@@ -14,7 +14,7 @@ export function UsagePage() {
       </p>
       {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
       <SectionHeading title="Features" hint="Ranked by hours" />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -33,11 +33,11 @@ export function UsagePage() {
               <tr key={row.featureKey} className="border-t border-line">
                 <td className="px-4 py-3 font-medium">{row.label}</td>
                 <td className="px-4 py-3 text-ink-600">{row.area}</td>
-                <td className="px-4 py-3 text-right font-mono">{hours(row.activeHours)}</td>
-                <td className="px-4 py-3 text-right font-mono">{percent(row.sharePct)}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.users)}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.orgs)}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.aiRequests)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{hours(row.activeHours)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{percent(row.sharePct)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.users)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.orgs)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.aiRequests)}</td>
                 <td className="px-4 py-3 text-right text-ink-500">{dateTime(row.lastUsedAt)}</td>
               </tr>
             ))}

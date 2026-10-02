@@ -1,198 +1,395 @@
 import { Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { useOverview } from '../hooks/useOverview';
-import { count, hours, money, moneyCompact, percent, signedPercent } from '../lib/format';
-import { canManageAccess, canSeeAccounts } from '../lib/access';
+import { useProductHealth } from '../hooks/useProductHealth';
 import { useAuth } from '../context/AuthContext';
-import { EmptyState, SectionHeading, Sparkline, StatTile } from '../components/ui';
+import { canManageAccess, canSeeAccounts } from '../lib/access';
+import {
+  count,
+  decimal,
+  duration,
+  moneyCompact,
+  msAsSeconds,
+  pctChange,
+  percent,
+  shortDate,
+  weekLabel,
+} from '../lib/format';
+import {
+  Delta,
+  ErrorLine,
+  Fn,
+  Footnotes,
+  KpiStrip,
+  LineChart,
+  Loading,
+  NotTracked,
+  PageHeader,
+  Section,
+} from '../components/report';
+import type { ProductHealth } from '../lib/types';
+
+interface SignalRow {
+  label: string;
+  unit: string;
+  current: string;
+  prior: string;
+  change: ReactNode;
+  source: number;
+}
+
+function signals(h: ProductHealth): SignalRow[] {
+  const u = h.uploads;
+  const a = h.analysis;
+  const e = h.evidence;
+  const k = h.ask;
+  const pts = (cur: number | null, pri: number | null) => (cur === null || pri === null ? null : cur - pri);
+  return [
+    {
+      label: 'Uploads started',
+      unit: 'count',
+      current: count(u.current.started),
+      prior: count(u.prior.started),
+      change: <Delta value={pctChange(u.current.started, u.prior.started)} />,
+      source: 2,
+    },
+    {
+      label: 'Upload completion rate',
+      unit: '% of settled',
+      current: percent(u.current.completionRatePct),
+      prior: percent(u.prior.completionRatePct),
+      change: <Delta value={pts(u.current.completionRatePct, u.prior.completionRatePct)} format="pts" />,
+      source: 2,
+    },
+    {
+      label: 'Uploads failed or abandoned',
+      unit: 'count',
+      current: count(u.current.failed + u.current.abandoned),
+      prior: count(u.prior.failed + u.prior.abandoned),
+      change: (
+        <Delta
+          value={pctChange(u.current.failed + u.current.abandoned, u.prior.failed + u.prior.abandoned)}
+          goodWhen="down"
+        />
+      ),
+      source: 2,
+    },
+    {
+      label: 'Time to analysis, median',
+      unit: 'upload → analysed',
+      current: duration(a.current.medianSeconds),
+      prior: duration(a.prior.medianSeconds),
+      change: <Delta value={pctChange(a.current.medianSeconds, a.prior.medianSeconds)} goodWhen="down" />,
+      source: 3,
+    },
+    {
+      label: 'Time to analysis, 90th pct.',
+      unit: 'upload → analysed',
+      current: duration(a.current.p90Seconds),
+      prior: duration(a.prior.p90Seconds),
+      change: <Delta value={pctChange(a.current.p90Seconds, a.prior.p90Seconds)} goodWhen="down" />,
+      source: 3,
+    },
+    {
+      label: 'Proofs analysed',
+      unit: 'count',
+      current: count(e.current.proofsAnalysed),
+      prior: count(e.prior.proofsAnalysed),
+      change: <Delta value={pctChange(e.current.proofsAnalysed, e.prior.proofsAnalysed)} />,
+      source: 4,
+    },
+    {
+      label: 'Evidence delivered',
+      unit: 'reports + downloads + share links',
+      current: count(e.current.dailyReportsSent + e.current.evidenceDownloads + e.current.shareLinksCreated),
+      prior: count(e.prior.dailyReportsSent + e.prior.evidenceDownloads + e.prior.shareLinksCreated),
+      change: (
+        <Delta
+          value={pctChange(
+            e.current.dailyReportsSent + e.current.evidenceDownloads + e.current.shareLinksCreated,
+            e.prior.dailyReportsSent + e.prior.evidenceDownloads + e.prior.shareLinksCreated,
+          )}
+        />
+      ),
+      source: 4,
+    },
+    {
+      label: 'Ask questions',
+      unit: 'count',
+      current: count(k.questions.current),
+      prior: count(k.questions.prior),
+      change: <Delta value={pctChange(k.questions.current, k.questions.prior)} />,
+      source: 5,
+    },
+    {
+      label: 'Ask latency, median',
+      unit: 'full answer',
+      current: msAsSeconds(k.current.medianMs),
+      prior: msAsSeconds(k.prior.medianMs),
+      change: <Delta value={pctChange(k.current.medianMs, k.prior.medianMs)} goodWhen="down" />,
+      source: 5,
+    },
+    {
+      label: 'Ask error rate',
+      unit: '% of turns',
+      current: percent(k.current.errorRatePct),
+      prior: percent(k.prior.errorRatePct),
+      change: <Delta value={pts(k.current.errorRatePct, k.prior.errorRatePct)} format="pts" goodWhen="down" />,
+      source: 5,
+    },
+  ];
+}
+
+const DRILL_DOWNS = [
+  { to: '/growth', title: 'Revenue & customers', body: 'MRR, ARR, paying organizations, plan mix and unit economics.' },
+  { to: '/capture', title: 'Capture pipeline', body: 'Upload completion and failures, time to analysis, evidence delivered.' },
+  { to: '/ai', title: 'AI & Ask', body: 'Questions asked, latency, error and refusal rates.' },
+  { to: '/usage', title: 'Feature usage', body: 'Hours and sessions by product surface.' },
+  { to: '/accounts', title: 'Organizations', body: 'Per-account revenue, seats and activity.', internal: true },
+  { to: '/contacts', title: 'Contacts & campaigns', body: 'Customer contacts from Stripe and draft email campaigns.', internal: true },
+];
 
 export function OverviewPage() {
   const { access } = useAuth();
-  const { data, error, loading, reload } = useOverview();
-  const summary = data?.summary;
-  const revenue = summary?.revenue;
+  const overview = useOverview();
+  const health = useProductHealth(12);
+  const h = health.data;
+  const revenue = overview.data?.summary?.revenue;
+  const customers = overview.data?.summary?.customers;
+  const latest = h?.northStar.latest ?? null;
+  const previous = h?.northStar.previous ?? null;
+  const internal = canSeeAccounts(access?.scope);
+  const asOfValue = h?.generatedAt ?? overview.data?.generatedAt ?? null;
 
-  if (loading && !data) {
-    return <p className="text-ink-500">Loading overview…</p>;
-  }
+  if ((overview.loading && !overview.data) || (health.loading && !h)) return <Loading label="Loading overview" />;
 
   return (
     <div>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Product & growth</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Live figures from the Atmosphere backend. Named accounts stay on this site, not the
-            customer console.
-          </p>
-        </div>
-        {data && (
-          <p className="text-xs text-ink-500">
-            Generated {new Date(data.generatedAt).toLocaleString()}
-          </p>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Atmosphere Analytics · Summary"
+        title="Overview"
+        subtitle="Hours of work filmed per paying seat is the north star: it rises only when paying customers capture real jobs. Everything else on this page explains its movement."
+        asOfValue={asOfValue}
+      />
 
       {canManageAccess(access?.scope) && (access?.pendingAccessRequests ?? 0) > 0 && (
-        <p className="mt-4 rounded-xl border border-brand-600/30 bg-brand-500/10 px-4 py-3 text-sm text-ink-800">
+        <p className="mt-4 border-l-2 border-brand-500 pl-3 text-[13px] text-ink-700">
           {access?.pendingAccessRequests === 1
-            ? '1 employee is waiting to join Internal Growth Metrics.'
-            : `${access?.pendingAccessRequests} employees are waiting to join Internal Growth Metrics.`}{' '}
-          <Link to="/access" className="font-medium text-brand-600 hover:underline">
+            ? '1 employee is waiting for access to Atmosphere Analytics.'
+            : `${access?.pendingAccessRequests} employees are waiting for access to Atmosphere Analytics.`}{' '}
+          <Link to="/access" className="font-medium text-brand-600 underline-offset-2 hover:underline">
             Review access requests
           </Link>
         </p>
       )}
 
-      {error && (
-        <p className="mt-4 text-sm text-danger-600">
-          {error}{' '}
-          <button type="button" className="underline" onClick={() => void reload()}>
-            Retry
-          </button>
-        </p>
-      )}
+      {overview.error && <ErrorLine message={overview.error} onRetry={() => void overview.reload()} />}
+      {health.error && <ErrorLine message={health.error} onRetry={() => void health.reload()} />}
 
-      {summary && revenue && (
-        <>
-          <SectionHeading title="This period" hint="Trailing 12 months" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-              label="MRR"
-              value={moneyCompact(revenue.mrrCents)}
-              delta={revenue.mrrGrowthMomPct}
-              footnote={money(revenue.mrrCents)}
-            />
-            <StatTile
-              label="ARR"
-              value={moneyCompact(revenue.arrCents)}
-              footnote={`${moneyCompact(revenue.annualContractedArrCents)} annual contracts`}
-            />
-            <StatTile
-              label="Paying orgs"
-              value={count(summary.customers.orgsPaying)}
-              delta={summary.customers.orgsGrowthMomPct}
-              footnote={`${count(summary.customers.orgsActive)} active`}
-            />
-            <StatTile
-              label="Hours in product"
-              value={hours(summary.engagement.trackedHours)}
-              footnote={`${count(summary.engagement.sessions)} sessions`}
-            />
-          </div>
+      <KpiStrip
+        items={[
+          {
+            label: 'Hours filmed per paying seat',
+            unit: latest ? `hrs / seat, wk of ${weekLabel(latest.weekStart)}` : 'hrs / seat, last full week',
+            value: decimal(latest?.hoursPerSeat ?? null),
+            delta: <Delta value={pctChange(latest?.hoursPerSeat, previous?.hoursPerSeat)} />,
+            comparison: 'vs prior wk',
+          },
+          {
+            label: 'MRR',
+            unit: `USD, as of ${shortDate(overview.data?.generatedAt ?? null)}`,
+            value: moneyCompact(revenue?.mrrCents ?? null),
+            delta: <Delta value={revenue?.mrrGrowthMomPct ?? null} />,
+            comparison: 'vs prior month',
+          },
+          {
+            label: 'Paying organizations',
+            unit: `count, as of ${shortDate(overview.data?.generatedAt ?? null)}`,
+            value: count(customers?.orgsPaying ?? null),
+            delta: <Delta value={customers?.orgsGrowthMomPct ?? null} />,
+            comparison: 'vs prior month',
+          },
+          {
+            label: 'Upload completion',
+            unit: '% of settled, last 4 wks',
+            value: percent(h?.uploads.current.completionRatePct ?? null),
+            delta: (
+              <Delta
+                value={
+                  h?.uploads.current.completionRatePct != null && h.uploads.prior.completionRatePct != null
+                    ? h.uploads.current.completionRatePct - h.uploads.prior.completionRatePct
+                    : null
+                }
+                format="pts"
+              />
+            ),
+            comparison: 'vs prior 4 wks',
+          },
+          {
+            label: 'Time to analysis',
+            unit: 'median, last 4 wks',
+            value: duration(h?.analysis.current.medianSeconds ?? null),
+            delta: (
+              <Delta
+                value={pctChange(h?.analysis.current.medianSeconds, h?.analysis.prior.medianSeconds)}
+                goodWhen="down"
+              />
+            ),
+            comparison: 'vs prior 4 wks',
+          },
+          {
+            label: 'Ask error rate',
+            unit: '% of turns, last 4 wks',
+            value: percent(h?.ask.current.errorRatePct ?? null),
+            delta: (
+              <Delta
+                value={
+                  h?.ask.current.errorRatePct != null && h.ask.prior.errorRatePct != null
+                    ? h.ask.current.errorRatePct - h.ask.prior.errorRatePct
+                    : null
+                }
+                format="pts"
+                goodWhen="down"
+              />
+            ),
+            comparison: 'vs prior 4 wks',
+          },
+        ]}
+      />
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-              label="Users"
-              value={count(summary.users.usersActive)}
-              delta={summary.users.usersGrowthMomPct}
-              footnote={`of ${count(summary.users.usersTotal)} total`}
+      {h && (
+        <Section
+          title="North star: hours filmed per paying seat, weekly"
+          note={`Complete weeks, Monday–Sunday UTC; the week in progress is shown in the table only`}
+        >
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] [&>*]:min-w-0">
+            <LineChart
+              ariaLabel="Hours filmed per paying seat by week"
+              format={(v) => decimal(v, 1)}
+              xLabel={weekLabel}
+              series={[
+                {
+                  label: 'hrs / seat',
+                  primary: true,
+                  points: h.northStar.weekly
+                    .filter((w) => !w.partial)
+                    .map((w) => ({ x: w.weekStart, y: w.hoursPerSeat })),
+                },
+              ]}
             />
-            <StatTile
-              label="Seats filled"
-              value={count(summary.seats.seatsFilled)}
-              footnote={`${percent(summary.seats.seatUtilizationPct)} of ${count(summary.seats.seatsLicensed)} licensed`}
-            />
-            <StatTile label="ARPA" value={moneyCompact(revenue.arpaMrrCents)} footnote="MRR / paying org" />
-            <StatTile
-              label="Collected"
-              value={moneyCompact(revenue.collectedInRangeCents)}
-              footnote={`T12M ${moneyCompact(revenue.trailing12mRevenueCents)}`}
-            />
-          </div>
-
-          {summary.unitEconomics && (
-            <>
-              <SectionHeading title="Unit economics" hint="AI usage billed vs model cost" />
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile label="Billed usage" value={money(summary.unitEconomics.billedUsageCents)} />
-                <StatTile label="Model cost" value={money(summary.unitEconomics.modelCostCents)} />
-                <StatTile label="Gross margin" value={money(summary.unitEconomics.grossMarginCents)} />
-                <StatTile label="Gross margin %" value={percent(summary.unitEconomics.grossMarginPct)} />
-              </div>
-            </>
-          )}
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Sparkline
-              label="Monthly recurring revenue"
-              values={(data.monthly ?? []).map((row) => row.mrrCents)}
-            />
-            <Sparkline
-              label="Organizations"
-              values={(data.monthly ?? []).map((row) => row.totalOrgs)}
-            />
-          </div>
-
-          <SectionHeading title="Plan mix" />
-          <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
-            <table className="w-full text-sm">
-              <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
+            <div className="overflow-x-auto">
+            <table className="report-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3">Plan</th>
-                  <th className="px-4 py-3 text-right">Orgs</th>
-                  <th className="px-4 py-3 text-right">Seats</th>
-                  <th className="px-4 py-3 text-right">MRR</th>
-                  <th className="px-4 py-3 text-right">Share</th>
+                  <th>Week of</th>
+                  <th className="num">Paying seats</th>
+                  <th className="num">Hours, paying</th>
+                  <th className="num">Hrs / seat</th>
                 </tr>
               </thead>
               <tbody>
-                {(data.planMix ?? []).map((plan) => (
-                  <tr key={`${plan.planCode}-${plan.billingInterval}`} className="border-t border-line">
-                    <td className="px-4 py-3">
-                      {plan.planName}
-                      <span className="ml-2 text-xs text-ink-500">{plan.billingInterval}</span>
+                {h.northStar.weekly
+                  .slice(-6)
+                  .reverse()
+                  .map((w) => (
+                    <tr key={w.weekStart}>
+                      <td className="whitespace-nowrap">
+                        {weekLabel(w.weekStart)}
+                        {w.partial && <span className="ml-1.5 text-[11px] text-ink-500">to date</span>}
+                      </td>
+                      <td className="num">{count(w.payingSeats)}</td>
+                      <td className="num">{decimal(w.hoursPaying, 1)}</td>
+                      <td className="num font-semibold text-ink-900">{decimal(w.hoursPerSeat)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {h && (
+        <Section title="Health signals" note="Last 4 weeks vs prior 4 weeks">
+          <div className="overflow-x-auto">
+            <table className="report-table min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th>Measure</th>
+                  <th className="num">Last 4 wks</th>
+                  <th className="num">Prior 4 wks</th>
+                  <th className="num">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signals(h).map((row) => (
+                  <tr key={row.label}>
+                    <td className="font-medium text-ink-900">
+                      {row.label}
+                      <Fn n={row.source} />
                     </td>
-                    <td className="px-4 py-3 text-right font-mono">{count(plan.orgs)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(plan.seats)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{money(plan.mrrCents)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{percent(plan.mrrSharePct)}</td>
+                    <td className="text-ink-500">{row.unit}</td>
+                    <td className="num">{row.current}</td>
+                    <td className="num text-ink-600">{row.prior}</td>
+                    <td className="num">{row.change}</td>
                   </tr>
                 ))}
+                <tr>
+                  <td className="font-medium text-ink-900">
+                    Ask answer feedback
+                    <Fn n={5} />
+                  </td>
+                  <td className="text-ink-500">% helpful</td>
+                  <td className="num" colSpan={3}>
+                    <NotTracked>No rating control exists in the product</NotTracked>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
-
-          {data.productIntelligence && (
-            <>
-              <SectionHeading
-                title="Product intelligence"
-                hint={`${data.productIntelligence.confidence} confidence`}
-              />
-              <div className="grid gap-4 lg:grid-cols-3">
-                {data.productIntelligence.insights.map((insight) => (
-                  <article key={insight.id} className="rounded-xl border border-line bg-paper-0 p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-brand-600">
-                      {insight.kind} · {insight.priority}
-                    </p>
-                    <h3 className="mt-2 font-medium">{insight.title}</h3>
-                    <p className="mt-2 text-sm text-ink-600">{insight.rationale}</p>
-                    <p className="mt-3 text-sm text-ink-800">{insight.action}</p>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-
-          {canSeeAccounts(access?.scope) && (
-            <p className="mt-8 text-sm text-ink-500">
-              {count(data.accounts?.length ?? 0)} named organizations.{' '}
-              <Link to="/accounts" className="text-brand-600 hover:underline">
-                Open accounts
-              </Link>
-              {revenue.mrrGrowthMomPct != null && (
-                <span> · MoM {signedPercent(revenue.mrrGrowthMomPct)}</span>
-              )}
-            </p>
-          )}
-
-          {summary.customers.orgsTotal === 0 && (
-            <EmptyState
-              title="No customers yet"
-              body="These tiles read live from production. They fill in as organizations sign up."
-            />
-          )}
-        </>
+        </Section>
       )}
+
+      <Section title="Drill-downs">
+        <ul className="grid gap-x-10 sm:grid-cols-2">
+          {DRILL_DOWNS.filter((d) => !d.internal || internal).map((d) => (
+            <li key={d.to} className="border-b border-line py-2.5">
+              <Link to={d.to} className="group block">
+                <span className="text-[13.5px] font-medium text-ink-900 group-hover:text-brand-600">{d.title}</span>
+                <span className="block text-[12px] text-ink-500">{d.body}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Footnotes
+        asOfValue={asOfValue}
+        notes={[
+          <>
+            Hours filmed per paying seat: total duration of capture videos received in the week from organizations whose
+            latest billing event is active or past due with MRR above zero, divided by those organizations’ billed seats.
+            Sources: job_proofs.duration_seconds, org_billing_events. Trial and free usage is excluded.
+          </>,
+          <>
+            Uploads: one record per upload from the first upload URL to completion or failure (capture_upload_attempts).
+            Completion rate = completed ÷ (started − still in flight). Abandoned = no activity for 24 hours.
+            {h?.uploads.trackingSince ? ` Tracking since ${shortDate(h.uploads.trackingSince)}.` : ' History starts when this release deploys.'}
+          </>,
+          <>Time to analysis: job_proofs.received_at to analysed_at, for videos received in the window whose analysis finished.</>,
+          <>
+            Evidence: proofs analysed (job_proofs), daily reports sent (daily_job_reports), evidence downloads
+            (evidence_downloads) and share links created (verifier_shares). Share-link opens keep only a lifetime counter,
+            so there is no prior-period comparison.
+          </>,
+          <>
+            Ask: questions from job_proof_questions; latency, outcome and errors from ask_turn_events, recorded for job and
+            progress-share Ask. Answer feedback is not collected in the product today.
+          </>,
+          <>MRR and paying organizations: org_billing_events via the existing analytics_summary report. Month-over-month change.</>,
+        ]}
+      />
     </div>
   );
 }

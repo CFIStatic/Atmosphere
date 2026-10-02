@@ -1,3 +1,7 @@
+/**
+ * Legacy primitives, restyled for Atmosphere Analytics: hairlines, no cards,
+ * no shadows, tabular numbers. New pages use components/report.tsx.
+ */
 export function StatTile({
   label,
   value,
@@ -12,16 +16,14 @@ export function StatTile({
   const deltaLabel =
     delta === null || delta === undefined
       ? null
-      : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`;
+      : `${delta > 0 ? '+' : delta < 0 ? '−' : '±'}${Math.abs(delta).toFixed(1)}%`;
   return (
-    <div className="rounded-xl border border-line bg-paper-0 px-4 py-4 shadow-sm">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-ink-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-ink-900">{value}</p>
-      <div className="mt-1 flex items-center gap-2 text-xs text-ink-500">
+    <div className="border-t border-line-strong px-0.5 py-3">
+      <p className="text-[11.5px] font-semibold text-ink-700">{label}</p>
+      <p className="mt-1.5 text-[22px] font-semibold leading-none tracking-tight text-ink-900 tabular-nums">{value}</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
         {deltaLabel && (
-          <span className={delta && delta < 0 ? 'text-danger-600' : 'text-success-600'}>
-            {deltaLabel}
-          </span>
+          <span className={delta && delta < 0 ? 'text-danger-600' : 'text-success-600'}>{deltaLabel}</span>
         )}
         {footnote && <span>{footnote}</span>}
       </div>
@@ -31,18 +33,18 @@ export function StatTile({
 
 export function SectionHeading({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="mb-4 mt-10 flex items-end justify-between gap-4 first:mt-0">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      {hint && <p className="text-xs text-ink-500">{hint}</p>}
+    <div className="mb-3 mt-10 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line-strong pb-1.5 first:mt-0">
+      <h2 className="text-[17px] text-ink-900">{title}</h2>
+      {hint && <p className="text-[11.5px] text-ink-500">{hint}</p>}
     </div>
   );
 }
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
-      <h3 className="font-medium">{title}</h3>
-      <p className="mt-1 text-sm text-ink-500">{body}</p>
+    <div className="border-y border-line px-2 py-8 text-center">
+      <h3 className="text-[15px] text-ink-800">{title}</h3>
+      <p className="mt-1 text-[13px] text-ink-500">{body}</p>
     </div>
   );
 }
@@ -66,15 +68,15 @@ export function Sparkline({
     })
     .join(' ');
   return (
-    <div className="rounded-xl border border-line bg-paper-0 p-4">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-ink-500">{label}</p>
-      <svg viewBox="0 0 320 80" className="mt-3 h-24 w-full" role="img" aria-label={label}>
+    <div className="border-t border-line-strong pt-3">
+      <p className="text-[11.5px] font-semibold text-ink-700">{label}</p>
+      <svg viewBox="0 0 320 80" className="mt-2 h-24 w-full" role="img" aria-label={label}>
+        <line x1="0" x2="320" y1="72" y2="72" className="stroke-line" strokeWidth="1" />
         <polyline
           fill="none"
-          stroke="rgb(232 89 12)"
-          strokeWidth="2.5"
+          className="stroke-brand-500"
+          strokeWidth="1.5"
           strokeLinejoin="round"
-          strokeLinecap="round"
           points={points}
         />
       </svg>
@@ -85,15 +87,15 @@ export function Sparkline({
 export function StatusPill({ status }: { status: string }) {
   const tone =
     status === 'active' || status === 'ready' || status === 'running' || status === 'approved'
-      ? 'border-success-600/30 text-success-600'
+      ? 'border-success-600/40 text-success-600'
       : status === 'canceled' || status === 'not_ready' || status === 'denied'
-        ? 'border-danger-600/30 text-danger-600'
+        ? 'border-danger-600/40 text-danger-600'
         : status === 'pending'
-          ? 'border-brand-600/30 text-brand-600'
-          : 'border-line-strong text-ink-500';
+          ? 'border-brand-500/50 text-brand-600'
+          : 'border-line-strong text-ink-600';
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${tone}`}>
-      {status}
+    <span className={`inline-block whitespace-nowrap border px-1.5 py-px text-[10px] font-semibold uppercase tracking-[0.06em] ${tone}`}>
+      {status.replace(/_/g, ' ')}
     </span>
   );
 }

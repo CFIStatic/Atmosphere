@@ -32,6 +32,7 @@ export default {
           DEFAULT: 'rgb(var(--line) / <alpha-value>)',
           strong: 'rgb(var(--line-strong) / <alpha-value>)',
         },
+        rule: 'rgb(var(--rule) / <alpha-value>)',
         danger: {
           50: 'rgb(var(--danger-50) / <alpha-value>)',
           600: 'rgb(var(--danger-600) / <alpha-value>)',
@@ -46,6 +47,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Source Serif 4"', '"Source Serif Pro"', 'Georgia', '"Times New Roman"', 'serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
     },

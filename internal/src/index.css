@@ -6,73 +6,83 @@
  * Theme tokens. Paper is surfaces, ink is text strongest-first.
  * `data-theme` is the live palette (`dark` | `light`).
  */
+/*
+ * Atmosphere Analytics theme tokens.
+ *
+ * Pitch-book restraint: navy ink on white (light) or soft white on near-black
+ * (dark), one steel-blue accent (`brand`), and red / green reserved for
+ * deltas. Paper is surfaces, ink is text strongest-first. `data-theme` is the
+ * live palette (`dark` | `light`).
+ */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --brand-50: 49 25 12;
-  --brand-100: 62 31 13;
-  --brand-200: 84 41 15;
-  --brand-400: 181 79 16;
-  --brand-500: 232 89 12;
-  --brand-600: 242 110 34;
-  --brand-700: 245 136 63;
+  --brand-50: 22 32 46;
+  --brand-100: 28 42 60;
+  --brand-200: 44 64 90;
+  --brand-400: 112 152 198;
+  --brand-500: 143 179 218;
+  --brand-600: 163 194 228;
+  --brand-700: 196 216 238;
 
-  --paper-0: 29 27 24;
-  --paper-50: 25 23 20;
-  --paper-100: 20 19 17;
-  --paper-200: 36 34 32;
-  --paper-300: 44 42 39;
+  --paper-0: 18 22 29;
+  --paper-50: 22 27 35;
+  --paper-100: 13 16 21;
+  --paper-200: 31 37 47;
+  --paper-300: 42 49 61;
 
-  --ink-900: 241 239 235;
-  --ink-800: 226 223 217;
-  --ink-700: 195 191 183;
-  --ink-600: 160 156 147;
-  --ink-500: 128 124 116;
-  --ink-400: 92 89 81;
+  --ink-900: 233 236 241;
+  --ink-800: 212 217 225;
+  --ink-700: 180 188 200;
+  --ink-600: 148 157 172;
+  --ink-500: 120 130 146;
+  --ink-400: 86 96 112;
 
-  --line: 36 34 31;
-  --line-strong: 52 49 45;
+  --line: 36 43 54;
+  --line-strong: 78 88 104;
+  --rule: 205 212 222;
 
-  --danger-50: 48 20 18;
-  --danger-600: 240 122 98;
-  --caution-600: 229 184 74;
-  --success-50: 18 38 26;
-  --success-600: 124 201 141;
+  --danger-50: 52 22 22;
+  --danger-600: 242 120 108;
+  --caution-600: 214 172 92;
+  --success-50: 16 40 30;
+  --success-600: 104 196 146;
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --brand-50: 253 244 238;
-  --brand-100: 250 229 214;
-  --brand-200: 244 200 169;
-  --brand-400: 223 123 68;
-  --brand-500: 210 80 10;
-  --brand-600: 188 69 8;
-  --brand-700: 153 54 7;
+  --brand-50: 239 244 250;
+  --brand-100: 221 231 243;
+  --brand-200: 190 207 228;
+  --brand-400: 86 124 168;
+  --brand-500: 47 93 138;
+  --brand-600: 34 74 116;
+  --brand-700: 23 55 90;
 
   --paper-0: 255 255 255;
-  --paper-50: 251 250 247;
-  --paper-100: 244 241 235;
-  --paper-200: 237 233 225;
-  --paper-300: 228 223 213;
+  --paper-50: 247 248 250;
+  --paper-100: 255 255 255;
+  --paper-200: 238 241 245;
+  --paper-300: 225 230 237;
 
-  --ink-900: 28 25 23;
-  --ink-800: 41 37 36;
-  --ink-700: 68 64 60;
-  --ink-600: 87 83 78;
-  --ink-500: 120 113 108;
-  --ink-400: 168 162 158;
+  --ink-900: 11 31 58;
+  --ink-800: 28 45 70;
+  --ink-700: 55 70 92;
+  --ink-600: 80 94 115;
+  --ink-500: 106 118 137;
+  --ink-400: 152 162 177;
 
-  --line: 227 222 212;
-  --line-strong: 211 204 190;
+  --line: 222 227 234;
+  --line-strong: 170 180 194;
+  --rule: 11 31 58;
 
-  --danger-50: 253 242 240;
-  --danger-600: 180 54 29;
-  --caution-600: 148 106 11;
-  --success-50: 240 247 241;
-  --success-600: 63 125 76;
+  --danger-50: 252 241 240;
+  --danger-600: 176 36 28;
+  --caution-600: 138 96 8;
+  --success-50: 238 247 242;
+  --success-600: 21 110 68;
 }
 
 html,
@@ -86,9 +96,89 @@ body {
   background: rgb(var(--paper-100));
   color: rgb(var(--ink-900));
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Every figure lines up: tabular, lining numerals site-wide. */
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
   -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+@layer components {
+  /* Thin-rule report tables: navy top rule, hairline rows, no fills. */
+  .report-table {
+    @apply w-full border-collapse text-[13px];
+  }
+  .report-table thead th {
+    @apply whitespace-nowrap border-b border-t-2 px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-600;
+    border-top-color: rgb(var(--rule));
+    border-bottom-color: rgb(var(--line-strong));
+  }
+  .report-table tbody td {
+    @apply border-b border-line px-3 py-[7px] align-top text-ink-800;
+  }
+  .report-table tbody tr:last-child td {
+    border-bottom-color: rgb(var(--line-strong));
+  }
+  .report-table .num {
+    @apply text-right tabular-nums;
+  }
+  .report-table th.num {
+    @apply text-right;
+  }
+  .report-table tbody tr:hover td {
+    @apply bg-paper-50;
+  }
+  .eyebrow {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-500;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 border border-line-strong bg-paper-0 px-3 py-1.5 text-[13px] font-medium text-ink-800 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 border border-ink-900 bg-ink-900 px-3 py-1.5 text-[13px] font-medium text-paper-0 transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .field {
+    @apply w-full border border-line-strong bg-paper-0 px-2.5 py-1.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+  }
 }
 
 a {
   color: inherit;
+}
+
+/* Campaign email preview: the rendered markdown subset. */
+.campaign-preview h1 {
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.campaign-preview h2 {
+  font-size: 18px;
+  margin: 20px 0 8px;
+}
+.campaign-preview p {
+  margin: 0 0 12px;
+}
+.campaign-preview ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  list-style: disc;
+}
+.campaign-preview a {
+  color: rgb(var(--brand-600));
+  text-decoration: underline;
+}
+
+@media (max-width: 639px) {
+  .report-table thead th,
+  .report-table tbody td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
 }

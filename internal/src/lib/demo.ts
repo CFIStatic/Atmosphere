@@ -193,36 +193,6 @@ export const demoOverview: OverviewPayload = {
     { cohortMonth: '2026-02-01', cohortSize: 2, monthOffset: 5, activeOrgs: 1, retentionPct: 50 },
   ],
   accounts,
-  productIntelligence: {
-    confidence: 'medium',
-    confidenceNote: 'Based on 12 months of product heartbeats across 14 organizations.',
-    insights: [
-      {
-        id: 'invest-verifier',
-        kind: 'invest',
-        priority: 'high',
-        title: 'Verifier is where time is spent',
-        rationale: 'A third of tracked hours land in the evidence library.',
-        action: 'Keep the verification path first in the product, not a side tab.',
-      },
-      {
-        id: 'cut-email',
-        kind: 'cut',
-        priority: 'medium',
-        title: 'Email marketing is unused',
-        rationale: 'Two users, six sessions, last touch in June.',
-        action: 'Leave it off the console until a customer asks.',
-      },
-      {
-        id: 'stick-field',
-        kind: 'stickiness',
-        priority: 'high',
-        title: 'Field Capture brings crews back',
-        rationale: 'Most unique users, second-highest hours.',
-        action: 'Shorten the invite-to-first-clip loop.',
-      },
-    ],
-  },
 };
 
 export const demoExperiments: ExperimentStats[] = [

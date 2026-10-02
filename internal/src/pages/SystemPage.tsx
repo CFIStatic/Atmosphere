@@ -34,7 +34,7 @@ export function SystemPage() {
       {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
 
       <SectionHeading title="Signed in as" />
-      <dl className="grid gap-3 rounded-xl border border-line bg-paper-0 p-5 text-sm sm:grid-cols-2">
+      <dl className="grid gap-3 border border-line bg-paper-0 p-5 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-[11px] uppercase tracking-wide text-ink-500">Email</dt>
           <dd className="mt-1 font-mono">{user?.email ?? '—'}</dd>
@@ -51,14 +51,14 @@ export function SystemPage() {
 
       <SectionHeading title="Backend" hint={ready?.service} />
       {ready && (
-        <div className="rounded-xl border border-line bg-paper-0 p-5">
+        <div className="border border-line bg-paper-0 p-5">
           <div className="flex items-center gap-3">
             <StatusPill status={ready.status} />
             <span className="text-sm text-ink-500">{ready.time}</span>
           </div>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2">
             {Object.entries(ready.checks ?? {}).map(([name, check]) => (
-              <li key={name} className="flex items-center justify-between rounded-lg bg-paper-50 px-3 py-2 text-sm">
+              <li key={name} className="flex items-center justify-between bg-paper-50 px-3 py-2 text-sm">
                 <span>{name}</span>
                 <span className={check.ok ? 'text-success-600' : 'text-danger-600'}>
                   {check.ok ? 'ok' : check.detail ?? 'failed'}

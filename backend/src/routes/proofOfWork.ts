@@ -35,6 +35,8 @@ import {
   type AskThreadOwner,
 } from '../shared/askThreads.js';
 import { createAskTurnClock, logAskTurnTiming } from '../shared/askTiming.js';
+import { trackCaptureUpload, uploadFailureCode } from '../analytics/captureUploadTracking.js';
+import { askOutcomeForError, trackAskTurn, type AskTurnSurface } from '../analytics/askTurnTracking.js';
 import { displayMentionText } from '../shared/mentions.js';
 import {
   foldThreadMemory,
@@ -571,6 +573,8 @@ export async function createUploadUrl(
   const clipId = resolveClipId(input.clipId);
   const path = proofObjectPath(party, { ...input, clipId });
   const signed = await mintSignedUpload(admin, path);
+  // Atmosphere Analytics: an upload started (or a retry of the same clip).
+  trackCaptureUpload(admin, { orgId: party.org_id, jobId: party.job_id, uploadKey: path, event: 'start' });
   const plan = planProofChunks(input.byteSize ?? 0);
   const slot: {
     path: string;
@@ -659,6 +663,13 @@ export async function createPartUploadUrl(
   const path = proofObjectPath(party, { ...input, extension, clipId });
   const partPath = partObjectPath(path, input.index);
   const signed = await mintSignedUpload(admin, partPath);
+  // Atmosphere Analytics: slice 0 starts (or restarts) the upload; later slices keep it alive.
+  trackCaptureUpload(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    uploadKey: path,
+    event: input.index === 0 ? 'start' : 'touch',
+  });
   // Office Live index — best-effort; never block the crew's part mint.
   void touchProofLiveSession(admin, {
     orgId: party.org_id,
@@ -720,6 +731,29 @@ export async function listedProofObjectBytes(
  * itself never entered this process — only the already-stored slices.
  */
 export async function completeChunkedProofUpload(
+  party: any,
+  admin: any,
+  body: unknown,
+  options?: { maxBytes?: number },
+): Promise<{ path: string; byteSize: number }> {
+  try {
+    return await stitchChunkedProofUpload(party, admin, body, options);
+  } catch (err) {
+    const code = uploadFailureCode(err);
+    if (code) {
+      trackCaptureUpload(admin, {
+        orgId: party?.org_id,
+        jobId: party?.job_id,
+        uploadKey: (body as { storagePath?: unknown } | null)?.storagePath,
+        event: 'fail',
+        errorCode: code,
+      });
+    }
+    throw err;
+  }
+}
+
+async function stitchChunkedProofUpload(
   party: any,
   admin: any,
   body: unknown,
@@ -846,6 +880,28 @@ const recordSchema = z.object({
  * job, which is only meaningful at the moment of upload.
  */
 export async function recordProof(party: any, admin: any, body: unknown) {
+  const uploadKey = (body as { storagePath?: unknown } | null)?.storagePath;
+  try {
+    const filed = await fileRecordedProof(party, admin, body);
+    // Atmosphere Analytics: the upload finished — the film is on the record.
+    trackCaptureUpload(admin, { orgId: party?.org_id, jobId: party?.job_id, uploadKey, event: 'complete' });
+    return filed;
+  } catch (err) {
+    const code = uploadFailureCode(err);
+    if (code) {
+      trackCaptureUpload(admin, {
+        orgId: party?.org_id,
+        jobId: party?.job_id,
+        uploadKey,
+        event: 'fail',
+        errorCode: code,
+      });
+    }
+    throw err;
+  }
+}
+
+async function fileRecordedProof(party: any, admin: any, body: unknown) {
   await assertPartyProductActions(party, admin);
   const input = recordSchema.parse(body);
   await assertRecordingAckForProof({
@@ -2863,7 +2919,51 @@ async function memberCanPurchaseAi(
   }
 }
 
-export async function runProofAsk(input: {
+/**
+ * One Ask turn, plus the Atmosphere Analytics row for it (outcome, latency,
+ * model id — never the question or answer). The turn itself is unchanged.
+ */
+export async function runProofAsk(
+  input: Parameters<typeof runProofAskTurn>[0],
+): ReturnType<typeof runProofAskTurn> {
+  const startedAt = Date.now();
+  let firstTokenAt: number | null = null;
+  const surface: AskTurnSurface = input.access === 'org' ? 'job' : 'progress_share';
+  const tracker = unscopedAdminOrNull();
+  try {
+    const result = await runProofAskTurn({
+      ...input,
+      onToken: (text: string) => {
+        if (text && firstTokenAt === null) firstTokenAt = Date.now();
+        input.onToken?.(text);
+      },
+    });
+    trackAskTurn(tracker, {
+      orgId: input.orgId,
+      surface,
+      outcome: input.signal?.aborted ? 'stopped' : 'answered',
+      totalMs: Date.now() - startedAt,
+      ttftMs: firstTokenAt === null ? null : firstTokenAt - startedAt,
+      model: result.model,
+    });
+    return result;
+  } catch (err) {
+    const { outcome, code } = input.signal?.aborted
+      ? { outcome: 'stopped' as const, code: 'aborted' }
+      : askOutcomeForError(err);
+    trackAskTurn(tracker, {
+      orgId: input.orgId,
+      surface,
+      outcome,
+      errorCode: code,
+      totalMs: Date.now() - startedAt,
+      ttftMs: firstTokenAt === null ? null : firstTokenAt - startedAt,
+    });
+    throw err;
+  }
+}
+
+async function runProofAskTurn(input: {
   supabase: any;
   orgId: string;
   jobId: string;

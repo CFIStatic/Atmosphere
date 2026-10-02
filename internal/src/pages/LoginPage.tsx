@@ -97,10 +97,10 @@ export function LoginPage() {
       <div className="absolute right-6 top-4">
         <ThemeToggle />
       </div>
-      <div className="w-full max-w-md rounded-2xl border border-line bg-paper-0 p-8 shadow-sm">
+      <div className="w-full max-w-md border-t-2 border-rule bg-paper-0 px-1 pt-8 sm:border sm:border-t-2 sm:border-line sm:border-t-rule sm:p-8">
         <Logo to={null} size="lg" />
-        <p className="mt-5 text-[11px] uppercase tracking-[0.18em] text-brand-600">Atmosphere staff</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Internal</h1>
+        <p className="eyebrow mt-6">Atmosphere staff</p>
+        <h1 className="mt-1.5 text-[28px] leading-tight text-ink-900">Atmosphere Analytics</h1>
         {step.kind === 'pending' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
@@ -110,7 +110,7 @@ export function LoginPage() {
             <button
               type="button"
               onClick={goLogin}
-              className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500"
+              className="mt-6 w-full bg-ink-900 px-4 py-2.5 text-sm font-medium text-paper-0 hover:bg-ink-800"
             >
               Back to sign in
             </button>
@@ -118,7 +118,7 @@ export function LoginPage() {
         ) : step.kind === 'request' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              Atmosphere Internal is invite-only. Enter your name and work email to request access.
+              Atmosphere Analytics is invite-only. Enter your name and work email to request access.
               After an admin approves you, sign in with your Platform account password.
             </p>
             <form className="mt-6 space-y-4" onSubmit={(event) => void onRequestInvite(event)}>
@@ -131,7 +131,7 @@ export function LoginPage() {
                     required
                     value={firstName}
                     onChange={(event) => setFirstName(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                   />
                 </label>
                 <label className="block text-sm">
@@ -142,7 +142,7 @@ export function LoginPage() {
                     required
                     value={lastName}
                     onChange={(event) => setLastName(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                   />
                 </label>
               </div>
@@ -154,14 +154,14 @@ export function LoginPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                 />
               </label>
               {error && <p className="text-sm text-danger-600">{error}</p>}
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
+                className="w-full bg-ink-900 px-4 py-2.5 text-sm font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
               >
                 {submitting ? 'Submitting…' : 'Request invite'}
               </button>
@@ -188,7 +188,7 @@ export function LoginPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                 />
               </label>
               <label className="block text-sm">
@@ -200,7 +200,7 @@ export function LoginPage() {
                   minLength={8}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                 />
               </label>
               <p className="text-xs text-ink-500">Same password as Platform (platform.atmosphereteam.com)</p>
@@ -208,7 +208,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting || password.length < 8}
-                className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
+                className="w-full bg-ink-900 px-4 py-2.5 text-sm font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
               >
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>

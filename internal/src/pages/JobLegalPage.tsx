@@ -87,7 +87,7 @@ export function JobLegalPage() {
       ) : (
         <ul className="grid gap-3">
           {data.holds.map((hold) => (
-            <li key={hold.id} className="rounded-xl border border-line bg-paper-0 p-4">
+            <li key={hold.id} className="border border-line bg-paper-0 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="font-medium">{hold.title}</h3>
                 <StatusPill status={hold.status} />
@@ -105,7 +105,7 @@ export function JobLegalPage() {
       ) : (
         <ul className="grid gap-2">
           {data.clips.map((clip) => (
-            <li key={clip.id} className="rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm">
+            <li key={clip.id} className="border border-line bg-paper-0 px-4 py-3 text-sm">
               <span>{clip.title ?? clip.id}</span>
               {clip.userDeleted && (
                 <span className="ml-2 text-xs text-danger-600">customer deleted — still available</span>
@@ -120,7 +120,7 @@ export function JobLegalPage() {
       {data.activity.length === 0 ? (
         <EmptyState title="No actions yet" body="The monitor writes a row after each signed-in request." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-paper-0">
+        <div className="overflow-x-auto border border-line bg-paper-0">
           <table className="w-full text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-ink-500">
               <tr>

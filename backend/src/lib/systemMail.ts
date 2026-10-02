@@ -6,6 +6,7 @@ import { getTransporter, smtpConfigured } from './smtpTransport.js';
 import {
   alignedReplyTo,
   deliverabilityHeaders,
+  type MailKind,
   formatFromHeader,
   resendTags,
   smtpFromMatchesAccount,
@@ -147,6 +148,7 @@ async function postResend(input: {
   replyTo?: string | null;
   from: string;
   headers?: Record<string, string>;
+  kind?: MailKind;
 }): Promise<{ ok: true } | { ok: false; why: string; status?: number; body?: string }> {
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -163,7 +165,7 @@ async function postResend(input: {
         ...(input.html ? { html: input.html } : {}),
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         ...(input.headers ? { headers: input.headers } : {}),
-        tags: resendTags('transactional'),
+        tags: resendTags(input.kind ?? 'transactional'),
       }),
       signal: AbortSignal.timeout(20_000),
     });
@@ -193,6 +195,7 @@ async function sendViaResend(input: {
   from: string;
   headers?: Record<string, string>;
   keepReplyTo?: boolean;
+  kind?: MailKind;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -249,6 +252,13 @@ export async function sendSystemMail(input: {
   replyTo?: string | null;
   /** Contact/careers keep the visitor inbox as Reply-To. */
   keepReplyTo?: boolean;
+  /**
+   * 'marketing' (Atmosphere Analytics campaigns) drops Auto-Submitted, tags
+   * the Resend send as marketing and adds List-Unsubscribe when
+   * unsubscribeUrl is set. Defaults to 'transactional'.
+   */
+  kind?: MailKind;
+  unsubscribeUrl?: string | null;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();
   const driver = driverOverride();
@@ -257,8 +267,9 @@ export async function sendSystemMail(input: {
     ? requestedReplyTo
     : alignedReplyTo(from, requestedReplyTo);
   const sendId = randomUUID();
-  const headers = deliverabilityHeaders({ kind: 'transactional', sendId });
-  const payload = { ...input, replyTo, from, headers };
+  const kind: MailKind = input.kind ?? 'transactional';
+  const headers = deliverabilityHeaders({ kind, sendId, unsubscribeUrl: input.unsubscribeUrl });
+  const payload = { ...input, replyTo, from, headers, kind };
 
   const order = systemMailTransportOrder({
     driver,

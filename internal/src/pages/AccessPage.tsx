@@ -68,7 +68,7 @@ export function AccessPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Access</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Employees who asked to join Internal Growth Metrics. Approve them here — they then
+            Employees who asked to join Atmosphere Analytics. Approve them here — they then
             sign in with the same email and password as their Atmosphere Platform account.
           </p>
         </div>
@@ -81,7 +81,7 @@ export function AccessPage() {
                 await api.approveAllAccessRequests();
               })
             }
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
+            className="bg-ink-900 px-4 py-2 text-sm font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
           >
             {busy === 'all' ? 'Approving…' : `Approve all (${pending.length})`}
           </button>
@@ -130,7 +130,7 @@ function RequestTable({
   onDeny?: (id: string) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+    <div className="overflow-hidden border border-line bg-paper-0">
       <table className="w-full text-sm">
         <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
           <tr>
@@ -157,7 +157,7 @@ function RequestTable({
                       type="button"
                       disabled={busy !== null}
                       onClick={() => onApprove(row.id)}
-                      className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-60"
+                      className="bg-ink-900 px-3 py-1 text-xs font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
                     >
                       {busy === row.id ? 'Saving…' : 'Approve'}
                     </button>
@@ -166,7 +166,7 @@ function RequestTable({
                         type="button"
                         disabled={busy !== null}
                         onClick={() => onDeny(row.id)}
-                        className="rounded-md px-3 py-1 text-xs text-ink-500 hover:bg-paper-200 hover:text-ink-800 disabled:opacity-60"
+                        className="px-3 py-1 text-xs text-ink-500 hover:bg-paper-200 hover:text-ink-800 disabled:opacity-60"
                       >
                         Deny
                       </button>

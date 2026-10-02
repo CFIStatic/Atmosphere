@@ -10,12 +10,6 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from './errors.js';
-import {
-  buildProductIntelligence,
-  type ProductIntelligence,
-} from './productInsights.js';
-
-export type { ProductIntelligence, ProductInsight, AreaUsage, InsightKind } from './productInsights.js';
 export type AnalyticsScope = 'investor' | 'internal';
 
 export interface ExperimentVariantStats {
@@ -566,8 +560,6 @@ export interface OverviewPayload {
   planMix: PlanMixRow[];
   retention: RetentionRow[];
   accounts: AccountRow[] | null;
-  /** Internal only — cut / invest / stickiness advice from product usage. */
-  productIntelligence: ProductIntelligence | null;
 }
 
 export async function getOverview(
@@ -599,8 +591,5 @@ export async function getOverview(
     planMix,
     retention,
     accounts,
-    productIntelligence: isInternal
-      ? buildProductIntelligence({ features, accounts, retention, summary })
-      : null,
   };
 }

@@ -161,21 +161,6 @@ export interface RetentionRow {
   retentionPct: number | null;
 }
 
-export interface ProductInsight {
-  id: string;
-  kind: 'cut' | 'invest' | 'stickiness' | 'watch';
-  priority: 'high' | 'medium' | 'low';
-  title: string;
-  rationale: string;
-  action: string;
-}
-
-export interface ProductIntelligence {
-  confidence: 'low' | 'medium' | 'high';
-  confidenceNote: string;
-  insights: ProductInsight[];
-}
-
 export interface OverviewPayload {
   scope: AnalyticsScope;
   generatedAt: string;
@@ -186,7 +171,6 @@ export interface OverviewPayload {
   planMix: PlanMixRow[];
   retention: RetentionRow[];
   accounts: AccountRow[] | null;
-  productIntelligence: ProductIntelligence | null;
 }
 
 export interface ExperimentStats {
@@ -467,4 +451,174 @@ export interface MotionClipsStaffResponse {
   buckets: MotionTypeBucket[];
   knownTypes?: Array<{ motion: string; action: string }>;
   disclaimer: string;
+}
+
+// ---------------------------------------------------------------------------
+// Atmosphere Analytics: product health (/api/analytics/product-health)
+
+export interface NorthStarWeek {
+  weekStart: string;
+  partial: boolean;
+  payingSeats: number;
+  payingOrgs: number;
+  hoursPaying: number;
+  hoursAll: number;
+  films: number;
+  hoursPerSeat: number | null;
+}
+
+export interface UploadPeriod {
+  started: number;
+  completed: number;
+  failed: number;
+  abandoned: number;
+  inFlight: number;
+  retried: number;
+  retrying: number;
+  completionRatePct: number | null;
+}
+
+export interface AnalysisPeriod {
+  received: number;
+  analysed: number;
+  failed: number;
+  pending: number;
+  medianSeconds: number | null;
+  p90Seconds: number | null;
+}
+
+export interface EvidencePeriod {
+  proofsAnalysed: number;
+  dailyReportsSent: number;
+  evidenceDownloads: number;
+  shareLinksCreated: number;
+  shareLinksOpened: number | null;
+}
+
+export interface AskPeriod {
+  turns: number;
+  answered: number;
+  errors: number;
+  refused: number;
+  stopped: number;
+  errorRatePct: number | null;
+  medianMs: number | null;
+  p90Ms: number | null;
+  medianTtftMs: number | null;
+}
+
+export interface ProductHealth {
+  generatedAt: string;
+  weeks: number;
+  windows: {
+    current: { from: string; to: string };
+    prior: { from: string; to: string };
+  };
+  northStar: {
+    weekly: NorthStarWeek[];
+    latest: NorthStarWeek | null;
+    previous: NorthStarWeek | null;
+  };
+  uploads: {
+    trackingSince: string | null;
+    current: UploadPeriod;
+    prior: UploadPeriod;
+    topErrors: Array<{ code: string; count: number }>;
+  };
+  analysis: {
+    current: AnalysisPeriod;
+    prior: AnalysisPeriod;
+    weekly: Array<{ weekStart: string; analysed: number; medianSeconds: number | null; p90Seconds: number | null }>;
+  };
+  evidence: {
+    current: EvidencePeriod;
+    prior: EvidencePeriod;
+    lifetime: { shareLinks: number; shareLinkOpens: number };
+  };
+  ask: {
+    trackingSince: string | null;
+    questions: { current: number; prior: number; orgsCurrent: number };
+    current: AskPeriod;
+    prior: AskPeriod;
+    feedback: null;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Contacts and campaigns (/api/analytics/contacts, /api/analytics/campaigns)
+
+export type ContactSourceId = 'stripe' | 'crm';
+export type ContactStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'none';
+
+export interface Contact {
+  email: string;
+  name: string | null;
+  company: string | null;
+  orgId: string | null;
+  plan: string | null;
+  status: ContactStatus;
+  createdAt: string | null;
+  sources: ContactSourceId[];
+  suppressed: boolean;
+}
+
+export interface ContactSourceInfo {
+  id: ContactSourceId;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+  count: number | null;
+  truncated: boolean;
+}
+
+export interface ContactDirectory {
+  contacts: Contact[];
+  sources: ContactSourceInfo[];
+  fetchedAt: string;
+  cached: boolean;
+  suppressedCount: number;
+}
+
+export interface CampaignAudience {
+  plans: string[];
+  statuses: ContactStatus[];
+  sources: ContactSourceId[];
+}
+
+export type CampaignStatus = 'draft' | 'sending' | 'sent' | 'failed';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  subject: string;
+  bodyMarkdown: string;
+  audience: CampaignAudience;
+  status: CampaignStatus;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+  recipientCount: number | null;
+  sentCount: number | null;
+  failedCount: number | null;
+  suppressedCount: number | null;
+}
+
+export interface CampaignSendingState {
+  enabled: boolean;
+  reason: string | null;
+  code: string | null;
+}
+
+export interface CampaignDraft {
+  name: string;
+  subject: string;
+  bodyMarkdown: string;
+  audience: CampaignAudience;
+}
+
+export interface AudienceCount {
+  matched: number;
+  suppressed: number;
+  recipients: number;
+  fetchedAt: string;
 }

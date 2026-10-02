@@ -65,7 +65,7 @@ export function AiBudgetsPage() {
             value={orgId}
             onChange={(event) => setOrgId(event.target.value)}
             placeholder="Org id"
-            className="mt-1 block w-72 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm"
+            className="mt-1 block w-72 border border-line bg-paper-0 px-3 py-2 text-sm"
           />
         </label>
         <label className="text-sm text-ink-600">
@@ -73,7 +73,7 @@ export function AiBudgetsPage() {
           <input
             value={dollars}
             onChange={(event) => setDollars(event.target.value)}
-            className="mt-1 block w-24 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm"
+            className="mt-1 block w-24 border border-line bg-paper-0 px-3 py-2 text-sm"
           />
         </label>
         <label className="text-sm text-ink-600">
@@ -81,15 +81,15 @@ export function AiBudgetsPage() {
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="mt-1 block w-56 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm"
+            className="mt-1 block w-56 border border-line bg-paper-0 px-3 py-2 text-sm"
           />
         </label>
-        <button type="submit" className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-semibold text-paper-0">
+        <button type="submit" className="bg-ink-900 px-4 py-2 text-sm font-semibold text-paper-0">
           Grant credits
         </button>
       </form>
       {grantMessage && <p className="mt-3 text-sm text-success-700">{grantMessage}</p>}
-      <div className="mt-6 overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="mt-6 overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -109,9 +109,9 @@ export function AiBudgetsPage() {
                   <div className="font-mono text-[11px] text-ink-400">{row.orgId}</div>
                 </td>
                 <td className="px-4 py-3">{row.paused ? 'Paused' : row.state}</td>
-                <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.usedNanos)}</td>
-                <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.allowanceNanos)}</td>
-                <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.creditBalanceNanos)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.usedNanos)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.allowanceNanos)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.creditBalanceNanos)}</td>
                 <td className="px-4 py-3">{row.resetAt ? row.resetAt.slice(0, 10) : '—'}</td>
               </tr>
             ))}
