@@ -1348,10 +1348,12 @@
      remeasure columns from clip thumbnails or long titles. Folder rows
      keep the same type size, padding, and height either way. Clip titles
      truncate in the job-name track. Action icons stay in the uploader track.
-     Percentages (sum 84%) are the tracks from 641px up. Table-layout:fixed
-     ignores min()/max(), and the old 128+196+132+228px tracks (684px) run
-     past the pane once the rail and .tablewrap padding are subtracted.
-     !important beats the inline preview/recorded widths on the ths. */
+     Percentages (sum 84%) are the tracks from 641px up: status 17, date 18,
+     uploader 31, so the pill, the date, the name, and the action icons sit
+     with similar gaps. Table-layout:fixed ignores min()/max(). A status
+     column wide enough for the longest pill left a hole after Recorded /
+     Analyzed and jammed the name against the icons. !important beats the
+     inline preview/date widths on the ths. */
   @media (min-width: 641px) {
     #clip-table {
       table-layout: fixed;
@@ -1361,11 +1363,11 @@
     #clip-table .col-preview,
     #clip-table th[data-sort-key="preview"] { width: 18% !important; }
     #clip-table .col-status,
-    #clip-table th[data-sort-key="status"] { width: 20% !important; }
+    #clip-table th[data-sort-key="status"] { width: 17% !important; }
     #clip-table .col-recorded,
-    #clip-table th[data-sort-key="recorded"] { width: 14% !important; }
+    #clip-table th[data-sort-key="recorded"] { width: 18% !important; }
     #clip-table .col-uploader,
-    #clip-table th[data-sort-key="uploader"] { width: 32% !important; }
+    #clip-table th[data-sort-key="uploader"] { width: 31% !important; }
     #clip-table .titlecell { min-width: 0; }
     #clip-table th,
     #clip-table td { overflow: hidden; }
@@ -1412,6 +1414,7 @@
       display: flex;
       width: 100%;
       min-width: 0;
+      column-gap: 24px;
     }
     #clip-table td.job-who .cellrow > span:first-child {
       min-width: 0;
@@ -1425,17 +1428,21 @@
     }
   }
 
-  /* Wide desktop: the 684px tracks fit beside the rail with a job-name
-     column left over. Below this, those pixels overflow the pane. */
+  /* Wide desktop: even gaps as fixed pixels (128+168+168+272 = 736).
+     168px status fits "Waiting for first clip" without a hole after the
+     short Recorded / Analyzed pills. 272px uploader keeps the name clear
+     of the action icons. Leftover width stays on the job name. Below
+     1200px those pixels crowd the job name once the rail and .tablewrap
+     padding are subtracted, so the percentage tracks above are used. */
   @media (min-width: 1200px) {
     #clip-table .col-preview,
     #clip-table th[data-sort-key="preview"] { width: 128px !important; }
     #clip-table .col-status,
-    #clip-table th[data-sort-key="status"] { width: 196px !important; }
+    #clip-table th[data-sort-key="status"] { width: 168px !important; }
     #clip-table .col-recorded,
-    #clip-table th[data-sort-key="recorded"] { width: 132px !important; }
+    #clip-table th[data-sort-key="recorded"] { width: 168px !important; }
     #clip-table .col-uploader,
-    #clip-table th[data-sort-key="uploader"] { width: 228px !important; }
+    #clip-table th[data-sort-key="uploader"] { width: 272px !important; }
   }
 
   /* Phone All videos: one compact card per job, not a stacked desktop table.
@@ -2292,7 +2299,7 @@
             <th style="width:128px" data-sort-key="preview" aria-sort="none"><button type="button">Preview <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="job" aria-sort="none"><button type="button">Job name <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="status" aria-sort="none"><button type="button">Status <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th style="width:132px" data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded <span class="sortcaret" aria-hidden="true">↓</span></button></th>
+            <th style="width:168px" data-sort-key="recorded" aria-sort="descending"><button type="button">Date <span class="sortcaret" aria-hidden="true">↓</span></button></th>
             <th data-sort-key="uploader" aria-sort="none"><button type="button">Uploaded by <span class="sortcaret" aria-hidden="true">↕</span></button></th>
           </tr>
         </thead>

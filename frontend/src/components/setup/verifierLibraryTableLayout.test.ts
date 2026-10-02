@@ -20,20 +20,20 @@ describe('All videos table layout', () => {
     expect(css).toContain('.col-preview,');
     expect(css).toContain('th[data-sort-key="preview"] { width: 18% !important; }');
     expect(css).toContain('.col-status,');
-    expect(css).toContain('th[data-sort-key="status"] { width: 20% !important; }');
+    expect(css).toContain('th[data-sort-key="status"] { width: 17% !important; }');
     expect(css).toContain('.col-recorded,');
-    expect(css).toContain('th[data-sort-key="recorded"] { width: 14% !important; }');
+    expect(css).toContain('th[data-sort-key="recorded"] { width: 18% !important; }');
     expect(css).toContain('.col-uploader,');
-    expect(css).toContain('th[data-sort-key="uploader"] { width: 32% !important; }');
+    expect(css).toContain('th[data-sort-key="uploader"] { width: 31% !important; }');
     expect(css).toContain('max-width: 100%');
     const wide = verifierHtml.match(
       /@media \(min-width: 1200px\) \{[\s\S]*?\n  \}/,
     );
     expect(wide).not.toBeNull();
     expect(wide![0]).toContain('th[data-sort-key="preview"] { width: 128px !important; }');
-    expect(wide![0]).toContain('th[data-sort-key="status"] { width: 196px !important; }');
-    expect(wide![0]).toContain('th[data-sort-key="recorded"] { width: 132px !important; }');
-    expect(wide![0]).toContain('th[data-sort-key="uploader"] { width: 228px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="status"] { width: 168px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="recorded"] { width: 168px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="uploader"] { width: 272px !important; }');
     expect(css).toContain('text-overflow: ellipsis');
     expect(css).toContain('#clip-table tr.jobrow td.titlecell .t');
     expect(css).toContain('font-size: 14px');
@@ -48,7 +48,7 @@ describe('All videos table layout', () => {
     expect(verifierHtml).toContain('<col class="col-recorded" />');
     expect(verifierHtml).toContain('<col class="col-uploader" />');
     expect(verifierHtml).toMatch(/th style="width:128px"[^>]*data-sort-key="preview"/);
-    expect(verifierHtml).toMatch(/th style="width:132px"[^>]*data-sort-key="recorded"/);
+    expect(verifierHtml).toMatch(/th style="width:168px"[^>]*data-sort-key="recorded"/);
     expect(verifierHtml).not.toMatch(/<col class="col-status" style=/);
     expect(verifierHtml).toContain('#clip-table colgroup,\n    #clip-table col { display: none !important; }');
   });

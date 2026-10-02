@@ -104,8 +104,8 @@ describe('verifier recorded-date formatting', () => {
     expect(clipTime).not.toContain(clipDay);
 
     const header = document.querySelector('th[data-sort-key="recorded"] button');
-    expect(header?.textContent).toMatch(/^Recorded/);
-    expect(header?.textContent).not.toContain('Recorded date');
+    expect(header?.textContent).toMatch(/^Date/);
+    expect(header?.textContent).not.toContain('Recorded');
 
     dom.window.close();
   });
