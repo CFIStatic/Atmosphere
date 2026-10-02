@@ -448,12 +448,31 @@ const zeroTokens = () => ({
   events: 0, inputTokens: 0, outputTokens: 0, cacheTokens: 0, totalTokens: 0, priceNanos: 0,
 });
 
+function demoDayActors(events: number) {
+  const elena = Math.min(events, Math.max(1, Math.round(events * 0.56)));
+  const marcus = Math.min(Math.max(0, events - elena), Math.max(events > 1 ? 1 : 0, Math.round(events * 0.28)));
+  const priya = Math.max(0, events - elena - marcus);
+  return [
+    { userId: 'demo-user-1', name: 'Elena Ortiz', events: elena },
+    { userId: 'demo-user-2', name: 'Marcus Chen', events: marcus },
+    { userId: 'demo-user-3', name: 'Priya Shah', events: priya },
+  ].filter((actor) => actor.events > 0);
+}
+
 const TOKEN_USAGE = (): TokenUsageReport => {
-  const days = USAGE_DAYS.map((row) => {
+  const days = USAGE_DAYS.map((row, index) => {
     const total = row.inputTokens + row.outputTokens + row.cacheTokens;
     const video = Math.round(total * 0.56);
     const chat = Math.round(total * 0.28);
     const ask = Math.max(0, total - video - chat);
+    const newest = index === USAGE_DAYS.length - 1;
+    const prior = index === USAGE_DAYS.length - 2;
+    // Newest day: many unpriced calls plus one Other call at $0.08 and 0 tokens.
+    // The day before is real spend under a cent, so the table must not show $0.00.
+    const priceNanos = newest ? 80_000_000 : prior ? 5_000_000 : row.priceNanos;
+    const videoEvents = Math.round(row.events * 0.45);
+    const chatEvents = Math.round(row.events * 0.35);
+    const askEvents = Math.max(0, row.events - videoEvents - chatEvents - (newest ? 1 : 0));
     return {
       day: row.day,
       events: row.events,
@@ -461,12 +480,15 @@ const TOKEN_USAGE = (): TokenUsageReport => {
       outputTokens: row.outputTokens,
       cacheTokens: row.cacheTokens,
       totalTokens: total,
-      priceNanos: row.priceNanos,
+      priceNanos,
+      actors: demoDayActors(row.events),
       byFeature: {
-        video_analysis: { ...zeroTokens(), events: Math.round(row.events * 0.45), totalTokens: video, priceNanos: Math.round(row.priceNanos * 0.58) },
-        chat: { ...zeroTokens(), events: Math.round(row.events * 0.35), totalTokens: chat, priceNanos: Math.round(row.priceNanos * 0.27) },
-        ask: { ...zeroTokens(), events: Math.max(0, row.events - Math.round(row.events * 0.8)), totalTokens: ask, priceNanos: Math.round(row.priceNanos * 0.15) },
-        other: zeroTokens(),
+        video_analysis: { ...zeroTokens(), events: videoEvents, totalTokens: video, priceNanos: newest ? 0 : Math.round(priceNanos * 0.58) },
+        chat: { ...zeroTokens(), events: chatEvents, totalTokens: chat, priceNanos: newest ? 0 : Math.round(priceNanos * 0.27) },
+        ask: { ...zeroTokens(), events: askEvents, totalTokens: ask, priceNanos: newest ? 0 : Math.round(priceNanos * 0.15) },
+        other: newest
+          ? { ...zeroTokens(), events: 1, totalTokens: 0, priceNanos: 80_000_000 }
+          : zeroTokens(),
       },
     };
   });

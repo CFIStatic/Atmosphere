@@ -42,6 +42,19 @@ export function formatSpendUsd(nanos: number): string {
   return formatUsd(nanos);
 }
 
+/**
+ * Daily usage total. Sum nanodollars first, then format.
+ * A positive amount under one cent is `<$0.01` so rounding cannot show `$0.00`
+ * for a day that had real cost. Larger amounts use the same spend formatter
+ * as the rest of the usage tables.
+ */
+export function formatDailyUsd(nanos: number): string {
+  if (!Number.isFinite(nanos) || nanos === 0) return formatUsd(0);
+  const cents = 10_000_000;
+  if (Math.abs(nanos) < cents) return nanos < 0 ? '-<$0.01' : '<$0.01';
+  return formatSpendUsd(nanos);
+}
+
 /** Compact form for headline figures: `$1.2k`. */
 export function formatUsdCompact(nanos: number): string {
   const dollars = nanos / NANOS_PER_CREDIT;
@@ -72,7 +85,11 @@ export const formatRate = (usdPerMTok: number): string =>
 
 export function formatDate(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 /** How much of an allowance has been consumed, clamped for the progress bar. */

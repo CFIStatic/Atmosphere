@@ -9,20 +9,21 @@ import {
   type TokenUsageRange,
   type TokenUsageReport,
 } from '../../lib/api';
-import { formatSpendUsd, formatTokens, formatUsdCompact } from '../../lib/money';
+import { formatDailyUsd, formatSpendUsd, formatTokens, formatUsdCompact } from '../../lib/money';
 import { TokenUsageChart } from './TokenUsageChart';
-import { TOKEN_FEATURE_TRACK, formatAnalysisMinutes, sharePct, tokenSpendCaption } from './tokenUsageModel';
+import {
+  TOKEN_FEATURE_TRACK,
+  dailyUsageRows,
+  formatAnalysisMinutes,
+  sharePct,
+  tokenSpendCaption,
+} from './tokenUsageModel';
 
 const RANGES: { id: TokenUsageRange; label: string }[] = [
   { id: 'period', label: 'This period' },
   { id: '30d', label: 'Last 30 days' },
   { id: '90d', label: 'Last 90 days' },
 ];
-
-const day = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : '—';
 
 export function TokenUsageSection() {
   const [range, setRange] = useState<TokenUsageRange>('period');
@@ -66,6 +67,7 @@ export function TokenUsageSection() {
 
   const employees = report.byEmployee.filter((row) => row.userId !== null || row.totalTokens > 0);
   const tokenShare = (count: number) => sharePct(count, totals.totalTokens);
+  const daily = dailyUsageRows(report.byDay, report.recent);
 
   return (
     <div className="space-y-6">
@@ -77,7 +79,11 @@ export function TokenUsageSection() {
               Model calls for the signed-in organization. Spend is dollars (USD), not a token count.
             </p>
           </div>
-          <div className="flex rounded-lg border border-line bg-paper-50 p-0.5" role="tablist" aria-label="Usage window">
+          <div
+            className="flex rounded-lg border border-line bg-paper-50 p-0.5"
+            role="tablist"
+            aria-label="Usage window"
+          >
             {RANGES.map((option) => {
               const active = range === option.id;
               return (
@@ -99,12 +105,22 @@ export function TokenUsageSection() {
         </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi label="Tokens used" value={formatTokens(totals.totalTokens)} hint={`${totals.events.toLocaleString()} metered calls`} />
-          <Kpi label="Spend (USD)" value={formatSpendUsd(totals.priceNanos)} hint={tokenSpendCaption(report)} />
+          <Kpi
+            label="Tokens used"
+            value={formatTokens(totals.totalTokens)}
+            hint={`${totals.events.toLocaleString()} metered calls`}
+          />
+          <Kpi
+            label="Spend (USD)"
+            value={formatSpendUsd(totals.priceNanos)}
+            hint={tokenSpendCaption(report)}
+          />
           <Kpi
             label="Input / output"
             value={`${formatTokens(totals.inputTokens)} / ${formatTokens(totals.outputTokens)}`}
-            hint={totals.cacheTokens ? `${formatTokens(totals.cacheTokens)} cached` : 'No cache hits'}
+            hint={
+              totals.cacheTokens ? `${formatTokens(totals.cacheTokens)} cached` : 'No cache hits'
+            }
           />
           <Kpi
             label="People using tokens"
@@ -132,7 +148,9 @@ export function TokenUsageSection() {
 
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
           <div>
-            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Token class</h4>
+            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+              Token class
+            </h4>
             <ul className="mt-3 space-y-3">
               <Meter
                 label="Input"
@@ -155,7 +173,9 @@ export function TokenUsageSection() {
             </ul>
           </div>
           <div>
-            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">By application</h4>
+            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+              By application
+            </h4>
             <ul className="mt-3 space-y-3">
               {TOKEN_FEATURES.map((feature) => {
                 const row = report.byFeature.find((item) => item.feature === feature);
@@ -177,7 +197,9 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">By employee</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Every seat on this organization. Spend is USD billed to this organization for the selected period — not provider cost, and not another company. Unattributed rows are usage we could not tie to an uploader, job owner, or signed-in teammate.
+          Every seat on this organization. Spend is USD billed to this organization for the selected
+          period — not provider cost, and not another company. Unattributed rows are usage we could
+          not tie to an uploader, job owner, or signed-in teammate.
         </p>
         {employees.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -198,7 +220,11 @@ export function TokenUsageSection() {
               </thead>
               <tbody>
                 {employees.map((row) => (
-                  <EmployeeRow key={row.userId ?? 'unattributed'} row={row} totalTokens={totals.totalTokens} />
+                  <EmployeeRow
+                    key={row.userId ?? 'unattributed'}
+                    row={row}
+                    totalTokens={totals.totalTokens}
+                  />
                 ))}
               </tbody>
             </table>
@@ -210,7 +236,8 @@ export function TokenUsageSection() {
         <h3 className="text-base font-semibold text-ink-900">Usage by job</h3>
         <p className="mt-0.5 text-xs text-ink-500">
           Job costing view for this window: analysis minutes are the length of film that finished AI
-          analysis (proof duration), not a tokens-to-minutes estimate. Spend is this organization’s USD for the same window.
+          analysis (proof duration), not a tokens-to-minutes estimate. Spend is this organization’s
+          USD for the same window.
         </p>
         {(report.byJob ?? []).length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -239,36 +266,52 @@ export function TokenUsageSection() {
         )}
       </section>
 
-      <section className="rounded-xl glass-card p-5">
-        <h3 className="text-base font-semibold text-ink-900">Recent calls</h3>
-        <p className="mt-0.5 text-xs text-ink-500">Newest metered model calls in this window.</p>
-        {report.recent.length === 0 ? (
+      <section className="rounded-xl glass-card p-5" data-testid="daily-usage">
+        <h3 className="text-base font-semibold text-ink-900">Daily usage</h3>
+        <p className="mt-0.5 text-xs text-ink-500">One row per day in this window, newest first.</p>
+        {daily.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
             Nothing metered yet.
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[32rem] text-left text-xs">
+          <div className="mt-3 max-h-[32rem] overflow-auto">
+            <table className="w-full text-left text-xs">
               <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
                 <tr className="border-b border-line">
-                  <th className="py-2 pr-3 font-semibold">When</th>
-                  <th className="px-3 py-2 font-semibold">Who</th>
-                  <th className="px-3 py-2 font-semibold">Surface</th>
-                  <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
+                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pr-3 font-semibold backdrop-blur-sm">
+                    Day
+                  </th>
+                  <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-sm">
+                    Calls
+                  </th>
+                  <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-sm">
+                    Tokens
+                  </th>
+                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pl-3 text-right font-semibold backdrop-blur-sm">
+                    USD
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {report.recent.map((row) => (
-                  <tr key={row.id} className="border-b border-line/60 last:border-b-0">
-                    <td className="py-2.5 pr-3 tabular-nums text-ink-700">{day(row.createdAt)}</td>
-                    <td className="px-3 py-2.5 text-ink-700">{row.userName}</td>
-                    <td className="px-3 py-2.5 text-ink-700">{TOKEN_FEATURE_LABELS[row.feature]}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-800">
+                {daily.map((row) => (
+                  <tr key={row.day} className="border-b border-line/60 align-top last:border-b-0">
+                    <td className="py-2.5 pr-3">
+                      <div className="font-medium tabular-nums text-ink-900">{row.label}</div>
+                      <div className="mt-0.5 text-[11px] leading-snug text-ink-500">
+                        {row.breakdown}
+                      </div>
+                    </td>
+                    <td
+                      className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink-800"
+                      data-testid={`daily-calls-${row.day}`}
+                    >
+                      {row.calls.toLocaleString('en-US')}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink-800">
                       {formatTokens(row.totalTokens)}
                     </td>
-                    <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-                      {formatSpendUsd(row.priceNanos)}
+                    <td className="whitespace-nowrap py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
+                      {formatDailyUsd(row.priceNanos)}
                     </td>
                   </tr>
                 ))}
@@ -309,7 +352,10 @@ function Meter({
         <span className="tabular-nums text-ink-600">{value}</span>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-paper-200" aria-hidden>
-        <div className={`h-full rounded-full ${track}`} style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }} />
+        <div
+          className={`h-full rounded-full ${track}`}
+          style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
+        />
       </div>
     </li>
   );
@@ -330,7 +376,9 @@ function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
         </div>
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">{minutes}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('video_analysis')}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">
+        {feature('video_analysis')}
+      </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('ask')}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
         {formatTokens(row.totalTokens)}
@@ -354,7 +402,9 @@ function EmployeeRow({ row, totalTokens }: { row: TokenEmployeeBreakdown; totalT
           {totalTokens > 0 ? ` · ${sharePct(row.totalTokens, totalTokens).toFixed(0)}% of org` : ''}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('video_analysis')}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">
+        {feature('video_analysis')}
+      </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('chat')}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('ask')}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
