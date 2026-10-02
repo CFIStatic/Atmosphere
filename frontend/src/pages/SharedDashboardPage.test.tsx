@@ -460,6 +460,9 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('tab', { name: 'Job history' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Timeline' }));
     expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-documents-list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Documents' })).not.toBeInTheDocument();
+    expect(screen.queryByText('No documents on this job yet.')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Scope' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add a line' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Job facts' })).not.toBeInTheDocument();
