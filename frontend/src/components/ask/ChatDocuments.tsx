@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   attachChatDocument,
-  chipFromDocument,
   listChatDocuments,
   uploadChatDocument,
   type AskAttachment,
@@ -70,39 +69,6 @@ export function AskAttachmentChip({
         </button>
       ) : null}
     </span>
-  );
-}
-
-export function JobDocumentsList({ jobId }: { jobId: string }) {
-  const [documents, setDocuments] = useState<ChatDocumentCard[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    listChatDocuments(jobId)
-      .then((rows) => {
-        if (!cancelled) setDocuments(rows.filter((row) => row.attached));
-      })
-      .catch(() => {
-        if (!cancelled) setDocuments([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [jobId]);
-  return (
-    <section data-testid="job-documents-list" className="shrink-0 rounded-xl border border-line bg-paper-0 px-4 py-3">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Documents</h3>
-      {documents.length === 0 ? (
-        <p className="mt-1 text-xs text-ink-500">No documents on this job yet.</p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {documents.map((doc) => (
-            <li key={doc.id}>
-              <AskAttachmentChip file={chipFromDocument(doc)} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
