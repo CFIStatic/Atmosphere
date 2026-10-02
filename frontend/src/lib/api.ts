@@ -6330,9 +6330,17 @@ export interface TokenFeatureBreakdown extends TokenTotals {
   feature: TokenFeature;
 }
 
+export interface TokenDayActor {
+  userId: string | null;
+  name: string;
+  events: number;
+}
+
 export interface TokenUsageDay extends TokenTotals {
   day: string;
   byFeature: Record<TokenFeature, TokenTotals>;
+  /** People with calls this UTC day, most calls first. Omitted on older payloads. */
+  actors?: TokenDayActor[];
 }
 
 export interface TokenEmployeeBreakdown extends TokenTotals {

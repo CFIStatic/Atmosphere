@@ -80,9 +80,17 @@ export interface TokenFeatureBreakdown extends TokenTotals {
   feature: TokenFeature;
 }
 
+export interface TokenDayActor {
+  userId: string | null;
+  name: string;
+  events: number;
+}
+
 export interface TokenUsageDay extends TokenTotals {
   day: string;
   byFeature: Record<TokenFeature, TokenTotals>;
+  /** People with calls this UTC day, most calls first. */
+  actors: TokenDayActor[];
 }
 
 export interface TokenEmployeeBreakdown extends TokenTotals {
@@ -196,6 +204,17 @@ export function aggregateJobTokenUsage(
   });
 }
 
+function meteredUserName(
+  userId: string | null,
+  member: { fullName: string | null; email: string | null } | undefined,
+): string {
+  return (
+    member?.fullName?.trim() ||
+    member?.email?.split('@')[0] ||
+    (userId ? 'Teammate' : 'System')
+  );
+}
+
 function emptyByFeature(): Record<TokenFeature, TokenTotals> {
   return {
     video_analysis: EMPTY_TOTALS(),
@@ -301,7 +320,8 @@ export function aggregateTokenUsage(
 ): Omit<TokenUsageReport, 'range'> {
   const totals = EMPTY_TOTALS();
   const featureMap = emptyByFeature();
-  const dayMap = new Map<string, TokenUsageDay>();
+  const dayMap = new Map<string, Omit<TokenUsageDay, 'actors'>>();
+  const dayActors = new Map<string, Map<string, TokenDayActor>>();
   const employeeMap = new Map<string, TokenEmployeeBreakdown>();
 
   const memberById = new Map(members.map((m) => [m.userId, m]));
@@ -346,6 +366,23 @@ export function aggregateTokenUsage(
     addTo(dayRow, increment);
     addTo(dayRow.byFeature[row.feature], increment);
 
+    const actorKey = row.userId ?? '__unattributed__';
+    let actors = dayActors.get(day);
+    if (!actors) {
+      actors = new Map();
+      dayActors.set(day, actors);
+    }
+    const actor = actors.get(actorKey);
+    if (actor) actor.events += 1;
+    else {
+      const member = row.userId ? memberById.get(row.userId) : undefined;
+      actors.set(actorKey, {
+        userId: row.userId,
+        name: meteredUserName(row.userId, member),
+        events: 1,
+      });
+    }
+
     const employee = ensureEmployee(row.userId);
     addTo(employee, increment);
     addTo(employee.byFeature[row.feature], increment);
@@ -357,7 +394,12 @@ export function aggregateTokenUsage(
   }));
 
   const byDay = eachUtcDay(window.start, window.end).map((day) => {
-    return dayMap.get(day) ?? { day, byFeature: emptyByFeature(), ...EMPTY_TOTALS() };
+    const base = dayMap.get(day) ?? { day, byFeature: emptyByFeature(), ...EMPTY_TOTALS() };
+    const actors = [...(dayActors.get(day)?.values() ?? [])].sort((a, b) => {
+      if (b.events !== a.events) return b.events - a.events;
+      return a.name.localeCompare(b.name);
+    });
+    return { ...base, actors };
   });
 
   const byEmployee = [...employeeMap.values()].sort((a, b) => {
@@ -377,10 +419,7 @@ export function aggregateTokenUsage(
         source: row.source,
         modelId: row.modelId,
         userId: row.userId,
-        userName:
-          member?.fullName?.trim() ||
-          member?.email?.split('@')[0] ||
-          (row.userId ? 'Teammate' : 'System'),
+        userName: meteredUserName(row.userId, member),
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
         cacheTokens: row.cacheTokens,

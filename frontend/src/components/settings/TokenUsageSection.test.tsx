@@ -37,7 +37,10 @@ const report: TokenUsageReport = {
     priceNanos: 18_400_000_000,
   }),
   byFeature: [
-    { feature: 'video_analysis', ...totals({ events: 20, totalTokens: 180_000, priceNanos: 12_000_000_000 }) },
+    {
+      feature: 'video_analysis',
+      ...totals({ events: 20, totalTokens: 180_000, priceNanos: 12_000_000_000 }),
+    },
     { feature: 'chat', ...totals({ events: 18, totalTokens: 70_000, priceNanos: 4_400_000_000 }) },
     { feature: 'ask', ...totals({ events: 10, totalTokens: 38_000, priceNanos: 2_000_000_000 }) },
     { feature: 'other', ...emptyTokenTotals() },
@@ -138,14 +141,26 @@ describe('TokenUsageSection', () => {
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
     expect(screen.getByText('288k')).toBeInTheDocument();
     expect(screen.getByText('$18.40')).toBeInTheDocument();
-    expect(screen.getByText(/This billing period, Aug 1, 2026 to Sep 1, 2026 UTC · USD · this organization/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This billing period, Aug 1, 2026 to Sep 1, 2026 UTC · USD · this organization/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText('Spend (USD)')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Daily usage' })).toBeInTheDocument();
+    expect(screen.getByText('One row per day in this window, newest first.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Recent calls' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Newest metered model calls in this window.'),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText('Elena Ortiz').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Marcus Chen').length).toBeGreaterThan(0);
-    expect(screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org')).toBeInTheDocument();
+    expect(
+      screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org'),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('Ask').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Video analysis').length).toBeGreaterThan(0);
     expect(screen.queryByText('claude-sonnet')).not.toBeInTheDocument();
@@ -183,7 +198,9 @@ describe('TokenUsageSection', () => {
     render(<TokenUsageSection />);
     expect(await screen.findByText('Jack Cyganiak')).toBeInTheDocument();
     expect(screen.getByText(/uploader, job owner, or signed-in teammate/i)).toBeInTheDocument();
-    expect(screen.getByText(/USD billed to this organization for the selected period/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/USD billed to this organization for the selected period/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('$12.80').length).toBeGreaterThan(0);
     expect(screen.queryByText('$1.28')).not.toBeInTheDocument();
     expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
@@ -242,5 +259,78 @@ describe('Usage by job', () => {
     getTokenUsage.mockResolvedValue({ ...report, byJob: [] });
     render(<TokenUsageSection />);
     expect(await screen.findByText(/No job-attributed AI usage/i)).toBeInTheDocument();
+  });
+});
+
+describe('Daily usage', () => {
+  beforeEach(() => {
+    getTokenUsage.mockReset();
+  });
+
+  it('rolls calls into one row per day with precise totals', async () => {
+    const ask = totals({ events: 12, totalTokens: 19_300, priceNanos: 0 });
+    const other = totals({ events: 1, totalTokens: 0, priceNanos: 80_000_000 });
+    const priorAsk = totals({ events: 4, totalTokens: 6_300, priceNanos: 4_000_000 });
+    getTokenUsage.mockResolvedValue({
+      ...report,
+      byDay: [
+        {
+          day: '2026-09-30',
+          ...totals({ events: 4, totalTokens: 6_300, priceNanos: 4_000_000 }),
+          byFeature: {
+            video_analysis: emptyTokenTotals(),
+            chat: emptyTokenTotals(),
+            ask: priorAsk,
+            other: emptyTokenTotals(),
+          },
+          actors: [{ userId: 'u-1', name: 'El Presidente', events: 4 }],
+        },
+        {
+          day: '2026-10-01',
+          ...totals({ events: 13, totalTokens: 19_300, priceNanos: 80_000_000 }),
+          byFeature: {
+            video_analysis: emptyTokenTotals(),
+            chat: emptyTokenTotals(),
+            ask,
+            other,
+          },
+          actors: [{ userId: 'u-1', name: 'El Presidente', events: 13 }],
+        },
+        {
+          day: '2026-09-29',
+          ...emptyTokenTotals(),
+          byFeature: {
+            video_analysis: emptyTokenTotals(),
+            chat: emptyTokenTotals(),
+            ask: emptyTokenTotals(),
+            other: emptyTokenTotals(),
+          },
+        },
+      ],
+      recent: [],
+    });
+
+    render(<TokenUsageSection />);
+    expect(await screen.findByRole('heading', { name: 'Daily usage' })).toBeInTheDocument();
+    const rows = screen.getAllByRole('row');
+    const labels = rows.map((row) => row.textContent ?? '');
+    const oct = labels.findIndex((text) => text.includes('Oct 1, 2026'));
+    const sep30 = labels.findIndex((text) => text.includes('Sep 30, 2026'));
+    const sep29 = labels.findIndex((text) => text.includes('Sep 29, 2026'));
+    expect(oct).toBeGreaterThan(0);
+    expect(sep30).toBeGreaterThan(oct);
+    expect(sep29).toBe(-1);
+
+    const october = screen.getByText('Oct 1, 2026').closest('tr');
+    expect(october).toHaveTextContent('El Presidente · Ask, Other');
+    expect(october).toHaveTextContent('13');
+    expect(october).toHaveTextContent('19k');
+    expect(october).toHaveTextContent('$0.08');
+    expect(october).not.toHaveTextContent('$0.00');
+
+    const september = screen.getByText('Sep 30, 2026').closest('tr');
+    expect(september).toHaveTextContent('El Presidente · Ask');
+    expect(september).toHaveTextContent('<$0.01');
+    expect(september).toHaveTextContent('6.3k');
   });
 });

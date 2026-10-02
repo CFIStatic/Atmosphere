@@ -143,9 +143,22 @@ test('aggregateTokenUsage totals the org, each feature, each employee, and each 
   assert.equal(report.byDay.length, 4);
   assert.equal(report.byDay[0]?.day, '2026-08-01');
   assert.equal(report.byDay[0]?.totalTokens, 0);
+  assert.deepEqual(report.byDay[0]?.actors, []);
   assert.equal(report.byDay[1]?.totalTokens, 11300);
   assert.equal(report.byDay[1]?.byFeature.video_analysis.totalTokens, 9200);
   assert.equal(report.byDay[1]?.byFeature.ask.totalTokens, 2100);
+  assert.equal(report.byDay[1]?.events, 2);
+  assert.equal(report.byDay[1]?.priceNanos, 48_000_000);
+  assert.deepEqual(
+    report.byDay[1]?.actors.map((actor) => ({ name: actor.name, events: actor.events })),
+    [
+      { name: 'Elena Ortiz', events: 1 },
+      { name: 'Marcus Chen', events: 1 },
+    ],
+  );
+  assert.deepEqual(report.byDay[2]?.actors, [
+    { userId: 'user-1', name: 'Elena Ortiz', events: 1 },
+  ]);
 
   assert.equal(report.byEmployee[0]?.name, 'Elena Ortiz');
   assert.equal(report.byEmployee[0]?.totalTokens, 9980);
