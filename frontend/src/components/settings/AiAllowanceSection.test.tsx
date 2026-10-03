@@ -35,6 +35,12 @@ function expectFill(width: string, tone: 'brand' | 'caution' | 'danger', shade: 
 }
 
 describe('AI allowance meter', () => {
+  it('labels the meter as allowance used at our AI cost, not the billed price', () => {
+    render(<AiAllowanceSection allowance={allowance({ state: 'ok', usedFraction: 0.4 })} onError={() => {}} />);
+    expect(screen.getByTestId('ai-allowance-label')).toHaveTextContent('Allowance used (at our AI cost)');
+    expect(screen.queryByText(/10% annual increase/i)).not.toBeInTheDocument();
+  });
+
   it('fills the bar for normal use, the warning, and the limit', () => {
     const { rerender } = render(
       <AiAllowanceSection allowance={allowance({ state: 'ok', usedFraction: 0.4 })} onError={() => {}} />,

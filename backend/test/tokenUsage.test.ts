@@ -238,26 +238,21 @@ const askUsage = {
   totalTokens: 568,
 };
 
-test('quoteMeasuredUsageCostNanos prefers COGS over the marked-up rate-card price', async () => {
+test('quoteMeasuredUsageCostNanos prices from the official rate card, not an RPC', async () => {
+  let rpcCalls = 0;
   const cost = await quoteMeasuredUsageCostNanos(
     {
-      rpc: async () => ({ data: { cost_nanos: '9200000', price_nanos: '18400000' }, error: null }),
+      rpc: async () => {
+        rpcCalls += 1;
+        return { data: { cost_nanos: '1', price_nanos: '1' }, error: null };
+      },
     } as any,
-    'claude-sonnet',
+    'claude-sonnet-4-6',
     askUsage,
   );
-  assert.equal(cost, 9_200_000);
-});
-
-test('quoteMeasuredUsageCostNanos falls back to price_nanos when cost is absent', async () => {
-  const cost = await quoteMeasuredUsageCostNanos(
-    {
-      rpc: async () => ({ data: { price_nanos: '18400000' }, error: null }),
-    } as any,
-    'claude-sonnet',
-    askUsage,
-  );
-  assert.equal(cost, 18_400_000);
+  // 400 × $3/M + 168 × $15/M
+  assert.equal(cost, 400 * 3_000 + 168 * 15_000);
+  assert.equal(rpcCalls, 0);
 });
 
 test('quoteMeasuredUsageCostNanos stays 0 when the model is unknown', async () => {
@@ -300,14 +295,11 @@ test('recordTokenUsage writes provider cost and 10× billable', async () => {
   assert.equal((rpcs[0]?.params.p_metadata as { customerMarkup?: number }).customerMarkup, 10);
 });
 
-test('recordMeasuredTokenUsageAsync quotes Ask COGS and stores 10× billable', async () => {
+test('recordMeasuredTokenUsageAsync stores rate-card cost and 10× billable for a Claude Ask turn', async () => {
   const rpcs: Array<{ name: string; params: Record<string, unknown> }> = [];
   const client = {
     rpc: async (name: string, params: Record<string, unknown>) => {
       rpcs.push({ name, params });
-      if (name === 'quote_usage') {
-        return { data: { cost_nanos: '9200000', price_nanos: '18400000' }, error: null };
-      }
       return { data: { eventId: 'evt-ask', duplicate: false }, error: null };
     },
   } as any;
@@ -317,17 +309,19 @@ test('recordMeasuredTokenUsageAsync quotes Ask COGS and stores 10× billable', a
     requestId: 'ask:job-1',
     feature: 'ask',
     source: 'proof_ask',
-    modelId: 'claude-sonnet',
+    modelId: 'claude-sonnet-4-6',
     usage: askUsage,
   });
 
-  const quote = rpcs.find((row) => row.name === 'quote_usage');
+  assert.equal(rpcs.some((row) => row.name === 'quote_usage'), false);
   const record = rpcs.find((row) => row.name === 'record_token_usage');
-  assert.ok(quote);
-  assert.equal(record?.params.p_cost_nanos, 9_200_000);
-  assert.equal(record?.params.p_price_nanos, billableNanosFromCost(9_200_000));
-  assert.equal(record?.params.p_price_nanos, 92_000_000);
+  const cost = 400 * 3_000 + 168 * 15_000;
+  assert.equal(record?.params.p_cost_nanos, cost);
+  assert.equal(record?.params.p_price_nanos, billableNanosFromCost(cost));
+  assert.equal(record?.params.p_price_nanos, cost * 10);
   assert.equal(record?.params.p_feature, 'ask');
+  assert.equal(record?.params.p_provider, 'anthropic');
+  assert.equal(record?.params.p_pricing_status, 'priced');
 });
 
 test('aggregateTokenUsage Spend KPI is the billable price_nanos, not COGS', () => {
@@ -466,16 +460,17 @@ test('resolveTokenUsageWindow caps an open billing period at now', () => {
   assert.equal(window.end, now.toISOString());
 });
 
-test('eventBillableNanos prices zero-dollar Gemini rows and leaves unknown models at zero', () => {
+test('eventBillableNanos prices zero-dollar Gemini rows at official rates and leaves unknown models at zero', () => {
   const gemini = eventBillableNanos({
-    modelId: 'gemini-3.6-flash',
+    modelId: 'gemini-3.5-flash-lite',
     inputTokens: 529,
     outputTokens: 39,
     cacheTokens: 0,
     costNanos: 0,
     priceNanos: 0,
   });
-  assert.equal(gemini, (529 * 100 + 39 * 400) * 10);
+  // $0.30 / $2.50 per M → 300 / 2,500 nanos per token, ×10 markup
+  assert.equal(gemini, (529 * 300 + 39 * 2_500) * 10);
 
   const unknown = eventBillableNanos({
     modelId: 'mystery-model',
@@ -520,49 +515,58 @@ test('aggregateTokenUsage includes Gemini ask spend that was stored as zero', ()
   );
   assert.equal(report.totals.events, 1);
   assert.equal(report.totals.totalTokens, 568);
-  assert.equal(report.totals.priceNanos, (529 * 100 + 39 * 400) * 10);
+  // gemini-3.6-flash in Sept 2026: $0.75 / $3.75 per M
+  assert.equal(report.totals.priceNanos, (529 * 750 + 39 * 3_750) * 10);
   assert.equal(report.byFeature.find((row) => row.feature === 'ask')?.priceNanos, report.totals.priceNanos);
 });
 
-test('quoteMeasuredUsageCostNanos prices Gemini when the rate card does not know the model', async () => {
-  const cost = await quoteMeasuredUsageCostNanos(
-    {
-      rpc: async () => ({ data: null, error: { message: 'unknown_model' } }),
-    } as any,
-    'gemini-3.6-flash',
-    askUsage,
-  );
-  assert.equal(cost, askUsage.inputTokens * 100 + askUsage.outputTokens * 400);
-});
-
-test('recordMeasuredTokenUsageAsync stores 10× Gemini COGS when quote_usage has no card', async () => {
+test('recordMeasuredTokenUsageAsync stores provider usage, cache split and 10× Gemini cost', async () => {
   const rpcs: Array<{ name: string; params: Record<string, unknown> }> = [];
   const client = {
     rpc: async (name: string, params: Record<string, unknown>) => {
       rpcs.push({ name, params });
-      if (name === 'quote_usage') return { data: null, error: { message: 'unknown_model' } };
       return { data: { eventId: 'evt-gem', duplicate: false }, error: null };
     },
   } as any;
+  const raw = { promptTokenCount: 629, candidatesTokenCount: 39, cachedContentTokenCount: 100 };
   const usage = {
     inputTokens: 529,
     outputTokens: 39,
     cacheWrite5mTokens: 0,
     cacheWrite1hTokens: 0,
-    cacheReadTokens: 0,
-    totalTokens: 568,
+    cacheReadTokens: 100,
+    totalTokens: 668,
+    provider: 'google' as const,
+    calls: [
+      {
+        provider: 'google' as const,
+        model: 'gemini-3.5-flash-lite',
+        inputTokens: 529,
+        outputTokens: 39,
+        cacheReadTokens: 100,
+        cacheWrite5mTokens: 0,
+        cacheWrite1hTokens: 0,
+        raw,
+      },
+    ],
   };
   await recordMeasuredTokenUsageAsync(client, {
     orgId: 'org-1',
     requestId: 'ask:gem',
     feature: 'ask',
-    modelId: 'gemini-3.6-flash',
+    modelId: 'gemini-3.5-flash-lite',
     usage,
   });
   const record = rpcs.find((row) => row.name === 'record_token_usage');
-  const cogs = 529 * 100 + 39 * 400;
+  const cogs = 529 * 300 + 39 * 2_500 + 100 * 30;
   assert.equal(record?.params.p_cost_nanos, cogs);
   assert.equal(record?.params.p_price_nanos, cogs * 10);
+  assert.equal(record?.params.p_provider, 'google');
+  assert.equal(record?.params.p_cache_read_tokens, 100);
+  assert.equal(record?.params.p_cache_write_5m_tokens, 0);
+  assert.deepEqual(record?.params.p_provider_usage, {
+    calls: [{ provider: 'google', model: 'gemini-3.5-flash-lite', usage: raw }],
+  });
 });
 
 test('collectPaged walks past a 1000-row PostgREST page', async () => {

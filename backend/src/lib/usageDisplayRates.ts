@@ -1,5 +1,6 @@
 import { ANALYSIS_UNIT_CENTS } from './stripeInvoices.js';
 import { usageCustomerMarkup } from '../metering/customerMarkup.js';
+import { modelPriceTable, ratesForModel } from '../metering/modelPriceTable.js';
 import { verificationConfig } from '../verification/config.js';
 
 export interface UsageRateInputs {
@@ -22,8 +23,8 @@ function usd(amount: number): string {
 /**
  * Customer-facing usage clause.
  *
- * Video analysis is billed from verificationConfig Gemini COGS × the usage
- * markup. Escalated reads use the Anthropic COGS × the same markup. Stripe
+ * Video analysis is billed from the official rate card for the configured
+ * model × the usage markup; escalated reads likewise. Stripe
  * invoices that charge as analysis units at ANALYSIS_UNIT_CENTS.
  */
 export function usageRateClause(input: UsageRateInputs): string {
@@ -36,16 +37,24 @@ export function usageRateClause(input: UsageRateInputs): string {
   );
 }
 
-/** Rates the billing code actually charges, including env overrides. */
+/**
+ * Rates the billing code actually charges: the official rate card (the same
+ * one every ledger row is priced from) for the configured video and
+ * escalation models, × the usage markup. A model missing from the card
+ * shows 0 here and is flagged as unpriced wherever it is metered.
+ */
 export function billedUsageRateInputs(
   env: NodeJS.ProcessEnv = process.env,
 ): UsageRateInputs {
   const markup = usageCustomerMarkup(env);
+  const table = modelPriceTable();
+  const video = ratesForModel(table, verificationConfig.primaryModel);
+  const escalation = ratesForModel(table, verificationConfig.escalationModel);
   return {
-    videoInputUsdPerMTok: verificationConfig.geminiInputPerMTokUsd * markup,
-    videoOutputUsdPerMTok: verificationConfig.geminiOutputPerMTokUsd * markup,
-    escalationInputUsdPerMTok: verificationConfig.anthropicInputPerMTokUsd * markup,
-    escalationOutputUsdPerMTok: verificationConfig.anthropicOutputPerMTokUsd * markup,
+    videoInputUsdPerMTok: (video?.inputPerMTok ?? 0) * markup,
+    videoOutputUsdPerMTok: (video?.outputPerMTok ?? 0) * markup,
+    escalationInputUsdPerMTok: (escalation?.inputPerMTok ?? 0) * markup,
+    escalationOutputUsdPerMTok: (escalation?.outputPerMTok ?? 0) * markup,
     analysisUnitCents: ANALYSIS_UNIT_CENTS,
   };
 }

@@ -13,17 +13,15 @@
  * the signed-in org — never the global ledger.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { cacheTokensOf, type MeasuredUsage } from '../lib/anthropic.js';
-import { toNanos } from '../lib/money.js';
+import { currentAiUsageScope } from './aiUsageContext.js';
+import { cacheTokensOf, type MeasuredUsage, type ProviderUsageCall } from '../lib/anthropic.js';
 import { labelForMemberRole } from '../lib/productRoles.js';
 import { usdToNanos } from './costEngine.js';
-import {
-  billableNanosFromCost,
-  resolveTokenLedgerAmounts,
-  usageCustomerMarkup,
-} from './customerMarkup.js';
-import { fallbackProviderCogsNanos } from './providerCogs.js';
+import { resolveTokenLedgerAmounts, usageCustomerMarkup } from './customerMarkup.js';
+import { eventBillableNanos as sharedEventBillableNanos, providerCostForUsage } from './pricing.js';
+import { RATE_CARD_VERIFIED_AT } from './modelPriceTable.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
@@ -47,6 +45,16 @@ export interface TokenUsageInput {
   priceNanos?: number;
   metadata?: Record<string, unknown>;
   at?: string;
+  /** anthropic | google | openai | tavily — whose API reported the usage. */
+  provider?: string | null;
+  /** Provider-reported cache split. cacheTokens is the aggregate. */
+  cacheReadTokens?: number;
+  cacheWrite5mTokens?: number;
+  cacheWrite1hTokens?: number;
+  /** Raw provider usage object(s), stored on token_usage_events.provider_usage. */
+  providerUsage?: Record<string, unknown> | null;
+  /** 'unpriced' when the model has no price on the rate card. */
+  pricingStatus?: 'priced' | 'unpriced';
 }
 
 export interface TokenUsageEventRow {
@@ -65,6 +73,11 @@ export interface TokenUsageEventRow {
   costNanos: number;
   priceNanos: number;
   createdAt: string;
+  cacheReadTokens?: number;
+  cacheWrite5mTokens?: number;
+  cacheWrite1hTokens?: number;
+  provider?: string | null;
+  pricingStatus?: string | null;
 }
 
 export interface TokenTotals {
@@ -234,25 +247,15 @@ function addTo(target: TokenTotals, row: TokenTotals): void {
 }
 
 /**
- * Billable nanodollars for one event.
- * Stored price_nanos wins. Zero-price rows with a stored COGS are marked up.
- * Gemini rows with neither amount use the video-analysis rate card × markup
- * so Ask/chat tokens are not shown as free.
+ * Billable nanodollars for one event — the shared rule in metering/pricing.ts
+ * (stored price wins; a legacy row with tokens but $0 is priced from the rate
+ * card and marked up once). Billing and Analytics both call this.
  */
 export function eventBillableNanos(row: Pick<
   TokenUsageEventRow,
   'priceNanos' | 'costNanos' | 'modelId' | 'inputTokens' | 'outputTokens' | 'cacheTokens'
->): number {
-  if (row.priceNanos > 0) return row.priceNanos;
-  const stored = row.costNanos > 0 ? row.costNanos : 0;
-  const cost = stored > 0
-    ? stored
-    : fallbackProviderCogsNanos(row.modelId, {
-        inputTokens: row.inputTokens,
-        outputTokens: row.outputTokens,
-        cacheTokens: row.cacheTokens,
-      });
-  return billableNanosFromCost(cost);
+> & Partial<Pick<TokenUsageEventRow, 'cacheReadTokens' | 'cacheWrite5mTokens' | 'cacheWrite1hTokens' | 'createdAt'>>): number {
+  return sharedEventBillableNanos(row);
 }
 
 function asEventTotals(row: TokenUsageEventRow): TokenTotals {
@@ -470,7 +473,17 @@ function toRpcParams(input: TokenUsageInput) {
     p_price_nanos: priceNanos,
     p_metadata: metadata,
     p_at: input.at ?? null,
+    p_provider: input.provider ?? null,
+    p_cache_read_tokens: input.cacheReadTokens ?? 0,
+    p_cache_write_5m_tokens: input.cacheWrite5mTokens ?? 0,
+    p_cache_write_1h_tokens: input.cacheWrite1hTokens ?? 0,
+    p_provider_usage: input.providerUsage ?? null,
+    p_pricing_status: input.pricingStatus ?? (costNanos > 0 ? 'priced' : tokenCount(input) > 0 ? 'unpriced' : 'priced'),
   };
+}
+
+function tokenCount(input: TokenUsageInput): number {
+  return (input.inputTokens ?? 0) + (input.outputTokens ?? 0) + (input.cacheTokens ?? 0);
 }
 
 /** Record one token-usage event. Idempotent on requestId. Never throws to the caller of the async variant. */
@@ -478,7 +491,20 @@ export async function recordTokenUsage(
   client: SupabaseClient,
   input: TokenUsageInput,
 ): Promise<{ eventId: string; duplicate: boolean } | null> {
-  const { data, error } = await client.rpc('record_token_usage', toRpcParams(input));
+  const params = toRpcParams(input);
+  const tokenTotal = tokenCount(input);
+  if (tokenTotal > 0 && params.p_cost_nanos <= 0) {
+    // Health check: tokens were spent but nothing was priced. This is an
+    // alert, not a warning — the row is stored with pricing_status
+    // 'unpriced' and Analytics › Token usage shows it as a red health flag.
+    console.error('[metering] ALERT unpriced AI usage: tokens recorded with $0 cost', {
+      orgId: input.orgId,
+      requestId: input.requestId,
+      modelId: input.modelId ?? null,
+      totalTokens: tokenTotal,
+    });
+  }
+  const { data, error } = await client.rpc('record_token_usage', params);
   if (error) throw error;
   const row = data as { eventId?: string; duplicate?: boolean } | null;
   if (!row?.eventId) return null;
@@ -523,10 +549,22 @@ export function recordFlatProviderCost(
     jobId?: string | null;
     userId?: string | null;
     metadata?: Record<string, unknown>;
+    provider?: string | null;
+    /** Raw usage the provider returned (Tavily `usage`, OpenAI transcription `usage`). */
+    providerUsage?: Record<string, unknown> | null;
   },
 ): void {
-  if (!Number.isFinite(input.costNanos) || input.costNanos <= 0) return;
+  if (!Number.isFinite(input.costNanos) || input.costNanos <= 0) {
+    console.error('[metering] ALERT flat provider fee has no price; not recorded', {
+      orgId: input.orgId,
+      requestId: input.requestId,
+      modelId: input.modelId,
+    });
+    return;
+  }
   recordTokenUsageAsync(client, {
+    provider: input.provider ?? null,
+    providerUsage: input.providerUsage ?? null,
     orgId: input.orgId,
     requestId: input.requestId,
     feature: input.feature,
@@ -557,54 +595,32 @@ export function recordTokenUsageAsync(
 }
 
 /**
- * Provider-cost estimate for measured tokens via `quote_usage`.
+ * Provider cost for provider-reported usage, from the official rate card
+ * (metering/modelPriceTable.ts via metering/pricing.ts). Local and
+ * synchronous in substance: no database round-trip that can fail on grants —
+ * the September 23 lock-down made `quote_usage` service_role-only, the Ask
+ * path called it with the signed-in client, and Claude turns were stored at
+ * $0. A model that is not on the card returns 0 and logs an ALERT; the write
+ * path then stores the row as `unpriced` so it is never silent.
  *
- * Prefers `cost_nanos` (true COGS). Falls back to `price_nanos` when an older
- * quote_usage still strips cost — that value is then treated as cost and
- * marked up once by the customer multiplier. Gemini models missing from the
- * rate card use the video-analysis card instead of $0. Other unknown models
- * stay 0 — we do not invent a price.
+ * The client argument is kept for call-site compatibility.
  */
 export async function quoteMeasuredUsageCostNanos(
-  client: SupabaseClient,
+  _client: SupabaseClient,
   modelId: string | null | undefined,
   usage: MeasuredUsage,
+  at: Date | string | null = null,
 ): Promise<number> {
-  if (!modelId?.trim()) return 0;
-  try {
-    const { data, error } = await client.rpc('quote_usage', {
-      p_model_id: modelId,
-      p_input_tokens: usage.inputTokens,
-      p_output_tokens: usage.outputTokens,
-      p_cache_write_5m_tokens: usage.cacheWrite5mTokens,
-      p_cache_write_1h_tokens: usage.cacheWrite1hTokens,
-      p_cache_read_tokens: usage.cacheReadTokens,
-      p_is_batch: false,
-    });
-    if (error || !data) {
-      return fallbackProviderCogsNanos(modelId, {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cacheTokens: cacheTokensOf(usage),
-      });
-    }
-    const row = data as { cost_nanos?: unknown; price_nanos?: unknown };
-    const cost = toNanos(row.cost_nanos ?? 0);
-    if (cost > 0) return cost;
-    const legacy = toNanos(row.price_nanos ?? 0);
-    if (legacy > 0) return legacy;
-    return fallbackProviderCogsNanos(modelId, {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cacheTokens: cacheTokensOf(usage),
-    });
-  } catch {
-    return fallbackProviderCogsNanos(modelId, {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cacheTokens: cacheTokensOf(usage),
+  const quote = providerCostForUsage(modelId, usage, at);
+  if (!quote.priced) {
+    console.error('[metering] ALERT no price on the rate card; usage recorded at $0', {
+      modelId: modelId ?? null,
+      unpricedModels: quote.unpricedModels,
+      totalTokens: usage.totalTokens,
+      rateCardVerifiedAt: quote.rateCardVerifiedAt,
     });
   }
+  return quote.costNanos;
 }
 
 /** @deprecated Use quoteMeasuredUsageCostNanos — name kept for existing tests. */
@@ -662,6 +678,7 @@ export async function recordMeasuredTokenUsageAsync(
   },
 ): Promise<{ eventId: string; duplicate: boolean } | null> {
   const usage = input.usage;
+  const quote = providerCostForUsage(input.modelId, usage);
   const quotedCost =
     input.costNanos != null && input.costNanos > 0
       ? input.costNanos
@@ -669,6 +686,12 @@ export async function recordMeasuredTokenUsageAsync(
         ? input.priceNanos
         : await quoteMeasuredUsageCostNanos(client, input.modelId, usage);
   return recordTokenUsage(client, {
+    provider: usage.provider ?? providerOfModel(input.modelId),
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWrite5mTokens: usage.cacheWrite5mTokens,
+    cacheWrite1hTokens: usage.cacheWrite1hTokens,
+    providerUsage: providerUsageJson(usage.calls, input.modelId ?? null),
+    pricingStatus: quotedCost > 0 ? 'priced' : 'unpriced',
     orgId: input.orgId,
     requestId: input.requestId,
     feature: input.feature,
@@ -680,7 +703,39 @@ export async function recordMeasuredTokenUsageAsync(
     outputTokens: usage.outputTokens,
     cacheTokens: cacheTokensOf(usage),
     costNanos: quotedCost,
+    metadata: {
+      pricing: {
+        rateCardVerifiedAt: RATE_CARD_VERIFIED_AT,
+        ...(quote.unpricedModels.length ? { unpricedModels: quote.unpricedModels } : {}),
+      },
+    },
   });
+}
+
+/** Provider for a model id, when the usage object did not say. */
+export function providerOfModel(modelId: string | null | undefined): string | null {
+  const id = (modelId ?? '').trim().toLowerCase();
+  if (!id) return null;
+  if (id.startsWith('claude')) return 'anthropic';
+  if (id.startsWith('gemini')) return 'google';
+  if (id.startsWith('tavily')) return 'tavily';
+  if (id.startsWith('whisper') || id.startsWith('gpt')) return 'openai';
+  return null;
+}
+
+/** `provider_usage` jsonb: one entry per provider call, with the raw usage object. */
+export function providerUsageJson(
+  calls: ProviderUsageCall[] | undefined,
+  fallbackModel: string | null,
+): Record<string, unknown> | null {
+  if (!calls?.length) return null;
+  return {
+    calls: calls.map((call) => ({
+      provider: call.provider,
+      model: call.model ?? fallbackModel,
+      usage: call.raw,
+    })),
+  };
 }
 
 function parseEventRow(raw: Record<string, unknown>): TokenUsageEventRow {
@@ -701,6 +756,11 @@ function parseEventRow(raw: Record<string, unknown>): TokenUsageEventRow {
     costNanos: Number(raw.cost_nanos ?? 0),
     priceNanos: Number(raw.price_nanos ?? 0),
     createdAt: String(raw.created_at),
+    cacheReadTokens: Number(raw.cache_read_tokens ?? 0),
+    cacheWrite5mTokens: Number(raw.cache_write_5m_tokens ?? 0),
+    cacheWrite1hTokens: Number(raw.cache_write_1h_tokens ?? 0),
+    provider: (raw.provider as string | null) ?? null,
+    pricingStatus: (raw.pricing_status as string | null) ?? null,
   };
 }
 
@@ -752,7 +812,7 @@ async function resolvePeriodBounds(
 export const TOKEN_USAGE_PAGE = 1000;
 
 const TOKEN_USAGE_SELECT =
-  'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, cost_nanos, price_nanos, created_at';
+  'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, cost_nanos, price_nanos, created_at, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, provider, pricing_status';
 
 export async function collectPaged<T>(
   pageSize: number,
@@ -903,4 +963,40 @@ async function loadAnalysedFilmSeconds(
 export function estimatedUsdToNanos(usd: number): number {
   if (!Number.isFinite(usd) || usd <= 0) return 0;
   return usdToNanos(usd);
+}
+
+/**
+ * Record provider-reported usage for a call that has no org id of its own,
+ * using the request's AI usage scope (metering/aiUsageContext.ts). With no
+ * scope the call cannot be attributed to a customer: log an ALERT with the
+ * tokens so the provider-billing reconciliation can explain the gap.
+ */
+export function meterScopedUsage(input: {
+  source: string;
+  feature: string;
+  modelId: string;
+  usage: MeasuredUsage | null | undefined;
+}): void {
+  const usage = input.usage;
+  if (!usage || usage.totalTokens <= 0) return;
+  const scope = currentAiUsageScope();
+  if (!scope) {
+    console.error('[metering] ALERT AI call with no org scope; provider usage not attributed', {
+      source: input.source,
+      modelId: input.modelId,
+      totalTokens: usage.totalTokens,
+      costNanos: providerCostForUsage(input.modelId, usage).costNanos,
+    });
+    return;
+  }
+  recordMeasuredTokenUsage(scope.client, {
+    orgId: scope.orgId,
+    requestId: `${input.source}:${scope.requestId}:${randomUUID()}`,
+    feature: input.feature,
+    source: input.source,
+    modelId: input.modelId,
+    usage,
+    jobId: scope.jobId ?? null,
+    userId: scope.userId ?? null,
+  });
 }

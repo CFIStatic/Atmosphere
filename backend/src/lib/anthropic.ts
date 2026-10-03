@@ -33,6 +33,43 @@ export interface MeasuredUsage {
   cacheReadTokens: number;
   /** Total across every class — for logging and reconciliation only. */
   totalTokens: number;
+  /** Which provider reported these counts. */
+  provider?: 'anthropic' | 'google' | 'openai' | 'tavily';
+  /**
+   * One entry per provider call that makes up this usage, each with the
+   * provider's raw usage object, so a turn that spans several calls (or two
+   * models) is priced call by call and audited against the provider's own
+   * numbers. Stored on token_usage_events.provider_usage.
+   */
+  calls?: ProviderUsageCall[];
+}
+
+/** One provider call: the counts we price on, plus the provider's raw usage object. */
+export interface ProviderUsageCall {
+  provider: 'anthropic' | 'google' | 'openai' | 'tavily';
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWrite5mTokens: number;
+  cacheWrite1hTokens: number;
+  /** Gemini: audio share of inputTokens (priced separately on some models). */
+  audioInputTokens?: number;
+  /** Whole prompt size for long-context tiers. */
+  promptTokens?: number;
+  /** Anthropic server tools (web search $10 / 1,000). */
+  webSearchRequests?: number;
+  raw: Record<string, unknown>;
+}
+
+/** JSON-safe shallow copy of a provider usage object (SDK objects can carry prototypes). */
+export function rawUsageObject(usage: unknown): Record<string, unknown> {
+  if (!usage || typeof usage !== 'object') return {};
+  try {
+    return JSON.parse(JSON.stringify(usage)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -52,7 +89,7 @@ function nonNegativeInt(value: unknown, field: string): number {
  * Throws rather than guessing if the payload is unusable — billing a customer
  * from a usage object we could not parse is worse than failing the request.
  */
-export function extractUsage(usage: any): MeasuredUsage {
+export function extractUsage(usage: any, model: string | null = null): MeasuredUsage {
   if (!usage || typeof usage !== 'object') {
     throw new HttpError(502, 'Provider response carried no usage data', 'missing_usage');
   }
@@ -95,6 +132,7 @@ export function extractUsage(usage: any): MeasuredUsage {
     cacheWrite5mTokens = cacheCreationTotal;
   }
 
+  const webSearchRequests = Number(usage.server_tool_use?.web_search_requests ?? 0) || 0;
   return {
     inputTokens,
     outputTokens,
@@ -103,6 +141,20 @@ export function extractUsage(usage: any): MeasuredUsage {
     cacheReadTokens,
     totalTokens:
       inputTokens + outputTokens + cacheWrite5mTokens + cacheWrite1hTokens + cacheReadTokens,
+    provider: 'anthropic',
+    calls: [
+      {
+        provider: 'anthropic',
+        model,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWrite5mTokens,
+        cacheWrite1hTokens,
+        ...(webSearchRequests > 0 ? { webSearchRequests } : {}),
+        raw: rawUsageObject(usage),
+      },
+    ],
   };
 }
 
@@ -119,9 +171,9 @@ const EMPTY_USAGE: MeasuredUsage = {
  * Best-effort parse for paths that must still answer even when the provider
  * omitted usage. Returns zeros rather than failing the conversation.
  */
-export function tryExtractUsage(usage: unknown): MeasuredUsage {
+export function tryExtractUsage(usage: unknown, model: string | null = null): MeasuredUsage {
   try {
-    return extractUsage(usage);
+    return extractUsage(usage, model);
   } catch {
     return EMPTY_USAGE;
   }

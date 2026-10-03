@@ -111,7 +111,7 @@ export function TokenUsageSection() {
             hint={`${totals.events.toLocaleString()} metered calls`}
           />
           <Kpi
-            label="Spend (USD)"
+            label="Billed AI usage"
             value={formatSpendUsd(totals.priceNanos)}
             hint={tokenSpendCaption(report)}
           />

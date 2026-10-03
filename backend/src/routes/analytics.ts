@@ -36,6 +36,7 @@ import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics, getAdminTokenUsageAnalytics } from '../metering/periodAggregation.js';
 import { getProductHealth } from '../analytics/productHealth.js';
+import { buildReconciliation } from '../metering/reconciliation.js';
 import { contactRegistry, normalizeAudience } from '../analytics/contacts/registry.js';
 import {
   campaignSendBlocker,
@@ -218,6 +219,25 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = staffReports(req);
       res.json(await getAdminTokenUsageAnalytics(supabase, from.toISOString(), to.toISOString()));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * Our recorded AI cost vs each provider's own usage/cost report, per provider
+ * per UTC day; variance over 2% is flagged. Providers without admin
+ * credentials report "not connected" with what they need. Internal only.
+ */
+analyticsRouter.get(
+  '/ai-reconciliation',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { from, to } = parseRange(req);
+      const supabase = staffReports(req);
+      res.json(await buildReconciliation({ client: supabase, from: from.toISOString(), to: to.toISOString() }));
     } catch (err) {
       next(err);
     }

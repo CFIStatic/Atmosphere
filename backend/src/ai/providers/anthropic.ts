@@ -1,4 +1,5 @@
 import { describeNetworkError, readErrorMessage } from './openaiCompatible.js';
+import { tryExtractUsage } from '../../lib/anthropic.js';
 import {
   isRetryableStatus,
   ProviderError,
@@ -78,19 +79,21 @@ export class AnthropicProvider implements ModelProvider {
       .join('');
 
     if (!text) throw new ProviderError(this.id, response.status, 'Empty completion', true);
+    const usage = tryExtractUsage(payload.usage, request.model);
 
     return {
       // Put back the brace we prefilled, so callers get parseable JSON.
       text: prefill ? `{${text}` : text,
-      inputTokens: payload.usage?.input_tokens ?? 0,
-      outputTokens: payload.usage?.output_tokens ?? 0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
       stopReason: payload.stop_reason ?? null,
+      usage,
     };
   }
 }
 
 interface MessagesResponse {
   content?: Array<{ type?: string; text?: string }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: Record<string, unknown>;
   stop_reason?: string;
 }

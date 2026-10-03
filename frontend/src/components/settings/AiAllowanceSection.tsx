@@ -81,7 +81,10 @@ export function AiAllowanceSection({
         <p className="mt-4 text-sm text-ink-600">This account is not limited by an AI usage allowance.</p>
       ) : (
         <div className="mt-5" data-testid="ai-allowance-meter">
-          <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500" data-testid="ai-allowance-label">
+            Allowance used (at our AI cost)
+          </p>
+          <div className="mt-1 flex items-baseline justify-between gap-3">
             <p className="text-2xl font-semibold tabular-nums tracking-tight text-ink-900">
               {formatUsd(allowance.usedNanos)}
               <span className="text-base font-medium text-ink-500"> of {formatUsd(allowance.allowanceNanos)}</span>

@@ -80,6 +80,37 @@ export function TokenUsagePage() {
         </div>
       </div>
 
+      {data?.window && (
+        <p className="mt-3 text-[12px] text-ink-600" data-testid="token-usage-window">
+          <span className="font-semibold text-ink-800">{data.window.label}</span>
+          {' · '}
+          {new Date(data.window.from).toISOString().slice(0, 10)} to {new Date(data.window.to).toISOString().slice(0, 10)}
+          {' · '}Billable = provider cost × markup, the same rule as Settings › Billing
+          {data.pricing?.rateCardVerifiedAt ? ` · rate card verified ${data.pricing.rateCardVerifiedAt}` : ''}
+        </p>
+      )}
+
+      {data?.health && !data.health.ok && (
+        <div
+          role="alert"
+          data-testid="token-usage-unpriced"
+          className="mt-4 border-l-2 border-danger-600 bg-danger-50 px-3 py-2 text-[13px] text-danger-600"
+        >
+          <span className="font-semibold">
+            {count(data.health.unpricedEvents)} AI call{data.health.unpricedEvents === 1 ? '' : 's'} with tokens but no price.
+          </span>{' '}
+          No rate-card entry for{' '}
+          {data.health.unpricedModels.map((m) => `${m.model} (${count(m.events)})`).join(', ')}. These are not billed
+          until the model is priced.
+        </div>
+      )}
+      {data?.health && data.health.ok && data.health.repricedEvents > 0 && (
+        <p className="mt-3 text-[12px] text-ink-500" data-testid="token-usage-repriced">
+          {count(data.health.repricedEvents)} call{data.health.repricedEvents === 1 ? ' was' : 's were'} stored at $0 and{' '}
+          {data.health.repricedEvents === 1 ? 'is' : 'are'} priced here from the official rate card.
+        </p>
+      )}
+
       {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
       {loading && !data && <p className="mt-6 text-sm text-ink-500">Loading token usage…</p>}
 

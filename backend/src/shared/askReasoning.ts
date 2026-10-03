@@ -15,6 +15,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
+import { geminiMeasuredUsage, mergeMeasuredUsages } from '../lib/providerUsage.js';
 import {
   anthropicAskApiKey,
   anthropicFastRequest,
@@ -450,7 +451,7 @@ function anthropicLookupSession(input: {
         model: response.model,
         text: '',
         calls: calls.map((call) => ({ name: call.name, input: call.input })),
-        usage: tryExtractUsage(response.usage),
+        usage: tryExtractUsage(response.usage, response.model ?? null),
         streamed: false,
       };
     }
@@ -458,7 +459,7 @@ function anthropicLookupSession(input: {
       model: response.model,
       text,
       calls: [],
-      usage: tryExtractUsage(response.usage),
+      usage: tryExtractUsage(response.usage, response.model ?? null),
       streamed: deltas.length > 0,
     };
   };
@@ -477,7 +478,7 @@ export function geminiLookupTools() {
 function turnFromGeminiParts(
   parts: GeminiPart[],
   model: string,
-  usage: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number },
+  usageMetadata: unknown,
   streamed: boolean,
 ): LookupModelTurn {
   const calls = parts
@@ -489,21 +490,12 @@ function turnFromGeminiParts(
     .map((part) => part.text ?? '')
     .join('')
     .trim();
-  const inputTokens = usage.inputTokens ?? 0;
-  const outputTokens = usage.outputTokens ?? 0;
-  const cacheReadTokens = usage.cacheReadTokens ?? 0;
   return {
     model,
     text: calls.length ? '' : text,
     calls,
-    usage: {
-      inputTokens,
-      outputTokens,
-      cacheWrite5mTokens: 0,
-      cacheWrite1hTokens: 0,
-      cacheReadTokens,
-      totalTokens: inputTokens + outputTokens + cacheReadTokens,
-    },
+    // Provider-reported: prompt includes cached tokens, output adds thinking.
+    usage: geminiMeasuredUsage(usageMetadata, model),
     streamed: streamed && !calls.length,
   };
 }
@@ -520,9 +512,7 @@ async function readGeminiLookupStream(
   const parts: GeminiPart[] = [];
   let streamed = false;
   let modelVersion = model;
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
+  let usageMetadata: unknown = null;
   let sawCall = false;
   while (true) {
     const { done, value } = await reader.read();
@@ -537,7 +527,7 @@ async function readGeminiLookupStream(
       if (!raw || raw === '[DONE]') continue;
       let payload: {
         candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
-        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
+        usageMetadata?: Record<string, unknown>;
         modelVersion?: string;
       };
       try {
@@ -546,11 +536,8 @@ async function readGeminiLookupStream(
         continue;
       }
       if (payload.modelVersion) modelVersion = payload.modelVersion;
-      if (payload.usageMetadata?.promptTokenCount != null) inputTokens = payload.usageMetadata.promptTokenCount;
-      if (payload.usageMetadata?.candidatesTokenCount != null) outputTokens = payload.usageMetadata.candidatesTokenCount;
-      if (payload.usageMetadata?.cachedContentTokenCount != null) {
-        cacheReadTokens = payload.usageMetadata.cachedContentTokenCount;
-      }
+      // Each chunk carries the running usageMetadata; the last one is final.
+      if (payload.usageMetadata) usageMetadata = payload.usageMetadata;
       for (const part of payload.candidates?.[0]?.content?.parts ?? []) {
         parts.push(part);
         if (part.functionCall?.name) sawCall = true;
@@ -562,7 +549,7 @@ async function readGeminiLookupStream(
       }
     }
   }
-  return turnFromGeminiParts(parts, modelVersion || model, { inputTokens, outputTokens, cacheReadTokens }, streamed);
+  return turnFromGeminiParts(parts, modelVersion || model, usageMetadata, streamed);
 }
 
 async function geminiLookupTurn(input: {
@@ -615,19 +602,10 @@ async function geminiLookupTurn(input: {
   const payload = (await posted.response.json()) as {
     candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
     modelVersion?: string;
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
+    usageMetadata?: Record<string, unknown>;
   };
   const parts = payload.candidates?.[0]?.content?.parts ?? [];
-  const turn = turnFromGeminiParts(
-    parts,
-    payload.modelVersion || posted.model,
-    {
-      inputTokens: payload.usageMetadata?.promptTokenCount,
-      outputTokens: payload.usageMetadata?.candidatesTokenCount,
-      cacheReadTokens: payload.usageMetadata?.cachedContentTokenCount,
-    },
-    false,
-  );
+  const turn = turnFromGeminiParts(parts, payload.modelVersion || posted.model, payload.usageMetadata ?? null, false);
   if (!turn.calls.length && turn.text && input.onToken) {
     input.onToken(turn.text);
     turn.streamed = true;
@@ -990,7 +968,7 @@ export async function answerFromAskLookup(input: {
       if (!researched.answer.trim()) throw new Error('research_empty');
       prose = researched.answer;
       model = researched.model;
-      usage = researched.usage;
+      usage = mergeMeasuredUsages([usage, researched.usage]);
       if (model) input.timing?.noteModel(model);
       trace.push(...researched.traceSteps);
       researchMeta = researched.meta;
@@ -1021,7 +999,8 @@ export async function answerFromAskLookup(input: {
       model = turn.model || model;
       input.timing?.noteModel(model);
       if (turn.usage) {
-        usage = turn.usage;
+        // Every provider call is billed: accumulate, never overwrite.
+        usage = mergeMeasuredUsages([usage, turn.usage]);
         input.timing?.addCacheRead(turn.usage.cacheReadTokens);
       }
       if (turn.calls.length) {
@@ -1115,7 +1094,7 @@ export async function answerFromAskLookup(input: {
       prose = completed.text;
       model = completed.model;
       input.timing?.noteModel(model);
-      usage = completed.usage;
+      usage = mergeMeasuredUsages([usage, completed.usage]);
       if (completed.usage) input.timing?.addCacheRead(completed.usage.cacheReadTokens);
       streamed = true;
     } else {

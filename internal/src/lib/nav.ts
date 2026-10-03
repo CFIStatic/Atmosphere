@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/ai', label: 'Ask quality' },
       { to: '/token-usage', label: 'Token usage', internal: true },
+      { to: '/ai-reconciliation', label: 'Cost reconciliation', internal: true },
       { to: '/ai-budgets', label: 'AI budgets', internal: true },
       { to: '/metering', label: 'Metering', internal: true },
     ],
