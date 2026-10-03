@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   api,
+  TOKEN_DISPLAY_FEATURES,
   TOKEN_FEATURE_LABELS,
-  TOKEN_FEATURES,
   type TokenEmployeeBreakdown,
   type TokenFeature,
   type TokenJobBreakdown,
@@ -15,6 +15,7 @@ import {
   TOKEN_FEATURE_TRACK,
   dailyUsageRows,
   formatAnalysisMinutes,
+  mergeAskIntoChat,
   sharePct,
   tokenSpendCaption,
 } from './tokenUsageModel';
@@ -36,7 +37,7 @@ export function TokenUsageSection() {
     api
       .getTokenUsage(range)
       .then((next) => {
-        if (live) setReport(next);
+        if (live) setReport(mergeAskIntoChat(next));
       })
       .catch((err) => {
         if (live) setError(err instanceof Error ? err.message : 'Could not load token usage.');
@@ -133,7 +134,7 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">Usage over time</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Stacked daily tokens — video analysis, chat, and Ask.
+          Stacked daily tokens — video analysis, chat, and web search.
         </p>
         <div className="mt-4">
           <TokenUsageChart days={report.byDay} />
@@ -177,14 +178,24 @@ export function TokenUsageSection() {
               By application
             </h4>
             <ul className="mt-3 space-y-3">
-              {TOKEN_FEATURES.map((feature) => {
+              {TOKEN_DISPLAY_FEATURES.map((feature) => {
                 const row = report.byFeature.find((item) => item.feature === feature);
+                // Web search is billed per Tavily credit, not per token: show searches.
+                const searches = row?.events ?? 0;
+                const amount =
+                  feature === 'web_search'
+                    ? `${searches.toLocaleString()} search${searches === 1 ? '' : 'es'}`
+                    : formatTokens(row?.totalTokens ?? 0);
                 return (
                   <Meter
                     key={feature}
                     label={TOKEN_FEATURE_LABELS[feature]}
-                    value={`${formatTokens(row?.totalTokens ?? 0)} · ${formatUsdCompact(row?.priceNanos ?? 0)}`}
-                    pct={sharePct(row?.totalTokens ?? 0, featureMax)}
+                    value={`${amount} · ${formatUsdCompact(row?.priceNanos ?? 0)}`}
+                    pct={
+                      feature === 'web_search'
+                        ? sharePct(row?.priceNanos ?? 0, totals.priceNanos)
+                        : sharePct(row?.totalTokens ?? 0, featureMax)
+                    }
                     track={TOKEN_FEATURE_TRACK[feature]}
                   />
                 );
@@ -213,7 +224,6 @@ export function TokenUsageSection() {
                   <th className="py-2 pr-3 font-semibold">Person</th>
                   <th className="px-3 py-2 text-right font-semibold">Video</th>
                   <th className="px-3 py-2 text-right font-semibold">Chat</th>
-                  <th className="px-3 py-2 text-right font-semibold">Ask</th>
                   <th className="px-3 py-2 text-right font-semibold">Tokens</th>
                   <th className="py-2 pl-3 text-right font-semibold">USD</th>
                 </tr>
@@ -251,7 +261,7 @@ export function TokenUsageSection() {
                   <th className="py-2 pr-3 font-semibold">Job</th>
                   <th className="px-3 py-2 text-right font-semibold">Analysis min</th>
                   <th className="px-3 py-2 text-right font-semibold">Video</th>
-                  <th className="px-3 py-2 text-right font-semibold">Ask</th>
+                  <th className="px-3 py-2 text-right font-semibold">Chat</th>
                   <th className="px-3 py-2 text-right font-semibold">Tokens</th>
                   <th className="py-2 pl-3 text-right font-semibold">USD</th>
                 </tr>
@@ -379,7 +389,7 @@ function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">
         {feature('video_analysis')}
       </td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('ask')}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('chat')}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
         {formatTokens(row.totalTokens)}
       </td>
@@ -406,7 +416,6 @@ function EmployeeRow({ row, totalTokens }: { row: TokenEmployeeBreakdown; totalT
         {feature('video_analysis')}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('chat')}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('ask')}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
         {formatTokens(row.totalTokens)}
       </td>

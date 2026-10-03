@@ -47,6 +47,7 @@ import {
   type StoredChildPrivacyRedactions,
 } from './childPrivacyRedactions.js';
 import { eventsSha256, transcriptSha256 } from './summaryFreshness.js';
+import { withVideoUsageScope } from '../metering/backgroundUsage.js';
 import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
 import { transcriptLineCount } from '../shared/speechCount.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
@@ -113,7 +114,16 @@ export async function publishableConversation(
   return { details, rejected, quarantined };
 }
 
+/** Every model call made while enriching is billed to the proof's org as video analysis. */
 export async function enrichProofConversation(
+  admin: any,
+  proofId: string,
+  opts?: Parameters<typeof enrichProofConversationInScope>[2],
+): Promise<ConversationDetails | null> {
+  return withVideoUsageScope(admin, { proofId }, () => enrichProofConversationInScope(admin, proofId, opts));
+}
+
+async function enrichProofConversationInScope(
   admin: any,
   proofId: string,
   opts?: {

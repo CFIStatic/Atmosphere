@@ -21,11 +21,37 @@ export async function calculateMeteringPeriod(
   return data as MeteringPeriodCalculation;
 }
 
+/**
+ * Customer-facing usage summary for the caller's org.
+ *
+ * `customer_metering_summary` is EXECUTE-granted to the service role only, so
+ * a user-JWT call is refused ("permission denied") and Settings › Billing showed
+ * no summary. This reads it with the service role instead:
+ *   - `orgId` must be the org the backend resolved from the caller's own
+ *     membership (requireOrg), never a value from the request.
+ *   - `userId` must be the caller's id from the verified JWT.
+ *   - The database checks again: `customer_metering_summary_for_member` raises
+ *     42501 unless `userId` is a member of `orgId`.
+ */
 export async function getCustomerMeteringSummary(
-  client: SupabaseClient,
+  serviceClient: SupabaseClient | null,
   orgId: string,
+  userId: string,
 ): Promise<CustomerMeteringSummary> {
-  const { data, error } = await client.rpc('customer_metering_summary', { p_org: orgId });
+  if (!serviceClient) {
+    throw Object.assign(new Error('Billing summary needs the backend service role.'), {
+      code: 'service_role_unavailable',
+    });
+  }
+  if (!orgId || !userId) {
+    throw Object.assign(new Error('Billing summary needs an org and a signed-in user.'), {
+      code: '42501',
+    });
+  }
+  const { data, error } = await serviceClient.rpc('customer_metering_summary_for_member', {
+    p_org: orgId,
+    p_user: userId,
+  });
   if (error) throw error;
   return data as CustomerMeteringSummary;
 }

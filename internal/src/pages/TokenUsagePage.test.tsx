@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { TokenUsagePage } from './TokenUsagePage';
+import { mergeAskIntoChat } from '../lib/tokenFeatures';
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -107,7 +108,22 @@ describe('TokenUsagePage', () => {
     await waitFor(() => expect(screen.getAllByText('Acme Builders').length).toBeGreaterThan(0));
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('claude-opus-5')).toBeInTheDocument();
-    expect(screen.getByText('Ask')).toBeInTheDocument();
+    // Ask rows are shown under Chat.
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+    expect(screen.queryByText('Ask')).not.toBeInTheDocument();
+  });
+
+  it('merges Ask into one Chat row without changing the totals', () => {
+    const rows = mergeAskIntoChat([
+      { feature: 'web_search', eventCount: 1, totalTokens: 0, priceNanos: 80_000_000 },
+      { feature: 'ask', eventCount: 17, totalTokens: 134_113, priceNanos: 5_837_763_000 },
+      { feature: 'chat', eventCount: 3, totalTokens: 900, priceNanos: 12_000_000 },
+      { feature: 'video_analysis', eventCount: 2, totalTokens: 500, priceNanos: 4_000_000 },
+    ]);
+    expect(rows.map((row) => row.feature)).toEqual(['video_analysis', 'chat', 'web_search']);
+    expect(rows[1]).toEqual({ feature: 'chat', eventCount: 20, totalTokens: 135_013, priceNanos: 5_849_763_000 });
+    const sum = rows.reduce((acc, row) => acc + row.priceNanos, 0);
+    expect(sum).toBe(80_000_000 + 5_837_763_000 + 12_000_000 + 4_000_000);
   });
 
   it('shows the window label and flags unpriced calls loudly', async () => {

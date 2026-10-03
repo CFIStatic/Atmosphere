@@ -19,7 +19,7 @@ import { geminiMeasuredUsage } from '../lib/providerUsage.js';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
-import { anthropicClient } from '../lib/anthropic.js';
+import { anthropicClient, tryExtractUsage } from '../lib/anthropic.js';
 import { googleVisionApiKeys, isVisionConfigured } from '../lib/visionProvider.js';
 import { verificationConfig } from '../verification/config.js';
 import {
@@ -318,6 +318,8 @@ export async function dictatePreparedFrames(
   }
 
   return {
+    // Provider-reported usage, same contract as the Gemini path: callers meter it.
+    usage: tryExtractUsage(response.usage, response.model ?? null),
     narrationText: parsed.narration,
     narrationSummary: parsed.summary,
     model: response.model,

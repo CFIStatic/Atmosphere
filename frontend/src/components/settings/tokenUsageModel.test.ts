@@ -7,6 +7,7 @@ import {
   dailyUsageRows,
   emptyTokenTotals,
   formatAnalysisMinutes,
+  mergeAskIntoChat,
   peakDayTokens,
   sharePct,
   tokenSpendCaption,
@@ -114,10 +115,10 @@ describe('dailyUsageRows', () => {
       calls: 13,
       totalTokens: 19_300,
       priceNanos: 80_000_000,
-      surfaces: 'Ask, Other',
-      breakdown: 'El Presidente · Ask, Other',
+      surfaces: 'Chat, Other',
+      breakdown: 'El Presidente · Chat, Other',
     });
-    expect(rows[1]?.breakdown).toBe('El Presidente · Ask');
+    expect(rows[1]?.breakdown).toBe('El Presidente · Chat');
     expect(formatDailyUsd(rows[0]!.priceNanos)).toBe('$0.08');
     expect(formatDailyUsd(rows[1]!.priceNanos)).toBe('<$0.01');
   });
@@ -195,5 +196,68 @@ describe('tokenSpendCaption', () => {
         orgName: 'Ortiz Restoration',
       }),
     ).toBe('Last 30 days, Aug 1, 2026 to Aug 31, 2026 UTC · USD · Ortiz Restoration');
+  });
+});
+
+describe('mergeAskIntoChat', () => {
+  const t = (events: number, totalTokens: number, priceNanos: number) => ({
+    ...emptyTokenTotals(),
+    events,
+    totalTokens,
+    priceNanos,
+  });
+  it('folds Ask into Chat everywhere and keeps the totals', () => {
+    const report = {
+      periodStart: '2026-09-23T20:22:00Z',
+      periodEnd: '2026-10-23T20:22:00Z',
+      range: 'period' as const,
+      totals: t(19, 134_113, 5_917_763_000),
+      byFeature: [
+        { feature: 'ask' as const, ...t(17, 134_113, 5_837_763_000) },
+        { feature: 'chat' as const, ...t(1, 0, 0) },
+        { feature: 'web_search' as const, ...t(1, 0, 80_000_000) },
+      ],
+      byDay: [
+        {
+          day: '2026-10-01',
+          ...t(3, 10_000, 300_000_000),
+          byFeature: {
+            video_analysis: emptyTokenTotals(),
+            chat: t(1, 1_000, 20_000_000),
+            ask: t(1, 9_000, 200_000_000),
+            web_search: t(1, 0, 80_000_000),
+            other: emptyTokenTotals(),
+          },
+        },
+      ],
+      byEmployee: [],
+      byJob: [],
+      recent: [
+        {
+          id: 'r',
+          createdAt: '2026-10-01T19:51:03Z',
+          feature: 'ask' as const,
+          source: 'proof_ask',
+          modelId: 'claude-sonnet-5',
+          userId: null,
+          userName: 'System',
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheTokens: 0,
+          totalTokens: 2,
+          priceNanos: 1,
+        },
+      ],
+    };
+    const merged = mergeAskIntoChat(report);
+    expect(merged.totals).toEqual(report.totals);
+    expect(merged.byFeature.map((row) => row.feature)).toEqual(['chat', 'web_search']);
+    expect(merged.byFeature[0]).toMatchObject({ feature: 'chat', events: 18, totalTokens: 134_113, priceNanos: 5_837_763_000 });
+    const sum = (rows: { priceNanos: number }[]) => rows.reduce((acc, row) => acc + row.priceNanos, 0);
+    expect(sum(merged.byFeature)).toBe(sum(report.byFeature));
+    expect(merged.byDay[0]?.byFeature.chat).toMatchObject({ events: 2, totalTokens: 10_000, priceNanos: 220_000_000 });
+    expect(merged.byDay[0]?.byFeature.ask).toEqual(emptyTokenTotals());
+    expect(merged.recent[0]?.feature).toBe('chat');
+    expect(dailyUsageRows(merged.byDay)[0]?.surfaces).toBe('Chat, Web search');
   });
 });

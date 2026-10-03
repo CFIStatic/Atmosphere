@@ -2,17 +2,20 @@
  * Canonical buckets for customer-facing token metering.
  *
  * Video analysis, chat, and Ask are the three product surfaces that spend
- * tokens. Everything else (PM drafts, financial briefs, …) still counts, but
- * lands in `other` so the billing graph stays readable.
+ * tokens. Web search (Tavily credits, Gemini grounded search) is its own line
+ * so search spend is visible on Billing, the allowance and Analytics.
+ * Everything else (PM drafts, financial briefs, …) still counts, but lands in
+ * `other` so the billing graph stays readable.
  */
 
-export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'other'] as const;
+export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'other'] as const;
 export type TokenFeature = (typeof TOKEN_FEATURES)[number];
 
 export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
   video_analysis: 'Video analysis',
   chat: 'Chat',
   ask: 'Ask',
+  web_search: 'Web search',
   other: 'Other',
 };
 
@@ -31,7 +34,10 @@ const VIDEO = new Set([
   'clip_analysis',
 ]);
 
-const ASK = new Set(['ask', 'clip_ask', 'proof_ask', 'job_ask', 'job-ask', 'clip-ask', 'proof-ask']);
+// Research is an Ask mode (multi-step answer); it bills as Ask.
+const ASK = new Set(['ask', 'clip_ask', 'proof_ask', 'job_ask', 'job-ask', 'clip-ask', 'proof-ask', 'research']);
+
+const WEB_SEARCH = new Set(['web_search', 'web-search', 'tavily', 'tavily_search', 'gemini_search']);
 
 const CHAT = new Set([
   'chat',
@@ -52,6 +58,7 @@ const CHAT = new Set([
 export function classifyTokenFeature(feature: string | null | undefined): TokenFeature {
   const raw = (feature ?? '').trim().toLowerCase();
   if (!raw) return 'other';
+  if (WEB_SEARCH.has(raw)) return 'web_search';
   if (VIDEO.has(raw) || /(^|[_-])(video|verif|analys|vision|frame)([_-]|$)/.test(raw)) {
     return 'video_analysis';
   }

@@ -467,12 +467,17 @@ const TOKEN_USAGE = (): TokenUsageReport => {
     const ask = Math.max(0, total - video - chat);
     const newest = index === USAGE_DAYS.length - 1;
     const prior = index === USAGE_DAYS.length - 2;
-    // Newest day: many unpriced calls plus one Other call at $0.08 and 0 tokens.
+    // Newest day: priced model calls plus one Tavily web search (1 credit,
+    // $0.008 cost, $0.08 billed) on its own Web search line with 0 tokens.
     // The day before is real spend under a cent, so the table must not show $0.00.
-    const priceNanos = newest ? 80_000_000 : prior ? 5_000_000 : row.priceNanos;
+    const searchNanos = newest ? 80_000_000 : 0;
+    const modelNanos = prior ? 5_000_000 : row.priceNanos;
+    const priceNanos = modelNanos + searchNanos;
     const videoEvents = Math.round(row.events * 0.45);
     const chatEvents = Math.round(row.events * 0.35);
     const askEvents = Math.max(0, row.events - videoEvents - chatEvents - (newest ? 1 : 0));
+    const videoNanos = Math.round(modelNanos * 0.58);
+    const chatNanos = Math.round(modelNanos * 0.27);
     return {
       day: row.day,
       events: row.events,
@@ -483,12 +488,13 @@ const TOKEN_USAGE = (): TokenUsageReport => {
       priceNanos,
       actors: demoDayActors(row.events),
       byFeature: {
-        video_analysis: { ...zeroTokens(), events: videoEvents, totalTokens: video, priceNanos: newest ? 0 : Math.round(priceNanos * 0.58) },
-        chat: { ...zeroTokens(), events: chatEvents, totalTokens: chat, priceNanos: newest ? 0 : Math.round(priceNanos * 0.27) },
-        ask: { ...zeroTokens(), events: askEvents, totalTokens: ask, priceNanos: newest ? 0 : Math.round(priceNanos * 0.15) },
-        other: newest
-          ? { ...zeroTokens(), events: 1, totalTokens: 0, priceNanos: 80_000_000 }
+        video_analysis: { ...zeroTokens(), events: videoEvents, totalTokens: video, priceNanos: videoNanos },
+        chat: { ...zeroTokens(), events: chatEvents, totalTokens: chat, priceNanos: chatNanos },
+        ask: { ...zeroTokens(), events: askEvents, totalTokens: ask, priceNanos: modelNanos - videoNanos - chatNanos },
+        web_search: newest
+          ? { ...zeroTokens(), events: 1, totalTokens: 0, priceNanos: searchNanos }
           : zeroTokens(),
+        other: zeroTokens(),
       },
     };
   });
@@ -503,7 +509,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
     }),
     zeroTokens(),
   );
-  const feature = (key: 'video_analysis' | 'chat' | 'ask') =>
+  const feature = (key: 'video_analysis' | 'chat' | 'ask' | 'web_search') =>
     days.reduce(
       (acc, day) => ({
         events: acc.events + day.byFeature[key].events,
@@ -524,6 +530,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
       { feature: 'video_analysis', ...feature('video_analysis') },
       { feature: 'chat', ...feature('chat') },
       { feature: 'ask', ...feature('ask') },
+      { feature: 'web_search', ...feature('web_search') },
       { feature: 'other', ...zeroTokens() },
     ],
     byDay: days,
@@ -560,6 +567,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
             video_analysis: { ...zeroTokens(), totalTokens: videoTokens },
             chat: { ...zeroTokens(), totalTokens: chatTokens },
             ask: { ...zeroTokens(), totalTokens: askTokens },
+            web_search: zeroTokens(),
             other: zeroTokens(),
           },
         };

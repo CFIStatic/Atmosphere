@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
@@ -563,7 +564,27 @@ async function answerClipFromDocuments(opts: {
  * Persistence is best-effort: the reviewer still gets the answer if the
  * questions table or the custody insert cannot take a row.
  */
-async function settleClipQuestion(opts: {
+type SettleClipQuestionOpts = Parameters<typeof settleClipQuestionInScope>[0];
+
+/**
+ * Clip Ask runs inside the org's AI usage scope, so the web searches it makes
+ * (Tavily credits, Gemini grounded search) are billed to this org as
+ * 'web_search'. The turn's own model usage is recorded once below.
+ */
+async function settleClipQuestion(opts: SettleClipQuestionOpts): ReturnType<typeof settleClipQuestionInScope> {
+  return runWithAiUsageScope(
+    {
+      client: opts.client,
+      orgId: opts.orgId,
+      jobId: opts.jobId,
+      userId: opts.askedBy ?? null,
+      requestId: `ask:${opts.proofId}:${randomUUID()}`,
+    },
+    () => settleClipQuestionInScope(opts),
+  );
+}
+
+async function settleClipQuestionInScope(opts: {
   client: any;
   orgId: string;
   jobId: string;

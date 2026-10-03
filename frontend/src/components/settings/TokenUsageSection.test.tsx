@@ -161,7 +161,10 @@ describe('TokenUsageSection', () => {
     expect(
       screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org'),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Ask').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+    // Ask is shown as Chat in the usage displays: one meter, chat + ask summed.
+    expect(screen.queryByText('Ask')).not.toBeInTheDocument();
+    expect(screen.getByText('108k · $6.40')).toBeInTheDocument();
     expect(screen.getAllByText('Video analysis').length).toBeGreaterThan(0);
     expect(screen.queryByText('claude-sonnet')).not.toBeInTheDocument();
     expect(screen.queryByText('gemini-3.6-flash')).not.toBeInTheDocument();
@@ -322,14 +325,14 @@ describe('Daily usage', () => {
     expect(sep29).toBe(-1);
 
     const october = screen.getByText('Oct 1, 2026').closest('tr');
-    expect(october).toHaveTextContent('El Presidente · Ask, Other');
+    expect(october).toHaveTextContent('El Presidente · Chat, Other');
     expect(october).toHaveTextContent('13');
     expect(october).toHaveTextContent('19k');
     expect(october).toHaveTextContent('$0.08');
     expect(october).not.toHaveTextContent('$0.00');
 
     const september = screen.getByText('Sep 30, 2026').closest('tr');
-    expect(september).toHaveTextContent('El Presidente · Ask');
+    expect(september).toHaveTextContent('El Presidente · Chat');
     expect(september).toHaveTextContent('<$0.01');
     expect(september).toHaveTextContent('6.3k');
   });

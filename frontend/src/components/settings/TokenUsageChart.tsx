@@ -1,4 +1,4 @@
-import { TOKEN_FEATURE_LABELS, TOKEN_FEATURES, type TokenFeature, type TokenUsageDay } from '../../lib/api';
+import { TOKEN_DISPLAY_FEATURES, TOKEN_FEATURE_LABELS, type TokenUsageDay } from '../../lib/api';
 import { formatTokens } from '../../lib/money';
 import {
   TOKEN_FEATURE_COLOR,
@@ -15,7 +15,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
   const width = 720;
   const peak = peakDayTokens(days);
   const features = activeFeatures(days);
-  const series = features.length ? features : [...TOKEN_FEATURES];
+  const series = features.length ? features : [...TOKEN_DISPLAY_FEATURES];
   const plotWidth = width - PAD.left - PAD.right;
   const plotHeight = HEIGHT - PAD.top - PAD.bottom;
   const slot = days.length > 0 ? plotWidth / days.length : plotWidth;
@@ -34,7 +34,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
     <div>
       <svg
         role="img"
-        aria-label="Token usage by day, stacked by video analysis, chat, and Ask"
+        aria-label="Token usage by day, stacked by video analysis, chat, and web search"
         viewBox={`0 0 ${width} ${HEIGHT}`}
         className="h-48 w-full"
       >
@@ -102,7 +102,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
               className="inline-block h-2 w-2 rounded-sm"
               style={{ background: TOKEN_FEATURE_COLOR[feature] }}
             />
-            {TOKEN_FEATURE_LABELS[feature as TokenFeature]}
+            {TOKEN_FEATURE_LABELS[feature]}
           </li>
         ))}
         <li className="ml-auto tabular-nums text-ink-500">Peak day {formatTokens(peak)}</li>

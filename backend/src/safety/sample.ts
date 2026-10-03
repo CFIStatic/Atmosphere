@@ -10,6 +10,9 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
+import { VIDEO_ANALYSIS_FEATURE } from '../metering/backgroundUsage.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { classifySafetySample } from './classify.js';
 import { createSafetyIncident } from './incidents.js';
@@ -59,12 +62,23 @@ export async function processSafetySample(
 ): Promise<SafetySampleResult> {
   await assertOrgProductActionsAllowed(admin, party.org_id);
   const input = safetySampleSchema.parse(body ?? {});
-  const classification = await classifySafetySample({
-    frames: input.frames,
-    transcriptSnippet: input.transcriptSnippet,
-    clipTimestampSeconds: input.clipTimestampSeconds ?? null,
-    allowModel: input.allowModel,
-  });
+  // The frame check is a vision call on this job's footage: video analysis.
+  const classification = await runWithAiUsageScope(
+    {
+      client: admin,
+      orgId: party.org_id,
+      jobId: party.job_id,
+      requestId: `safety:${party.id}:${randomUUID()}`,
+      meterFeature: VIDEO_ANALYSIS_FEATURE,
+    },
+    () =>
+      classifySafetySample({
+        frames: input.frames,
+        transcriptSnippet: input.transcriptSnippet,
+        clipTimestampSeconds: input.clipTimestampSeconds ?? null,
+        allowModel: input.allowModel,
+      }),
+  );
 
   if (!classification.hit) {
     return {

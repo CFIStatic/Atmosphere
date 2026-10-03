@@ -1,4 +1,5 @@
 import { anthropicClient } from '../lib/anthropic.js';
+import { meterAnthropicResponse } from '../metering/backgroundUsage.js';
 import { config } from '../config.js';
 
 /**
@@ -295,6 +296,7 @@ async function readWindow(
     system: [{ type: 'text', text: windowPrompt(scopeTitles), cache_control: { type: 'ephemeral' } }] as any,
     messages: [{ role: 'user', content }],
   });
+  meterAnthropicResponse('long_form_window', response);
   const text = response.content
     .filter((b: any) => b.type === 'text')
     .map((b: any) => b.text)
@@ -356,6 +358,7 @@ export async function analyseLongRecording(input: {
     system: synthesisPrompt({ scopeTitles: input.scopeTitles, totalHours, windows: readings }),
     messages: [{ role: 'user', content: 'Write the day report.' }],
   });
+  meterAnthropicResponse('long_form_synthesis', response);
   const text = response.content
     .filter((b: any) => b.type === 'text')
     .map((b: any) => b.text)
