@@ -21,7 +21,7 @@ import {
   subscriptionAmountCents,
   videoUploadOutcome,
 } from '../src/metering/aiBudget.js';
-import { modelPriceTable, tokenCostNanos, tavilySearchCostNanos, whisperCostNanos } from '../src/metering/modelPriceTable.js';
+import { modelPriceTable, tokenCostNanos, tokenCostUsd, tavilySearchCostNanos, whisperCostNanos } from '../src/metering/modelPriceTable.js';
 
 const cfg = aiBudgetConfig({});
 
@@ -244,12 +244,14 @@ test('only org admins can buy and only internal staff can grant', () => {
 });
 
 test('the price table prices tokens, Whisper minutes, and Tavily searches', () => {
-  const table = modelPriceTable({});
+  const table = modelPriceTable();
   const gemini = tokenCostNanos(table, {
-    provider: 'google',
+    modelId: 'gemini-3.5-flash-lite',
     tokens: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
   });
-  assert.equal(gemini, 500_000_000);
+  assert.equal(gemini, 2_800_000_000);
+  // Unknown models are not priced from a family default.
+  assert.equal(tokenCostUsd(table, { provider: 'google', tokens: { inputTokens: 1_000_000 } }), null);
   const claude = tokenCostNanos(table, {
     modelId: 'claude-sonnet-4-6',
     tokens: { inputTokens: 1_000_000, outputTokens: 0 },

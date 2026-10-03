@@ -4,24 +4,30 @@
 
 import { randomUUID } from 'node:crypto';
 import { verificationConfig } from '../config.js';
-import { estimatedUsdToNanos, recordTokenUsage } from '../../metering/tokenUsage.js';
+import { estimatedUsdToNanos, providerOfModel, providerUsageJson, recordTokenUsage } from '../../metering/tokenUsage.js';
 import { resolveUsageActor } from '../../metering/usageAttribution.js';
-import { modelPriceTable, tokenCostUsd } from '../../metering/modelPriceTable.js';
+import { providerCostForUsage } from '../../metering/pricing.js';
+import type { MeasuredUsage } from '../../lib/anthropic.js';
 import { isAiPaused } from '../../metering/aiBudgetService.js';
 import { unscopedAdminOrNull } from '../../lib/scopedAdmin.js';
 
+/**
+ * Provider cost in USD for a call, from the official rate card (shared
+ * pricing module). 0 when the model is not on the card — recordAiCost then
+ * stores the ledger row as `unpriced` and logs an alert.
+ */
 export function estimateCostUsd(
-  provider: string,
+  _provider: string,
   inputTokens: number,
   outputTokens: number,
   modelId?: string | null,
 ): number {
-  const usd = tokenCostUsd(modelPriceTable(), {
-    provider,
-    modelId,
-    tokens: { inputTokens, outputTokens },
-  });
-  return Number((usd ?? 0).toFixed(6));
+  return Number((providerCostForUsage(modelId ?? null, { inputTokens, outputTokens }).costNanos / 1e9).toFixed(9));
+}
+
+/** Provider cost in USD for provider-reported usage (cache and thinking included). */
+export function usageCostUsd(modelId: string | null | undefined, usage: MeasuredUsage): number {
+  return Number((providerCostForUsage(modelId ?? null, usage).costNanos / 1e9).toFixed(9));
 }
 
 function monthStart(d = new Date()): string {
@@ -43,6 +49,8 @@ export async function recordAiCost(
     inputTokens: number;
     outputTokens: number;
     estimatedCostUsd: number;
+    /** Provider-reported usage (with the raw usage object). Preferred over the token pair. */
+    usage?: MeasuredUsage | null;
   },
 ): Promise<void> {
   const userId =
@@ -67,6 +75,9 @@ export async function recordAiCost(
     period_month: monthStart(),
   });
 
+  const measured = opts.usage && opts.usage.totalTokens > 0 ? opts.usage : null;
+  const quote = measured ? providerCostForUsage(opts.modelName, measured) : null;
+  const costNanos = quote ? quote.costNanos : estimatedUsdToNanos(opts.estimatedCostUsd);
   try {
     await recordTokenUsage(supabase, {
       orgId: opts.orgId,
@@ -76,9 +87,15 @@ export async function recordAiCost(
       userId,
       jobId: opts.jobId ?? null,
       modelId: opts.modelName,
-      inputTokens: opts.inputTokens,
-      outputTokens: opts.outputTokens,
-      costNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
+      inputTokens: measured ? measured.inputTokens : opts.inputTokens,
+      outputTokens: measured ? measured.outputTokens : opts.outputTokens,
+      cacheTokens: measured ? measured.cacheReadTokens + measured.cacheWrite5mTokens + measured.cacheWrite1hTokens : 0,
+      cacheReadTokens: measured?.cacheReadTokens ?? 0,
+      cacheWrite5mTokens: measured?.cacheWrite5mTokens ?? 0,
+      cacheWrite1hTokens: measured?.cacheWrite1hTokens ?? 0,
+      provider: measured?.provider ?? providerOfModel(opts.modelName) ?? opts.provider,
+      providerUsage: providerUsageJson(measured?.calls, opts.modelName),
+      costNanos,
       metadata: {
         provider: opts.provider,
         videoId: opts.videoId ?? null,

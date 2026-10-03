@@ -19,6 +19,8 @@
  *     in-clip / labeled-prior embedding match.
  */
 
+import { meterScopedUsage } from '../metering/tokenUsage.js';
+import { geminiMeasuredUsage } from '../lib/providerUsage.js';
 import {
   matchPeopleToOrgMembers,
   type OrgMemberHint,
@@ -832,7 +834,14 @@ export async function webIdentifyPublicSpeakers(input: {
 
   const payload = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: Record<string, unknown>;
   };
+  meterScopedUsage({
+    source: 'speaker_identity',
+    feature: 'video_analysis',
+    modelId: model,
+    usage: geminiMeasuredUsage(payload.usageMetadata ?? null, model),
+  });
   const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
   return parseWebIdentityJson(text);
 }

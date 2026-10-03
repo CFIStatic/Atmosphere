@@ -33,7 +33,8 @@
     "check:email-auth": "node scripts/checkEmailAuthDns.mjs",
     "stripe:sync": "tsx src/scripts/syncStripeCatalog.ts",
     "test:vitest": "vitest run --passWithNoTests",
-    "eval:ask": "tsx src/scripts/askEval.ts"
+    "eval:ask": "tsx src/scripts/askEval.ts",
+    "reconcile:ai-costs": "tsx src/scripts/reconcileAiCosts.ts"
   },
   "engines": {
     "node": ">=20"

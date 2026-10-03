@@ -1,16 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { billableNanosFromCost } from '../src/metering/customerMarkup.js';
-import { estimateCostUsd, recordAiCost } from '../src/verification/cost/tracker.js';
+import { estimateCostUsd, recordAiCost, usageCostUsd } from '../src/verification/cost/tracker.js';
 import { estimatedUsdToNanos } from '../src/metering/tokenUsage.js';
 
-test('estimateCostUsd uses the verification Gemini / Anthropic rate config', () => {
-  const gemini = estimateCostUsd('google', 1_000_000, 1_000_000);
-  const claude = estimateCostUsd('anthropic', 1_000_000, 1_000_000);
-  assert.equal(gemini, 0.5);
-  assert.equal(claude, 18);
+test('estimateCostUsd prices the named model from the official rate card', () => {
+  const gemini = estimateCostUsd('google', 1_000_000, 1_000_000, 'gemini-3.5-flash-lite');
+  const claude = estimateCostUsd('anthropic', 1_000_000, 1_000_000, 'claude-sonnet-4-6');
+  assert.equal(gemini, 2.8); // $0.30 in + $2.50 out
+  assert.equal(claude, 18); // $3 in + $15 out
+  // No model → no guess (a family default would silently mis-price).
+  assert.equal(estimateCostUsd('google', 1_000_000, 1_000_000), 0);
   assert.ok(estimatedUsdToNanos(gemini) > 0);
   assert.ok(estimatedUsdToNanos(0) === 0);
+});
+
+test('usageCostUsd prices provider-reported Gemini usage including cache reads', () => {
+  const usd = usageCostUsd('gemini-3.5-flash-lite', {
+    inputTokens: 1_000_000,
+    outputTokens: 0,
+    cacheReadTokens: 1_000_000,
+    cacheWrite5mTokens: 0,
+    cacheWrite1hTokens: 0,
+    totalTokens: 2_000_000,
+  });
+  assert.equal(usd, 0.33); // $0.30 input + $0.03 cached
 });
 
 test('recordAiCost writes the actor and estimated spend onto both ledgers', async () => {
@@ -39,10 +53,10 @@ test('recordAiCost writes the actor and estimated spend onto both ledgers', asyn
     userId: 'user-jack',
     idempotencyKey: 'video_analysis:run-1:frame-1',
     provider: 'google',
-    modelName: 'gemini-3.6-flash',
+    modelName: 'gemini-3.5-flash-lite',
     inputTokens: 8000,
     outputTokens: 1200,
-    estimatedCostUsd: estimateCostUsd('google', 8000, 1200),
+    estimatedCostUsd: estimateCostUsd('google', 8000, 1200, 'gemini-3.5-flash-lite'),
   });
 
   const costRow = inserts.find((row) => row.table === 'verification_ai_costs');
@@ -53,7 +67,7 @@ test('recordAiCost writes the actor and estimated spend onto both ledgers', asyn
   assert.equal(rpcs[0]?.name, 'record_token_usage');
   assert.equal(rpcs[0]?.params.p_user_id, 'user-jack');
   assert.equal(rpcs[0]?.params.p_feature, 'video_analysis');
-  const costNanos = estimatedUsdToNanos(estimateCostUsd('google', 8000, 1200));
+  const costNanos = estimatedUsdToNanos(estimateCostUsd('google', 8000, 1200, 'gemini-3.5-flash-lite'));
   assert.equal(Number(rpcs[0]?.params.p_cost_nanos), costNanos);
   assert.equal(Number(rpcs[0]?.params.p_price_nanos), billableNanosFromCost(costNanos));
   assert.equal(Number(rpcs[0]?.params.p_price_nanos), costNanos * 10);

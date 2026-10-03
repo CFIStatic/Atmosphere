@@ -1,4 +1,5 @@
 import { describeNetworkError, readErrorMessage } from './openaiCompatible.js';
+import { geminiMeasuredUsage } from '../../lib/providerUsage.js';
 import {
   isRetryableStatus,
   ProviderError,
@@ -86,17 +87,19 @@ export class GoogleProvider implements ModelProvider {
       );
     }
 
+    const usage = geminiMeasuredUsage(payload.usageMetadata ?? null, request.model);
     return {
       text,
-      inputTokens: payload.usageMetadata?.promptTokenCount ?? 0,
-      outputTokens: payload.usageMetadata?.candidatesTokenCount ?? 0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
       stopReason: candidate?.finishReason?.toLowerCase() ?? null,
+      usage,
     };
   }
 }
 
 interface GenerateContentResponse {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  usageMetadata?: Record<string, unknown>;
   promptFeedback?: { blockReason?: string };
 }

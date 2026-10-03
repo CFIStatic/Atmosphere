@@ -109,4 +109,31 @@ describe('TokenUsagePage', () => {
     expect(screen.getByText('claude-opus-5')).toBeInTheDocument();
     expect(screen.getByText('Ask')).toBeInTheDocument();
   });
+
+  it('shows the window label and flags unpriced calls loudly', async () => {
+    vi.mocked(api.tokenUsage).mockResolvedValue({
+      window: { from: '2026-09-02T00:00:00Z', to: '2026-10-02T00:00:00Z', label: 'Rolling 30 days (UTC)', timeZone: 'UTC' },
+      pricing: { rule: 'price = provider cost × customer markup', rateCardVerifiedAt: '2026-10-02' },
+      health: { repricedEvents: 0, unpricedEvents: 3, unpricedModels: [{ model: 'mystery-model', events: 3 }], ok: false },
+      totals: {
+        eventCount: 3,
+        inputTokens: 10,
+        outputTokens: 1,
+        cacheTokens: 0,
+        totalTokens: 11,
+        priceNanos: 0,
+        costNanos: 0,
+        distinctOrgs: 1,
+        distinctUsers: 0,
+        distinctModels: 1,
+      },
+      byCustomer: [],
+      byUser: [],
+      byModel: [],
+      byFeature: [],
+    });
+    render(<TokenUsagePage />);
+    expect(await screen.findByTestId('token-usage-window')).toHaveTextContent('Rolling 30 days (UTC)');
+    expect(screen.getByRole('alert')).toHaveTextContent('mystery-model (3)');
+  });
 });

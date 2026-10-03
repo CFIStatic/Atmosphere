@@ -5,6 +5,8 @@
  * Escalation: stronger frontier model only when policy says so.
  */
 
+import { tryExtractUsage, type MeasuredUsage } from '../../lib/anthropic.js';
+import { geminiMeasuredUsage } from '../../lib/providerUsage.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { googleVisionApiKey } from '../../lib/visionProvider.js';
@@ -18,7 +20,7 @@ import {
   type FrameObservationParsed,
 } from '../schemas.js';
 import type { PipelineContext } from '../pipeline/orchestrator.js';
-import { estimateCostUsd, recordAiCost, wouldExceedBudget } from '../cost/tracker.js';
+import { recordAiCost, usageCostUsd, wouldExceedBudget } from '../cost/tracker.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
 
 export interface VisionImage {
@@ -33,6 +35,8 @@ export interface AnalysisUsage {
   latencyMs: number;
   providerRequestId: string | null;
   estimatedCostUsd: number;
+  /** Provider-reported usage with the raw usage object. */
+  measured?: MeasuredUsage;
 }
 
 export interface AnalysisResult<T> {
@@ -279,13 +283,14 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
     }
     const payload = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      usageMetadata?: Record<string, unknown>;
       responseId?: string;
     };
     const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
     const parsed = parseModelJson(text, opts.schema);
-    const inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
-    const outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
+    const measured = geminiMeasuredUsage(payload.usageMetadata ?? null, opts.model);
+    const inputTokens = measured.inputTokens;
+    const outputTokens = measured.outputTokens;
     return {
       parsed,
       raw: text,
@@ -298,7 +303,8 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         outputTokens,
         latencyMs: Date.now() - started,
         providerRequestId: payload.responseId ?? null,
-        estimatedCostUsd: estimateCostUsd('google', inputTokens, outputTokens),
+        estimatedCostUsd: usageCostUsd(opts.model, measured),
+        measured,
       },
       cached: false,
     };
@@ -343,7 +349,7 @@ async function escalateWithAnthropic(
   }
   const payload = (await response.json()) as {
     content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
+    usage?: Record<string, unknown>;
     id?: string;
   };
   const text = (payload.content ?? [])
@@ -351,8 +357,9 @@ async function escalateWithAnthropic(
     .map((c) => c.text ?? '')
     .join('');
   const parsed = parseModelJson(text, frameObservationSchema);
-  const inputTokens = payload.usage?.input_tokens ?? 0;
-  const outputTokens = payload.usage?.output_tokens ?? 0;
+  const measured = tryExtractUsage(payload.usage, verificationConfig.escalationModel);
+  const inputTokens = measured.inputTokens;
+  const outputTokens = measured.outputTokens;
   return {
     parsed,
     raw: text,
@@ -365,7 +372,8 @@ async function escalateWithAnthropic(
       outputTokens,
       latencyMs: Date.now() - started,
       providerRequestId: payload.id ?? null,
-      estimatedCostUsd: estimateCostUsd('anthropic', inputTokens, outputTokens),
+      estimatedCostUsd: usageCostUsd(verificationConfig.escalationModel, measured),
+      measured,
     },
     cached: false,
   };
@@ -667,6 +675,7 @@ export function createAnalyzeFramesHandler(opts: {
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           estimatedCostUsd: result.usage.estimatedCostUsd,
+          usage: result.usage.measured ?? null,
         });
       }
 

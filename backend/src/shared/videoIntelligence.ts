@@ -14,6 +14,8 @@
  * Persistence stays in the caller. New ingress points only need a fetchable
  * URL, a duration, and optional context text — not a proof row.
  */
+import type { MeasuredUsage } from '../lib/anthropic.js';
+import { geminiMeasuredUsage } from '../lib/providerUsage.js';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
@@ -81,6 +83,8 @@ export type PreparedVideoFrames = {
 };
 
 export type VideoDictationResult = {
+  /** Provider-reported usage (Gemini usageMetadata, raw object kept). Callers meter it. */
+  usage?: MeasuredUsage | null;
   narrationText: string;
   narrationSummary: string | null;
   model: string;
@@ -396,7 +400,9 @@ async function dictateWithGemini(input: {
   }
   const payload = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: Record<string, unknown>;
   };
+  const usage = geminiMeasuredUsage(payload.usageMetadata ?? null, model);
   const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
   const parsed = parseDictationPayload(
     text,
@@ -407,6 +413,7 @@ async function dictateWithGemini(input: {
     throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
   }
   return {
+    usage,
     narrationText: parsed.narration,
     narrationSummary: parsed.summary,
     model,

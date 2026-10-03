@@ -9,6 +9,7 @@ import type {
   ExperimentStats,
   MeteringPayload,
   TokenUsageAnalyticsPayload,
+  AiReconciliationPayload,
   OverviewPayload,
   RangeParams,
   ReadyPayload,
@@ -165,6 +166,9 @@ export const api = {
 
   tokenUsage: (range: RangeParams) =>
     request<TokenUsageAnalyticsPayload>(`/api/analytics/token-usage?${rangeQuery(range)}`),
+
+  aiReconciliation: (range: RangeParams) =>
+    request<AiReconciliationPayload>(`/api/analytics/ai-reconciliation?${rangeQuery(range)}`),
 
   account: (orgId: string, range: RangeParams) =>
     request<AccountDetail>(`/api/analytics/accounts/${orgId}?${rangeQuery(range)}`),

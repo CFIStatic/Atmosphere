@@ -146,7 +146,7 @@ describe('TokenUsageSection', () => {
         /This billing period, Aug 1, 2026 to Sep 1, 2026 UTC · USD · this organization/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Spend (USD)')).toBeInTheDocument();
+    expect(screen.getByText('Billed AI usage')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();

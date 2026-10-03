@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 186,
+    "migrationCount": 187,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3620
+    "finalObjects": 3629
   },
   "outOfOrder": [
     {
@@ -200,7 +200,8 @@
     "20261002180000_ask_question_document_ids.sql",
     "20261002193000_internal_analytics_actor.sql",
     "20261002210000_atmosphere_analytics_health.sql",
-    "20261002211000_atmosphere_analytics_campaigns.sql"
+    "20261002211000_atmosphere_analytics_campaigns.sql",
+    "20261003020000_provider_usage_and_rate_card.sql"
   ],
   "migrations": [
     {
@@ -6070,6 +6071,26 @@
         "table|public.analytics_campaign_sends",
         "table|public.analytics_campaigns",
         "table|public.analytics_email_suppressions"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003020000_provider_usage_and_rate_card",
+      "file": "20261003020000_provider_usage_and_rate_card.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|private.model_costs.price_source_url",
+        "column|private.model_costs.price_verified_at",
+        "column|public.token_usage_events.cache_read_tokens",
+        "column|public.token_usage_events.cache_write_1h_tokens",
+        "column|public.token_usage_events.cache_write_5m_tokens",
+        "column|public.token_usage_events.pricing_status",
+        "column|public.token_usage_events.provider",
+        "column|public.token_usage_events.provider_usage",
+        "index|public.token_usage_events.token_usage_events_unpriced"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

@@ -62,6 +62,10 @@ export const verificationConfig = {
 
   /** Cost controls. */
   defaultMonthlyBudgetUsd: num('VERIFICATION_DEFAULT_MONTHLY_BUDGET_USD', 250),
+  /**
+   * @deprecated Not used for pricing. Every AI call is priced from the
+   * official rate card in metering/modelPriceTable.ts (verified 2026-10-02).
+   */
   geminiInputPerMTokUsd: num('VERIFICATION_GEMINI_INPUT_USD_PER_MTOK', 0.1),
   geminiOutputPerMTokUsd: num('VERIFICATION_GEMINI_OUTPUT_USD_PER_MTOK', 0.4),
   anthropicInputPerMTokUsd: num('VERIFICATION_ANTHROPIC_INPUT_USD_PER_MTOK', 3),
