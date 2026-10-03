@@ -339,12 +339,41 @@ export async function loadAiAllowance(
   };
 }
 
+/**
+ * Runs when an org is out of credits. Returns true only if a credit pack was
+ * bought just now (auto-recharge on, within its cooldown and cap). Tests pass
+ * their own; `false` turns it off for that call.
+ */
+export type AiAutoRechargeHook = (orgId: string, trigger: string) => Promise<boolean>;
+
+async function defaultAutoRechargeHook(orgId: string, trigger: string): Promise<boolean> {
+  const { autoRechargeOnExhaustion } = await import('./autoRechargeTrigger.js');
+  return autoRechargeOnExhaustion(orgId, trigger);
+}
+
+async function tryAutoRecharge(
+  hook: AiAutoRechargeHook | false | undefined,
+  orgId: string,
+  trigger: string,
+): Promise<boolean> {
+  if (hook === false) return false;
+  try {
+    return await (hook ?? defaultAutoRechargeHook)(orgId, trigger);
+  } catch (err) {
+    console.warn('[ai-budget] auto-recharge did not run', err);
+    return false;
+  }
+}
+
 export async function assertAiFeatureAllowed(
   client: SupabaseClient,
   orgId: string,
-  opts?: { canManage?: boolean },
+  opts?: { canManage?: boolean; autoRecharge?: AiAutoRechargeHook | false },
 ): Promise<AiAllowanceView> {
-  const view = await loadAiAllowance(client, orgId, opts);
+  let view = await loadAiAllowance(client, orgId, opts);
+  if (view.paused && (await tryAutoRecharge(opts?.autoRecharge, orgId, 'ai_gate'))) {
+    view = await loadAiAllowance(client, orgId, opts);
+  }
   if (!view.paused) return view;
   throw paymentRequired(view.message ?? 'AI is paused until the usage allowance resets.', 'ai_budget_limited', {
     canManage: Boolean(opts?.canManage),
@@ -353,9 +382,16 @@ export async function assertAiFeatureAllowed(
   });
 }
 
-export async function isAiPaused(client: SupabaseClient, orgId: string): Promise<boolean> {
+export async function isAiPaused(
+  client: SupabaseClient,
+  orgId: string,
+  opts?: { autoRecharge?: AiAutoRechargeHook | false },
+): Promise<boolean> {
   try {
-    const view = await loadAiAllowance(client, orgId);
+    let view = await loadAiAllowance(client, orgId);
+    if (view.paused && (await tryAutoRecharge(opts?.autoRecharge, orgId, 'ai_background'))) {
+      view = await loadAiAllowance(client, orgId);
+    }
     return view.paused;
   } catch (err) {
     console.warn('[ai-budget] could not read allowance; not pausing', err);

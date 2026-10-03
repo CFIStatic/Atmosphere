@@ -6,6 +6,7 @@ import { PlanPrice } from '../billing/AtmospherePlanPicker';
 import { AlertIcon, SpinnerIcon } from '../icons';
 import { Logo } from '../Logo';
 import { AiAllowanceSection } from './AiAllowanceSection';
+import { AutoRechargeSection } from './AutoRechargeSection';
 import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -139,6 +140,8 @@ export function BillingSection() {
           onUpdated={refreshAfterPlanChange}
         />
       ) : null}
+
+      {allowance && !complimentary ? <AutoRechargeSection /> : null}
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>

@@ -38,6 +38,13 @@ import {
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
 import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
 import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
+import {
+  applyAutoRechargeIntentFailed,
+  applyAutoRechargeIntentSucceeded,
+  chargeSummary,
+  isAutoRechargeIntent,
+  supabaseAutoRechargeStore,
+} from '../metering/autoRecharge.js';
 import { grantAiCredits, recordSubscriptionPriceSpan, syncCreditPackClawback } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
@@ -126,6 +133,14 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
       await onSubscriptionDeleted(event.data.object as Stripe.Subscription, admin);
       break;
 
+    case 'payment_intent.succeeded':
+      await onAutoRechargeSucceeded(event.data.object as Stripe.PaymentIntent, admin);
+      break;
+
+    case 'payment_intent.payment_failed':
+      await onAutoRechargeFailed(event.data.object as Stripe.PaymentIntent, admin);
+      break;
+
     case 'charge.refunded':
       await onChargeRefunded(event.data.object as Stripe.Charge, event.id, admin);
       break;
@@ -211,6 +226,31 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     p_purchase_id: purchaseId ?? null,
   });
   if (paymentError) throw new Error(`payment record failed: ${paymentError.message}`);
+}
+
+/**
+ * Auto-recharge PaymentIntents. The server grants credits as soon as the
+ * off-session charge succeeds; this is the backstop if that grant did not
+ * finish. Both grant against the PaymentIntent id, so credits land once.
+ * Checkout's own PaymentIntents carry no auto_recharge flag and are ignored.
+ */
+async function onAutoRechargeSucceeded(intent: Stripe.PaymentIntent, admin: any): Promise<void> {
+  if (!isAutoRechargeIntent(intent.metadata)) return;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, intent.metadata, stripeId(intent.customer)),
+    `auto-recharge ${intent.id}`,
+  );
+  let charge = intent.latest_charge ?? null;
+  if (typeof charge === 'string') {
+    charge = await stripeClient().charges.retrieve(charge);
+  }
+  await applyAutoRechargeIntentSucceeded(supabaseAutoRechargeStore(admin), orgId, intent, chargeSummary(charge));
+}
+
+/** A failed auto-recharge turns auto-recharge off; the owner buys credits manually. */
+async function onAutoRechargeFailed(intent: Stripe.PaymentIntent, admin: any): Promise<void> {
+  if (!isAutoRechargeIntent(intent.metadata)) return;
+  await applyAutoRechargeIntentFailed(supabaseAutoRechargeStore(admin), intent);
 }
 
 /** Subscription and same-day usage invoices: the receipt trail. */

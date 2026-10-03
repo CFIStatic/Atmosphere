@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 186,
+    "migrationCount": 187,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3620
+    "finalObjects": 3658
   },
   "outOfOrder": [
     {
@@ -200,7 +200,8 @@
     "20261002180000_ask_question_document_ids.sql",
     "20261002193000_internal_analytics_actor.sql",
     "20261002210000_atmosphere_analytics_health.sql",
-    "20261002211000_atmosphere_analytics_campaigns.sql"
+    "20261002211000_atmosphere_analytics_campaigns.sql",
+    "20261003160000_ai_credit_auto_recharge.sql"
   ],
   "migrations": [
     {
@@ -6070,6 +6071,55 @@
         "table|public.analytics_campaign_sends",
         "table|public.analytics_campaigns",
         "table|public.analytics_email_suppressions"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003160000_ai_credit_auto_recharge",
+      "file": "20261003160000_ai_credit_auto_recharge.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ai_credit_auto_recharge_settings.consented_at",
+        "column|public.ai_credit_auto_recharge_settings.disabled_at",
+        "column|public.ai_credit_auto_recharge_settings.disabled_reason",
+        "column|public.ai_credit_auto_recharge_settings.enabled",
+        "column|public.ai_credit_auto_recharge_settings.last_attempt_at",
+        "column|public.ai_credit_auto_recharge_settings.org_id",
+        "column|public.ai_credit_auto_recharge_settings.pack_code",
+        "column|public.ai_credit_auto_recharge_settings.updated_at",
+        "column|public.ai_credit_auto_recharge_settings.updated_by",
+        "column|public.ai_credit_auto_recharges.amount_cents",
+        "column|public.ai_credit_auto_recharges.completed_at",
+        "column|public.ai_credit_auto_recharges.created_at",
+        "column|public.ai_credit_auto_recharges.credit_nanos",
+        "column|public.ai_credit_auto_recharges.currency",
+        "column|public.ai_credit_auto_recharges.failure_code",
+        "column|public.ai_credit_auto_recharges.failure_message",
+        "column|public.ai_credit_auto_recharges.id",
+        "column|public.ai_credit_auto_recharges.idempotency_key",
+        "column|public.ai_credit_auto_recharges.org_id",
+        "column|public.ai_credit_auto_recharges.pack_code",
+        "column|public.ai_credit_auto_recharges.status",
+        "column|public.ai_credit_auto_recharges.stripe_charge_id",
+        "column|public.ai_credit_auto_recharges.stripe_payment_intent_id",
+        "column|public.ai_credit_auto_recharges.trigger_source",
+        "function|public.claim_ai_auto_recharge",
+        "function|public.finish_ai_auto_recharge",
+        "index|public.ai_credit_auto_recharge_settings.ai_credit_auto_recharge_settings_pkey",
+        "index|public.ai_credit_auto_recharges.ai_credit_auto_recharges_idem_uidx",
+        "index|public.ai_credit_auto_recharges.ai_credit_auto_recharges_org_idx",
+        "index|public.ai_credit_auto_recharges.ai_credit_auto_recharges_pending_uidx",
+        "index|public.ai_credit_auto_recharges.ai_credit_auto_recharges_pi_uidx",
+        "index|public.ai_credit_auto_recharges.ai_credit_auto_recharges_pkey",
+        "policy|public.ai_credit_auto_recharge_settings.ai_credit_auto_recharge_settings_select",
+        "policy|public.ai_credit_auto_recharges.ai_credit_auto_recharges_select",
+        "rls|public.ai_credit_auto_recharge_settings",
+        "rls|public.ai_credit_auto_recharges",
+        "table|public.ai_credit_auto_recharge_settings",
+        "table|public.ai_credit_auto_recharges"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

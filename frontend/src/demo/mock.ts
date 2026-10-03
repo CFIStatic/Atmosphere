@@ -2341,6 +2341,52 @@ function demoAllowanceFraction(): number {
   return 0.4;
 }
 
+/**
+ * Auto-recharge fixture. Off by default. sessionStorage 'demo-auto-recharge'
+ * = 'failed' shows the notice after a declined automatic charge.
+ */
+const demoAutoRechargeState = {
+  enabled: false,
+  packCode: 'ai_25',
+  notice: null as { message: string; at: string | null } | null,
+  primed: false,
+};
+
+function demoAutoRecharge() {
+  if (!demoAutoRechargeState.primed) {
+    demoAutoRechargeState.primed = true;
+    const flag = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('demo-auto-recharge') : null;
+    if (flag === 'failed') {
+      demoAutoRechargeState.notice = {
+        message:
+          'Your card was declined, so auto-recharge is off. Buy credits manually, then turn auto-recharge back on if you want it.',
+        at: '2026-10-03T15:42:00.000Z',
+      };
+    }
+  }
+  const failed = Boolean(demoAutoRechargeState.notice);
+  return {
+    enabled: demoAutoRechargeState.enabled,
+    packCode: demoAutoRechargeState.packCode,
+    packs: [
+      { code: 'ai_10', label: '$10', cents: 1000, priceConfigured: true },
+      { code: 'ai_25', label: '$25', cents: 2500, priceConfigured: true },
+      { code: 'ai_50', label: '$50', cents: 5000, priceConfigured: true },
+    ],
+    available: true,
+    canManage: true,
+    notice: demoAutoRechargeState.notice,
+    cooldownMinutes: 10,
+    maxPerDay: 3,
+    recent: failed
+      ? [
+          { id: 'rch-demo-2', at: '2026-10-03T15:42:00.000Z', status: 'failed', packCode: 'ai_25', amountCents: 2500, failureMessage: 'Your card was declined.' },
+          { id: 'rch-demo-1', at: '2026-09-28T19:10:00.000Z', status: 'succeeded', packCode: 'ai_25', amountCents: 2500, failureMessage: null },
+        ]
+      : [],
+  };
+}
+
 function demoAiAllowance() {
   const allowanceNanos = 12_500_000_000;
   const fraction = demoAllowanceFraction();
@@ -2707,6 +2753,17 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/usage\/daily$/, () => ({ body: { days: USAGE_DAYS } })],
   ['GET', /^\/api\/billing\/token-usage$/, () => ({ body: TOKEN_USAGE() })],
   ['GET', /^\/api\/billing\/ai-allowance$/, () => ({ body: demoAiAllowance() })],
+  ['GET', /^\/api\/billing\/ai-allowance\/auto-recharge$/, () => ({ body: demoAutoRecharge() })],
+  ['PUT', /^\/api\/billing\/ai-allowance\/auto-recharge$/, (_m, b) => {
+    const body = b as { enabled?: boolean; packCode?: string; consent?: boolean };
+    if (body.enabled && body.consent !== true) {
+      return { status: 400, body: { error: 'Confirm that we may charge your saved card automatically.', code: 'consent_required' } };
+    }
+    demoAutoRechargeState.enabled = Boolean(body.enabled);
+    if (body.packCode) demoAutoRechargeState.packCode = body.packCode;
+    demoAutoRechargeState.notice = null;
+    return { body: demoAutoRecharge() };
+  }],
   ['POST', /^\/api\/billing\/ai-allowance\/credits\/checkout$/, () => ({
     status: 201,
     body: { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_ai_credits', packCode: 'ai_25' },
