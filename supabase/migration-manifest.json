@@ -204,7 +204,8 @@
     "20261003020000_provider_usage_and_rate_card.sql",
     "20261003160000_ai_credit_auto_recharge.sql",
     "20261003190000_token_usage_feature_web_search.sql",
-    "20261003190100_metering_web_search_and_settle_fix.sql"
+    "20261003190100_metering_web_search_and_settle_fix.sql",
+    "20261003190200_customer_metering_summary_for_member.sql"
   ],
   "migrations": [
     {
@@ -6164,6 +6165,20 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "creates no durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003190200_customer_metering_summary_for_member",
+      "file": "20261003190200_customer_metering_summary_for_member.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|private.calculate_metering_period_unchecked",
+        "function|private.customer_metering_summary_unchecked",
+        "function|public.customer_metering_summary_for_member"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

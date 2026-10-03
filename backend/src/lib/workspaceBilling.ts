@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { getCustomerMeteringSummary } from '../metering/periodAggregation.js';
 import type { CustomerMeteringSummary } from '../metering/types.js';
 import { loadFieldCaptureSeatUsage, type FieldCaptureSeatUsage } from './fieldCaptureSeats.js';
+import { createAdminClient } from './supabase.js';
 import {
   EXTRA_FC_SEAT_MONTHLY_CENTS,
   INCLUDED_FC_SEATS,
@@ -120,6 +121,10 @@ export async function loadWorkspaceBilling(
   orgId: string,
   userId: string,
   userEmail?: string | null,
+  options: {
+    /** Service-role client for the usage summary (defaults to the backend's). */
+    serviceClient?: SupabaseClient | null;
+  } = {},
 ): Promise<WorkspaceBilling> {
   const paymentProvider = config.billing.paymentProvider;
 
@@ -197,7 +202,10 @@ export async function loadWorkspaceBilling(
 
   let usage: CustomerMeteringSummary | null = null;
   try {
-    usage = await getCustomerMeteringSummary(supabase, orgId);
+    // The summary RPC is service-role only. Read it with the service role,
+    // scoped to this caller's org; the database re-checks membership.
+    const serviceClient = 'serviceClient' in options ? options.serviceClient ?? null : createAdminClient();
+    usage = await getCustomerMeteringSummary(serviceClient, orgId, userId);
   } catch (err) {
     console.warn('[billing] metering summary unavailable:', (err as Error).message);
   }

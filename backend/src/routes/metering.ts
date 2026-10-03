@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createUserClient } from '../lib/supabase.js';
+import { createAdminClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { billingError } from '../lib/billing.js';
@@ -57,8 +57,9 @@ const registerJobSchema = z.object({
  */
 meteringRouter.get('/summary', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const supabase = createUserClient(req.accessToken!);
-    const summary = await getCustomerMeteringSummary(supabase, req.orgId!);
+    // Service role, scoped to the org requireOrg resolved from the caller's
+    // own membership; the database re-checks that req.user is a member.
+    const summary = await getCustomerMeteringSummary(createAdminClient(), req.orgId!, req.user!.id);
     res.json(summary);
   } catch (err) {
     next(err instanceof Error && 'code' in err ? billingError(err as never) : err);
