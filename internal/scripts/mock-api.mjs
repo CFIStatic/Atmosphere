@@ -255,49 +255,71 @@ addCampaign({
 });
 
 // ------------------------------------------------------- AI cost (TEST DATA)
-// Invented orgs and amounts. Billable = cost × 10, like the real ledger.
+// Invented orgs and token counts. Every row is priced the way the real ledger
+// is: provider tokens × official rate (USD per MTok) × 10, Tavily credits ×
+// $0.008 × 10, so every total on the page adds up.
+const MOCK_RATES = {
+  'claude-opus-5': { in: 5, out: 25, cacheRead: 0.5 },
+  'claude-sonnet-5': { in: 2, out: 10, cacheRead: 0.2 },
+  'gemini-3.6-flash': { in: 0.75, out: 3.75, cacheRead: 0.075 },
+  'gemini-3.5-flash-lite': { in: 0.3, out: 2.5, cacheRead: 0.03 },
+};
+const MOCK_MARKUP = 10;
+const TAVILY_USD_PER_CREDIT = 0.008;
+
+function mockUsageRows() {
+  const a = { orgId: 'aaaaaaaa-0000-4000-8000-000000000001', orgName: 'Test Restoration Co (TEST DATA)', userId: 'u-1', userName: 'Test Owner', email: 'owner@example.test' };
+  const b = { orgId: 'aaaaaaaa-0000-4000-8000-000000000002', orgName: 'Sample Builders (TEST DATA)', userId: 'u-2', userName: 'Sample Estimator', email: 'estimator@example.test' };
+  // [who, model, feature, events, input, output, cacheRead, tavilyCredits]
+  const raw = [
+    [a, 'claude-opus-5', 'ask', 10, 62_000, 7_400, 16_000, 0],
+    [a, 'claude-sonnet-5', 'ask', 7, 21_000, 3_900, 25_000, 0],
+    [a, 'claude-opus-5', 'video_analysis', 4, 48_000, 5_200, 0, 0],
+    [a, 'gemini-3.6-flash', 'video_analysis', 9, 9_800, 1_200, 0, 0],
+    [a, 'tavily-search', 'web_search', 2, 0, 0, 0, 2],
+    [b, 'claude-sonnet-5', 'ask', 6, 18_400, 2_600, 9_000, 0],
+    [b, 'claude-sonnet-5', 'chat', 2, 3_000, 500, 0, 0],
+    [b, 'gemini-3.5-flash-lite', 'ask', 12, 21_700, 2_700, 0, 0],
+    [b, 'tavily-search', 'web_search', 1, 0, 0, 0, 2],
+  ];
+  return raw.map(([who, model, feature, events, input, output, cache, credits]) => {
+    const r = MOCK_RATES[model];
+    const costUsd = r ? (input * r.in + output * r.out + cache * r.cacheRead) / 1e6 : credits * TAVILY_USD_PER_CREDIT;
+    const costNanos = Math.round(costUsd * 1e9);
+    return { ...who, model, feature, events, input, output, cache, costNanos, priceNanos: costNanos * MOCK_MARKUP };
+  });
+}
+
+function groupUsage(rows, keyOf, seed) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const cur = map.get(key) ?? { ...seed(row), eventCount: 0, inputTokens: 0, outputTokens: 0, cacheTokens: 0, totalTokens: 0, priceNanos: 0, costNanos: 0, _orgs: new Set(), _users: new Set(), _models: new Set() };
+    cur.eventCount += row.events; cur.inputTokens += row.input; cur.outputTokens += row.output; cur.cacheTokens += row.cache;
+    cur.totalTokens += row.input + row.output + row.cache; cur.priceNanos += row.priceNanos; cur.costNanos += row.costNanos;
+    cur._orgs.add(row.orgId); cur._users.add(row.userId); cur._models.add(row.model);
+    map.set(key, cur);
+  }
+  return [...map.values()]
+    .map(({ _orgs, _users, _models, ...rest }) => ({ ...rest, distinctOrgs: _orgs.size, distinctUsers: _users.size, distinctModels: _models.size }))
+    .sort((x, y) => y.priceNanos - x.priceNanos);
+}
+
 function tokenUsage() {
   const to = new Date(NOW);
   const from = new Date(to.getTime() - 30 * 86_400_000);
-  const orgs = [
-    { orgId: 'aaaaaaaa-0000-4000-8000-000000000001', orgName: 'Test Restoration Co (TEST DATA)', events: 41, input: 182_400, output: 21_900, cache: 41_176, cost: 596_630_000, users: 3, models: 3 },
-    { orgId: 'aaaaaaaa-0000-4000-8000-000000000002', orgName: 'Sample Builders (TEST DATA)', events: 18, input: 64_200, output: 7_800, cache: 9_000, cost: 141_900_000, users: 2, models: 2 },
-  ];
-  const byCustomer = orgs.map((o) => ({
-    orgId: o.orgId, orgName: o.orgName, eventCount: o.events, inputTokens: o.input, outputTokens: o.output,
-    cacheTokens: o.cache, totalTokens: o.input + o.output + o.cache, priceNanos: o.cost * 10, costNanos: o.cost,
-    distinctUsers: o.users, distinctModels: o.models,
-  }));
-  const sum = (k) => byCustomer.reduce((a, row) => a + row[k], 0);
-  const models = [
-    ['claude-opus-5', 22, 140_000, 15_000, 30_000, 1_123_500_000],
-    ['claude-sonnet-5', 15, 70_000, 9_500, 20_317, 238_064_000],
-    ['gemini-3.6-flash', 14, 26_000, 3_800, 0, 33_750_000],
-    ['gemini-3.5-flash-lite', 8, 10_600, 1_400, 0, 6_680_000],
-  ];
+  const rows = mockUsageRows();
+  const [totals] = groupUsage(rows, () => 'all', () => ({}));
   return {
     range: { from: iso(from), to: iso(to) },
     window: { from: iso(from), to: iso(to), label: 'Rolling 30 days (UTC)', timeZone: 'UTC' },
     pricing: { rule: 'price = provider cost × customer markup (same rule as Settings › Billing)', rateCardVerifiedAt: '2026-10-02' },
     health: { repricedEvents: 0, unpricedEvents: 0, unpricedModels: [], ok: true },
-    totals: {
-      eventCount: sum('eventCount'), inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
-      cacheTokens: sum('cacheTokens'), totalTokens: sum('totalTokens'), priceNanos: sum('priceNanos'),
-      costNanos: sum('costNanos'), distinctOrgs: orgs.length, distinctUsers: 5, distinctModels: models.length,
-    },
-    byCustomer,
-    byUser: [
-      { userId: 'u-1', userName: 'Test Owner', email: 'owner@example.test', orgId: orgs[0].orgId, orgName: orgs[0].orgName, eventCount: 30, inputTokens: 150_000, outputTokens: 18_000, cacheTokens: 35_000, totalTokens: 203_000, priceNanos: 4_900_000_000 },
-      { userId: 'u-2', userName: 'Sample Estimator', email: 'estimator@example.test', orgId: orgs[1].orgId, orgName: orgs[1].orgName, eventCount: 18, inputTokens: 64_200, outputTokens: 7_800, cacheTokens: 9_000, totalTokens: 81_000, priceNanos: 1_419_000_000 },
-    ],
-    byModel: models.map(([model, events, input, output, cache, price]) => ({
-      model, eventCount: events, inputTokens: input, outputTokens: output, cacheTokens: cache,
-      totalTokens: input + output + cache, priceNanos: price, distinctOrgs: 2, distinctUsers: 3,
-    })),
-    byFeature: [
-      { feature: 'ask', eventCount: 45, totalTokens: 260_000, priceNanos: 6_500_000_000 },
-      { feature: 'video_analysis', eventCount: 14, totalTokens: 66_476, priceNanos: 885_300_000 },
-    ],
+    totals,
+    byCustomer: groupUsage(rows, (r) => r.orgId, (r) => ({ orgId: r.orgId, orgName: r.orgName })),
+    byUser: groupUsage(rows, (r) => r.userId, (r) => ({ userId: r.userId, userName: r.userName, email: r.email, orgId: r.orgId, orgName: r.orgName })),
+    byModel: groupUsage(rows, (r) => r.model, (r) => ({ model: r.model })),
+    byFeature: groupUsage(rows, (r) => r.feature, (r) => ({ feature: r.feature })),
   };
 }
 

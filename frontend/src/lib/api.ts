@@ -6315,15 +6315,32 @@ export interface BillingOnboardingStatus {
   };
 }
 
-export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'other'] as const;
+/** Feature ids as the ledger stores them (`token_usage_events.feature`). */
+export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'other'] as const;
 export type TokenFeature = (typeof TOKEN_FEATURES)[number];
+
+/**
+ * Categories the usage screens show. Ask and Chat are one product surface, so
+ * the ledger's `ask` rows are shown (and summed) under "Chat"; totals are
+ * unchanged. The stored feature id stays `ask`.
+ */
+export const TOKEN_DISPLAY_FEATURES = ['video_analysis', 'chat', 'web_search', 'other'] as const;
+export type TokenDisplayFeature = (typeof TOKEN_DISPLAY_FEATURES)[number];
 
 export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
   video_analysis: 'Video analysis',
   chat: 'Chat',
-  ask: 'Ask',
+  ask: 'Chat',
+  web_search: 'Web search',
   other: 'Other',
 };
+
+/** Usage-display category for a stored feature id (`ask` → `chat`). */
+export function tokenDisplayFeature(feature: string | null | undefined): TokenDisplayFeature {
+  if (feature === 'ask' || feature === 'chat') return 'chat';
+  if (feature === 'video_analysis' || feature === 'web_search') return feature;
+  return 'other';
+}
 
 export type TokenUsageRange = 'period' | '30d' | '90d';
 

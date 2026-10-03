@@ -1,4 +1,5 @@
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
+import { meterAnthropicResponse } from '../metering/backgroundUsage.js';
 import { config } from '../config.js';
 import {
   actionsFromNarrationEntries,
@@ -120,6 +121,7 @@ export async function observeLiveFrame(input: {
       },
     ],
   });
+  meterAnthropicResponse('live_observe', response);
 
   const text = response.content.find((b) => b.type === 'text');
   return text && text.type === 'text' ? parseObservation(text.text, input.steps.length) : null;
@@ -258,6 +260,7 @@ export async function narrateProofVideo(input: {
       },
     ],
   });
+  meterAnthropicResponse('video_narration', response);
 
   const text = response.content.find((b) => b.type === 'text');
   const parsed =

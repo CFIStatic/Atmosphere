@@ -1,17 +1,25 @@
 import type {
   TokenDayActor,
   TokenFeature,
+  TokenFeatureBreakdown,
   TokenTotals,
   TokenUsageDay,
   TokenUsageRange,
   TokenUsageRecent,
+  TokenUsageReport,
 } from '../../lib/api';
-import { TOKEN_FEATURE_LABELS, TOKEN_FEATURES } from '../../lib/api';
+import {
+  TOKEN_DISPLAY_FEATURES,
+  TOKEN_FEATURE_LABELS,
+  type TokenDisplayFeature,
+  tokenDisplayFeature,
+} from '../../lib/api';
 
 export const TOKEN_FEATURE_COLOR: Record<TokenFeature, string> = {
   video_analysis: 'rgb(var(--brand-600))',
   chat: 'rgb(var(--success-600))',
   ask: 'rgb(var(--caution-600))',
+  web_search: 'rgb(var(--ink-600))',
   other: 'rgb(var(--ink-400))',
 };
 
@@ -19,6 +27,7 @@ export const TOKEN_FEATURE_TRACK: Record<TokenFeature, string> = {
   video_analysis: 'bg-brand-600',
   chat: 'bg-success-600',
   ask: 'bg-caution-600',
+  web_search: 'bg-ink-600',
   other: 'bg-ink-400',
 };
 
@@ -31,8 +40,64 @@ export const emptyTokenTotals = (): TokenTotals => ({
   priceNanos: 0,
 });
 
+function addTotals(a: TokenTotals | undefined, b: TokenTotals | undefined): TokenTotals {
+  const left = a ?? emptyTokenTotals();
+  const right = b ?? emptyTokenTotals();
+  return {
+    events: left.events + right.events,
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    cacheTokens: left.cacheTokens + right.cacheTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+    priceNanos: left.priceNanos + right.priceNanos,
+  };
+}
+
+/** Per-feature record with `ask` folded into `chat` (and `ask` left at zero). */
+function mergeFeatureRecord(
+  record: Record<TokenFeature, TokenTotals> | undefined,
+): Record<TokenFeature, TokenTotals> {
+  const out = {} as Record<TokenFeature, TokenTotals>;
+  for (const [key, totals] of Object.entries(record ?? {}) as [string, TokenTotals][]) {
+    const target = tokenDisplayFeature(key);
+    out[target] = addTotals(out[target], totals);
+  }
+  out.ask = emptyTokenTotals();
+  for (const feature of TOKEN_DISPLAY_FEATURES) out[feature] ??= emptyTokenTotals();
+  return out;
+}
+
+/**
+ * The usage screens show Ask and Chat as one "Chat" category. Folds every
+ * `ask` breakdown into `chat`; the report's totals are untouched, so the sum
+ * over categories still equals the totals.
+ */
+export function mergeAskIntoChat(report: TokenUsageReport): TokenUsageReport {
+  const byFeature = new Map<TokenDisplayFeature, TokenFeatureBreakdown>();
+  for (const row of report.byFeature ?? []) {
+    const feature = tokenDisplayFeature(row.feature);
+    const prev = byFeature.get(feature);
+    byFeature.set(feature, { feature, ...addTotals(prev, row) });
+  }
+  return {
+    ...report,
+    byFeature: TOKEN_DISPLAY_FEATURES.flatMap((feature) => {
+      const row = byFeature.get(feature);
+      return row ? [row] : [];
+    }),
+    byDay: (report.byDay ?? []).map((day) => ({ ...day, byFeature: mergeFeatureRecord(day.byFeature) })),
+    byEmployee: (report.byEmployee ?? []).map((row) => ({
+      ...row,
+      byFeature: mergeFeatureRecord(row.byFeature),
+    })),
+    byJob: (report.byJob ?? []).map((row) => ({ ...row, byFeature: mergeFeatureRecord(row.byFeature) })),
+    recent: (report.recent ?? []).map((row) => ({ ...row, feature: tokenDisplayFeature(row.feature) })),
+  };
+}
+
+/** A day's totals for a display category (`chat` includes the ledger's `ask`). */
 export function featureTokens(day: TokenUsageDay, feature: TokenFeature): number {
-  return day.byFeature?.[feature]?.totalTokens ?? 0;
+  return featureActivity(day, feature)?.totalTokens ?? 0;
 }
 
 export function peakDayTokens(days: TokenUsageDay[]): number {
@@ -50,8 +115,8 @@ export function compactDayLabel(isoDay: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export function activeFeatures(days: TokenUsageDay[]): TokenFeature[] {
-  return TOKEN_FEATURES.filter((feature) => days.some((day) => featureTokens(day, feature) > 0));
+export function activeFeatures(days: TokenUsageDay[]): TokenDisplayFeature[] {
+  return TOKEN_DISPLAY_FEATURES.filter((feature) => days.some((day) => featureTokens(day, feature) > 0));
 }
 
 /** Display analysis minutes from the API (already rounded) or format seconds. */
@@ -104,6 +169,7 @@ export interface DailyUsageRow {
 }
 
 function featureActivity(day: TokenUsageDay, feature: TokenFeature): TokenTotals | undefined {
+  if (feature === 'chat' && day.byFeature?.ask) return addTotals(day.byFeature.chat, day.byFeature.ask);
   return day.byFeature?.[feature];
 }
 
@@ -114,7 +180,7 @@ function featureWasUsed(totals: TokenTotals | undefined): boolean {
 
 /** Surfaces with calls or cost this day, most-used first. */
 export function dailySurfaceLabel(day: TokenUsageDay): string {
-  const used = TOKEN_FEATURES.filter((feature) =>
+  const used = TOKEN_DISPLAY_FEATURES.filter((feature) =>
     featureWasUsed(featureActivity(day, feature)),
   ).sort((a, b) => {
     const left = featureActivity(day, a);
@@ -125,7 +191,7 @@ export function dailySurfaceLabel(day: TokenUsageDay): string {
     if (price !== 0) return price;
     const tokens = (right?.totalTokens ?? 0) - (left?.totalTokens ?? 0);
     if (tokens !== 0) return tokens;
-    return TOKEN_FEATURES.indexOf(a) - TOKEN_FEATURES.indexOf(b);
+    return TOKEN_DISPLAY_FEATURES.indexOf(a) - TOKEN_DISPLAY_FEATURES.indexOf(b);
   });
   if (used.length === 0) return '—';
   return used.map((feature) => TOKEN_FEATURE_LABELS[feature]).join(', ');

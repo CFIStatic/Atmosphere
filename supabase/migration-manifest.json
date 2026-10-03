@@ -202,7 +202,9 @@
     "20261002210000_atmosphere_analytics_health.sql",
     "20261002211000_atmosphere_analytics_campaigns.sql",
     "20261003020000_provider_usage_and_rate_card.sql",
-    "20261003160000_ai_credit_auto_recharge.sql"
+    "20261003160000_ai_credit_auto_recharge.sql",
+    "20261003190000_token_usage_feature_web_search.sql",
+    "20261003190100_metering_web_search_and_settle_fix.sql"
   ],
   "migrations": [
     {
@@ -6142,6 +6144,26 @@
         "table|public.ai_credit_auto_recharge_settings",
         "table|public.ai_credit_auto_recharges"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003190000_token_usage_feature_web_search",
+      "file": "20261003190000_token_usage_feature_web_search.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003190100_metering_web_search_and_settle_fix",
+      "file": "20261003190100_metering_web_search_and_settle_fix.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

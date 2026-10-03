@@ -1,4 +1,5 @@
 import { anthropicClient, isModelProviderConfigured, type MeasuredUsage } from '../lib/anthropic.js';
+import { meterAnthropicResponse } from '../metering/backgroundUsage.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { config } from '../config.js';
 import { privacySafeMentionProof } from './mentionPrivacy.js';
@@ -380,6 +381,7 @@ export async function analyseDayFilm(input: {
       },
     ],
   }).finalMessage();
+  meterAnthropicResponse('proof_analysis', response);
 
   const text = response.content
     .filter((block: any) => block.type === 'text')
@@ -434,6 +436,7 @@ export async function analyseProofDay(input: {
       },
     ],
   }).finalMessage();
+  meterAnthropicResponse('proof_analysis', response);
 
   const text = response.content
     .filter((block: any) => block.type === 'text')

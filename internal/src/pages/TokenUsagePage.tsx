@@ -3,18 +3,13 @@ import { api, tokenUsageRange, type TokenUsageWindow } from '../lib/api';
 import type { TokenUsageAnalyticsPayload } from '../lib/types';
 import { count, nanosToMoney, tokens } from '../lib/format';
 import { EmptyState, SectionHeading, StatTile } from '../components/ui';
+import { FEATURE_LABELS, mergeAskIntoChat } from '../lib/tokenFeatures';
+
 
 const WINDOWS: { id: TokenUsageWindow; label: string }[] = [
   { id: '30d', label: 'Last 30 days' },
   { id: 'all', label: 'All time' },
 ];
-
-const FEATURE_LABELS: Record<string, string> = {
-  video_analysis: 'Video analysis',
-  chat: 'Chat',
-  ask: 'Ask',
-  other: 'Other',
-};
 
 export function TokenUsagePage() {
   const [windowId, setWindowId] = useState<TokenUsageWindow>('30d');
@@ -139,7 +134,7 @@ export function TokenUsagePage() {
         <div className="mt-10">
           <EmptyState
             title="No token usage in this window"
-            body="The ledger is empty for this range. New model calls (video analysis, Ask) write org, user, and model going forward — history before logging stays blank."
+            body="The ledger is empty for this range. New model calls (video analysis, chat) write org, user, and model going forward — history before logging stays blank."
           />
         </div>
       )}
@@ -240,7 +235,7 @@ export function TokenUsagePage() {
 
           {(data?.byFeature?.length ?? 0) > 0 && (
             <>
-              <SectionHeading title="By feature" hint="video_analysis · ask · chat · other" />
+              <SectionHeading title="By feature" hint="Video analysis · Chat · Web search · Other" />
               <div className="overflow-hidden border border-line bg-paper-0">
                 <table className="w-full text-sm">
                   <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
@@ -252,7 +247,7 @@ export function TokenUsagePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data?.byFeature ?? []).map((row) => (
+                    {mergeAskIntoChat(data?.byFeature).map((row) => (
                       <tr key={row.feature} className="border-t border-line">
                         <td className="px-4 py-3 font-medium">
                           {FEATURE_LABELS[row.feature] ?? row.feature}

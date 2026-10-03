@@ -267,6 +267,8 @@ async function classifyWithVision(
         system: VISION_SYSTEM,
         messages: [{ role: 'user', content: content as any }],
       });
+      const { meterAnthropicResponse } = await import('../metering/backgroundUsage.js');
+      meterAnthropicResponse('safety_vision', response);
       const text = response.content
         .map((block) => (block.type === 'text' ? block.text : ''))
         .join('\n')
@@ -296,6 +298,7 @@ async function classifyWithVision(
       user: `${parts.join('\n')}\nNo pixel data available in this fallback — return hit=false.`,
       mode: 'analysis',
       maxTokens: 400,
+      meterSource: 'safety_text',
     });
     if (!result) return emptyMiss({ reason: 'ask_empty' });
     const parsed = parseVisionJson(result.text);

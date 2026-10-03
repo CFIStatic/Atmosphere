@@ -233,6 +233,7 @@ function emptyByFeature(): Record<TokenFeature, TokenTotals> {
     video_analysis: EMPTY_TOTALS(),
     chat: EMPTY_TOTALS(),
     ask: EMPTY_TOTALS(),
+    web_search: EMPTY_TOTALS(),
     other: EMPTY_TOTALS(),
   };
 }

@@ -24,6 +24,7 @@ import {
 } from './anthropic.js';
 import { googleVisionApiKey } from './visionProvider.js';
 import { logger } from './logger.js';
+import { meterBackgroundUsage } from '../metering/backgroundUsage.js';
 import { isRetiredAnthropicModel, resolveAnthropicModel } from './anthropicModel.js';
 import {
   anthropicCachedSystem,
@@ -630,7 +631,25 @@ async function completeWithGemini(input: {
  * Gemini SSE). Interactive Ask prefers Anthropic when keyed; otherwise
  * Flash-Lite + thinking off. Pass `mode: 'analysis'` for heavier offline extractors.
  */
-export async function completeAskText(input: {
+export async function completeAskText(input: CompleteAskTextInput): Promise<AskModelResult | null> {
+  const result = await completeAskTextUnmetered(input);
+  // Background video work (summaries, speaker plans, safety checks) runs in a
+  // metering scope: record this call there. Ask turns record their own total.
+  if (result?.usage) {
+    meterBackgroundUsage({
+      source: input.meterSource ?? 'background_completion',
+      modelId: result.model,
+      usage: result.usage,
+    });
+  }
+  return result;
+}
+
+type CompleteAskTextInput = Parameters<typeof completeAskTextUnmetered>[0];
+
+async function completeAskTextUnmetered(input: {
+  /** Ledger source when this runs inside a background metering scope. */
+  meterSource?: string;
   system: string;
   user: string;
   /**

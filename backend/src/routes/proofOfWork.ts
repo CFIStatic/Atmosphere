@@ -16,7 +16,8 @@ import {
 } from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { canPurchaseAiCredits } from '../metering/aiBudget.js';
-import { enterAiUsageScope } from '../metering/aiUsageContext.js';
+import { enterAiUsageScope, runWithAiUsageScope } from '../metering/aiUsageContext.js';
+import { VIDEO_ANALYSIS_FEATURE, withVideoUsageScope } from '../metering/backgroundUsage.js';
 import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../metering/aiBudgetService.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
@@ -1264,11 +1265,14 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     })
     .eq('id', job.proofId);
 
-  const result = await runDayAnalysis(
-    admin,
-    { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
-    job.workDate,
-    job.proofId,
+  // Every model call in the reading is billed to the org as video analysis.
+  const result = await withVideoUsageScope(admin, { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId }, () =>
+    runDayAnalysis(
+      admin,
+      { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
+      job.workDate,
+      job.proofId,
+    ),
   );
 
   if (result.outcome === 'skipped') {
@@ -1717,7 +1721,11 @@ const narrationLocks = new Map<string, Promise<void>>();
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   const existing = narrationLocks.get(job.proofId);
   if (existing) return existing;
-  const work = runNarration(admin, job).finally(() => {
+  // Narration, long-form windows, synthesis and the summary rebuild are all
+  // video analysis on this org's ledger.
+  const work = withVideoUsageScope(admin, { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId }, () =>
+    runNarration(admin, job),
+  ).finally(() => {
     narrationLocks.delete(job.proofId);
   });
   narrationLocks.set(job.proofId, work);
@@ -2342,7 +2350,7 @@ export async function liveObserve(req: Request, res: Response, next: NextFunctio
         lastStageIndex: z.number().int().min(-1).nullish(),
       })
       .parse(req.body);
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, userId, supabase } = await requireOrgContext(req);
 
     if (!isModelProviderConfigured()) {
       throw new HttpError(503, 'Live monitoring needs a configured model.', 'no_model');
@@ -2376,11 +2384,22 @@ export async function liveObserve(req: Request, res: Response, next: NextFunctio
     });
     const steps = stepsForNarration(guide.steps);
 
-    const observation = await observeLiveFrame({
-      frameBase64: body.frameBase64,
-      steps,
-      lastStageIndex: body.lastStageIndex ?? null,
-    });
+    const observation = await runWithAiUsageScope(
+      {
+        client: supabase,
+        orgId,
+        requestId: `live_observe:${randomUUID()}`,
+        jobId: req.params.jobId ?? null,
+        userId,
+        meterFeature: VIDEO_ANALYSIS_FEATURE,
+      },
+      () =>
+        observeLiveFrame({
+          frameBase64: body.frameBase64,
+          steps,
+          lastStageIndex: body.lastStageIndex ?? null,
+        }),
+    );
     if (!observation) {
       throw new HttpError(502, 'The model reply was not usable.', 'observe_failed');
     }

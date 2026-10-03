@@ -22,7 +22,12 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '../lib/logger.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
 import { currentAiUsageScope } from '../metering/aiUsageContext.js';
-import { modelPriceTable, tavilyCreditsCostNanos } from '../metering/modelPriceTable.js';
+import {
+  modelPriceTable,
+  tavilyBilledCredits,
+  tavilyCreditsCostNanos,
+  type TavilyCall,
+} from '../metering/modelPriceTable.js';
 import { recordFlatProviderCost, recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { geminiMeasuredUsage } from '../lib/providerUsage.js';
 
@@ -697,6 +702,8 @@ function pushHit(hits: AskWebHit[], next: AskWebHit | null) {
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
 const TAVILY_TIMEOUT_MS = 9_000;
 const TAVILY_MAX_RESULTS = 5;
+/** Basic search: 1 credit. Advanced would be 2 — metering follows whatever is sent. */
+const TAVILY_SEARCH_DEPTH: 'basic' | 'advanced' = 'basic';
 
 let askWebSearchCount = 0;
 
@@ -723,7 +730,7 @@ async function searchTavily(
   const maxResults = Math.min(Math.max(limit, 1), TAVILY_MAX_RESULTS);
   const body: Record<string, unknown> = {
     query,
-    search_depth: 'basic',
+    search_depth: TAVILY_SEARCH_DEPTH,
     max_results: maxResults,
     include_answer: true,
     // Ask Tavily to report the credits this request used, so we bill on the
@@ -749,7 +756,9 @@ async function searchTavily(
     results?: Array<{ title?: string; url?: string; content?: string }>;
     usage?: { credits?: number };
   };
-  meterTavilySearch(payload.usage ?? null);
+  meterTavilyCall({ endpoint: 'search', depth: TAVILY_SEARCH_DEPTH }, payload.usage ?? null, {
+    results: (payload.results ?? []).length,
+  });
   const hits: AskWebHit[] = [];
   for (const row of payload.results ?? []) {
     pushHit(hits, {
@@ -1275,30 +1284,66 @@ function meterGeminiSearch(model: string, usageMetadata: unknown): void {
   });
 }
 
-function meterTavilySearch(usage: { credits?: number } | null): void {
+/**
+ * Bill one Tavily call on the org's ledger: credits × $0.008 (pay-as-you-go)
+ * provider cost, × the customer markup like every other AI call. The row lands
+ * under the 'web_search' feature, so it shows on Billing, the allowance,
+ * Analytics and the same-day Stripe usage invoice.
+ *
+ * Every Tavily call made from Ask (direct web search, research steps, the
+ * reasoning lookup tool) runs inside the Ask turn's usage scope. A call with
+ * no scope cannot be attributed to a customer: it is logged as an ALERT with
+ * its credits so the provider bill can be reconciled.
+ */
+function meterTavilyCall(
+  call: TavilyCall,
+  usage: { credits?: number } | null,
+  meta: { results: number },
+): void {
+  const { credits, reportedByProvider } = tavilyBilledCredits(call, usage?.credits);
   const scope = currentAiUsageScope();
-  if (!scope) return;
-  // Provider-reported credits when Tavily returns them; a basic search is
-  // documented as 1 credit (https://docs.tavily.com/documentation/api-credits).
-  const reported = Number(usage?.credits);
-  const credits = Number.isFinite(reported) && reported >= 0 ? reported : 1;
-  if (credits === 0) return;
+  if (!scope) {
+    logger.error('tavily_unmetered', {
+      reason: 'no_org_scope',
+      endpoint: call.endpoint,
+      depth: call.depth ?? 'basic',
+      credits,
+    });
+    return;
+  }
+  if (credits <= 0) return;
+  const model = call.endpoint === 'extract' ? 'tavily-extract' : 'tavily-search';
   const costNanos = tavilyCreditsCostNanos(modelPriceTable(), credits);
   recordFlatProviderCost(scope.client, {
     provider: 'tavily',
     providerUsage: {
-      calls: [{ provider: 'tavily', model: 'tavily-search', usage: usage ?? { credits: 1, reported: false } }],
+      calls: [
+        {
+          provider: 'tavily',
+          model,
+          endpoint: call.endpoint,
+          depth: call.depth ?? 'basic',
+          usage: usage ?? { credits, reported: false },
+        },
+      ],
     },
-    metadata: { credits, creditsReportedByProvider: Number.isFinite(reported) },
+    metadata: {
+      credits,
+      creditsReportedByProvider: reportedByProvider,
+      endpoint: call.endpoint,
+      depth: call.depth ?? 'basic',
+      results: meta.results,
+    },
     orgId: scope.orgId,
     requestId: `tavily:${scope.requestId}:${randomUUID()}`,
     feature: 'web_search',
     source: 'tavily',
-    modelId: 'tavily-search',
+    modelId: model,
     costNanos,
     jobId: scope.jobId,
     userId: scope.userId,
   });
+  logger.info('tavily_metered', { endpoint: call.endpoint, credits, reportedByProvider });
 }
 
 export async function searchAskWeb(question: string, opts?: AskWebSearchOptions): Promise<AskWebHit[]> {

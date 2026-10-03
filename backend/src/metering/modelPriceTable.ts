@@ -71,7 +71,7 @@ export interface ModelPriceTable {
   transcriptionUsdPerMinute: Record<string, number>;
   /** @deprecated Kept for older callers: whisper-1 per-minute price. */
   whisperUsdPerMinute: number;
-  /** Tavily pay-as-you-go, USD per API credit. Basic search = 1 credit. */
+  /** Tavily pay-as-you-go, USD per API credit. Search basic 1 / advanced 2; extract 1 or 2 per 5 URLs. */
   tavilyUsdPerCredit: number;
   /** @deprecated Kept for older callers: one basic search. */
   tavilySearchUsd: number;
@@ -301,4 +301,40 @@ export function tavilyCreditsCostNanos(table: ModelPriceTable, credits = 1): num
 
 export function tavilySearchCostNanos(table: ModelPriceTable, searches = 1): number {
   return tavilyCreditsCostNanos(table, Math.max(0, Math.round(searches)));
+}
+
+export type TavilyCall =
+  | { endpoint: 'search'; depth?: 'basic' | 'advanced' | null }
+  | { endpoint: 'extract'; depth?: 'basic' | 'advanced' | null; successfulUrls: number };
+
+/**
+ * Credits Tavily charges for one call, from the published credit table
+ * (https://docs.tavily.com/documentation/api-credits, checked 2026-10-03):
+ *
+ * - Search: basic 1 credit, advanced 2 credits per request.
+ * - Extract: every 5 successful URL extractions cost 1 credit (basic) or
+ *   2 credits (advanced); failed URLs are free. A partial block of 5 is
+ *   counted as a full one (rounded up).
+ *
+ * Used only when the response carries no `usage.credits`; the provider's own
+ * number always wins.
+ */
+export function tavilyDocumentedCredits(call: TavilyCall): number {
+  const perUnit = call.depth === 'advanced' ? 2 : 1;
+  if (call.endpoint === 'search') return perUnit;
+  const urls = Math.max(0, Math.floor(Number(call.successfulUrls) || 0));
+  if (urls === 0) return 0;
+  return Math.ceil(urls / 5) * perUnit;
+}
+
+/** Credits to bill: provider-reported `usage.credits` when present, else the documented table. */
+export function tavilyBilledCredits(
+  call: TavilyCall,
+  reported: unknown,
+): { credits: number; reportedByProvider: boolean } {
+  const n = Number(reported);
+  if (reported !== null && reported !== undefined && Number.isFinite(n) && n >= 0) {
+    return { credits: n, reportedByProvider: true };
+  }
+  return { credits: tavilyDocumentedCredits(call), reportedByProvider: false };
 }
