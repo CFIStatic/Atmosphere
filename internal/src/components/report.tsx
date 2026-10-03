@@ -7,6 +7,7 @@
  * as-of stamp on every page.
  */
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { asOf } from '../lib/format';
 
 export function PageHeader({
@@ -110,6 +111,8 @@ export interface KpiItem {
   delta?: ReactNode;
   comparison?: string;
   note?: string;
+  /** Detail page for this figure; the whole cell becomes the link. */
+  to?: string;
 }
 
 /** The crisp strip at the top of a page: hairline-divided cells, no cards. */
@@ -122,10 +125,19 @@ export function KpiStrip({ items }: { items: KpiItem[] }) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="border-l border-line px-3 py-3 first:border-l-0 sm:px-4 [&:nth-child(2n+1)]:border-l-0 sm:[&:nth-child(2n+1)]:border-l sm:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(3n+1)]:border-l lg:[&:nth-child(6n+1)]:border-l-0"
+          className="relative border-l border-line px-3 py-3 first:border-l-0 sm:px-4 [&:nth-child(2n+1)]:border-l-0 sm:[&:nth-child(2n+1)]:border-l sm:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(3n+1)]:border-l lg:[&:nth-child(6n+1)]:border-l-0"
         >
           <dt>
-            <span className="block text-[11.5px] font-semibold text-ink-800">{item.label}</span>
+            {item.to ? (
+              <Link
+                to={item.to}
+                className="block text-[11.5px] font-semibold text-ink-800 after:absolute after:inset-0 hover:text-brand-600 hover:underline hover:underline-offset-2"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span className="block text-[11.5px] font-semibold text-ink-800">{item.label}</span>
+            )}
             <span className="block text-[10.5px] text-ink-500">{item.unit}</span>
           </dt>
           <dd className="mt-2 text-[24px] font-semibold leading-none tracking-tight text-ink-900 tabular-nums">
