@@ -1,10 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { api, type AiAllowance } from '../../lib/api';
-import tailwindConfig from '../../../tailwind.config.js';
 import { AiAllowanceSection } from './AiAllowanceSection';
-
-const colors = tailwindConfig.theme.extend.colors as Record<string, Record<string, string>>;
 
 function allowance(partial: Partial<AiAllowance>): AiAllowance {
   return {
@@ -27,41 +24,48 @@ function allowance(partial: Partial<AiAllowance>): AiAllowance {
   };
 }
 
-function expectFill(width: string, tone: 'brand' | 'caution' | 'danger', shade: string) {
-  const fill = screen.getByTestId('ai-allowance-fill');
-  expect(fill).toHaveStyle({ width });
-  expect(fill.className).toContain(`bg-${tone}-${shade}`);
-  expect(colors[tone]?.[shade]).toBeTruthy();
-}
-
-describe('AI allowance meter', () => {
-  it('labels the meter as allowance used at our AI cost, not the billed price', () => {
-    render(<AiAllowanceSection allowance={allowance({ state: 'ok', usedFraction: 0.4 })} onError={() => {}} />);
-    expect(screen.getByTestId('ai-allowance-label')).toHaveTextContent('Allowance used (at our AI cost)');
-    expect(screen.queryByText(/10% annual increase/i)).not.toBeInTheDocument();
-  });
-
-  it('fills the bar for normal use, the warning, and the limit', () => {
-    const { rerender } = render(
-      <AiAllowanceSection allowance={allowance({ state: 'ok', usedFraction: 0.4 })} onError={() => {}} />,
-    );
-    expectFill('40%', 'brand', '600');
-
-    rerender(
+describe('AI credits card', () => {
+  it('never shows allowance dollar amounts, percent, daily cap or a progress bar', () => {
+    const { container } = render(
       <AiAllowanceSection
         allowance={allowance({
-          state: 'warning',
-          warning: true,
-          usedFraction: 0.8,
-          usedNanos: 10_000_000_000,
-          message: 'This account has used most of its AI allowance for this period.',
+          state: 'ok',
+          usedFraction: 0.4,
+          byFeature: [{ feature: 'ask', label: 'Ask', nanos: 2_250_000_000 }],
+          history: {
+            usage: [{ id: 'u1', at: '2026-10-01T00:00:00.000Z', feature: 'ask', label: 'Ask', nanos: 2_250_000_000 }],
+            credits: [],
+          },
         })}
         onError={() => {}}
       />,
     );
-    expectFill('80%', 'caution', '600');
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/\$5\.00|\$12\.50|\$2\.25|\$1\.00|\$3\.13/);
+    expect(text).not.toMatch(/40%/);
+    expect(text).not.toMatch(/Allowance used|Daily limit|This period/i);
+    expect(screen.queryByTestId('ai-allowance-meter')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ai-allowance-fill')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ai-allowance-percent')).not.toBeInTheDocument();
+    expect(screen.queryByText(/10% annual increase/i)).not.toBeInTheDocument();
+  });
 
-    rerender(
+  it('keeps the plan and buy-credits actions', () => {
+    render(
+      <AiAllowanceSection
+        allowance={allowance({
+          canManage: true,
+          packs: [{ code: 'credits_10', label: '$10', cents: 1000, creditNanos: 10_000_000_000, priceConfigured: true }],
+        })}
+        onError={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('upgrade-plan-scale')).toBeInTheDocument();
+    expect(screen.getByTestId('buy-credits-credits_10')).toBeInTheDocument();
+  });
+
+  it('still explains a pause without any amounts', () => {
+    render(
       <AiAllowanceSection
         allowance={allowance({
           state: 'limited',
@@ -73,7 +77,8 @@ describe('AI allowance meter', () => {
         onError={() => {}}
       />,
     );
-    expectFill('100%', 'danger', '600');
+    expect(screen.getByTestId('ai-allowance-status')).toHaveTextContent('AI is paused');
+    expect(screen.queryByText(/\$12\.50/)).not.toBeInTheDocument();
   });
 
   it('keeps a yearly plan on the yearly price when switching plans', async () => {
