@@ -22,8 +22,9 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '../lib/logger.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
 import { currentAiUsageScope } from '../metering/aiUsageContext.js';
-import { modelPriceTable, tavilySearchCostNanos } from '../metering/modelPriceTable.js';
-import { recordFlatProviderCost } from '../metering/tokenUsage.js';
+import { modelPriceTable, tavilyCreditsCostNanos } from '../metering/modelPriceTable.js';
+import { recordFlatProviderCost, recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
+import { geminiMeasuredUsage } from '../lib/providerUsage.js';
 
 export type AskWebHit = {
   title: string;
@@ -725,6 +726,9 @@ async function searchTavily(
     search_depth: 'basic',
     max_results: maxResults,
     include_answer: true,
+    // Ask Tavily to report the credits this request used, so we bill on the
+    // provider's number rather than our assumption (basic = 1 credit).
+    include_usage: true,
   };
   if (includeDomains?.length) body.include_domains = includeDomains;
   const res = await fetchFn(TAVILY_SEARCH_URL, {
@@ -743,7 +747,9 @@ async function searchTavily(
   const payload = (await res.json()) as {
     answer?: string;
     results?: Array<{ title?: string; url?: string; content?: string }>;
+    usage?: { credits?: number };
   };
+  meterTavilySearch(payload.usage ?? null);
   const hits: AskWebHit[] = [];
   for (const row of payload.results ?? []) {
     pushHit(hits, {
@@ -939,6 +945,7 @@ async function searchGemini(
     throw new Error(`gemini_search_${res.status}:${redactSecrets(errBody)}`);
   }
   const payload = (await res.json()) as GeminiGeneratePayload;
+  meterGeminiSearch(model, (payload as { usageMetadata?: unknown }).usageMetadata ?? null);
   const fromGrounding = hitsFromGeminiGrounding(payload, limit);
   const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
   const fromJson = parseGeminiAskWebHitsJson(text, limit);
@@ -1210,7 +1217,6 @@ export async function searchAskWebDetailed(
   if (tavilyKey) {
     try {
       const outcome = await searchTavily(query, tavilyKey, limit, fetchFn, includeDomains);
-      meterTavilySearch();
       // Count of searches only — never the key, the Authorization header, or the query.
       logger.info('ask_web_search', { searches, results: outcome.hits.length });
       return outcome;
@@ -1246,11 +1252,44 @@ export async function searchAskWebDetailed(
   }
 }
 
-function meterTavilySearch(): void {
+/**
+ * Gemini grounded search spends model tokens: record what usageMetadata
+ * reports. The Google Search grounding fee ($14 / 1,000 after 5,000 free
+ * requests a month, shared across the account) cannot be attributed per call;
+ * it shows up in the Google billing reconciliation instead.
+ */
+function meterGeminiSearch(model: string, usageMetadata: unknown): void {
   const scope = currentAiUsageScope();
   if (!scope) return;
-  const costNanos = tavilySearchCostNanos(modelPriceTable(), 1);
+  const usage = geminiMeasuredUsage(usageMetadata, model);
+  if (usage.totalTokens <= 0) return;
+  recordMeasuredTokenUsage(scope.client, {
+    orgId: scope.orgId,
+    requestId: `gemini_search:${scope.requestId}:${randomUUID()}`,
+    feature: 'web_search',
+    source: 'gemini_search',
+    modelId: model,
+    usage,
+    jobId: scope.jobId,
+    userId: scope.userId,
+  });
+}
+
+function meterTavilySearch(usage: { credits?: number } | null): void {
+  const scope = currentAiUsageScope();
+  if (!scope) return;
+  // Provider-reported credits when Tavily returns them; a basic search is
+  // documented as 1 credit (https://docs.tavily.com/documentation/api-credits).
+  const reported = Number(usage?.credits);
+  const credits = Number.isFinite(reported) && reported >= 0 ? reported : 1;
+  if (credits === 0) return;
+  const costNanos = tavilyCreditsCostNanos(modelPriceTable(), credits);
   recordFlatProviderCost(scope.client, {
+    provider: 'tavily',
+    providerUsage: {
+      calls: [{ provider: 'tavily', model: 'tavily-search', usage: usage ?? { credits: 1, reported: false } }],
+    },
+    metadata: { credits, creditsReportedByProvider: Number.isFinite(reported) },
     orgId: scope.orgId,
     requestId: `tavily:${scope.requestId}:${randomUUID()}`,
     feature: 'web_search',

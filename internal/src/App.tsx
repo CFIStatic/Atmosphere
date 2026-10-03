@@ -12,6 +12,7 @@ import { ExperimentsPage } from './pages/ExperimentsPage';
 import { MeteringPage } from './pages/MeteringPage';
 import { AiBudgetsPage } from './pages/AiBudgetsPage';
 import { TokenUsagePage } from './pages/TokenUsagePage';
+import { AiReconciliationPage } from './pages/AiReconciliationPage';
 import { SystemPage } from './pages/SystemPage';
 import { AccessPage } from './pages/AccessPage';
 import { LegalPage } from './pages/LegalPage';
@@ -58,6 +59,7 @@ export function App() {
             <Route path="metering" element={<MeteringPage />} />
             <Route path="ai-budgets" element={<AiBudgetsPage />} />
             <Route path="token-usage" element={<TokenUsagePage />} />
+            <Route path="ai-reconciliation" element={<RequireInternal><AiReconciliationPage /></RequireInternal>} />
             <Route path="legal" element={<LegalPage />} />
             <Route path="safety" element={<SafetyAlertsPage />} />
             <Route path="motion-clips" element={<MotionClipsPage />} />

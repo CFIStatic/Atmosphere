@@ -14,6 +14,8 @@
  *   - a new OpenAI-compatible endpoint is a config entry, not a code change.
  */
 
+import type { MeasuredUsage } from '../../lib/anthropic.js';
+
 export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'oss';
 
 export interface ChatMessage {
@@ -48,6 +50,8 @@ export interface CompletionResult {
   outputTokens: number;
   /** Provider-reported stop reason, normalised to lower case where available. */
   stopReason: string | null;
+  /** Provider-reported usage (cache split, thinking, raw object) for metering. */
+  usage?: MeasuredUsage;
 }
 
 export interface ModelProvider {

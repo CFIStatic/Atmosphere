@@ -254,6 +254,118 @@ addCampaign({
   bodyMarkdown: '',
 });
 
+// ------------------------------------------------------- AI cost (TEST DATA)
+// Invented orgs and amounts. Billable = cost × 10, like the real ledger.
+function tokenUsage() {
+  const to = new Date(NOW);
+  const from = new Date(to.getTime() - 30 * 86_400_000);
+  const orgs = [
+    { orgId: 'aaaaaaaa-0000-4000-8000-000000000001', orgName: 'Test Restoration Co (TEST DATA)', events: 41, input: 182_400, output: 21_900, cache: 41_176, cost: 596_630_000, users: 3, models: 3 },
+    { orgId: 'aaaaaaaa-0000-4000-8000-000000000002', orgName: 'Sample Builders (TEST DATA)', events: 18, input: 64_200, output: 7_800, cache: 9_000, cost: 141_900_000, users: 2, models: 2 },
+  ];
+  const byCustomer = orgs.map((o) => ({
+    orgId: o.orgId, orgName: o.orgName, eventCount: o.events, inputTokens: o.input, outputTokens: o.output,
+    cacheTokens: o.cache, totalTokens: o.input + o.output + o.cache, priceNanos: o.cost * 10, costNanos: o.cost,
+    distinctUsers: o.users, distinctModels: o.models,
+  }));
+  const sum = (k) => byCustomer.reduce((a, row) => a + row[k], 0);
+  const models = [
+    ['claude-opus-5', 22, 140_000, 15_000, 30_000, 1_123_500_000],
+    ['claude-sonnet-5', 15, 70_000, 9_500, 20_317, 238_064_000],
+    ['gemini-3.6-flash', 14, 26_000, 3_800, 0, 33_750_000],
+    ['gemini-3.5-flash-lite', 8, 10_600, 1_400, 0, 6_680_000],
+  ];
+  return {
+    range: { from: iso(from), to: iso(to) },
+    window: { from: iso(from), to: iso(to), label: 'Rolling 30 days (UTC)', timeZone: 'UTC' },
+    pricing: { rule: 'price = provider cost × customer markup (same rule as Settings › Billing)', rateCardVerifiedAt: '2026-10-02' },
+    health: { repricedEvents: 0, unpricedEvents: 0, unpricedModels: [], ok: true },
+    totals: {
+      eventCount: sum('eventCount'), inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
+      cacheTokens: sum('cacheTokens'), totalTokens: sum('totalTokens'), priceNanos: sum('priceNanos'),
+      costNanos: sum('costNanos'), distinctOrgs: orgs.length, distinctUsers: 5, distinctModels: models.length,
+    },
+    byCustomer,
+    byUser: [
+      { userId: 'u-1', userName: 'Test Owner', email: 'owner@example.test', orgId: orgs[0].orgId, orgName: orgs[0].orgName, eventCount: 30, inputTokens: 150_000, outputTokens: 18_000, cacheTokens: 35_000, totalTokens: 203_000, priceNanos: 4_900_000_000 },
+      { userId: 'u-2', userName: 'Sample Estimator', email: 'estimator@example.test', orgId: orgs[1].orgId, orgName: orgs[1].orgName, eventCount: 18, inputTokens: 64_200, outputTokens: 7_800, cacheTokens: 9_000, totalTokens: 81_000, priceNanos: 1_419_000_000 },
+    ],
+    byModel: models.map(([model, events, input, output, cache, price]) => ({
+      model, eventCount: events, inputTokens: input, outputTokens: output, cacheTokens: cache,
+      totalTokens: input + output + cache, priceNanos: price, distinctOrgs: 2, distinctUsers: 3,
+    })),
+    byFeature: [
+      { feature: 'ask', eventCount: 45, totalTokens: 260_000, priceNanos: 6_500_000_000 },
+      { feature: 'video_analysis', eventCount: 14, totalTokens: 66_476, priceNanos: 885_300_000 },
+    ],
+  };
+}
+
+function aiReconciliation() {
+  const to = new Date(NOW);
+  const from = new Date(to.getTime() - 30 * 86_400_000);
+  const day = (offset) => iso(new Date(to.getTime() - offset * 86_400_000)).slice(0, 10);
+  const row = (offset, ours, theirs, pending = false) => {
+    const varianceUsd = theirs == null ? null : Math.round((ours - theirs) * 1e6) / 1e6;
+    const variancePct = theirs ? Math.round(((ours - theirs) / theirs) * 10_000) / 100 : null;
+    const flagged = !pending && variancePct != null && Math.abs(variancePct) > 2;
+    return { day: day(offset), oursUsd: ours, theirsUsd: theirs, varianceUsd, variancePct, flagged, pending };
+  };
+  const anthropicDays = [row(6, 0.4123, 0.4119), row(5, 0.3011, 0.3020), row(4, 0.2875, 0.3301), row(3, 0.5210, 0.5188), row(2, 0.1842, 0.1850), row(0, 0.0931, 0.0400, true)];
+  const settled = anthropicDays.filter((d) => !d.pending);
+  const oursSettled = settled.reduce((a, d) => a + d.oursUsd, 0);
+  const theirsSettled = settled.reduce((a, d) => a + d.theirsUsd, 0);
+  const totalPct = Math.round(((oursSettled - theirsSettled) / theirsSettled) * 10_000) / 100;
+  const notConnected = (offsets) => offsets.map(([o, ours]) => row(o, ours, null));
+  const total = (days) => ({ oursUsd: Math.round(days.reduce((a, d) => a + d.oursUsd, 0) * 1e6) / 1e6, theirsUsd: null, varianceUsd: null, variancePct: null, flagged: false });
+  const googleDays = notConnected([[6, 0.0212], [4, 0.0187], [2, 0.0301], [1, 0.0094]]);
+  const tavilyDays = notConnected([[5, 0.016], [3, 0.008], [1, 0.024]]);
+  const providers = [
+    {
+      provider: 'anthropic', label: 'Anthropic (Claude)', status: 'connected', requires: [],
+      source: 'Anthropic Admin API — Usage & Cost (cost_report)', error: null,
+      note: 'TEST DATA. Covers every key in the Anthropic organization (or the one workspace you set).',
+      days: anthropicDays,
+      totals: {
+        oursUsd: Math.round(oursSettled * 1e6) / 1e6,
+        theirsUsd: Math.round(theirsSettled * 1e6) / 1e6,
+        varianceUsd: Math.round((oursSettled - theirsSettled) * 1e6) / 1e6,
+        variancePct: totalPct,
+        flagged: Math.abs(totalPct) > 2,
+      },
+    },
+    {
+      provider: 'google', label: 'Google (Gemini API)', status: 'not_connected',
+      requires: [
+        'Cloud Billing → BigQuery export enabled (standard usage cost)',
+        'GOOGLE_BILLING_EXPORT_TABLE (project.dataset.gcp_billing_export_v1_…)',
+        'GOOGLE_BILLING_SERVICE_ACCOUNT_JSON (BigQuery Data Viewer + Job User; optional GOOGLE_BILLING_PROJECT_ID)',
+      ],
+      source: 'Cloud Billing export to BigQuery (service "Gemini API")', error: null,
+      note: 'Billing export lags up to a day or more. Includes explicit context-cache storage and Google Search grounding fees.',
+      days: googleDays, totals: total(googleDays),
+    },
+    {
+      provider: 'openai', label: 'OpenAI (transcription)', status: 'not_connected',
+      requires: ['OPENAI_ADMIN_KEY (organization admin key)'], source: 'OpenAI Costs API (organization/costs)',
+      error: null, note: null, days: [], totals: total([]),
+    },
+    {
+      provider: 'tavily', label: 'Tavily (web search)', status: 'unsupported',
+      requires: ['Compare the monthly Tavily invoice by hand'], source: 'No per-day usage or cost API',
+      error: null, note: 'Our side is provider-reported credits × $0.008 (pay-as-you-go).',
+      days: tavilyDays, totals: total(tavilyDays),
+    },
+  ];
+  return {
+    generatedAt: iso(NOW),
+    window: { from: iso(from), to: iso(to), timeZone: 'UTC' },
+    thresholdPct: 2,
+    flaggedCount: providers.reduce((a, p) => a + p.days.filter((d) => d.flagged).length + (p.totals.flagged ? 1 : 0), 0),
+    providers,
+  };
+}
+
 // ----------------------------------------------------------------- server
 function send(res, status, body) {
   res.writeHead(status, {
@@ -296,7 +408,8 @@ const server = http.createServer(async (req, res) => {
   if (r === '/product-health') return send(res, 200, productHealth(Math.min(52, Math.max(4, Number(url.searchParams.get('weeks') ?? 12)))));
   if (r === '/experiments') return send(res, 200, { experiments: demo.demoExperiments });
   if (r === '/metering') return send(res, 200, demo.demoMetering);
-  if (r === '/token-usage') return send(res, 200, { byCustomer: [], byUser: [], byModel: [], byFeature: [] });
+  if (r === '/token-usage') return send(res, 200, tokenUsage());
+  if (r === '/ai-reconciliation') return send(res, 200, aiReconciliation());
   if (r === '/ai-budgets') return send(res, 200, { budgets: [] });
   if (r === '/access-requests') return send(res, 200, { requests: [], pendingCount: 0 });
 

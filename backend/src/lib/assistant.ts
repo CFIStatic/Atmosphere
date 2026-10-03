@@ -106,7 +106,7 @@ export async function generateReply(
     return {
       reply: "I can't help with that one. Ask me something else about the job and I'll pick it back up.",
       model: response.model,
-      usage: tryExtractUsage(response.usage),
+      usage: tryExtractUsage(response.usage, response.model ?? null),
     };
   }
 
@@ -119,7 +119,7 @@ export async function generateReply(
   return {
     reply: reply || "Sorry — I didn't catch that. Say it again?",
     model: response.model,
-    usage: tryExtractUsage(response.usage),
+    usage: tryExtractUsage(response.usage, response.model ?? null),
   };
 }
 

@@ -6,12 +6,14 @@
  * they do not decide.
  */
 
+import { tryExtractUsage, type MeasuredUsage } from '../../lib/anthropic.js';
+import { geminiMeasuredUsage } from '../../lib/providerUsage.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { googleVisionApiKey } from '../../lib/visionProvider.js';
 import { verificationConfig } from '../config.js';
 import { parseModelJson } from '../schemas.js';
-import { estimateCostUsd, recordAiCost, wouldExceedBudget } from '../cost/tracker.js';
+import { recordAiCost, usageCostUsd, wouldExceedBudget } from '../cost/tracker.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
 import type { PipelineContext } from '../pipeline/orchestrator.js';
 import {
@@ -101,6 +103,8 @@ export interface VerificationProvider {
       latencyMs: number;
       providerRequestId: string | null;
       estimatedCostUsd: number;
+      /** Provider-reported usage with the raw usage object. */
+      measured?: MeasuredUsage;
     };
   }>;
 }
@@ -275,8 +279,7 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
     const fetchFn = this.opts.fetchFn ?? fetch;
 
     let text = '';
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let measured: MeasuredUsage;
     let requestId: string | null = null;
 
     if (this.opts.provider === 'anthropic') {
@@ -298,12 +301,11 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
       if (!response.ok) throw new Error(`Anthropic verifier failed: ${response.status}`);
       const payload = (await response.json()) as {
         content?: Array<{ type: string; text?: string }>;
-        usage?: { input_tokens?: number; output_tokens?: number };
+        usage?: Record<string, unknown>;
         id?: string;
       };
       text = (payload.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
-      inputTokens = payload.usage?.input_tokens ?? 0;
-      outputTokens = payload.usage?.output_tokens ?? 0;
+      measured = tryExtractUsage(payload.usage, this.opts.model);
       requestId = payload.id ?? null;
     } else {
       // Gemini generateContent JSON
@@ -325,12 +327,11 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
       if (!response.ok) throw new Error(`Gemini verifier failed: ${response.status}`);
       const payload = (await response.json()) as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+        usageMetadata?: Record<string, unknown>;
         responseId?: string;
       };
       text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-      inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
-      outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
+      measured = geminiMeasuredUsage(payload.usageMetadata ?? null, this.opts.model);
       requestId = payload.responseId ?? null;
     }
 
@@ -344,11 +345,12 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
       promptKey: VERIFIER_PROMPT_KEY,
       promptVersion: VERIFIER_PROMPT_VERSION,
       usage: {
-        inputTokens,
-        outputTokens,
+        inputTokens: measured.inputTokens,
+        outputTokens: measured.outputTokens,
         latencyMs: Date.now() - started,
         providerRequestId: requestId,
-        estimatedCostUsd: estimateCostUsd(this.opts.provider, inputTokens, outputTokens),
+        estimatedCostUsd: usageCostUsd(this.opts.model, measured),
+        measured,
       },
     };
   }
@@ -604,6 +606,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           inputTokens: verification.usage.inputTokens,
           outputTokens: verification.usage.outputTokens,
           estimatedCostUsd: verification.usage.estimatedCostUsd,
+          usage: verification.usage.measured ?? null,
         });
       }
 
@@ -676,6 +679,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           inputTokens: esc.usage.inputTokens,
           outputTokens: esc.usage.outputTokens,
           estimatedCostUsd: esc.usage.estimatedCostUsd,
+          usage: (esc.usage as { measured?: MeasuredUsage }).measured ?? null,
         });
         finalRunId = escId;
         finalDecision = esc.parsed;

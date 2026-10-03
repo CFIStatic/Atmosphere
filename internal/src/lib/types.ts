@@ -240,8 +240,28 @@ export interface TokenUsageTotals {
   distinctModels: number;
 }
 
+export interface TokenUsageWindowInfo {
+  from: string;
+  to: string;
+  /** e.g. "Rolling 30 days (UTC)" — the same window Settings › Billing shows for "Last 30 days". */
+  label: string;
+  timeZone: string;
+}
+
+export interface TokenUsageHealth {
+  /** Rows stored at $0 with tokens, priced here by the shared rule. */
+  repricedEvents: number;
+  /** Rows with tokens whose model has no price on the rate card. Should be 0. */
+  unpricedEvents: number;
+  unpricedModels: Array<{ model: string; events: number }>;
+  ok: boolean;
+}
+
 export interface TokenUsageAnalyticsPayload {
   range?: { from: string; to: string };
+  window?: TokenUsageWindowInfo;
+  pricing?: { rule: string; rateCardVerifiedAt: string };
+  health?: TokenUsageHealth;
   totals?: TokenUsageTotals;
   byCustomer?: Array<{
     orgId: string;
@@ -621,4 +641,40 @@ export interface AudienceCount {
   suppressed: number;
   recipients: number;
   fetchedAt: string;
+}
+
+export interface AiReconciliationDay {
+  day: string;
+  oursUsd: number;
+  theirsUsd: number | null;
+  varianceUsd: number | null;
+  variancePct: number | null;
+  flagged: boolean;
+  pending: boolean;
+}
+
+export interface AiReconciliationProvider {
+  provider: 'anthropic' | 'google' | 'openai' | 'tavily';
+  label: string;
+  status: 'connected' | 'not_connected' | 'error' | 'unsupported';
+  requires: string[];
+  source: string;
+  note: string | null;
+  error: string | null;
+  days: AiReconciliationDay[];
+  totals: {
+    oursUsd: number;
+    theirsUsd: number | null;
+    varianceUsd: number | null;
+    variancePct: number | null;
+    flagged: boolean;
+  };
+}
+
+export interface AiReconciliationPayload {
+  generatedAt: string;
+  window: { from: string; to: string; timeZone: string };
+  thresholdPct: number;
+  flaggedCount: number;
+  providers: AiReconciliationProvider[];
 }

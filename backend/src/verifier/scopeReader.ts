@@ -142,7 +142,7 @@ export async function extractScopeFromDocument(input: {
   if (!parsed) return null;
   let usage: MeasuredUsage | null = null;
   try {
-    usage = extractUsage(response.usage);
+    usage = extractUsage(response.usage, response.model ?? null);
   } catch {
     usage = null;
   }

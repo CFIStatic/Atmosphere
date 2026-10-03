@@ -1,39 +1,33 @@
 /**
- * Provider COGS for models that are not on the Claude rate card.
+ * Provider cost (COGS) for a token count — thin wrapper over the shared
+ * pricing module (metering/pricing.ts → modelPriceTable.ts).
  *
- * Video analysis already prices Gemini at $0.10 / $0.40 per million tokens
- * (`verificationConfig` defaults) and stores that as cost_nanos. Ask and chat
- * go through `quote_usage`, which errors `unknown_model` for Gemini ids, so
- * those events were written with cost 0 and price 0. Settings then showed
- * token counts with no matching spend.
+ * 0 when the model is not on the official rate card: we never invent a
+ * price. Callers that can see that case must flag it (see pricing.ts
+ * `providerCostForUsage(...).priced`).
  *
- * Nanodollars per token = usd_per_mtok * 1e9 / 1e6 = usd_per_mtok * 1000.
- * $0.10 → 100 nanos/token. $0.40 → 400 nanos/token. Same integer maths as
- * `private.price_usage` (`tokens * usd_per_mtok * 1000`).
+ * Cache tokens without a read/write split are priced as cache reads, the
+ * lowest cache rate, so a legacy aggregate never over-charges.
  */
 
-import { modelPriceTable, tokenCostNanos } from './modelPriceTable.js';
-
-export const GEMINI_INPUT_NANOS_PER_TOKEN = 100;
-export const GEMINI_OUTPUT_NANOS_PER_TOKEN = 400;
+import { providerCostForUsage } from './pricing.js';
 
 export function isGeminiModel(modelId: string | null | undefined): boolean {
   return /^gemini\b/i.test((modelId ?? '').trim());
 }
 
-/** Provider COGS in nanodollars. 0 when the model is not a known Gemini id. */
 export function fallbackProviderCogsNanos(
   modelId: string | null | undefined,
-  tokens: { inputTokens?: number; outputTokens?: number; cacheTokens?: number },
+  tokens: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheTokens?: number;
+    cacheReadTokens?: number;
+    cacheWrite5mTokens?: number;
+    cacheWrite1hTokens?: number;
+  },
+  at: Date | string | null = null,
 ): number {
-  if (!isGeminiModel(modelId)) return 0;
-  return tokenCostNanos(modelPriceTable(), {
-    modelId,
-    provider: 'google',
-    tokens: {
-      inputTokens: tokens.inputTokens,
-      outputTokens: tokens.outputTokens,
-      cacheTokens: tokens.cacheTokens,
-    },
-  });
+  if (!(modelId ?? '').trim()) return 0;
+  return providerCostForUsage(modelId, tokens, at).costNanos;
 }

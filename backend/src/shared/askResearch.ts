@@ -17,6 +17,7 @@
  * This module does not stream tokens or status text.
  */
 import type { MeasuredUsage } from '../lib/anthropic.js';
+import { mergeMeasuredUsages } from '../lib/providerUsage.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
 import type { ClipAskRecord } from './clipAsk.js';
@@ -1139,24 +1140,6 @@ export async function runAskResearch(input: {
 }
 
 function sumMeasuredUsages(parts: MeasuredUsage[]): MeasuredUsage | null {
-  if (!parts.length) return null;
-  const usage = parts.reduce(
-    (acc, row) => ({
-      inputTokens: acc.inputTokens + (row.inputTokens || 0),
-      outputTokens: acc.outputTokens + (row.outputTokens || 0),
-      cacheWrite5mTokens: acc.cacheWrite5mTokens + (row.cacheWrite5mTokens || 0),
-      cacheWrite1hTokens: acc.cacheWrite1hTokens + (row.cacheWrite1hTokens || 0),
-      cacheReadTokens: acc.cacheReadTokens + (row.cacheReadTokens || 0),
-      totalTokens: acc.totalTokens + (row.totalTokens || 0),
-    }),
-    {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheWrite5mTokens: 0,
-      cacheWrite1hTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 0,
-    },
-  );
-  return usage.totalTokens > 0 ? usage : null;
+  // Keeps every provider call (and its raw usage) so each is priced at its own model's rate.
+  return mergeMeasuredUsages(parts);
 }

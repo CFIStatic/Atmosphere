@@ -16,6 +16,7 @@
  * logged and the next provider is tried. Callers keep their grounded
  * answer when nothing is configured or every provider fails.
  */
+import { geminiMeasuredUsage } from './providerUsage.js';
 import {
   anthropicClientForKey,
   tryExtractUsage,
@@ -417,7 +418,7 @@ async function completeWithAnthropic(input: {
         .join('\n')
         .trim();
     if (!text) throw new Error('Anthropic Ask returned an empty reply');
-    return { text, model: response.model, usage: tryExtractUsage(response.usage) };
+    return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
   }
 
   const response = await anthropicClientForKey(input.apiKey).messages.create(
@@ -436,7 +437,7 @@ async function completeWithAnthropic(input: {
     .join('\n')
     .trim();
   if (!text) throw new Error('Anthropic Ask returned an empty reply');
-  return { text, model: response.model, usage: tryExtractUsage(response.usage) };
+  return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
 }
 
 function visibleGeminiText(part: { text?: string; thought?: boolean }): string {
@@ -565,8 +566,7 @@ async function completeWithGemini(input: {
     let buffer = '';
     let text = '';
     let modelVersion = model;
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let usageMetadata: unknown = null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -580,7 +580,7 @@ async function completeWithGemini(input: {
         if (!raw || raw === '[DONE]') continue;
         let payload: {
           candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
-          usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+          usageMetadata?: Record<string, unknown>;
           modelVersion?: string;
         };
         try {
@@ -596,12 +596,7 @@ async function completeWithGemini(input: {
           input.onToken(delta);
         }
         if (payload.modelVersion) modelVersion = payload.modelVersion;
-        if (payload.usageMetadata?.promptTokenCount != null) {
-          inputTokens = payload.usageMetadata.promptTokenCount;
-        }
-        if (payload.usageMetadata?.candidatesTokenCount != null) {
-          outputTokens = payload.usageMetadata.candidatesTokenCount;
-        }
+        if (payload.usageMetadata) usageMetadata = payload.usageMetadata;
       }
     }
     text = text.trim();
@@ -609,37 +604,21 @@ async function completeWithGemini(input: {
     return {
       text,
       model: modelVersion || model,
-      usage: {
-        inputTokens,
-        outputTokens,
-        cacheWrite5mTokens: 0,
-        cacheWrite1hTokens: 0,
-        cacheReadTokens: 0,
-        totalTokens: inputTokens + outputTokens,
-      },
+      usage: geminiMeasuredUsage(usageMetadata, modelVersion || model),
     };
   }
 
   const payload = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    usageMetadata?: Record<string, unknown>;
     modelVersion?: string;
   };
   const text = extractGeminiText(payload);
   if (!text) throw new Error('Gemini Ask returned an empty reply');
-  const inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
-  const outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
   return {
     text,
     model: payload.modelVersion || model,
-    usage: {
-      inputTokens,
-      outputTokens,
-      cacheWrite5mTokens: 0,
-      cacheWrite1hTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: inputTokens + outputTokens,
-    },
+    usage: geminiMeasuredUsage(payload.usageMetadata ?? null, payload.modelVersion || model),
   };
 }
 

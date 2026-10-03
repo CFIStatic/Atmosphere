@@ -23,7 +23,8 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
-import { modelPriceTable, whisperCostNanos } from '../metering/modelPriceTable.js';
+import { modelPriceTable, transcriptionCostNanos } from '../metering/modelPriceTable.js';
+import { resolveTranscriptionConfig } from '../lib/transcriptionConfig.js';
 import { recordFlatProviderCost } from '../metering/tokenUsage.js';
 import { queueSummaryRefresh } from './summaryQueue.js';
 import { staleSummaryPatch } from './summaryFreshness.js';
@@ -329,14 +330,19 @@ export async function transcribeProofVideo(
   const heardSeconds = Number.isFinite(duration) && duration > 0 ? duration : 0;
   if (heardSeconds > 0 && proof.org_id) {
     // One charge per clip. The ledger no-ops a retry, sweep, or timing backfill.
+    // Priced at the configured transcription model's official per-minute rate.
+    // An unknown model is not priced: recordFlatProviderCost logs an ALERT.
+    const transcriptionModel = resolveTranscriptionConfig().model;
     recordFlatProviderCost(admin, {
       orgId: proof.org_id,
       requestId: `whisper:${proofId}`,
       feature: 'transcription',
       source: 'whisper',
-      modelId: 'whisper-1',
-      costNanos: whisperCostNanos(modelPriceTable(), heardSeconds),
+      modelId: transcriptionModel,
+      costNanos: transcriptionCostNanos(modelPriceTable(), transcriptionModel, heardSeconds) ?? 0,
       jobId: proof.job_id ?? null,
+      provider: 'openai',
+      metadata: { audioSeconds: heardSeconds, durationSource: 'ffprobe' },
     });
   }
 
