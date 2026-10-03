@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { anthropicClient, tryExtractUsage } from '../lib/anthropic.js';
+import { meterAnthropicResponse, meterBackgroundUsage } from '../metering/backgroundUsage.js';
 import { googleVisionApiKeys, isVisionConfigured } from '../lib/visionProvider.js';
 import { verificationConfig } from '../verification/config.js';
 import {
@@ -83,7 +84,7 @@ export type PreparedVideoFrames = {
 };
 
 export type VideoDictationResult = {
-  /** Provider-reported usage (Gemini usageMetadata, raw object kept). Callers meter it. */
+  /** Provider-reported usage (Gemini usageMetadata, raw object kept). Already metered at the call. */
   usage?: MeasuredUsage | null;
   narrationText: string;
   narrationSummary: string | null;
@@ -303,6 +304,9 @@ export async function dictatePreparedFrames(
       },
     ],
   }).finalMessage();
+  // Billed as soon as it returns: meter before the reply is parsed, so an
+  // empty or unparsable dictation is still on the org's ledger.
+  meterAnthropicResponse('video_dictation', response);
 
   const text = response.content
     .filter((b: { type: string }) => b.type === 'text')
@@ -318,7 +322,7 @@ export async function dictatePreparedFrames(
   }
 
   return {
-    // Provider-reported usage, same contract as the Gemini path: callers meter it.
+    // Provider-reported usage (already metered above in the caller's scope).
     usage: tryExtractUsage(response.usage, response.model ?? null),
     narrationText: parsed.narration,
     narrationSummary: parsed.summary,
@@ -405,6 +409,8 @@ async function dictateWithGemini(input: {
     usageMetadata?: Record<string, unknown>;
   };
   const usage = geminiMeasuredUsage(payload.usageMetadata ?? null, model);
+  // Billed as soon as it returns: meter before parsing (see the Claude path).
+  meterBackgroundUsage({ source: 'video_dictation', modelId: model, usage, alertWhenUnscoped: true });
   const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
   const parsed = parseDictationPayload(
     text,
