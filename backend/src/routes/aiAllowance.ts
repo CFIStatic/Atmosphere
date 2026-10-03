@@ -27,12 +27,25 @@ import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspace
 import { aiBudgetConfig, creditPackByCode, creditPackPriceId } from '../metering/aiBudgetConfig.js';
 import { canPurchaseAiCredits, creditNanosForPaymentCents } from '../metering/aiBudget.js';
 import { loadAiAllowance, publicAllowance } from '../metering/aiBudgetService.js';
+import {
+  readAutoRecharge,
+  stripeAutoRechargeAdapter,
+  supabaseAutoRechargeStore,
+  updateAutoRecharge,
+} from '../metering/autoRecharge.js';
 
 export const aiAllowanceRouter = Router();
 aiAllowanceRouter.use(requireAuth, requireOrg);
 
 const packSchema = z.object({
   packCode: z.string().min(1).max(32),
+});
+
+const autoRechargeSchema = z.object({
+  enabled: z.boolean(),
+  packCode: z.string().min(1).max(32).optional(),
+  /** The owner ticked "charge my saved card automatically". Required to turn it on. */
+  consent: z.boolean().optional(),
 });
 
 const planSchema = z.object({
@@ -215,6 +228,55 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
       { idempotencyKey: stripeIdempotencyKey('plan-change', req.orgId, plan.code, interval, priceId) },
     );
     res.status(201).json({ checkoutUrl: session.url, planCode: plan.code, billingInterval: interval });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function stripeEnabled(): boolean {
+  return config.billing.paymentProvider === 'stripe' && Boolean(config.stripe.secretKey);
+}
+
+/** Auto-recharge settings. Off unless an owner turned it on. */
+aiAllowanceRouter.get('/auto-recharge', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const canManage = await callerCanManage(req);
+    const store = supabaseAutoRechargeStore(unscopedAdminOrNull() ?? supabase);
+    res.json(await readAutoRecharge(store, req.orgId!, { canManage, stripeEnabled: stripeEnabled() }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Owner-only. Turning it on needs explicit consent, a configured pack price,
+ * and a saved card. Turning it off is always allowed.
+ */
+aiAllowanceRouter.put('/auto-recharge', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const canManage = await callerCanManage(req);
+    const body = autoRechargeSchema.parse(req.body ?? {});
+    const admin = unscopedAdminOrNull();
+    if (!admin && canManage) {
+      throw badRequest('Auto-recharge is not available on this server.', 'auto_recharge_unavailable');
+    }
+    const result = await updateAutoRecharge(
+      {
+        store: supabaseAutoRechargeStore(admin ?? createUserClient(req.accessToken!)),
+        stripe: () => stripeAutoRechargeAdapter(stripeClient()),
+      },
+      {
+        orgId: req.orgId!,
+        actorId: req.user!.id,
+        canManage,
+        stripeEnabled: stripeEnabled(),
+        enabled: body.enabled,
+        packCode: body.packCode ?? null,
+        consent: body.consent,
+      },
+    );
+    res.json(result);
   } catch (err) {
     next(err);
   }

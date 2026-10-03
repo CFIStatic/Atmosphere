@@ -91,6 +91,38 @@ Only org owners (Global Admin, including the legacy office-manager role) can
 upgrade or buy. Employees cannot. Atmosphere staff on the internal analytics
 scope can list every org's spend and grant credits. Investors cannot.
 
+## Auto-recharge
+
+Off by default. An owner turns it on in Settings → Billing → Auto-recharge,
+picks a pack, and ticks "I agree that Atmosphere will charge our saved card $X
+automatically…". The server refuses to turn it on without that consent
+(`consent_required`), without a configured pack price, or without a saved
+card (`no_saved_card`, 409). Turning it off is always allowed.
+
+When the AI gate (`assertAiFeatureAllowed`) or background analysis
+(`isAiPaused`) finds the org paused with no credits left, the server:
+
+1. Calls `claim_ai_auto_recharge`. Under a row lock it requires auto-recharge
+   on, nothing in flight, the cooldown passed, and fewer than the daily cap of
+   attempts in the last 24 hours. It inserts an `ai_credit_auto_recharges` row
+   whose id is the Stripe idempotency key.
+2. Checks the pack's Stripe price (`STRIPE_AI_CREDIT_*_PRICE_ID`) is active,
+   one-time, USD, and equal to the pack amount. Otherwise nothing is charged.
+3. Charges the customer's saved card with an off-session PaymentIntent
+   (`off_session: true, confirm: true`): the customer's default payment method,
+   or the active subscription's.
+4. On success, grants credits keyed by the PaymentIntent id (unique in
+   `ai_credit_ledger`), closes the attempt, and records a `payments` row
+   (`AI usage credits (auto-recharge)`).
+5. On any failure (decline, 3DS required, no saved card, bad price), closes
+   the attempt as failed and turns auto-recharge off with a notice that the
+   owner sees in Billing. They then buy credits manually.
+
+The `payment_intent.succeeded` and `payment_intent.payment_failed` webhooks
+finish an attempt if the server could not (same PaymentIntent key, so credits
+land once). Refunds and disputes use the same `kind=ai_credits` charge
+metadata as Checkout packs.
+
 ## Stripe objects to create at launch
 
 Do not create these in live mode from this repo. Create one-time **test-mode**
@@ -105,7 +137,8 @@ Prices (or live Prices at launch, by hand) and set:
 Plan changes reuse the existing self-serve subscription prices. No new plan
 products are required. Webhook events already handled (`checkout.session.completed`,
 `customer.subscription.created`, `customer.subscription.updated`) must stay
-enabled. No secrets belong in git.
+enabled. Auto-recharge also needs `payment_intent.succeeded` and
+`payment_intent.payment_failed` on the webhook endpoint. No secrets belong in git.
 
 ## Config
 
@@ -123,3 +156,5 @@ enabled. No secrets belong in git.
 | `STRIPE_AI_CREDIT_10_PRICE_ID` | empty | Test-mode price |
 | `STRIPE_AI_CREDIT_25_PRICE_ID` | empty | Test-mode price |
 | `STRIPE_AI_CREDIT_50_PRICE_ID` | empty | Test-mode price |
+| `AI_AUTO_RECHARGE_COOLDOWN_MINUTES` | `10` | Minimum time between auto-recharge attempts (max 1440) |
+| `AI_AUTO_RECHARGE_MAX_PER_DAY` | `3` | Auto-recharge attempts allowed per rolling 24 hours (max 10) |

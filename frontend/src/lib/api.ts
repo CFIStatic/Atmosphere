@@ -5060,6 +5060,16 @@ export const api = {
       body: JSON.stringify({ packCode }),
     }),
 
+  getAutoRecharge: () =>
+    request<AiAutoRecharge>('/api/billing/ai-allowance/auto-recharge', { method: 'GET', cache: 'no-store' }),
+
+  /** Owner only. Turning it on needs `consent: true` (the owner agreed to automatic charges). */
+  updateAutoRecharge: (input: { enabled: boolean; packCode?: string; consent?: boolean }) =>
+    request<AiAutoRecharge>('/api/billing/ai-allowance/auto-recharge', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
   checkoutAiPlan: (planCode: string, billingInterval: 'month' | 'year' = 'month') =>
     request<{ checkoutUrl: string | null; updated?: boolean; planCode: string; billingInterval: string }>(
       '/api/billing/ai-allowance/plan/checkout',
@@ -6375,6 +6385,26 @@ export interface TokenUsageRecent {
   cacheTokens: number;
   totalTokens: number;
   priceNanos: number;
+}
+
+/** Auto-recharge settings. Pack prices only; no allowance amounts. */
+export interface AiAutoRecharge {
+  enabled: boolean;
+  packCode: string;
+  packs: Array<{ code: string; label: string; cents: number; priceConfigured: boolean }>;
+  available: boolean;
+  canManage: boolean;
+  notice: { message: string; at: string | null } | null;
+  cooldownMinutes: number;
+  maxPerDay: number;
+  recent: Array<{
+    id: string;
+    at: string;
+    status: 'pending' | 'succeeded' | 'failed';
+    packCode: string;
+    amountCents: number | null;
+    failureMessage: string | null;
+  }>;
 }
 
 export interface AiAllowance {
