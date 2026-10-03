@@ -3,7 +3,11 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, HttpError } from '../lib/errors.js';
+import { requireOrgContext } from '../lib/orgContext.js';
+import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
+import { VIDEO_ANALYSIS_FEATURE } from '../metering/backgroundUsage.js';
+import { randomUUID } from 'node:crypto';
 import {
   assertProcessableDuration,
   prepareVideoFrames,
@@ -98,7 +102,24 @@ mediaVideoRouter.post(
         return;
       }
 
-      const { prepared, dictation } = await processInboundVideo(ref);
+      // Dictation is a billed model call: run it in the caller's org scope so
+      // the provider usage lands on that org's ledger as video analysis.
+      const org = await requireOrgContext(req).catch((err: unknown) => {
+        if (err instanceof HttpError && err.code === 'no_organization') return null;
+        throw err;
+      });
+      const { prepared, dictation } = org
+        ? await runWithAiUsageScope(
+            {
+              client: org.supabase,
+              orgId: org.orgId,
+              userId: org.userId,
+              requestId: `media-video:${ref.id}:${randomUUID()}`,
+              meterFeature: VIDEO_ANALYSIS_FEATURE,
+            },
+            () => processInboundVideo(ref),
+          )
+        : await processInboundVideo(ref);
       res.json({
         id: prepared.id,
         source: prepared.source,

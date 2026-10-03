@@ -22,6 +22,7 @@ import {
 import type { PipelineContext } from '../pipeline/orchestrator.js';
 import { recordAiCost, usageCostUsd, wouldExceedBudget } from '../cost/tracker.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
+import { BilledReplyError, billedCallsOf, parseBilled, type BilledCall } from './billedReply.js';
 
 export interface VisionImage {
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
@@ -48,6 +49,12 @@ export interface AnalysisResult<T> {
   promptVersion: string;
   usage: AnalysisUsage;
   cached: boolean;
+  /**
+   * Other provider calls billed while producing this result whose replies
+   * were not used (e.g. an Anthropic escalation that returned unusable JSON
+   * before the Gemini fallback). The caller records them too.
+   */
+  discardedCalls?: BilledCall[];
 }
 
 export interface VisionAnalyzer {
@@ -210,6 +217,8 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
     context?: AnalysisContext,
   ): Promise<AnalysisResult<FrameObservationParsed>> {
     // Prefer Anthropic for escalation when configured; otherwise Gemini Pro-class model.
+    // An Anthropic reply that came back but could not be used is still billed.
+    const discarded: BilledCall[] = [];
     if (verificationConfig.escalationProvider === 'anthropic') {
       try {
         const textParts = [
@@ -223,19 +232,26 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         // Production escalation should use Anthropic Messages API with image blocks (see escalateWithAnthropic).
         const result = await escalateWithAnthropic(images, textParts);
         return result;
-      } catch {
-        // fall through to Gemini
+      } catch (err) {
+        // fall through to Gemini, keeping any billed-but-unusable reply
+        discarded.push(...billedCallsOf(err));
       }
     }
-    return this.runStructured({
-      purpose: 'escalation',
-      system: FRAME_SYSTEM,
-      images,
-      schema: frameObservationSchema,
-      userNote: `Escalation: ${reason}`,
-      model: verificationConfig.escalationModel,
-      escalate: true,
-    });
+    try {
+      const result = await this.runStructured({
+        purpose: 'escalation',
+        system: FRAME_SYSTEM,
+        images,
+        schema: frameObservationSchema,
+        userNote: `Escalation: ${reason}`,
+        model: verificationConfig.escalationModel,
+        escalate: true,
+      });
+      return discarded.length ? { ...result, discardedCalls: [...(result.discardedCalls ?? []), ...discarded] } : result;
+    } catch (err) {
+      if (!discarded.length) throw err;
+      throw new BilledReplyError(err instanceof BilledReplyError ? err.cause : err, [...discarded, ...billedCallsOf(err)]);
+    }
   }
 
   private async runStructured<S extends z.ZodTypeAny>(opts: {
@@ -287,8 +303,15 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
       responseId?: string;
     };
     const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-    const parsed = parseModelJson(text, opts.schema);
+    // Measure first: Gemini billed this reply whether or not it parses.
     const measured = geminiMeasuredUsage(payload.usageMetadata ?? null, opts.model);
+    const parsed = parseBilled(() => parseModelJson(text, opts.schema), {
+      provider: 'google',
+      modelName: opts.model,
+      usage: measured,
+      estimatedCostUsd: usageCostUsd(opts.model, measured),
+      providerRequestId: payload.responseId ?? null,
+    });
     const inputTokens = measured.inputTokens;
     const outputTokens = measured.outputTokens;
     return {
@@ -356,8 +379,15 @@ async function escalateWithAnthropic(
     .filter((c) => c.type === 'text')
     .map((c) => c.text ?? '')
     .join('');
-  const parsed = parseModelJson(text, frameObservationSchema);
+  // Measure first: Anthropic billed this reply whether or not it parses.
   const measured = tryExtractUsage(payload.usage, verificationConfig.escalationModel);
+  const parsed = parseBilled(() => parseModelJson(text, frameObservationSchema), {
+    provider: 'anthropic',
+    modelName: verificationConfig.escalationModel,
+    usage: measured,
+    estimatedCostUsd: usageCostUsd(verificationConfig.escalationModel, measured),
+    providerRequestId: payload.id ?? null,
+  });
   const inputTokens = measured.inputTokens;
   const outputTokens = measured.outputTokens;
   return {
@@ -544,6 +574,30 @@ export async function loadJobScopeLines(
     .slice(0, 40);
 }
 
+/**
+ * Record provider calls that were billed but whose replies were not used.
+ * Each gets its own idempotency key: a pipeline retry calls the provider
+ * again and is billed again.
+ */
+async function recordBilledCalls(ctx: PipelineContext, frameId: string, calls: BilledCall[]): Promise<void> {
+  for (const call of calls) {
+    await recordAiCost(ctx.supabase, {
+      orgId: ctx.orgId,
+      videoId: ctx.videoId,
+      jobId: ctx.jobId,
+      analysisRunId: null,
+      userId: ctx.attributedUserId,
+      idempotencyKey: `video_analysis:${ctx.processingJobId}:${frameId}:${call.reason}:${randomUUID()}`,
+      provider: call.provider,
+      modelName: call.modelName,
+      inputTokens: call.usage.inputTokens,
+      outputTokens: call.usage.outputTokens,
+      estimatedCostUsd: call.estimatedCostUsd,
+      usage: call.usage,
+    });
+  }
+}
+
 export function createAnalyzeFramesHandler(opts: {
   analyzer: VisionAnalyzer;
   loadFrameBase64: (ctx: PipelineContext, storagePath: string) => Promise<string>;
@@ -609,14 +663,26 @@ export function createAnalyzeFramesHandler(opts: {
         });
       } else {
         const base64 = await opts.loadFrameBase64(ctx, frame.storage_path);
-        let result = await opts.analyzer.analyzeFrame(
-          {
-            mimeType: 'image/jpeg',
-            base64,
-            frameId: frame.id,
-          },
-          analysisContext,
-        );
+        // Every billed provider call lands on the ledger, including replies
+        // that failed validation (the step then fails and retries) and a
+        // primary reading that an escalation replaced.
+        const recordBilled = (calls: BilledCall[]) =>
+          recordBilledCalls(ctx, frame.id, calls);
+        let result: AnalysisResult<FrameObservationParsed>;
+        try {
+          result = await opts.analyzer.analyzeFrame(
+            {
+              mimeType: 'image/jpeg',
+              base64,
+              frameId: frame.id,
+            },
+            analysisContext,
+          );
+        } catch (err) {
+          await recordBilled(billedCallsOf(err));
+          throw err;
+        }
+        await recordBilled(result.discardedCalls ?? []);
         if (
           shouldEscalate({
             confidence: result.parsed.confidence,
@@ -628,11 +694,32 @@ export function createAnalyzeFramesHandler(opts: {
             humanRequested: false,
           })
         ) {
-          result = await opts.analyzer.escalateAnalysis(
-            [{ mimeType: 'image/jpeg', base64, frameId: frame.id }],
-            'low_confidence_or_safety',
-            analysisContext,
+          // The primary reading was billed; the escalation replaces it.
+          await recordBilled(
+            result.cached || !result.usage.measured
+              ? []
+              : [
+                  {
+                    provider: result.provider,
+                    modelName: result.modelName,
+                    usage: result.usage.measured,
+                    estimatedCostUsd: result.usage.estimatedCostUsd,
+                    providerRequestId: result.usage.providerRequestId,
+                    reason: 'replaced_by_escalation',
+                  },
+                ],
           );
+          try {
+            result = await opts.analyzer.escalateAnalysis(
+              [{ mimeType: 'image/jpeg', base64, frameId: frame.id }],
+              'low_confidence_or_safety',
+              analysisContext,
+            );
+          } catch (err) {
+            await recordBilled(billedCallsOf(err));
+            throw err;
+          }
+          await recordBilled(result.discardedCalls ?? []);
           escalated += 1;
         }
 

@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { googleVisionApiKey } from '../../lib/visionProvider.js';
 import { verificationConfig } from '../config.js';
 import { parseModelJson } from '../schemas.js';
+import { billedCallsOf, parseBilled, type BilledCall } from './billedReply.js';
 import { recordAiCost, usageCostUsd, wouldExceedBudget } from '../cost/tracker.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
 import type { PipelineContext } from '../pipeline/orchestrator.js';
@@ -335,7 +336,14 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
       requestId = payload.responseId ?? null;
     }
 
-    const parsed = parseModelJson(text, workEventVerificationResultSchema);
+    // The provider billed this reply whether or not it validates.
+    const parsed = parseBilled(() => parseModelJson(text, workEventVerificationResultSchema), {
+      provider: this.opts.provider,
+      modelName: this.opts.model,
+      usage: measured,
+      estimatedCostUsd: usageCostUsd(this.opts.model, measured),
+      providerRequestId: requestId,
+    });
     return {
       parsed,
       raw: text,
@@ -459,6 +467,35 @@ async function loadRules(
   return [...byActivity.values()];
 }
 
+
+/**
+ * Run one verifier call; if its reply was billed but unusable, record that
+ * usage on the org (verification_ai_costs + token ledger) before rethrowing.
+ */
+async function withBilledCalls<T>(ctx: PipelineContext, eventId: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    for (const billed of billedCallsOf(err) as BilledCall[]) {
+      await recordAiCost(ctx.supabase, {
+        orgId: ctx.orgId,
+        videoId: ctx.videoId,
+        jobId: ctx.jobId,
+        analysisRunId: null,
+        userId: ctx.attributedUserId,
+        idempotencyKey: `video_analysis:${ctx.processingJobId}:${eventId}:${billed.reason}:${randomUUID()}`,
+        provider: billed.provider,
+        modelName: billed.modelName,
+        inputTokens: billed.usage.inputTokens,
+        outputTokens: billed.usage.outputTokens,
+        estimatedCostUsd: billed.estimatedCostUsd,
+        usage: billed.usage,
+      });
+    }
+    throw err;
+  }
+}
+
 export function createLlmVerifyEvidenceHandler(opts: {
   verifier: VerificationProvider;
   escalation?: EscalationVerificationProvider;
@@ -543,7 +580,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
               estimatedCostUsd: 0,
             },
           }
-        : await opts.verifier.verifyWorkEvent({
+        : await withBilledCalls(ctx, event.id, () => opts.verifier.verifyWorkEvent({
             proposedActivity: event.inferred_activity,
             roomOrArea: event.room_or_area,
             beforeState: event.before_state,
@@ -560,7 +597,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
               before: event.first_observed_at,
               after: event.last_observed_at,
             },
-          });
+          }));
 
       const primaryRunId = randomUUID();
       if (!cached) {
@@ -625,7 +662,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           disagreement: false,
         })
       ) {
-        const esc = await opts.escalation.reviewDisputedEvent({
+        const esc = await withBilledCalls(ctx, event.id, () => opts.escalation!.reviewDisputedEvent({
           proposedActivity: event.inferred_activity,
           roomOrArea: event.room_or_area,
           beforeState: event.before_state,
@@ -638,7 +675,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           rule,
           priorDecision: verification.parsed,
           reason: 'primary_uncertain_or_conflict',
-        });
+        }));
         const escId = randomUUID();
         await ctx.supabase.from('llm_verification_runs').insert({
           id: escId,

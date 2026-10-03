@@ -81,7 +81,7 @@ import {
   mergeJobAskPeople,
   scrubStoredAskText,
 } from '../shared/askLookup.js';
-import { isModelProviderConfigured, resolveAskApiKey, type MeasuredUsage } from '../lib/anthropic.js';
+import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
@@ -1389,19 +1389,6 @@ export async function queueProofAnalysis(
 
 /* ---- Per-video narration -------------------------------------------------- */
 
-/** Video dictation is a billed Gemini call: record the provider-reported usage on the org. */
-function meterDictation(admin: any, job: NarrationJob, dictation: { usage?: MeasuredUsage | null; model: string }): void {
-  recordMeasuredTokenUsage(admin, {
-    orgId: job.orgId,
-    requestId: `video_dictation:${job.proofId}:${randomUUID()}`,
-    feature: 'video_analysis',
-    source: 'video_dictation',
-    jobId: job.jobId,
-    modelId: dictation.model,
-    usage: dictation.usage ?? null,
-  });
-}
-
 interface NarrationJob {
   key: string;
   proofId: string;
@@ -1824,7 +1811,6 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       longForm: false,
       trade,
     });
-    meterDictation(admin, job, dictation);
     await write({
       ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
       ai_findings: descriptionFindings(dictation),
@@ -1878,7 +1864,6 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       longForm: false,
       trade,
     });
-    meterDictation(admin, job, dictation);
     await write({
       ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
       ai_findings: descriptionFindings(dictation),
@@ -2005,7 +1990,6 @@ async function performLongFormAnalysis(
       longForm: true,
       trade,
     });
-    meterDictation(admin, job, dictation);
     await write({
       ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
       ai_findings: descriptionFindings(dictation),

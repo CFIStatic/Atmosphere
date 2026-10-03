@@ -8,6 +8,7 @@
  * Additive. A missing transcriber or a silent clip must never fail the upload.
  */
 
+import { HttpError } from '../lib/errors.js';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -232,6 +233,39 @@ export async function transcribeProofVideo(
   }
 
   const knownStarts = planAudioChunks(duration);
+  let slicesSent = 0;
+  // One charge per clip whenever audio reached the provider: Whisper bills the
+  // audio it was sent, also when it hears no speech. The ledger no-ops a
+  // retry, sweep, or timing backfill (same request id). Priced at the
+  // configured transcription model's official per-minute rate; an unknown
+  // model is not priced (recordFlatProviderCost logs an ALERT).
+  const chargeTranscription = () => {
+    const heardSeconds = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    if (!slicesSent || heardSeconds <= 0 || !proof.org_id) return;
+    const transcriptionModel = resolveTranscriptionConfig().model;
+    recordFlatProviderCost(admin, {
+      orgId: proof.org_id,
+      requestId: `whisper:${proofId}`,
+      // Proof transcription is part of video analysis on the Billing page.
+      feature: 'video_analysis',
+      source: 'whisper',
+      modelId: transcriptionModel,
+      costNanos: transcriptionCostNanos(modelPriceTable(), transcriptionModel, heardSeconds) ?? 0,
+      jobId: proof.job_id ?? null,
+      provider: 'openai',
+      metadata: { audioSeconds: heardSeconds, durationSource: 'ffprobe' },
+    });
+  };
+  // An "empty" reply (no speech heard) is still a billed Whisper call: charge
+  // before the error goes back to the retry path.
+  const heard = async (wav: Buffer, start: number) => {
+    try {
+      return await transcribeAudioTimed(wav, 'audio/wav', { timeOffsetSeconds: start });
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'transcription_empty') chargeTranscription();
+      throw err;
+    }
+  };
   const parts: string[] = [];
   const segments: TimedSegment[] = [];
   const words: TimedWord[] = [];
@@ -242,7 +276,8 @@ export async function transcribeProofVideo(
   const takeSlice = async (start: number, many: boolean) => {
     const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
     if (wav.length < 1000) return false;
-    const slice = await transcribeAudioTimed(wav, 'audio/wav', { timeOffsetSeconds: start });
+    slicesSent += 1;
+    const slice = await heard(wav, start);
     const body = slice.text.trim();
     if (!body && !slice.words.length) return true;
     if (body) parts.push(stamp(start, many, body));
@@ -262,7 +297,8 @@ export async function transcribeProofVideo(
     for (let start = 0; start < MAX_TRANSCRIPT_SECONDS; start += TRANSCRIPT_CHUNK_SECONDS) {
       const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
       if (wav.length < 1000) break;
-      const slice = await transcribeAudioTimed(wav, 'audio/wav', { timeOffsetSeconds: start });
+      slicesSent += 1;
+      const slice = await heard(wav, start);
       const body = slice.text.trim();
       if (!body && !slice.words.length) continue;
       if (body) parts.push(stamp(start, true, body));
@@ -272,6 +308,7 @@ export async function transcribeProofVideo(
   }
 
   if (!parts.length) {
+    chargeTranscription();
     if (opts?.preserveExistingOnEmpty) {
       await admin
         .from('job_proofs')
@@ -327,24 +364,7 @@ export async function transcribeProofVideo(
   // timing backfill too — skipping it is how the Tiffany clip's summary went stale.
   await queueSummaryRefresh(admin, proofId);
 
-  const heardSeconds = Number.isFinite(duration) && duration > 0 ? duration : 0;
-  if (heardSeconds > 0 && proof.org_id) {
-    // One charge per clip. The ledger no-ops a retry, sweep, or timing backfill.
-    // Priced at the configured transcription model's official per-minute rate.
-    // An unknown model is not priced: recordFlatProviderCost logs an ALERT.
-    const transcriptionModel = resolveTranscriptionConfig().model;
-    recordFlatProviderCost(admin, {
-      orgId: proof.org_id,
-      requestId: `whisper:${proofId}`,
-      feature: 'transcription',
-      source: 'whisper',
-      modelId: transcriptionModel,
-      costNanos: transcriptionCostNanos(modelPriceTable(), transcriptionModel, heardSeconds) ?? 0,
-      jobId: proof.job_id ?? null,
-      provider: 'openai',
-      metadata: { audioSeconds: heardSeconds, durationSource: 'ffprobe' },
-    });
-  }
+  chargeTranscription();
 
   if (opts?.enrich === false) return;
 
