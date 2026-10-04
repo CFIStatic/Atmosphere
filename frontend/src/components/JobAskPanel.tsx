@@ -517,6 +517,11 @@ function dropStaleRoleGuess(
   });
 }
 
+/** A Computer task reply is about the browser, not the job file: no "From this job file" line. */
+function isComputerTaskAnswer(text: string): boolean {
+  return extractAskSources(text).actions.some((action) => action.tool === 'start_computer_task');
+}
+
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
  *
@@ -1193,7 +1198,10 @@ export function JobAskPanel({
                       <MentionText text={turn.content} onDark />
                     </p>
                   )}
-                  {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
+                  {turn.role === 'assistant' &&
+                    turn.groundedOn != null &&
+                    turn.groundedOn > 0 &&
+                    !isComputerTaskAnswer(turn.content) && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                   {showActions ? (

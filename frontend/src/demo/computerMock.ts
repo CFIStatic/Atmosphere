@@ -6,7 +6,7 @@
  */
 import type { ComputerLogin, ComputerSignIn, ComputerTaskView } from '../lib/computer';
 
-type Scenario = 'claim' | 'permit';
+type Scenario = 'claim' | 'permit' | 'httpbin';
 
 interface DemoTask {
   id: string;
@@ -24,9 +24,10 @@ const tasks = new Map<string, DemoTask>();
 const IDS: Record<Scenario, string> = {
   claim: 'c0de0000-0000-4000-8000-00000000c001',
   permit: 'c0de0000-0000-4000-8000-00000000c002',
+  httpbin: 'c0de0000-0000-4000-8000-00000000c003',
 };
 
-const RUN_MS: Record<Scenario, number> = { claim: 9_000, permit: 4_000 };
+const RUN_MS: Record<Scenario, number> = { claim: 9_000, permit: 4_000, httpbin: 5_000 };
 
 const FIELDS = [
   { label: 'Insured name', value: 'Dana Whitfield (TEST)', source: 'Job brief: Insured name', verified: true },
@@ -71,6 +72,7 @@ function scenarioFor(question: string): Scenario | 'not_set_up' | null {
   if (!/\b(fill|complete|submit|file|apply|register|enter|update|request)\b/.test(q)) return null;
   if (!/(portal|website|web form|online|\.com|\.gov|\.org|\.net|\.test|https?:\/\/)/.test(q)) return null;
   if (q.includes('not set up')) return 'not_set_up';
+  if (q.includes('httpbin')) return 'httpbin';
   if (/permit|city|county/.test(q)) return 'permit';
   return 'claim';
 }
@@ -93,7 +95,7 @@ export function demoComputerAnswer(question: string): string | null {
     canceledAt: null,
     control: false,
   });
-  return `I'm opening a browser to do that. I'll fill in only this job's details and what you wrote, and I'll stop and ask you before anything is submitted, sent, paid, signed or deleted. If the site needs you to sign in or enter a code, I'll pause and you can take over.\n\n⟦actions: start_computer_task|Started a browser task. It asks before anything is submitted.|computer|computer-task:${id}⟧`;
+  return `Opening a browser now, and I'll check with you before anything is submitted.\n\n⟦actions: start_computer_task|Started a browser task. It asks before anything is submitted.|computer|computer-task:${id}⟧`;
 }
 
 function view(t: DemoTask): ComputerTaskView {
@@ -103,12 +105,15 @@ function view(t: DemoTask): ComputerTaskView {
   let status: ComputerTaskView['status'] = 'running';
   let stepCount = Math.min(18, 2 + Math.floor(elapsed / 600));
   let statusDetail: string | null = null;
-  let lastAction: string | null = 'typed into “Claim number”';
+  let lastAction: string | null = t.scenario === 'httpbin' ? 'Typed in “Telephone”' : 'Typed in “Claim number”';
   let resultSummary: string | null = null;
+  let result: ComputerTaskView['result'] = null;
+  let submitted = false;
   let needsYou: ComputerTaskView['needsYou'] = null;
   let approval: ComputerTaskView['approval'] = null;
   let finishedAt: string | null = null;
-  const host = t.scenario === 'claim' ? 'portal.example-carrier.test' : 'permits.example-city.test';
+  const host =
+    t.scenario === 'claim' ? 'portal.example-carrier.test' : t.scenario === 'httpbin' ? 'httpbin.org' : 'permits.example-city.test';
   if (t.canceledAt) {
     status = 'canceled';
     resultSummary = 'Canceled. Nothing was submitted.';
@@ -118,7 +123,13 @@ function view(t: DemoTask): ComputerTaskView {
       if (now - t.approvedAt > 3_000) {
         status = 'succeeded';
         stepCount = 21;
-        resultSummary = 'Submitted the claim on portal.example-carrier.test after your approval. Confirmation # TEST-55120. Cause of loss was not on the job, so I used what you approved.';
+        submitted = true;
+        resultSummary = 'Confirmation number TEST-55120.';
+        result = {
+          title: 'Claim submitted',
+          fields: FIELDS.map(({ label, value }) => ({ label, value })),
+          notes: resultSummary,
+        };
         finishedAt = new Date(t.approvedAt + 3_000).toISOString();
       } else {
         stepCount = 20;
@@ -141,11 +152,35 @@ function view(t: DemoTask): ComputerTaskView {
         expiresAt: new Date(t.createdAt + runMs + 10 * 60_000).toISOString(),
       };
     }
+  } else if (t.scenario === 'httpbin') {
+    if (elapsed >= runMs) {
+      status = 'succeeded';
+      resultSummary = 'No customer details on this job, so test values were used.';
+      result = {
+        title: 'Form filled',
+        fields: [
+          { label: 'Customer name', value: 'Test Customer' },
+          { label: 'Telephone', value: '555-0100' },
+          { label: 'E-mail address', value: 'test@example.com' },
+        ],
+        notes: resultSummary,
+      };
+      finishedAt = new Date(t.createdAt + runMs).toISOString();
+    }
   } else if (t.resumedAt) {
     if (now - t.resumedAt > 3_000) {
       status = 'succeeded';
       stepCount = 14;
-      resultSummary = 'Signed in after your code, filled the roofing permit draft and saved it. Nothing was submitted.';
+      resultSummary = 'Saved as a draft. Nothing was submitted.';
+      result = {
+        title: 'Draft saved',
+        fields: [
+          { label: 'Applicant', value: 'Dana Whitfield (TEST)' },
+          { label: 'Site address', value: '1842 Cedar Ridge Dr, Austin, TX' },
+          { label: 'Work type', value: 'Roof replacement' },
+        ],
+        notes: resultSummary,
+      };
       finishedAt = new Date(t.resumedAt + 3_000).toISOString();
     }
   } else if (elapsed >= runMs) {
@@ -159,7 +194,25 @@ function view(t: DemoTask): ComputerTaskView {
     };
   }
   const active = ['running', 'awaiting_approval', 'needs_you'].includes(status);
-  const events: ComputerTaskView['events'] = [
+  const at = (ms: number) => new Date(t.createdAt + ms).toISOString();
+  // The httpbin run replays the real task's audit trail (172a749a), timed for the demo.
+  const httpbinEvents: ComputerTaskView['events'] = [
+    { id: 1, event: 'task_queued', actor: 'user', at: at(0), detail: {} },
+    { id: 2, event: 'task_started', actor: 'system', at: at(200), detail: {} },
+    { id: 3, event: 'context_created', actor: 'system', at: at(300), detail: {} },
+    { id: 4, event: 'session_started', actor: 'system', at: at(400), detail: {} },
+    { id: 5, event: 'navigate', actor: 'agent', at: at(900), detail: { host: 'httpbin.org' } },
+    { id: 6, event: 'action', actor: 'agent', at: at(1500), detail: { action: 'left_click', target: { tag: 'input', label: 'Customer name:' } } },
+    { id: 7, event: 'action', actor: 'agent', at: at(1700), detail: { action: 'type', field: 'Customer name:', chars: 13 } },
+    { id: 8, event: 'action', actor: 'agent', at: at(2300), detail: { action: 'left_click', target: { tag: 'input', label: 'Telephone:' } } },
+    { id: 9, event: 'action', actor: 'agent', at: at(2500), detail: { action: 'type', field: 'Telephone:', chars: 8 } },
+    { id: 10, event: 'action', actor: 'agent', at: at(3100), detail: { action: 'left_click', target: { tag: 'input', label: 'E-mail address:' } } },
+    { id: 11, event: 'action', actor: 'agent', at: at(3300), detail: { action: 'type', field: 'E-mail address:', chars: 16 } },
+    { id: 12, event: 'finished', actor: 'agent', at: at(runMs), detail: { submitted: false } },
+    { id: 13, event: 'session_ended', actor: 'system', at: at(runMs), detail: {} },
+    { id: 14, event: 'task_finished', actor: 'system', at: at(runMs), detail: { status: 'succeeded', submitted: false } },
+  ].filter((e) => Date.parse(e.at) <= now);
+  const events: ComputerTaskView['events'] = t.scenario === 'httpbin' ? httpbinEvents : [
     { id: 1, event: 'task_queued', actor: 'user', at: new Date(t.createdAt).toISOString(), detail: {} },
     { id: 2, event: 'session_started', actor: 'system', at: new Date(t.createdAt + 400).toISOString(), detail: {} },
     { id: 3, event: 'navigate', actor: 'agent', at: new Date(t.createdAt + 900).toISOString(), detail: { host } },
@@ -167,7 +220,7 @@ function view(t: DemoTask): ComputerTaskView {
     { id: 5, event: 'action', actor: 'agent', at: new Date(t.createdAt + 2200).toISOString(), detail: { action: 'type', field: 'Claim number' } },
   ];
   if (status === 'awaiting_approval') {
-    events.push({ id: 6, event: 'approval_requested', actor: 'agent', at: new Date(t.createdAt + runMs).toISOString(), detail: {} });
+    events.push({ id: 6, event: 'approval_requested', actor: 'agent', at: new Date(t.createdAt + runMs).toISOString(), detail: { label: 'Submit claim' } });
   }
   if (status === 'needs_you') {
     events.push({ id: 6, event: 'needs_you', actor: 'agent', at: new Date(t.createdAt + runMs).toISOString(), detail: { reason: 'two_factor' } });
@@ -185,8 +238,10 @@ function view(t: DemoTask): ComputerTaskView {
     stepCount,
     maxSteps: 60,
     lastAction,
-    currentUrl: `https://${host}/${t.scenario === 'claim' ? 'claims/new' : 'verify'}`,
+    currentUrl: `https://${host}/${t.scenario === 'claim' ? 'claims/new' : t.scenario === 'httpbin' ? 'forms/post' : 'verify'}`,
     resultSummary,
+    result,
+    submitted,
     error: null,
     createdAt: new Date(t.createdAt).toISOString(),
     startedAt: new Date(t.createdAt + 300).toISOString(),
@@ -205,8 +260,8 @@ function liveHtml(t: DemoTask) {
     t.scenario === 'permit' && v.status === 'needs_you'
       ? formPage(0, { title: '', host: 'permits.example-city.test', twoFactor: true })
       : formPage(v.status === 'awaiting_approval' ? 5 : filled, {
-          title: t.scenario === 'claim' ? 'New property claim' : 'Roofing permit application',
-          host: t.scenario === 'claim' ? 'portal.example-carrier.test' : 'permits.example-city.test',
+          title: t.scenario === 'claim' ? 'New property claim' : t.scenario === 'httpbin' ? 'Pizza order (httpbin test form)' : 'Roofing permit application',
+          host: t.scenario === 'claim' ? 'portal.example-carrier.test' : t.scenario === 'httpbin' ? 'httpbin.org' : 'permits.example-city.test',
         });
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }

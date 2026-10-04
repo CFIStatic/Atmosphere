@@ -3,6 +3,7 @@
  * takes an org id that the caller already proved (requireOrgContext, or the
  * Ask tool's org access), and every lookup is filtered by it.
  */
+import { parseTaskResult } from './result.js';
 import type { JobFileAskContext } from '../shared/jobFileAsk.js';
 import { computerSettings, NOT_SET_UP_MESSAGE } from './config.js';
 import { projectJobForComputer } from './projection.js';
@@ -116,7 +117,12 @@ export interface ComputerTaskView {
   maxSteps: number;
   lastAction: string | null;
   currentUrl: string | null;
+  /** Plain note for the person (legacy rows: the whole summary). */
   resultSummary: string | null;
+  /** Structured result from finish, when the agent gave one. */
+  result: { title: string | null; fields: Array<{ label: string; value: string }>; notes: string | null } | null;
+  /** True only when an approved submit-type click went through (from the audit, not the model). */
+  submitted: boolean;
   error: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -154,6 +160,7 @@ export function taskView(
 ): ComputerTaskView {
   const open = (OPEN_TASK_STATUSES as readonly string[]).includes(task.status);
   const showApproval = approval && (approval.status === 'pending' || (approval.status === 'approved' && open));
+  const structured = parseTaskResult(task.result_summary);
   return {
     id: task.id,
     jobId: task.job_id,
@@ -168,7 +175,18 @@ export function taskView(
     maxSteps: task.max_steps,
     lastAction: task.last_action,
     currentUrl: task.current_url,
-    resultSummary: task.result_summary,
+    resultSummary: structured ? structured.notes : task.result_summary,
+    result: structured
+      ? {
+          title: structured.title,
+          // The agent forgot to list fields but asked for approval: show what it asked to submit.
+          fields: structured.fields.length
+            ? structured.fields
+            : (approval?.fields ?? []).map((f) => ({ label: f.label, value: f.value })),
+          notes: structured.notes,
+        }
+      : null,
+    submitted: approval?.status === 'consumed' || events.some((e) => e.event === 'approval_used'),
     error: task.error,
     createdAt: task.created_at,
     startedAt: task.started_at,

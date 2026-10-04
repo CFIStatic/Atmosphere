@@ -216,6 +216,32 @@ describe('JobAskPanel', () => {
     expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
   });
 
+  it('a Computer task reply has no "From this job file" line', async () => {
+    const answer =
+      "Opening a browser now, and I'll check with you before anything is submitted.\n\n⟦actions: start_computer_task|Started a browser task.|computer|computer-task:11111111-2222-4333-8444-555555555555⟧";
+    const ask = vi.fn().mockResolvedValue({
+      answer,
+      groundedOn: 3,
+      question: {
+        id: 'q-computer',
+        question: 'Fill in the form at https://httpbin.org/forms/post',
+        answer,
+        grounded_on: ['brief'],
+        created_at: '2026-10-04T12:00:00Z',
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} ask={ask} loadQuestions={async () => ({ questions: [] })} />
+      </JobFileFocusProvider>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'What was said about the skylights?' }));
+    expect(await screen.findByText(/Opening a browser now/)).toBeInTheDocument();
+    expect(await screen.findByTestId('computer-task-card')).toBeInTheDocument();
+    expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
+  });
+
   it('seeks the player to the Analysis second when an answer cites a moment', async () => {
     askAboutProofs.mockResolvedValue({
       answer: 'Yes. At 0:18, the tarp came off. That was 18 seconds into the recording.',
