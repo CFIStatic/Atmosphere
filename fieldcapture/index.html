@@ -148,9 +148,13 @@
   }
 
   /* ---------- header ---------- */
+  /* Safe areas: in the iPhone app (Capacitor, viewport-fit=cover, web view
+     under the status bar) env(safe-area-inset-*) is the notch / Dynamic
+     Island and home-indicator height. In a normal browser it is 0, so
+     these add nothing there. */
   .top {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px 18px 12px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
     position: sticky; top: 0; z-index: 40;
@@ -235,7 +239,11 @@
   /* ---------- screens ---------- */
   .screen { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: auto; }
   .screen[data-on="1"] { display: flex; }
-  #s-platform { overflow: hidden; }
+  /* The office console has no .top, so its frame starts below the status bar
+     (an iframe gets no safe-area insets of its own). */
+  #s-platform { overflow: hidden; padding-top: env(safe-area-inset-top, 0px); background: var(--panel); }
+  /* Login and terms have no bottom bar: keep their end clear of the home indicator. */
+  #s-blocked, #s-terms { padding-bottom: env(safe-area-inset-bottom, 0px); }
   .platform-frame {
     flex: 1; width: 100%; min-height: 0; border: 0;
     background: var(--bg);
