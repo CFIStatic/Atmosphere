@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 /**
  * Day-length field film: **camera + microphone** in one MP4 (H.264 + AAC).
@@ -21,6 +22,14 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var elapsedSeconds: Int = 0
+    /// Plain-words reason the last recording stopped on its own (phone call,
+    /// screen lock, another app took the camera). Nil when nothing interrupted.
+    @Published private(set) var interruptionMessage: String?
+
+    /// Called when a recording ends without `finishDay()` being called — a
+    /// call, a lock, a camera error, or the 24h cap. `.success` carries a file
+    /// that was really written and is safe to save; nothing is thrown away.
+    var onUnexpectedFinish: ((Result<URL, Error>) -> Void)?
 
     /// The live capture session. Recording UI binds a preview layer to this
     /// so the crew sees what is being recorded — not a black view.
@@ -34,6 +43,8 @@ final class DayFilmRecorder: NSObject, ObservableObject {
     private var startedAt: Date?
     private var outputURL: URL?
     private var stopContinuation: CheckedContinuation<URL, Error>?
+    private var sessionObservers: [NSObjectProtocol] = []
+    private var backgroundSaveTask: UIBackgroundTaskIdentifier = .invalid
 
     /// Max one object (~24h), matching server `PROOF_MAX_DURATION_SECONDS`.
     static let maxDurationSeconds: Double = 86_400
@@ -45,6 +56,8 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
     func prepare() async throws {
         status = .preparing
+        interruptionMessage = nil
+        observeSessionIfNeeded()
         let cam = try await CapturePermissions.requestCamera()
         let mic = try await CapturePermissions.requestMicrophone()
         guard cam, mic else {
@@ -124,14 +137,19 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         outputURL = url
         startedAt = Date()
         elapsedSeconds = 0
+        interruptionMessage = nil
         movieOutput.startRecording(to: url, recordingDelegate: self)
         status = .recording
+        // Keep the screen awake so auto-lock does not cut the film short.
+        UIApplication.shared.isIdleTimerDisabled = true
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let started = self.startedAt else { return }
                 self.elapsedSeconds = Int(Date().timeIntervalSince(started))
                 if Double(self.elapsedSeconds) >= Self.maxDurationSeconds {
-                    _ = try? await self.finishDay()
+                    // Stop without a waiting caller so `onUnexpectedFinish`
+                    // saves the file instead of dropping it.
+                    self.stopForInterruption()
                 }
             }
         }
@@ -153,8 +171,146 @@ final class DayFilmRecorder: NSObject, ObservableObject {
     func teardown() {
         timer?.invalidate()
         timer = nil
+        UIApplication.shared.isIdleTimerDisabled = false
         session.stopRunning()
         status = .idle
+    }
+
+    /// Finalize the file that is being written so what was filmed is kept.
+    private func stopForInterruption() {
+        timer?.invalidate()
+        timer = nil
+        if movieOutput.isRecording {
+            beginBackgroundSave()
+            status = .finishing
+            movieOutput.stopRecording()
+        }
+    }
+
+    /// Ask iOS for a little time so a film cut short by a lock still gets
+    /// finalized and copied into the upload queue before the app suspends.
+    private func beginBackgroundSave() {
+        guard backgroundSaveTask == .invalid else { return }
+        backgroundSaveTask = UIApplication.shared.beginBackgroundTask(withName: "Save interrupted day film") { [weak self] in
+            self?.endBackgroundSave()
+        }
+    }
+
+    /// Release the time asked for in `beginBackgroundSave` (safe to call twice).
+    func endBackgroundSave() {
+        guard backgroundSaveTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundSaveTask)
+        backgroundSaveTask = .invalid
+    }
+
+    /// Watch for calls, screen lock, camera taken by another app, and media
+    /// server errors. AVFoundation stops writing on its own when this happens;
+    /// we finalize the file and the delegate hands it to `onUnexpectedFinish`.
+    private func observeSessionIfNeeded() {
+        guard sessionObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        sessionObservers.append(
+            center.addObserver(
+                forName: .AVCaptureSessionWasInterrupted,
+                object: session,
+                queue: .main
+            ) { [weak self] note in
+                let reasonValue = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)?.intValue
+                Task { @MainActor in
+                    self?.handleInterruption(reasonValue: reasonValue)
+                }
+            }
+        )
+        sessionObservers.append(
+            center.addObserver(
+                forName: .AVCaptureSessionInterruptionEnded,
+                object: session,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleInterruptionEnded()
+                }
+            }
+        )
+        sessionObservers.append(
+            center.addObserver(
+                forName: .AVCaptureSessionRuntimeError,
+                object: session,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleRuntimeError()
+                }
+            }
+        )
+    }
+
+    private func handleInterruption(reasonValue: Int?) {
+        guard movieOutput.isRecording || isRecording else { return }
+        interruptionMessage = Self.interruptionText(reasonValue: reasonValue)
+        stopForInterruption()
+    }
+
+    private func handleInterruptionEnded() {
+        // The capture session resumes by itself; a new segment starts from
+        // the door screen ("Record another").
+    }
+
+    private func handleRuntimeError() {
+        guard movieOutput.isRecording || isRecording else { return }
+        interruptionMessage = "The camera stopped unexpectedly."
+        stopForInterruption()
+    }
+
+    nonisolated static func interruptionText(reasonValue: Int?) -> String {
+        guard
+            let reasonValue,
+            let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue)
+        else {
+            return "Recording was interrupted."
+        }
+        switch reason {
+        case .audioDeviceInUseByAnotherClient:
+            return "Recording stopped because a call or another app took the microphone."
+        case .videoDeviceInUseByAnotherClient:
+            return "Recording stopped because another app took the camera."
+        case .videoDeviceNotAvailableInBackground:
+            return "Recording stopped because the phone was locked or the app was closed."
+        case .videoDeviceNotAvailableWithMultipleForegroundApps:
+            return "Recording stopped because another app is open beside Field Capture."
+        case .videoDeviceNotAvailableDueToSystemPressure:
+            return "Recording stopped because the phone got too hot."
+        @unknown default:
+            return "Recording was interrupted."
+        }
+    }
+
+    /// Decide whether a finished (or cut-short) file is worth keeping.
+    /// A stop with an error can still leave a complete, playable movie —
+    /// AVFoundation marks that with `AVErrorRecordingSuccessfullyFinishedKey`.
+    /// When the key is missing we still probe the file before giving up.
+    static func usableRecording(at url: URL, error: Error?) async -> Result<URL, Error> {
+        if let error {
+            let finishedKey = (error as NSError).userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool
+            let fileExists = FileManager.default.fileExists(atPath: url.path)
+            if finishedKey != true && !fileExists {
+                return .failure(error)
+            }
+        }
+        do {
+            let tracks = try await probeTracks(url: url)
+            guard tracks.hasVideo, tracks.hasAudio else {
+                if let error { return .failure(error) }
+                return .failure(CaptureError.missingAudio)
+            }
+            if let error, tracks.duration <= 0 {
+                return .failure(error)
+            }
+            return .success(url)
+        } catch let probeError {
+            if let error { return .failure(error) }
+            return .failure(probeError)
+        }
     }
 
     /// ~720p / ~30 fps / ~2 Mbps — see backend `PREFERRED_DAY_FILM`.
@@ -226,28 +382,28 @@ extension DayFilmRecorder: AVCaptureFileOutputRecordingDelegate {
         error: Error?
     ) {
         Task { @MainActor in
-            if let error {
-                status = .failed(error.localizedDescription)
-                stopContinuation?.resume(throwing: error)
-                stopContinuation = nil
-                return
-            }
-            do {
-                let tracks = try await Self.probeTracks(url: outputFileURL)
-                guard tracks.hasVideo, tracks.hasAudio else {
-                    let err = CaptureError.missingAudio
-                    status = .failed(err.localizedDescription)
-                    stopContinuation?.resume(throwing: err)
-                    stopContinuation = nil
-                    return
-                }
+            timer?.invalidate()
+            timer = nil
+            UIApplication.shared.isIdleTimerDisabled = false
+            // Nil when the stop was not asked for (call, lock, camera error).
+            let continuation = stopContinuation
+            stopContinuation = nil
+            let result = await Self.usableRecording(at: outputFileURL, error: error)
+            switch result {
+            case let .success(url):
                 status = .idle
-                stopContinuation?.resume(returning: outputFileURL)
-                stopContinuation = nil
-            } catch {
-                status = .failed(error.localizedDescription)
-                stopContinuation?.resume(throwing: error)
-                stopContinuation = nil
+                if let continuation {
+                    continuation.resume(returning: url)
+                } else {
+                    onUnexpectedFinish?(.success(url))
+                }
+            case let .failure(failure):
+                status = .failed(failure.localizedDescription)
+                if let continuation {
+                    continuation.resume(throwing: failure)
+                } else {
+                    onUnexpectedFinish?(.failure(failure))
+                }
             }
         }
     }
