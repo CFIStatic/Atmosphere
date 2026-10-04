@@ -2446,7 +2446,47 @@ function demoAiAllowance() {
   };
 }
 
+/** Demo live-safety alerts: one confirmed live fight, one unconfirmed person-down. */
+const demoSafety: Array<Record<string, unknown>> = [];
+function demoSafetyIncidents(jobId: string): Array<Record<string, unknown>> {
+  if (!demoSafety.some((i) => i.jobId === jobId)) {
+    const now = Date.now();
+    demoSafety.push(
+      {
+        id: `safety-real-${jobId}`, orgId: 'demo-org', jobId, category: 'physical_violence', severity: 'critical',
+        confidence: 0.93, title: 'Worker being assaulted',
+        description: 'Two people struggling by the stairs; a worker shouts "get off me". Not a screen or a joke.',
+        clipTimestampSeconds: 35, locationLabel: null, recommendedAction: 'contact_authorities', status: 'open',
+        source: 'live_stream', createdAt: new Date(now - 60_000).toISOString(), reality: 'real', confirmation: 'confirmed',
+        workerOkAt: null,
+      },
+      {
+        id: `safety-unclear-${jobId}`, orgId: 'demo-org', jobId, category: 'fall_person_down', severity: 'critical',
+        confidence: 0.45, title: 'Unconfirmed: check live view — Possible person down',
+        description: 'Someone is on the floor near the ladder; the frames do not show whether they are hurt.',
+        clipTimestampSeconds: 212, locationLabel: null, recommendedAction: 'dispatch_help', status: 'open',
+        source: 'live_stream', createdAt: new Date(now - 20_000).toISOString(), reality: 'unclear', confirmation: 'unconfirmed',
+        workerOkAt: new Date(now - 5_000).toISOString(),
+      },
+    );
+  }
+  return demoSafety.filter((i) => i.jobId === jobId);
+}
+
 const routes: Array<[string, RegExp, Handler]> = [
+  ['GET', /^\/api\/safety\/incidents$/, () => {
+    const jobId = LAST_QUERY.jobId ?? '';
+    const all = demoSafetyIncidents(jobId);
+    const incidents = LAST_QUERY.status === 'all' ? all : all.filter((i) => i.status === 'open');
+    return { body: { incidents, counts: { open: incidents.length, criticalOpen: incidents.length } } };
+  }],
+  ['POST', /^\/api\/safety\/incidents\/([^/]+)\/(ack|dismiss)$/, (m, b) => {
+    const row = demoSafety.find((i) => i.id === m[1]);
+    if (!row) return { status: 404, body: { error: 'Incident not found' } };
+    row.status = m[2] === 'ack' ? 'acknowledged' : 'dismissed';
+    if (m[2] === 'dismiss') row.dismissCategory = b.category ?? null;
+    return { body: { incident: row } };
+  }],
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
     state.signedIn = true; state.onboarded = true;
     if (typeof b.email === 'string') state.email = b.email;

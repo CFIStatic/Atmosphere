@@ -4,7 +4,7 @@
  *   GET  /api/safety/incidents
  *   GET  /api/safety/incidents/:id
  *   POST /api/safety/incidents/:id/ack
- *   POST /api/safety/incidents/:id/dismiss
+ *   POST /api/safety/incidents/:id/dismiss  ({ category, reason? } — reason required)
  *   GET  /api/safety/settings
  *   PATCH /api/safety/settings  (incl. wellness thresholds)
  *   GET  /api/safety/staff/incidents  (Platform / internal)
@@ -25,6 +25,7 @@ import {
   loadOrgSafetySettings,
   updateOrgSafetySettings,
 } from '../safety/index.js';
+import { SAFETY_DISMISS_CATEGORIES } from '../safety/types.js';
 
 export const safetyRouter = Router();
 
@@ -113,9 +114,30 @@ safetyRouter.post(
   },
 );
 
-const dismissSchema = z.object({
-  reason: z.string().trim().max(1000).optional(),
-});
+/**
+ * Dismissing a safety alert needs a reason: a category (feeds false-alarm
+ * tuning — e.g. "false_alarm_media" for a TV / podcast) and, for "other",
+ * a short note.
+ */
+const dismissSchema = z
+  .object({
+    category: z.enum(SAFETY_DISMISS_CATEGORIES),
+    reason: z.string().trim().max(1000).optional(),
+  })
+  .refine((b) => b.category !== 'other' || (b.reason ?? '').length >= 3, {
+    message: 'Say why you are dismissing this alert.',
+    path: ['reason'],
+  });
+
+const DISMISS_LABELS: Record<(typeof SAFETY_DISMISS_CATEGORIES)[number], string> = {
+  false_alarm_media: 'False alarm: TV / video / podcast playing',
+  joking: 'False alarm: joking',
+  staged: 'False alarm: staged / acting',
+  not_an_emergency: 'Not an emergency',
+  handled: 'Real — handled',
+  duplicate: 'Duplicate alert',
+  other: 'Other',
+};
 
 safetyRouter.post(
   '/incidents/:id/dismiss',
@@ -130,7 +152,10 @@ safetyRouter.post(
         next(notFound('Incident not found', 'safety_not_found'));
         return;
       }
-      const incident = await dismissSafetyIncident(admin, existing.id, ctx.userId, body.reason);
+      const reason = body.reason?.trim()
+        ? `${DISMISS_LABELS[body.category]} — ${body.reason.trim()}`
+        : DISMISS_LABELS[body.category];
+      const incident = await dismissSafetyIncident(admin, existing.id, ctx.userId, reason, body.category);
       res.json({ incident });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid dismiss'));
@@ -163,6 +188,9 @@ const settingsPatch = z.object({
   wellnessNoMotionSeconds: z.number().int().min(60).max(7200).optional(),
   wellnessCriticalAfterSeconds: z.number().int().min(60).max(14400).optional(),
   wellnessRequireAlone: z.boolean().optional(),
+  liveSafetyEnabled: z.boolean().optional(),
+  alertPhones: z.array(z.string().max(32)).max(10).optional(),
+  escalateAfterSeconds: z.number().int().min(30).max(1800).optional(),
 });
 
 safetyRouter.patch(
@@ -184,6 +212,9 @@ safetyRouter.patch(
         wellnessNoMotionSeconds: body.wellnessNoMotionSeconds,
         wellnessCriticalAfterSeconds: body.wellnessCriticalAfterSeconds,
         wellnessRequireAlone: body.wellnessRequireAlone,
+        liveSafetyEnabled: body.liveSafetyEnabled,
+        alertPhones: body.alertPhones,
+        escalateAfterSeconds: body.escalateAfterSeconds,
       });
       res.json({
         settings,
@@ -195,7 +226,9 @@ safetyRouter.patch(
       });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid settings'));
-      else next(err);
+      else if ((err as { code?: string })?.code === 'emergency_number_refused') {
+        next(badRequest((err as Error).message, 'emergency_number_refused'));
+      } else next(err);
     }
   },
 );

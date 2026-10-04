@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 188,
+    "migrationCount": 189,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -205,7 +205,8 @@
     "20261003160000_ai_credit_auto_recharge.sql",
     "20261003190000_token_usage_feature_web_search.sql",
     "20261003190100_metering_web_search_and_settle_fix.sql",
-    "20261003190200_customer_metering_summary_for_member.sql"
+    "20261003190200_customer_metering_summary_for_member.sql",
+    "20261003200000_live_safety_real_vs_media.sql"
   ],
   "migrations": [
     {
@@ -6178,6 +6179,24 @@
         "function|private.calculate_metering_period_unchecked",
         "function|private.customer_metering_summary_unchecked",
         "function|public.customer_metering_summary_for_member"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261003200000_live_safety_real_vs_media",
+      "file": "20261003200000_live_safety_real_vs_media.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.orgs.safety_alert_phones",
+        "column|public.orgs.safety_escalate_after_seconds",
+        "column|public.orgs.safety_live_enabled",
+        "column|public.safety_incidents.confirmation",
+        "column|public.safety_incidents.dismiss_category",
+        "column|public.safety_incidents.reality",
+        "column|public.safety_incidents.worker_ok_at"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

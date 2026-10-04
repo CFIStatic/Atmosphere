@@ -9,6 +9,7 @@ import {
   SAFETY_ALERT_RATE_LIMIT_MS,
   type SafetyCategory,
   type SafetyClassification,
+  type SafetyDismissCategory,
   type SafetyIncident,
   type SafetySeverity,
   type SafetySource,
@@ -53,6 +54,10 @@ function rowFromDb(r: any): SafetyIncident {
     dismissedAt: r.dismissed_at ?? null,
     dismissedBy: r.dismissed_by ?? null,
     dismissReason: r.dismiss_reason ?? null,
+    dismissCategory: r.dismiss_category ?? null,
+    reality: r.reality ?? null,
+    confirmation: r.confirmation ?? null,
+    workerOkAt: r.worker_ok_at ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -127,7 +132,13 @@ export async function recentDuplicate(
 export async function createSafetyIncident(
   admin: any,
   input: CreateIncidentInput,
-): Promise<{ incident: SafetyIncident; created: boolean; suppressedDuplicate: boolean }> {
+): Promise<{
+  incident: SafetyIncident;
+  created: boolean;
+  suppressedDuplicate: boolean;
+  /** An open "unconfirmed" incident was upgraded to confirmed (re-alert). */
+  upgraded?: boolean;
+}> {
   const c = input.classification;
   if (!c.hit || !c.category || !c.severity || !c.title || !c.description) {
     throw new Error('Cannot create incident from a miss classification');
@@ -139,6 +150,12 @@ export async function createSafetyIncident(
     category: c.category,
   });
   if (dup) {
+    // "Unconfirmed: check live view" followed by a confirmed "real" for the
+    // same job + category is news the office must get, not a duplicate.
+    if (dup.confirmation === 'unconfirmed' && c.confirmation === 'confirmed') {
+      const upgraded = await upgradeIncident(admin, dup, c);
+      return { incident: upgraded, created: false, suppressedDuplicate: false, upgraded: true };
+    }
     return { incident: dup, created: false, suppressedDuplicate: true };
   }
 
@@ -172,6 +189,10 @@ export async function createSafetyIncident(
     dismissed_at: null,
     dismissed_by: null,
     dismiss_reason: null,
+    dismiss_category: null,
+    reality: c.reality ?? null,
+    confirmation: c.confirmation ?? null,
+    worker_ok_at: null,
     created_at: now,
     updated_at: now,
   };
@@ -182,9 +203,135 @@ export async function createSafetyIncident(
     return { incident, created: true, suppressedDuplicate: false };
   }
 
-  const { data, error } = await admin.from('safety_incidents').insert(row).select('*').single();
+  let { data, error } = await admin.from('safety_incidents').insert(row).select('*').single();
+  if (error && /reality|confirmation|dismiss_category|worker_ok_at|live_stream/.test(error.message ?? '')) {
+    // Live-safety migration not applied yet: still record the incident.
+    const { reality, confirmation, dismiss_category, worker_ok_at, ...legacy } = row;
+    void reality; void confirmation; void dismiss_category; void worker_ok_at;
+    ({ data, error } = await admin
+      .from('safety_incidents')
+      .insert({
+        ...legacy,
+        source: legacy.source === 'live_stream' ? 'live_sample' : legacy.source,
+        signals: { ...(legacy.signals ?? {}), reality: row.reality, confirmation: row.confirmation },
+      })
+      .select('*')
+      .single());
+  }
   if (error) throw new Error(error.message);
   return { incident: rowFromDb(data), created: true, suppressedDuplicate: false };
+}
+
+async function upgradeIncident(
+  admin: any,
+  existing: SafetyIncident,
+  c: SafetyClassification,
+): Promise<SafetyIncident> {
+  const now = new Date().toISOString();
+  const patch = {
+    severity: c.severity ?? existing.severity,
+    confidence: c.confidence,
+    title: (c.title ?? existing.title).slice(0, 200),
+    description: (c.description ?? existing.description).slice(0, 4000),
+    recommended_action: c.recommendedAction,
+    reality: c.reality ?? 'real',
+    confirmation: 'confirmed',
+    model: c.model,
+    signals: { ...(existing.signals ?? {}), ...(c.signals ?? {}), upgradedFromUnconfirmedAt: now },
+    updated_at: now,
+  };
+  if (useMemory()) {
+    const next: SafetyIncident = {
+      ...existing,
+      severity: patch.severity,
+      confidence: patch.confidence,
+      title: patch.title,
+      description: patch.description,
+      recommendedAction: patch.recommended_action,
+      reality: patch.reality,
+      confirmation: 'confirmed',
+      model: patch.model,
+      signals: patch.signals,
+      updatedAt: now,
+    };
+    memory.set(existing.id, next);
+    return next;
+  }
+  const { data, error } = await admin
+    .from('safety_incidents')
+    .update(patch)
+    .eq('id', existing.id)
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return rowFromDb(data);
+}
+
+/**
+ * Pages (email / SMS) already sent for this job in the last hour. Used to cap
+ * alert fatigue; the incident is still recorded and shown in Platform.
+ */
+export async function countRecentJobAlerts(
+  admin: any,
+  input: { orgId: string; jobId: string | null; withinMs?: number },
+): Promise<number> {
+  if (!input.jobId) return 0;
+  const since = new Date(Date.now() - (input.withinMs ?? 60 * 60 * 1000)).toISOString();
+  if (useMemory()) {
+    return [...memory.values()].filter(
+      (r) =>
+        r.orgId === input.orgId &&
+        r.jobId === input.jobId &&
+        r.alertSentAt != null &&
+        r.alertSentAt >= since &&
+        r.alertChannels.some((ch) => ch === 'email' || ch === 'sms' || ch === 'voice'),
+    ).length;
+  }
+  const { data, error } = await admin
+    .from('safety_incidents')
+    .select('id, alert_channels')
+    .eq('org_id', input.orgId)
+    .eq('job_id', input.jobId)
+    .gte('alert_sent_at', since)
+    .limit(200);
+  if (error) return 0;
+  return ((data ?? []) as any[]).filter(
+    (r) => Array.isArray(r.alert_channels) && r.alert_channels.some((ch: string) => ch === 'email' || ch === 'sms' || ch === 'voice'),
+  ).length;
+}
+
+/** Worker tapped "I'm OK" on the phone banner. Never affects whether the alert went out. */
+export async function markWorkerOk(
+  admin: any,
+  id: string,
+): Promise<SafetyIncident> {
+  const now = new Date().toISOString();
+  if (useMemory()) {
+    const row = memory.get(id);
+    if (!row) throw Object.assign(new Error('Incident not found'), { code: 'not_found' });
+    const next: SafetyIncident = { ...row, workerOkAt: row.workerOkAt ?? now, updatedAt: now };
+    memory.set(id, next);
+    return next;
+  }
+  const { data, error } = await admin
+    .from('safety_incidents')
+    .update({ worker_ok_at: now, updated_at: now })
+    .eq('id', id)
+    .is('worker_ok_at', null)
+    .select('*')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data) return rowFromDb(data);
+  const existing = await getSafetyIncident(admin, id);
+  if (!existing) throw Object.assign(new Error('Incident not found'), { code: 'not_found' });
+  return existing;
+}
+
+/** Add a channel (sms / voice) after the first fanout. */
+export async function appendIncidentChannel(admin: any, id: string, channel: string): Promise<void> {
+  const current = await getSafetyIncident(admin, id);
+  if (!current || current.alertChannels.includes(channel)) return;
+  await markIncidentAlerted(admin, id, [...current.alertChannels, channel]);
 }
 
 export async function listSafetyIncidents(
@@ -277,6 +424,7 @@ export async function dismissSafetyIncident(
   id: string,
   actorUserId: string | null,
   reason?: string | null,
+  category?: SafetyDismissCategory | null,
 ): Promise<SafetyIncident> {
   const now = new Date().toISOString();
   if (useMemory()) {
@@ -288,6 +436,7 @@ export async function dismissSafetyIncident(
       dismissedAt: now,
       dismissedBy: actorUserId,
       dismissReason: reason?.slice(0, 1000) ?? null,
+      dismissCategory: category ?? null,
       updatedAt: now,
     };
     memory.set(id, next);
@@ -300,6 +449,7 @@ export async function dismissSafetyIncident(
       dismissed_at: now,
       dismissed_by: actorUserId,
       dismiss_reason: reason?.slice(0, 1000) ?? null,
+      ...(category ? { dismiss_category: category } : {}),
       updated_at: now,
     })
     .eq('id', id)

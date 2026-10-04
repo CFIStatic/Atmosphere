@@ -1775,12 +1775,15 @@
           $('#site-text').textContent = site.label;
           $('#sitestrip').className = 'sitestrip' + (site.lat == null ? ' unsure' : '');
         });
-        // Near-real-time safety: sparse live frames while recording (not WebRTC).
-        if (Core.createLiveSafetySampler && !DEMO && (LIVE || (state.account && state.accessToken))) {
+        // Live critical safety: a 480px frame every 5 s + a 10 s audio segment.
+        // The server screens, confirms (real / joking / staged / media) and
+        // alerts the office in seconds; the banner below only follows it.
+        if ((Core.createLiveSafetyStream || Core.createLiveSafetySampler) && !DEMO && (LIVE || (state.account && state.accessToken))) {
           try {
             if (rec.safetySampler && rec.safetySampler.stop) rec.safetySampler.stop();
-            rec.safetySampler = Core.createLiveSafetySampler({
+            var safetyCfg = {
               videoEl: videoEl,
+              stream: stream,
               apiBase: state.apiBase || Core.resolveApiBase(),
               jobId: LIVE ? null : state.activeJobId,
               token: LIVE ? state.shareToken : null,
@@ -1796,7 +1799,16 @@
               },
               workDate: Core.localDateISO(Date.now()),
               phase: 'after',
-            });
+              onAlert: function (alert) {
+                showSafetyBanner(alert, safetyCfg);
+              },
+              onConnection: function (online) {
+                setSafetyPaused(!online);
+              },
+            };
+            rec.safetySampler = Core.createLiveSafetyStream
+              ? Core.createLiveSafetyStream(safetyCfg)
+              : Core.createLiveSafetySampler(safetyCfg);
           } catch (e) {
             /* never block capture */
           }
@@ -1863,11 +1875,52 @@
    */
 
   function stopSafetySampler(rec) {
+    setSafetyPaused(false);
     if (!rec || !rec.safetySampler) return;
     try {
       rec.safetySampler.stop();
     } catch (e) {}
     rec.safetySampler = null;
+  }
+
+  /* "Alert sent, tap I'm OK". Shown only AFTER the office was alerted —
+     the alert never waits on this tap, and the tap never recalls it. */
+  var safetyBannerTimer = null;
+  function showSafetyBanner(alert, cfg) {
+    var box = $('#safety-banner');
+    if (!box || !alert) return;
+    var unconfirmed = alert.confirmation === 'unconfirmed';
+    box.setAttribute('data-kind', unconfirmed ? 'unconfirmed' : 'sent');
+    $('#safety-banner-title').textContent = 'Alert sent';
+    $('#safety-banner-copy').textContent = unconfirmed
+      ? "Your office was asked to check your live view. Tap I'm OK if you're safe."
+      : "Your office was alerted. Tap I'm OK if you're safe.";
+    var btn = $('#safety-ok-btn');
+    btn.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "I'm OK";
+    btn.onclick = function () {
+      btn.disabled = true;
+      box.setAttribute('data-kind', 'ok');
+      $('#safety-banner-title').textContent = "Thanks — you're OK";
+      $('#safety-banner-copy').textContent = "We told your office you tapped I'm OK.";
+      btn.hidden = true;
+      if (cfg && Core.postSafetyOk && alert.incidentId && alert.incidentId !== 'demo') {
+        Core.postSafetyOk(cfg, alert.incidentId).catch(function () {
+          $('#safety-banner-copy').textContent = "Couldn't reach your office. Call them if you can.";
+        });
+      }
+      if (safetyBannerTimer) clearTimeout(safetyBannerTimer);
+      safetyBannerTimer = setTimeout(function () {
+        box.hidden = true;
+      }, 6000);
+    };
+    box.hidden = false;
+  }
+
+  function setSafetyPaused(paused) {
+    var el = $('#safety-paused');
+    if (el) el.hidden = !paused;
   }
 
   function stopWellnessMonitor(rec) {
@@ -2622,6 +2675,13 @@
       }
     }
     window.__startDemoDay = startDemoDay;
+    /* Demo only: preview the live-safety banner / paused notice. */
+    window.__demoSafetyAlert = function (kind) {
+      showSafetyBanner({ incidentId: 'demo', confirmation: kind === 'unconfirmed' ? 'unconfirmed' : 'confirmed' }, null);
+    };
+    window.__demoSafetyPaused = function (paused) {
+      setSafetyPaused(paused !== false);
+    };
     when('#daybtn', function (btn) {
       btn.onclick = startDemoDay;
     });

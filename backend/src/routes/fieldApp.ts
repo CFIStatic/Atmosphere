@@ -35,6 +35,7 @@ import {
   recordProof,
 } from './proofOfWork.js';
 import { processSafetySampleForParty } from '../safety/sample.js';
+import { processLiveSafetyChunkForParty, recordWorkerOkForParty } from '../safety/live.js';
 import { processWellnessHeartbeatForParty } from '../safety/wellness.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
@@ -163,6 +164,24 @@ fieldAppRouter.all('/office/preview', (_req: Request, res: Response) => {
 });
 
 fieldAppRouter.use(requireAuth);
+
+/*
+ * Live safety stream: one frame every 5 s + a 10 s audio segment while
+ * recording (~12 posts a minute). Its own budget, registered before the
+ * general Field Capture limiter (180 / 15 min) so a recording never starves
+ * the filing routes, and a safety alert is never rate-limited away by them.
+ */
+const liveSafetyLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many live safety samples.', code: 'rate_limited' },
+});
+/** POST /api/field-app/jobs/:jobId/proof/safety-live — live audio segment + frame. */
+fieldAppRouter.post('/jobs/:jobId/proof/safety-live', liveSafetyLimiter, proofRoute(processLiveSafetyChunkForParty));
+/** POST /api/field-app/jobs/:jobId/proof/safety-ok — worker tapped "I'm OK" (never delays the alert). */
+fieldAppRouter.post('/jobs/:jobId/proof/safety-ok', liveSafetyLimiter, proofRoute(recordWorkerOkForParty));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

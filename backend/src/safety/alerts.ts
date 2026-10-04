@@ -1,5 +1,10 @@
 /**
- * Alert fanout for safety incidents: email (Resend/SMTP) + optional webhook.
+ * Alert fanout for safety incidents: email (Resend/SMTP, every recipient in
+ * parallel, with a live-view link) + optional webhook + optional SMS / voice
+ * escalation (escalation.ts, disabled unless TWILIO_* is configured).
+ * Web push: Platform has no web-push subscription infrastructure today, so
+ * there is nothing to reuse; email + SMS are the out-of-app channels.
+ * Pages are capped per job per hour (SAFETY_ALERT_CAP_PER_JOB_HOUR).
  *
  * Authorities escalation: when the incident recommends contact_authorities AND
  * the org has autoEscalateToAuthorities=true, the payload includes
@@ -10,8 +15,11 @@
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { loadOrgSafetySettings } from './settings.js';
-import { markIncidentAlerted } from './incidents.js';
-import type { SafetyIncident } from './types.js';
+import { countRecentJobAlerts, markIncidentAlerted } from './incidents.js';
+import { SAFETY_ALERT_CAP_PER_JOB_HOUR, type SafetyIncident } from './types.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { startSafetyEscalation } from './escalation.js';
+import { safetyProviderOverrides } from './providers.js';
 
 export type SafetyAlertPayload = {
   type: 'atmosphere.safety_incident';
@@ -42,6 +50,12 @@ export type SafetyAlertPayload = {
   source: string;
   createdAt: string;
   platformPath: string;
+  /** Absolute Platform link to the job page with the office live view. */
+  liveViewUrl: string;
+  /** confirmed = model said real; unconfirmed = check the live view. */
+  confirmation: 'confirmed' | 'unconfirmed' | null;
+  /** real / joking / staged / media_playback / unclear (null = not checked). */
+  reality: string | null;
 };
 
 export function buildSafetyAlertPayload(
@@ -78,7 +92,31 @@ export function buildSafetyAlertPayload(
     platformPath: incident.jobId
       ? `/jobs/${incident.jobId}`
       : '/safety',
+    // The job file (Timeline → "Now") is where the office opens a live recording.
+    liveViewUrl: `${safeOrigin()}${
+      incident.jobId ? `/job-progress?job=${encodeURIComponent(incident.jobId)}&section=timeline` : '/'
+    }`,
+    confirmation: incident.confirmation ?? null,
+    reality: incident.reality ?? null,
   };
+}
+
+function safeOrigin(): string {
+  try {
+    return publicAppOrigin();
+  } catch {
+    return 'https://platform.atmosphereteam.com';
+  }
+}
+
+/** Subject line: unconfirmed alerts say so up front. */
+export function safetyAlertSubject(incident: SafetyIncident, opts?: { upgraded?: boolean }): string {
+  if (incident.confirmation === 'unconfirmed') {
+    const what = incident.title.replace(/^Unconfirmed: check live view\s*[—-]\s*/i, '');
+    return `[Atmosphere Safety] UNCONFIRMED — check live view: ${what}`;
+  }
+  const prefix = opts?.upgraded ? 'NOW CONFIRMED ' : '';
+  return `[Atmosphere Safety] ${prefix}${incident.severity.toUpperCase()}: ${incident.title}`;
 }
 
 async function orgAdminEmails(admin: any, orgId: string): Promise<string[]> {
@@ -111,9 +149,17 @@ function safetyEmailHtml(payload: SafetyAlertPayload): string {
     payload.clipTimestampSeconds != null
       ? `${payload.clipTimestampSeconds}s into clip`
       : 'timestamp unknown';
+  const banner =
+    payload.confirmation === 'unconfirmed'
+      ? `<p style="margin:0 0 12px;padding:8px 10px;background:#fff4d6;border:1px solid #e0b100;border-radius:6px"><strong>Unconfirmed.</strong> The automatic check could not tell whether this is real. Open the live view now.</p>`
+      : payload.confirmation === 'confirmed'
+        ? `<p style="margin:0 0 12px;padding:8px 10px;background:#fde2e2;border:1px solid #d33;border-radius:6px"><strong>Confirmed by a second check</strong> (not a joke, act, or video playing).</p>`
+        : '';
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.45;color:#111">
   <h2 style="margin:0 0 8px">Safety alert · ${escapeHtml(payload.severity)}</h2>
+  ${banner}
   <p style="margin:0 0 12px"><strong>${escapeHtml(payload.title)}</strong></p>
+  <p style="margin:0 0 16px"><a href="${escapeHtml(payload.liveViewUrl)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;border-radius:8px;text-decoration:none">Open live view</a></p>
   <p>${escapeHtml(payload.description)}</p>
   <ul>
     <li>Category: ${escapeHtml(payload.category)}</li>
@@ -124,7 +170,8 @@ function safetyEmailHtml(payload: SafetyAlertPayload): string {
     <li>Escalate to authorities flag: ${payload.escalateToAuthorities ? 'YES (policy on — no auto-dial)' : 'no'}</li>
   </ul>
   <p style="color:#555;font-size:13px">${escapeHtml(payload.authoritiesNote)}</p>
-  <p style="font-size:13px">Ack or dismiss in Platform · job ${escapeHtml(payload.jobId ?? 'n/a')}</p>
+  <p style="font-size:13px">Acknowledge or dismiss (with a reason) in Platform: <a href="${escapeHtml(payload.liveViewUrl)}">${escapeHtml(payload.liveViewUrl)}</a></p>
+  <p style="font-size:12px;color:#555">Atmosphere never calls 911. If someone is in danger, call emergency services yourself.</p>
 </body></html>`;
 }
 
@@ -161,43 +208,64 @@ async function postWebhook(url: string, payload: SafetyAlertPayload): Promise<bo
 export async function fanoutSafetyAlert(
   admin: any,
   incident: SafetyIncident,
-): Promise<{ channels: string[]; payload: SafetyAlertPayload }> {
+  opts?: { upgraded?: boolean },
+): Promise<{ channels: string[]; payload: SafetyAlertPayload; capped: boolean }> {
   const settings = await loadOrgSafetySettings(admin, incident.orgId);
   const payload = buildSafetyAlertPayload(incident, settings.autoEscalateToAuthorities);
   const channels: string[] = [];
 
+  // Alert fatigue: past the per-job hourly cap the incident is still recorded
+  // and shown in Platform, but nobody is paged again.
+  const pagedThisHour = await countRecentJobAlerts(admin, { orgId: incident.orgId, jobId: incident.jobId });
+  const capped = pagedThisHour >= SAFETY_ALERT_CAP_PER_JOB_HOUR;
+
   // Watch severity: still persist the incident, but only email on critical
   // unless a webhook is configured (ops may want all).
-  const shouldEmail = incident.severity === 'critical';
-  if (shouldEmail && systemMailConfigured()) {
-    const admins = await orgAdminEmails(admin, incident.orgId);
-    const recipients = [...new Set([...admins, ...settings.alertEmails])].slice(0, 25);
-    if (recipients.length) {
-      let emailed = false;
-      for (const to of recipients) {
-        try {
-          const result = await sendSystemMail({
-            to,
-            subject: `[Atmosphere Safety] ${incident.severity.toUpperCase()}: ${incident.title}`,
-            html: safetyEmailHtml(payload),
-            text: `${payload.title}\n\n${payload.description}\n\nAction: ${payload.recommendedAction}\nEscalate flag: ${payload.escalateToAuthorities}\n\n${payload.authoritiesNote}`,
-          });
-          if (result.ok) emailed = true;
-        } catch (err) {
-          console.warn('[safety] email failed:', err instanceof Error ? err.message : err);
+  const shouldEmail = incident.severity === 'critical' && !capped;
+  const subject = safetyAlertSubject(incident, opts);
+  const tasks: Array<Promise<void>> = [];
+  const mailOverride = safetyProviderOverrides().sendMail;
+  const send = mailOverride ?? sendSystemMail;
+  if (shouldEmail && (mailOverride || systemMailConfigured())) {
+    tasks.push(
+      (async () => {
+        const admins = await orgAdminEmails(admin, incident.orgId);
+        const recipients = [...new Set([...admins, ...settings.alertEmails])].slice(0, 25);
+        if (!recipients.length) return;
+        const html = safetyEmailHtml(payload);
+        const text = `${subject}\n\n${payload.title}\n\n${payload.description}\n\nLive view: ${payload.liveViewUrl}\n\nAction: ${payload.recommendedAction}\nEscalate flag: ${payload.escalateToAuthorities}\n\n${payload.authoritiesNote}`;
+        // Every recipient at once — one slow mailbox never delays the next.
+        const results = await Promise.allSettled(
+          recipients.map((to) => send({ to, subject, html, text })),
+        );
+        for (const r of results) {
+          if (r.status === 'rejected') {
+            console.warn('[safety] email failed:', r.reason instanceof Error ? r.reason.message : r.reason);
+          }
         }
-      }
-      if (emailed) channels.push('email');
-    }
+        if (results.some((r) => r.status === 'fulfilled' && (r.value as any)?.ok)) channels.push('email');
+      })(),
+    );
   }
 
   if (settings.alertWebhookUrl) {
-    const ok = await postWebhook(settings.alertWebhookUrl, payload);
-    if (ok) channels.push('webhook');
+    tasks.push(
+      postWebhook(settings.alertWebhookUrl, payload).then((ok) => {
+        if (ok) channels.push('webhook');
+      }),
+    );
   }
+  await Promise.all(tasks);
 
   // Always record an internal channel so Platform can show "alerted".
   channels.push('platform');
+  if (capped) channels.push('capped');
   await markIncidentAlerted(admin, incident.id, channels);
-  return { channels, payload };
+
+  // SMS / voice ladder: disabled unless an SMS provider is configured
+  // server-side AND the org listed phone numbers. Never 911. Not awaited.
+  if (incident.severity === 'critical' && !capped) {
+    startSafetyEscalation(admin, incident, settings, payload);
+  }
+  return { channels, payload, capped };
 }

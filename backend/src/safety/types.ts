@@ -36,8 +36,31 @@ export const SAFETY_SOURCES = [
   'post_upload',
   'transcript',
   'wellness_heartbeat',
+  'live_stream',
 ] as const;
 export type SafetySource = (typeof SAFETY_SOURCES)[number];
+
+/**
+ * Is what was seen / heard actually happening? A word list or a fast frame
+ * screen only flags a candidate; the confirmation model answers this.
+ */
+export const SAFETY_REALITIES = ['real', 'joking', 'staged', 'media_playback', 'unclear'] as const;
+export type SafetyReality = (typeof SAFETY_REALITIES)[number];
+
+/** confirmed = real above threshold; unconfirmed = high-severity unclear. */
+export type SafetyConfirmation = 'confirmed' | 'unconfirmed';
+
+/** Why the office dismissed an alert (required in Platform). */
+export const SAFETY_DISMISS_CATEGORIES = [
+  'false_alarm_media',
+  'joking',
+  'staged',
+  'not_an_emergency',
+  'handled',
+  'duplicate',
+  'other',
+] as const;
+export type SafetyDismissCategory = (typeof SAFETY_DISMISS_CATEGORIES)[number];
 
 export type SafetyFrame = {
   atSeconds: number;
@@ -56,6 +79,9 @@ export type SafetyClassification = {
   clipTimestampSeconds: number | null;
   model: string | null;
   signals: Record<string, unknown>;
+  /** Model verdict on whether it is really happening (null = not checked). */
+  reality?: SafetyReality | null;
+  confirmation?: SafetyConfirmation | null;
 };
 
 export type SafetyIncident = {
@@ -86,6 +112,10 @@ export type SafetyIncident = {
   dismissedAt: string | null;
   dismissedBy: string | null;
   dismissReason: string | null;
+  dismissCategory: SafetyDismissCategory | null;
+  reality: SafetyReality | null;
+  confirmation: SafetyConfirmation | null;
+  workerOkAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -103,11 +133,24 @@ export type OrgSafetySettings = {
   wellnessCriticalAfterSeconds: number;
   /** When true, require alone_on_site before alerting. */
   wellnessRequireAlone: boolean;
+  /** Critical live safety while recording. Default ON; org may opt out. */
+  liveSafetyEnabled: boolean;
+  /** E.164 numbers for SMS / voice escalation (ladder order). */
+  alertPhones: string[];
+  /** Unacknowledged seconds before the next SMS / voice step. */
+  escalateAfterSeconds: number;
 };
 
 /** Minimum confidence to open an incident (high precision bias). */
 export const SAFETY_MIN_CONFIDENCE_WATCH = 0.72;
 export const SAFETY_MIN_CONFIDENCE_CRITICAL = 0.85;
+
+/** Confirmation (Opus) thresholds: alert only on "real" at or above these. */
+export const SAFETY_CONFIRM_MIN_REAL_CRITICAL = 0.8;
+export const SAFETY_CONFIRM_MIN_REAL_WATCH = 0.72;
+
+/** At most this many pages (email / SMS) per job per rolling hour. */
+export const SAFETY_ALERT_CAP_PER_JOB_HOUR = 6;
 
 /** Do not re-alert the same job+category within this window. */
 export const SAFETY_ALERT_RATE_LIMIT_MS = 10 * 60 * 1000;

@@ -12,6 +12,7 @@ import { UnpaidJobEvaluation } from '../components/shared/UnpaidJobEvaluation';
 import { useProductActionsLocked } from '../components/billing/ProductActionLock';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
 import { JobTimeline } from '../components/shared/JobTimeline';
+import { JobSafetyAlerts } from '../components/safety/JobSafetyAlerts';
 import {
   JobFileSectionBar,
   type JobFileSectionId,
@@ -463,6 +464,11 @@ function JobFileSections({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {office ? (
+        <div className="shrink-0">
+          <JobSafetyAlerts jobId={record.job.id} onOpenLive={() => onSectionChange('timeline')} />
+        </div>
+      ) : null}
       <div className="shrink-0">
         <JobFileSectionBar tabs={tabs} active={active} onChange={onSectionChange} />
       </div>

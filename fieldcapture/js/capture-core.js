@@ -3810,6 +3810,387 @@
     };
   }
 
+  function safetyUrl(opts, suffix) {
+    var apiBase = origin(opts.apiBase);
+    return opts.jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(opts.jobId) + '/proof/' + suffix
+      : jobShareUrl(apiBase, opts.token, '/proof/' + suffix);
+  }
+
+  /** POST one live safety chunk (frame and/or 10 s audio segment). */
+  function postSafetyLive(opts, body) {
+    opts = opts || {};
+    return apiJson(safetyUrl(opts, 'safety-live'), {
+      method: 'POST',
+      accessToken: typeof opts.accessToken === 'function' ? opts.accessToken() : opts.accessToken,
+      body: body,
+    });
+  }
+
+  /** Worker tapped "I'm OK". Never affects the alert that already went out. */
+  function postSafetyOk(opts, incidentId) {
+    opts = opts || {};
+    return apiJson(safetyUrl(opts, 'safety-ok'), {
+      method: 'POST',
+      accessToken: typeof opts.accessToken === 'function' ? opts.accessToken() : opts.accessToken,
+      body: { incidentId: incidentId },
+    });
+  }
+
+  var LIVE_AUDIO_TYPES = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+
+  function pickLiveAudioType(MR) {
+    if (!MR || typeof MR.isTypeSupported !== 'function') return '';
+    for (var i = 0; i < LIVE_AUDIO_TYPES.length; i++) {
+      try {
+        if (MR.isTypeSupported(LIVE_AUDIO_TYPES[i])) return LIVE_AUDIO_TYPES[i];
+      } catch (e) {}
+    }
+    return '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      if (blob && typeof blob.arrayBuffer === 'function' && typeof btoa === 'function') {
+        blob.arrayBuffer().then(function (buf) {
+          var bytes = new Uint8Array(buf);
+          var bin = '';
+          for (var i = 0; i < bytes.length; i += 0x8000) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+          }
+          resolve(btoa(bin));
+        }, reject);
+        return;
+      }
+      if (typeof FileReader === 'undefined') {
+        reject(new Error('no FileReader'));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(String(reader.result || '').replace(/^data:[^,]*,/, ''));
+      };
+      reader.onerror = function () {
+        reject(reader.error || new Error('read failed'));
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * Live critical-safety stream while recording. Every `frameIntervalMs`
+   * (5 s) it POSTs one 480px frame; every `audioSegmentMs` (10 s) that post
+   * also carries the last audio segment as its own small file (a second
+   * MediaRecorder on a clone of the mic track — the day film is untouched).
+   * The server transcribes, screens, confirms and alerts; when it reports an
+   * alert, `onAlert(alert)` shows the "Alert sent, tap I'm OK" banner.
+   *
+   * Field Capture is a web app and assumes a connection. When posts fail on
+   * the network (or the browser reports offline), `onConnection(false)`
+   * shows "Live safety paused, no connection"; the next successful post calls
+   * `onConnection(true)` and the notice clears. Nothing is queued: a chunk
+   * that could not be sent is dropped (the film itself keeps recording).
+   * `{ enabled: false }` from the server (org opted out) stops the stream.
+   * Returns { stop() }. Never throws into capture.
+   */
+  function createLiveSafetyStream(cfg) {
+    cfg = cfg || {};
+    var win = cfg.win || (typeof window !== 'undefined' ? window : null);
+    var MR = cfg.MediaRecorder || (win && win.MediaRecorder) || null;
+    var frameMs = Math.max(1000, Number(cfg.frameIntervalMs) || 5000);
+    var segEvery = Math.max(1, Math.round((Number(cfg.audioSegmentMs) || 10000) / frameMs));
+    var maxEdge = Number(cfg.maxEdge) || 480;
+    var maxInFlight = Number(cfg.maxInFlight) || 3;
+    var now =
+      cfg.now ||
+      function () {
+        return Date.now();
+      };
+    var post =
+      cfg.post ||
+      function (body) {
+        return postSafetyLive(cfg, body);
+      };
+    var stopped = false;
+    var disabled = false;
+    var seq = 0;
+    var ticks = 0;
+    var inFlight = 0;
+    var connected = true;
+    var failures = 0;
+    var timer = null;
+    var seen = {};
+    var audioStream = null;
+    var rec = null;
+    var recChunks = [];
+    var recStartedAt = 0;
+    var recStartSeconds = 0;
+    var mimeType = '';
+
+    function at() {
+      try {
+        return Math.max(0, Number(typeof cfg.atSeconds === 'function' ? cfg.atSeconds() : 0) || 0);
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    function site() {
+      try {
+        return typeof cfg.site === 'function' ? cfg.site() : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function grab() {
+      try {
+        if (typeof cfg.grabFrame === 'function') return cfg.grabFrame();
+        var v = cfg.videoEl;
+        if (!v || !v.videoWidth) return null;
+        return grabPaintedFrame(v, maxEdge);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function handle(res) {
+      if (!res || stopped) return;
+      if (res.enabled === false) {
+        disabled = true;
+        teardown();
+        if (typeof cfg.onDisabled === 'function') cfg.onDisabled();
+        return;
+      }
+      var alert = res.alert;
+      if (alert && alert.incidentId) {
+        var key = alert.incidentId + ':' + (alert.confirmation || '');
+        if (!seen[key]) {
+          seen[key] = true;
+          if (typeof cfg.onAlert === 'function') {
+            try {
+              cfg.onAlert(alert);
+            } catch (e) {}
+          }
+        }
+      }
+    }
+
+    function isNetworkFailure(err) {
+      if (!err) return true;
+      // fetch() rejects with a TypeError (no status) when there is no network.
+      return err.status === 0 || err.status == null;
+    }
+
+    function setConnected(next) {
+      if (connected === next) return;
+      connected = next;
+      if (typeof cfg.onConnection === 'function') {
+        try {
+          cfg.onConnection(next);
+        } catch (e) {}
+      }
+    }
+
+    function dispatch(body) {
+      if (stopped || disabled) return Promise.resolve(null);
+      // Too many slow posts in flight: drop this one rather than pile up.
+      if (inFlight >= maxInFlight) return Promise.resolve(null);
+      inFlight += 1;
+      return Promise.resolve()
+        .then(function () {
+          return post(body);
+        })
+        .then(
+          function (res) {
+            inFlight -= 1;
+            failures = 0;
+            setConnected(true);
+            handle(res);
+            return res;
+          },
+          function (err) {
+            inFlight -= 1;
+            if (isNetworkFailure(err)) {
+              failures += 1;
+              // One blip is not an outage; two failed posts in a row is.
+              if (failures >= 2) setConnected(false);
+            }
+            return null;
+          },
+        );
+    }
+
+    function onOffline() {
+      setConnected(false);
+    }
+
+    function onOnline() {
+      // Resume right away instead of waiting for the next 5 s tick.
+      if (!stopped && !disabled) tick();
+    }
+
+    function send(extra) {
+      var body = { clipId: cfg.clipId, seq: seq++ };
+      var s = site();
+      if (s && s.lat != null) body.lat = s.lat;
+      if (s && s.lon != null) body.lon = s.lon;
+      if (s && s.label) body.locationLabel = String(s.label).slice(0, 400);
+      if (cfg.workDate) body.workDate = cfg.workDate;
+      Object.keys(extra).forEach(function (k) {
+        body[k] = extra[k];
+      });
+      if (!body.frame && !body.audio) return Promise.resolve(null);
+      return dispatch(body);
+    }
+
+    function startSegment() {
+      if (!audioStream || !MR || stopped || disabled) return;
+      try {
+        var options = mimeType ? { mimeType: mimeType, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 };
+        var r = new MR(audioStream, options);
+        recChunks = [];
+        r.ondataavailable = function (e) {
+          if (e && e.data && e.data.size) recChunks.push(e.data);
+        };
+        r.start();
+        rec = r;
+        recStartedAt = now();
+        recStartSeconds = at();
+      } catch (e) {
+        rec = null;
+      }
+    }
+
+    /** Stop the running segment, start the next, resolve the finished one. */
+    function cutSegment() {
+      var r = rec;
+      if (!r) return Promise.resolve(null);
+      var startedAt = recStartedAt;
+      var startSeconds = recStartSeconds;
+      var chunks = recChunks;
+      var type = mimeType || r.mimeType || 'audio/webm';
+      return new Promise(function (resolve) {
+        var done = false;
+        function finish() {
+          if (done) return;
+          done = true;
+          if (!chunks.length) return resolve(null);
+          var BlobCtor = (win && win.Blob) || (typeof Blob !== 'undefined' ? Blob : null);
+          var blob = BlobCtor ? new BlobCtor(chunks, { type: type }) : chunks[0];
+          blobToBase64(blob).then(
+            function (b64) {
+              if (!b64 || b64.length < 40) return resolve(null);
+              resolve({
+                startSeconds: startSeconds,
+                durationSeconds: Math.min(15, Math.max(0.3, (now() - startedAt) / 1000)),
+                mimeType: String(type).split(';')[0],
+                base64: b64,
+              });
+            },
+            function () {
+              resolve(null);
+            },
+          );
+        }
+        r.onstop = finish;
+        try {
+          r.stop();
+        } catch (e) {
+          finish();
+        }
+        setTimeout(finish, 1500);
+        startSegment();
+      });
+    }
+
+    function tick() {
+      if (stopped || disabled) return;
+      ticks += 1;
+      var image = grab();
+      var frame = image && image.length >= 80 ? { atSeconds: at(), base64: image } : null;
+      if (rec && ticks % segEvery === 0) {
+        cutSegment().then(function (audio) {
+          var extra = {};
+          if (frame) extra.frame = frame;
+          if (audio) extra.audio = audio;
+          send(extra);
+        });
+        return;
+      }
+      if (frame) send({ frame: frame });
+    }
+
+    function teardown() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      if (rec) {
+        try {
+          rec.ondataavailable = null;
+          rec.onstop = null;
+          if (rec.state !== 'inactive') rec.stop();
+        } catch (e) {}
+      }
+      rec = null;
+      if (audioStream && !cfg.audioStream) {
+        try {
+          audioStream.getTracks().forEach(function (t) {
+            t.stop();
+          });
+        } catch (e) {}
+      }
+      audioStream = null;
+      if (win && typeof win.removeEventListener === 'function') {
+        win.removeEventListener('online', onOnline);
+        win.removeEventListener('offline', onOffline);
+      }
+    }
+
+    // Audio: a clone of the mic track so stopping this never touches the film.
+    try {
+      if (cfg.audioStream) {
+        audioStream = cfg.audioStream;
+      } else if (MR && cfg.stream && typeof cfg.stream.getAudioTracks === 'function') {
+        var tracks = cfg.stream.getAudioTracks();
+        if (tracks && tracks.length) {
+          var MS = (win && win.MediaStream) || (typeof MediaStream !== 'undefined' ? MediaStream : null);
+          var t0 = typeof tracks[0].clone === 'function' ? tracks[0].clone() : tracks[0];
+          audioStream = MS ? new MS([t0]) : null;
+        }
+      }
+      if (audioStream) {
+        mimeType = pickLiveAudioType(MR);
+        startSegment();
+      }
+    } catch (e) {
+      audioStream = null;
+    }
+
+    if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('online', onOnline);
+      win.addEventListener('offline', onOffline);
+    }
+    timer = setInterval(tick, frameMs);
+
+    return {
+      stop: function () {
+        stopped = true;
+        teardown();
+      },
+      /** Test / debug: run one tick now. */
+      tick: tick,
+      isConnected: function () {
+        return connected;
+      },
+    };
+  }
+
   /**
    * Keyboard-aware chrome. On iOS Safari and the installed PWA the on-screen
    * keyboard shrinks the visual viewport, and the bottom record button and
@@ -3986,6 +4367,10 @@
     LIVE_SIGNAL_PATH: LIVE_SIGNAL_PATH,
     postSafetySample: postSafetySample,
     createLiveSafetySampler: createLiveSafetySampler,
+    createLiveSafetyStream: createLiveSafetyStream,
+    postSafetyLive: postSafetyLive,
+    postSafetyOk: postSafetyOk,
+    pickLiveAudioType: pickLiveAudioType,
     postWellnessHeartbeat: postWellnessHeartbeat,
     createLiveWellnessMonitor: createLiveWellnessMonitor,
     WELLNESS_MOTION_SCORE_THRESHOLD: WELLNESS_MOTION_SCORE_THRESHOLD,

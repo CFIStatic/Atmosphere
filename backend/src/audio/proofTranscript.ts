@@ -29,7 +29,7 @@ import { resolveTranscriptionConfig } from '../lib/transcriptionConfig.js';
 import { recordFlatProviderCost } from '../metering/tokenUsage.js';
 import { queueSummaryRefresh } from './summaryQueue.js';
 import { staleSummaryPatch } from './summaryFreshness.js';
-import { runSafetyScanForProof } from '../safety/sample.js';
+import { runTranscriptSafetyScan } from '../safety/sample.js';
 import { writeTranscriptChunks } from '../shared/askTranscriptChunkStore.js';
 
 const PROOF_BUCKET = 'job-proofs';
@@ -368,19 +368,20 @@ export async function transcribeProofVideo(
 
   if (opts?.enrich === false) return;
 
-  // Verbal threat / medical distress cues from the finished transcript.
+  // Safety cues over the WHOLE transcript, in windows. A word-list match is a
+  // candidate only; the confirmation model (with stills near the moment and
+  // the clip's media tagging) decides real / joking / staged / media playback.
   if (proof.org_id && proof.job_id && proof.party_id) {
-    void runSafetyScanForProof(admin, {
+    void runTranscriptSafetyScan(admin, {
       orgId: proof.org_id,
       jobId: proof.job_id,
       partyId: proof.party_id,
       proofId,
       clipId: proof.clip_id ?? null,
-      transcriptSnippet: transcriptText.slice(0, 2000),
+      transcriptText,
+      segments,
       lat: proof.lat == null ? null : Number(proof.lat),
       lon: proof.lon == null ? null : Number(proof.lon),
-      source: 'transcript',
-      allowModel: false,
     }).catch((err) => {
       console.warn('[safety] transcript scan failed:', err instanceof Error ? err.message : err);
     });
