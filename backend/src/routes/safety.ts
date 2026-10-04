@@ -4,7 +4,7 @@
  *   GET  /api/safety/incidents
  *   GET  /api/safety/incidents/:id
  *   POST /api/safety/incidents/:id/ack
- *   POST /api/safety/incidents/:id/dismiss
+ *   POST /api/safety/incidents/:id/dismiss  ({ category, reason? } — reason required)
  *   GET  /api/safety/settings
  *   PATCH /api/safety/settings  (incl. wellness thresholds)
  *   GET  /api/safety/staff/incidents  (Platform / internal)
@@ -14,7 +14,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
@@ -25,6 +25,7 @@ import {
   loadOrgSafetySettings,
   updateOrgSafetySettings,
 } from '../safety/index.js';
+import { SAFETY_DISMISS_CATEGORIES } from '../safety/types.js';
 
 export const safetyRouter = Router();
 
@@ -113,9 +114,30 @@ safetyRouter.post(
   },
 );
 
-const dismissSchema = z.object({
-  reason: z.string().trim().max(1000).optional(),
-});
+/**
+ * Dismissing a safety alert needs a reason: a category (feeds false-alarm
+ * tuning — e.g. "false_alarm_media" for a TV / podcast) and, for "other",
+ * a short note.
+ */
+const dismissSchema = z
+  .object({
+    category: z.enum(SAFETY_DISMISS_CATEGORIES),
+    reason: z.string().trim().max(1000).optional(),
+  })
+  .refine((b) => b.category !== 'other' || (b.reason ?? '').length >= 3, {
+    message: 'Say why you are dismissing this alert.',
+    path: ['reason'],
+  });
+
+const DISMISS_LABELS: Record<(typeof SAFETY_DISMISS_CATEGORIES)[number], string> = {
+  false_alarm_media: 'False alarm: TV / video / podcast playing',
+  joking: 'False alarm: joking',
+  staged: 'False alarm: staged / acting',
+  not_an_emergency: 'Not an emergency',
+  handled: 'Real — handled',
+  duplicate: 'Duplicate alert',
+  other: 'Other',
+};
 
 safetyRouter.post(
   '/incidents/:id/dismiss',
@@ -130,7 +152,10 @@ safetyRouter.post(
         next(notFound('Incident not found', 'safety_not_found'));
         return;
       }
-      const incident = await dismissSafetyIncident(admin, existing.id, ctx.userId, body.reason);
+      const reason = body.reason?.trim()
+        ? `${DISMISS_LABELS[body.category]} — ${body.reason.trim()}`
+        : DISMISS_LABELS[body.category];
+      const incident = await dismissSafetyIncident(admin, existing.id, ctx.userId, reason, body.category);
       res.json({ incident });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid dismiss'));
@@ -155,14 +180,11 @@ safetyRouter.get(
 
 const settingsPatch = z.object({
   autoEscalateToAuthorities: z.boolean().optional(),
-  alertWebhookUrl: z
-    .union([z.string().url(), z.null()])
-    .optional(),
-  alertEmails: z.array(z.string().email().max(200)).max(20).optional(),
   wellnessCheckEnabled: z.boolean().optional(),
   wellnessNoMotionSeconds: z.number().int().min(60).max(7200).optional(),
   wellnessCriticalAfterSeconds: z.number().int().min(60).max(14400).optional(),
   wellnessRequireAlone: z.boolean().optional(),
+  liveSafetyEnabled: z.boolean().optional(),
 });
 
 safetyRouter.patch(
@@ -172,18 +194,13 @@ safetyRouter.patch(
     try {
       const ctx = await requireGlobalAdmin(req);
       const body = settingsPatch.parse(req.body ?? {});
-      if (body.alertWebhookUrl && !/^https:\/\//i.test(body.alertWebhookUrl)) {
-        next(forbidden('Webhook URL must be https', 'invalid_webhook'));
-        return;
-      }
       const settings = await updateOrgSafetySettings(adminOrThrow(), ctx.orgId, {
         autoEscalateToAuthorities: body.autoEscalateToAuthorities,
-        alertWebhookUrl: body.alertWebhookUrl,
-        alertEmails: body.alertEmails,
         wellnessCheckEnabled: body.wellnessCheckEnabled,
         wellnessNoMotionSeconds: body.wellnessNoMotionSeconds,
         wellnessCriticalAfterSeconds: body.wellnessCriticalAfterSeconds,
         wellnessRequireAlone: body.wellnessRequireAlone,
+        liveSafetyEnabled: body.liveSafetyEnabled,
       });
       res.json({
         settings,

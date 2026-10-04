@@ -148,8 +148,9 @@ export function createApp(): Express {
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const voiceSamplePath = /^\/api\/speaker-identity\/(?:voiceprint|enrollment-requests\/[^/]+\/confirm)\/?$/;
   // Near-real-time safety samples carry 1–3 small JPEGs while recording.
+  // The live safety stream adds a ~10 s audio segment (base64) per post.
   const safetySamplePath =
-    /\/proof\/safety-sample\/?$/;
+    /\/proof\/safety-(?:sample|live)\/?$/;
   // Day-film filing POSTs stills (base64 JPEG) only — never the video bytes
   // (those go to signed storage / multipart parts). A ~32s laptop clip still
   // used to 413 here: six ~900px JPEGs as base64 routinely exceed the global
@@ -160,7 +161,7 @@ export function createApp(): Express {
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
   const voiceSampleJson = express.json({ limit: '2mb' });
-  const safetySampleJson = express.json({ limit: '1.5mb' });
+  const safetySampleJson = express.json({ limit: '2.5mb' });
   const proofRecordJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {

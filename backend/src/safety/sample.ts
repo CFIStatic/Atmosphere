@@ -18,6 +18,7 @@ import { classifySafetySample } from './classify.js';
 import { createSafetyIncident } from './incidents.js';
 import { fanoutSafetyAlert } from './alerts.js';
 import type { SafetyIncident, SafetySource } from './types.js';
+import type { SafetyMediaContext } from './confirm.js';
 
 // TODO(true-live): WebRTC / MediaStream track sampling for sub-second
 // detection. Today FC uploads chunks while recording; this sample endpoint
@@ -62,6 +63,21 @@ export async function processSafetySample(
 ): Promise<SafetySampleResult> {
   await assertOrgProductActionsAllowed(admin, party.org_id);
   const input = safetySampleSchema.parse(body ?? {});
+  return processSafetyInput(admin, party, input);
+}
+
+/**
+ * Server-side entry: may carry more frames (confirmation takes up to 8) and a
+ * media context built from our own analysis — never from the client body.
+ */
+async function processSafetyInput(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string },
+  input: z.infer<typeof safetySampleSchema> & {
+    serverFrames?: Array<{ atSeconds: number; base64: string }>;
+    mediaContext?: SafetyMediaContext;
+  },
+): Promise<SafetySampleResult> {
   // The frame check is a vision call on this job's footage: video analysis.
   const classification = await runWithAiUsageScope(
     {
@@ -73,10 +89,11 @@ export async function processSafetySample(
     },
     () =>
       classifySafetySample({
-        frames: input.frames,
+        frames: input.serverFrames ?? input.frames,
         transcriptSnippet: input.transcriptSnippet,
         clipTimestampSeconds: input.clipTimestampSeconds ?? null,
         allowModel: input.allowModel,
+        mediaContext: input.mediaContext,
       }),
   );
 
@@ -92,7 +109,7 @@ export async function processSafetySample(
   }
 
   const source = input.source as SafetySource;
-  const { incident, created, suppressedDuplicate } = await createSafetyIncident(admin, {
+  const { incident, created, suppressedDuplicate, upgraded } = await createSafetyIncident(admin, {
     orgId: party.org_id,
     jobId: party.job_id,
     partyId: party.id,
@@ -106,9 +123,9 @@ export async function processSafetySample(
   });
 
   let channels: string[] = [];
-  if (created) {
+  if (created || upgraded) {
     try {
-      const fanout = await fanoutSafetyAlert(admin, incident);
+      const fanout = await fanoutSafetyAlert(admin, incident, { upgraded: Boolean(upgraded) });
       channels = fanout.channels;
     } catch (err) {
       console.warn('[safety] fanout failed:', err instanceof Error ? err.message : err);
@@ -144,24 +161,79 @@ export async function runSafetyScanForProof(
     locationLabel?: string | null;
     source?: SafetySource;
     allowModel?: boolean;
+    clipTimestampSeconds?: number | null;
+    mediaContext?: SafetyMediaContext;
   },
 ): Promise<SafetySampleResult> {
-  return processSafetySample(
-    admin,
-    { org_id: input.orgId, job_id: input.jobId, id: input.partyId },
-    {
-      proofId: input.proofId,
-      clipId: input.clipId ?? undefined,
-      frames: input.frames?.slice(0, 3),
-      transcriptSnippet: input.transcriptSnippet ?? undefined,
-      lat: input.lat ?? undefined,
-      lon: input.lon ?? undefined,
-      locationLabel: input.locationLabel ?? undefined,
-      source: input.source ?? 'post_upload',
-      allowModel: input.allowModel,
-      clipTimestampSeconds: input.frames?.[0]?.atSeconds,
-    },
-  );
+  const party = { org_id: input.orgId, job_id: input.jobId, id: input.partyId };
+  await assertOrgProductActionsAllowed(admin, party.org_id);
+  const parsed = safetySampleSchema.parse({
+    proofId: input.proofId,
+    clipId: input.clipId ?? undefined,
+    transcriptSnippet: input.transcriptSnippet ? input.transcriptSnippet.slice(0, 2000) : undefined,
+    lat: input.lat ?? undefined,
+    lon: input.lon ?? undefined,
+    locationLabel: input.locationLabel ?? undefined,
+    source: input.source ?? 'post_upload',
+    allowModel: input.allowModel,
+    clipTimestampSeconds: input.clipTimestampSeconds ?? input.frames?.[0]?.atSeconds,
+  });
+  return processSafetyInput(admin, party, {
+    ...parsed,
+    // The confirmation stage takes up to 8 frames; the full window text.
+    serverFrames: input.frames?.slice(0, 8),
+    transcriptSnippet: input.transcriptSnippet ?? undefined,
+    mediaContext: input.mediaContext,
+  });
+}
+
+/**
+ * Whole-transcript scan after Whisper finishes. The word list runs over the
+ * FULL transcript in ±30 s windows (it used to read only the first 2,000
+ * characters); each candidate window is confirmed by the model with stills
+ * near that moment and the clip's media-window tagging (a TV / monitor /
+ * podcast playing). Words alone never page anyone.
+ */
+export async function runTranscriptSafetyScan(
+  admin: any,
+  input: {
+    orgId: string;
+    jobId: string;
+    partyId: string;
+    proofId: string;
+    clipId?: string | null;
+    transcriptText: string;
+    segments?: Array<{ start: number; end: number; text: string }> | null;
+    lat?: number | null;
+    lon?: number | null;
+  },
+): Promise<SafetySampleResult[]> {
+  const { transcriptCandidateWindows } = await import('./classify.js');
+  const windows = transcriptCandidateWindows({ segments: input.segments, text: input.transcriptText, maxWindows: 4 });
+  if (!windows.length) return [];
+  const { proofMediaContext, loadProofFramesNear } = await import('./proofContext.js');
+  const media = await proofMediaContext(admin, input.proofId, input.transcriptText);
+  const results: SafetySampleResult[] = [];
+  for (const window of windows) {
+    const frames = await loadProofFramesNear(admin, input.proofId, window.atSeconds, 6);
+    results.push(
+      await runSafetyScanForProof(admin, {
+        orgId: input.orgId,
+        jobId: input.jobId,
+        partyId: input.partyId,
+        proofId: input.proofId,
+        clipId: input.clipId ?? null,
+        frames,
+        transcriptSnippet: window.text,
+        clipTimestampSeconds: window.atSeconds,
+        lat: input.lat ?? null,
+        lon: input.lon ?? null,
+        source: 'transcript',
+        mediaContext: media,
+      }),
+    );
+  }
+  return results;
 }
 
 

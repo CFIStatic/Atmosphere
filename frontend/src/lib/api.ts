@@ -3167,6 +3167,15 @@ export interface AuthResponse {
 
 export type SafetySeverity = 'watch' | 'critical';
 export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
+export type SafetyReality = 'real' | 'joking' | 'staged' | 'media_playback' | 'unclear';
+export type SafetyDismissCategory =
+  | 'false_alarm_media'
+  | 'joking'
+  | 'staged'
+  | 'not_an_emergency'
+  | 'handled'
+  | 'duplicate'
+  | 'other';
 
 
 /* ------------------------------------------------------------------ */
@@ -3230,6 +3239,12 @@ export interface SafetyIncident {
   status: SafetyStatus;
   source: string;
   createdAt: string;
+  /** Model verdict: real / joking / staged / media_playback / unclear. */
+  reality?: SafetyReality | null;
+  /** confirmed = checked real; unconfirmed = "check live view". */
+  confirmation?: 'confirmed' | 'unconfirmed' | null;
+  dismissCategory?: SafetyDismissCategory | null;
+  dismissReason?: string | null;
 }
 
 
@@ -4126,10 +4141,11 @@ export const api = {
       body: JSON.stringify({}),
     }),
 
-  dismissSafetyIncident: (id: string, reason?: string) =>
+  /** Dismiss needs a reason category (and a note for "other"). */
+  dismissSafetyIncident: (id: string, category: SafetyDismissCategory, reason?: string) =>
     request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/dismiss`, {
       method: 'POST',
-      body: JSON.stringify(reason ? { reason } : {}),
+      body: JSON.stringify(reason ? { category, reason } : { category }),
     }),
 
 

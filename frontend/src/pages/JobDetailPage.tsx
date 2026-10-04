@@ -23,6 +23,7 @@ import {
   type JobFileBeat,
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
+import { SafetyAlertBanner } from '../components/safety/SafetyAlertBanner';
 import { OfficeLiveView } from '../components/shared/OfficeLiveView';
 
 /**
@@ -161,65 +162,11 @@ export function JobDetailPage() {
         )}
 
         
-      {safetyIncidents.some(
-        (i) =>
-          i.status === 'open' &&
-          (i.severity === 'critical' || i.category === 'silent_panic_wellness'),
-      ) && (
-        <section
-          className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4"
-          data-testid="job-safety-alert-banner"
-          role="alert"
-        >
-          <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-            Safety / wellness alert on this job
-          </p>
-          <ul className="mt-2 space-y-2">
-            {safetyIncidents
-              .filter(
-                (i) =>
-                  i.status === 'open' &&
-                  (i.severity === 'critical' || i.category === 'silent_panic_wellness'),
-              )
-              .map((incident) => (
-                <li key={incident.id} className="text-sm text-ink-800">
-                  <span className="font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
-                    {incident.severity}
-                    {incident.category === 'silent_panic_wellness' ? ' · wellness' : ''}
-                  </span>
-                  {' · '}
-                  {incident.title}
-                  {incident.clipTimestampSeconds != null
-                    ? ` · ${incident.clipTimestampSeconds}s`
-                    : ''}
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded-md bg-ink-900 px-2 py-1 text-xs text-white"
-                      onClick={() => {
-                        void api.ackSafetyIncident(incident.id).then(() => load());
-                      }}
-                    >
-                      Acknowledge
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-line px-2 py-1 text-xs"
-                      onClick={() => {
-                        void api
-                          .dismissSafetyIncident(incident.id, 'Reviewed in Platform')
-                          .then(() => load());
-                      }}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
-
+      <SafetyAlertBanner
+        incidents={safetyIncidents}
+        onAck={(id) => api.ackSafetyIncident(id).then(() => load())}
+        onDismiss={(id, category, note) => api.dismissSafetyIncident(id, category, note).then(() => load())}
+      />
 
         {blockers.length > 0 && (
           <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">
