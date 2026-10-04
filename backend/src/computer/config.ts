@@ -79,3 +79,14 @@ export function browserbaseCredentials(): { apiKey: string; projectId: string } 
 
 /** Customer-facing. Operators: set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID (docs/computer.md). */
 export const NOT_SET_UP_MESSAGE = "Computer isn't set up yet, so Chat can't work in a browser for you.";
+
+/**
+ * Logins page: a person signing in to a site holds the org's browser for at
+ * most this long (Browserbase gets a minute more), then it is released.
+ */
+export const LOGIN_SESSION_SEC = 15 * 60;
+
+/** A sign-in / sign-out session older than its limit (plus grace) was left by a crash. */
+export function helperSessionStale(startedAtIso: string, nowMs: number): boolean {
+  return nowMs - Date.parse(startedAtIso) > (LOGIN_SESSION_SEC + 120) * 1000;
+}

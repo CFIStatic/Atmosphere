@@ -76,6 +76,41 @@ export interface ComputerSessionRow {
   browser_seconds: number | null;
   metered_at: string | null;
   created_at: string;
+  /** 'task' = an agent task; 'login' = a person signing in on the Logins page; 'logout' = clearing a removed site. */
+  purpose: SessionPurpose;
+  login_id: string | null;
+  target_url: string | null;
+  target_label: string | null;
+  started_by: string | null;
+}
+
+export type SessionPurpose = 'task' | 'login' | 'logout';
+
+export interface ComputerLoginRow {
+  id: string;
+  org_id: string;
+  label: string;
+  url: string;
+  host: string;
+  cookie_domains: string[];
+  created_by: string | null;
+  created_at: string;
+  last_signed_in_at: string | null;
+  last_signed_in_by: string | null;
+  updated_at: string;
+}
+
+export type NewSession = Pick<ComputerSessionRow, 'org_id' | 'provider' | 'provider_context_id'> &
+  Partial<Pick<ComputerSessionRow, 'purpose' | 'login_id' | 'target_url' | 'target_label' | 'started_by'>>;
+
+export interface SavedLogin {
+  org_id: string;
+  label: string;
+  url: string;
+  host: string;
+  cookie_domains: string[];
+  user_id: string | null;
+  at: string;
 }
 
 export interface ComputerAuditRow {
@@ -128,11 +163,20 @@ export interface ComputerStore {
   listQueuedTasks(limit: number): Promise<ComputerTaskRow[]>;
   listStaleActiveTasks(olderThanIso: string): Promise<ComputerTaskRow[]>;
   latestContextId(orgId: string, provider: string): Promise<string | null>;
-  insertSession(row: Pick<ComputerSessionRow, 'org_id' | 'provider' | 'provider_context_id'>): Promise<ComputerSessionRow>;
+  insertSession(row: NewSession): Promise<ComputerSessionRow>;
   updateSession(id: string, patch: Partial<ComputerSessionRow>): Promise<void>;
   /** Close out sessions an earlier crash left open; returns their provider ids. */
   closeLiveSessions(orgId: string): Promise<string[]>;
   getSession(id: string): Promise<ComputerSessionRow | null>;
+  /** The org's live (starting/active) session, if any. */
+  liveSession(orgId: string): Promise<ComputerSessionRow | null>;
+  /** The org's task in running / awaiting_approval / needs_you, if any. */
+  activeTask(orgId: string): Promise<ComputerTaskRow | null>;
+  listLogins(orgId: string): Promise<ComputerLoginRow[]>;
+  getLogin(orgId: string, id: string): Promise<ComputerLoginRow | null>;
+  /** Insert or update the org's entry for this host (cookie domains are merged). */
+  saveLogin(row: SavedLogin): Promise<ComputerLoginRow>;
+  deleteLogin(orgId: string, id: string): Promise<boolean>;
   insertApproval(row: NewApproval): Promise<ComputerApprovalRow>;
   getApproval(orgId: string | null, id: string): Promise<ComputerApprovalRow | null>;
   latestApproval(taskId: string): Promise<ComputerApprovalRow | null>;
@@ -146,6 +190,16 @@ export interface ComputerStore {
 }
 
 const nowIso = () => new Date().toISOString();
+
+const ACTIVE: readonly ComputerTaskStatus[] = ['running', 'awaiting_approval', 'needs_you'];
+
+/** The org already has a live browser session (the one-per-org rule). */
+export class SessionBusyError extends Error {
+  constructor() {
+    super('Computer is already using the browser for this account.');
+    this.name = 'SessionBusyError';
+  }
+}
 
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: string }).code === '23505');
@@ -223,9 +277,12 @@ export class SupabaseComputerStore implements ComputerStore {
     return row?.provider_context_id ?? null;
   }
 
-  async insertSession(row: Pick<ComputerSessionRow, 'org_id' | 'provider' | 'provider_context_id'>) {
+  async insertSession(row: NewSession) {
     const { data, error } = await this.db.from('computer_sessions').insert(row).select('*').single();
-    if (error) throw error;
+    if (error) {
+      if (isUniqueViolation(error)) throw new SessionBusyError();
+      throw error;
+    }
     return data as ComputerSessionRow;
   }
 
@@ -251,6 +308,82 @@ export class SupabaseComputerStore implements ComputerStore {
     const { data, error } = await this.db.from('computer_sessions').select('*').eq('id', id).maybeSingle();
     if (error) throw error;
     return (data as ComputerSessionRow | null) ?? null;
+  }
+
+  async liveSession(orgId: string) {
+    const { data, error } = await this.db
+      .from('computer_sessions')
+      .select('*')
+      .eq('org_id', orgId)
+      .in('status', ['starting', 'active'])
+      .limit(1);
+    if (error) throw error;
+    return ((data ?? [])[0] as ComputerSessionRow | undefined) ?? null;
+  }
+
+  async activeTask(orgId: string) {
+    const { data, error } = await this.db
+      .from('computer_tasks')
+      .select('*')
+      .eq('org_id', orgId)
+      .in('status', [...ACTIVE])
+      .limit(1);
+    if (error) throw error;
+    return ((data ?? [])[0] as ComputerTaskRow | undefined) ?? null;
+  }
+
+  async listLogins(orgId: string) {
+    const { data, error } = await this.db
+      .from('computer_logins')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('label', { ascending: true })
+      .limit(200);
+    if (error) throw error;
+    return (data ?? []) as ComputerLoginRow[];
+  }
+
+  async getLogin(orgId: string, id: string) {
+    const { data, error } = await this.db.from('computer_logins').select('*').eq('org_id', orgId).eq('id', id).maybeSingle();
+    if (error) throw error;
+    return (data as ComputerLoginRow | null) ?? null;
+  }
+
+  async saveLogin(row: SavedLogin) {
+    const { data: existing, error: readError } = await this.db
+      .from('computer_logins')
+      .select('*')
+      .eq('org_id', row.org_id)
+      .eq('host', row.host)
+      .limit(1);
+    if (readError) throw readError;
+    const prev = (existing ?? [])[0] as ComputerLoginRow | undefined;
+    const patch = {
+      label: row.label,
+      url: row.url,
+      cookie_domains: [...new Set([...(prev?.cookie_domains ?? []), ...row.cookie_domains])].sort(),
+      last_signed_in_at: row.at,
+      last_signed_in_by: row.user_id,
+      updated_at: row.at,
+    };
+    if (prev) {
+      const { data, error } = await this.db.from('computer_logins').update(patch).eq('id', prev.id).select('*').single();
+      if (error) throw error;
+      return data as ComputerLoginRow;
+    }
+    const { data, error } = await this.db
+      .from('computer_logins')
+      .insert({ ...patch, org_id: row.org_id, host: row.host, created_by: row.user_id })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as ComputerLoginRow;
+  }
+
+  async deleteLogin(orgId: string, id: string) {
+    const { data, error } = await this.db.from('computer_logins').delete().eq('org_id', orgId).eq('id', id).select('id');
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
   }
 
   async insertApproval(row: NewApproval) {
@@ -330,12 +463,12 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 }
 
-const ACTIVE: readonly ComputerTaskStatus[] = ['running', 'awaiting_approval', 'needs_you'];
 
 export class MemoryComputerStore implements ComputerStore {
   tasks = new Map<string, ComputerTaskRow>();
   approvals = new Map<string, ComputerApprovalRow>();
   sessions = new Map<string, ComputerSessionRow>();
+  logins = new Map<string, ComputerLoginRow>();
   audit: ComputerAuditRow[] = [];
   private seq = 0;
 
@@ -413,7 +546,10 @@ export class MemoryComputerStore implements ComputerStore {
     return rows[0]?.provider_context_id ?? null;
   }
 
-  async insertSession(row: Pick<ComputerSessionRow, 'org_id' | 'provider' | 'provider_context_id'>) {
+  async insertSession(row: NewSession) {
+    for (const other of this.sessions.values()) {
+      if (other.org_id === row.org_id && (other.status === 'starting' || other.status === 'active')) throw new SessionBusyError();
+    }
     const at = nowIso();
     const s: ComputerSessionRow = {
       id: randomUUID(),
@@ -424,6 +560,11 @@ export class MemoryComputerStore implements ComputerStore {
       browser_seconds: null,
       metered_at: null,
       created_at: at,
+      purpose: 'task',
+      login_id: null,
+      target_url: null,
+      target_label: null,
+      started_by: null,
       ...row,
     };
     this.sessions.set(s.id, s);
@@ -450,6 +591,54 @@ export class MemoryComputerStore implements ComputerStore {
     const s = this.sessions.get(id);
     return s ? { ...s } : null;
   }
+  async liveSession(orgId: string) {
+    const s = [...this.sessions.values()].find((x) => x.org_id === orgId && (x.status === 'starting' || x.status === 'active'));
+    return s ? { ...s } : null;
+  }
+
+  async activeTask(orgId: string) {
+    const t = [...this.tasks.values()].find((x) => x.org_id === orgId && ACTIVE.includes(x.status));
+    return t ? { ...t } : null;
+  }
+
+  async listLogins(orgId: string) {
+    return [...this.logins.values()]
+      .filter((l) => l.org_id === orgId)
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map((l) => ({ ...l, cookie_domains: [...l.cookie_domains] }));
+  }
+
+  async getLogin(orgId: string, id: string) {
+    const l = this.logins.get(id);
+    return l && l.org_id === orgId ? { ...l, cookie_domains: [...l.cookie_domains] } : null;
+  }
+
+  async saveLogin(row: SavedLogin) {
+    const prev = [...this.logins.values()].find((l) => l.org_id === row.org_id && l.host === row.host);
+    const next: ComputerLoginRow = {
+      id: prev?.id ?? randomUUID(),
+      org_id: row.org_id,
+      host: row.host,
+      created_by: prev ? prev.created_by : row.user_id,
+      created_at: prev?.created_at ?? row.at,
+      label: row.label,
+      url: row.url,
+      cookie_domains: [...new Set([...(prev?.cookie_domains ?? []), ...row.cookie_domains])].sort(),
+      last_signed_in_at: row.at,
+      last_signed_in_by: row.user_id,
+      updated_at: row.at,
+    };
+    this.logins.set(next.id, next);
+    return { ...next };
+  }
+
+  async deleteLogin(orgId: string, id: string) {
+    const l = this.logins.get(id);
+    if (!l || l.org_id !== orgId) return false;
+    this.logins.delete(id);
+    return true;
+  }
+
 
   async insertApproval(row: NewApproval) {
     const a: ComputerApprovalRow = {

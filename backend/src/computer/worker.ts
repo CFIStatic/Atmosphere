@@ -12,7 +12,7 @@ import { logger } from '../lib/logger.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { assertAiFeatureAllowed, isAiPaused } from '../metering/aiBudgetService.js';
 import { runComputerAgent, type AgentOutcome, type ComputerModel } from './agent.js';
-import { computerSettings, NOT_SET_UP_MESSAGE, type ComputerSettings } from './config.js';
+import { computerSettings, helperSessionStale, NOT_SET_UP_MESSAGE, type ComputerSettings } from './config.js';
 import { browserCostSoFar, meterBrowserTime, meterComputerModelCall } from './metering.js';
 import { anthropicComputerModel } from './model.js';
 import { computerProvider } from './providers/index.js';
@@ -62,7 +62,7 @@ export function computerStore(): ComputerStore | null {
   return admin ? new SupabaseComputerStore(admin) : null;
 }
 
-function deps(): ComputerWorkerDeps | null {
+export function computerWorkerDeps(): ComputerWorkerDeps | null {
   const store = computerStore();
   if (!store) return null;
   const o = overrides ?? {};
@@ -93,11 +93,15 @@ const inFlight = new Set<string>();
 
 /** Claim and run one task to completion. Resolves when the task has a final status. */
 export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps): Promise<AgentOutcome | null> {
-  const d = given ?? deps();
+  const d = given ?? computerWorkerDeps();
   if (!d) return null;
   const { store, provider, settings } = d;
   const task = await store.getTask(null, taskId);
   if (!task || task.status !== 'queued') return null;
+  // Someone is signing in to a site on the Logins page: the org's browser is
+  // theirs until they finish. The task stays queued and runs after.
+  const live = await store.liveSession(task.org_id);
+  if (live && live.purpose !== 'task' && !helperSessionStale(live.started_at, d.now())) return null;
   const startedIso = new Date(d.now()).toISOString();
   const claimed = await store.transitionTask(task.id, ['queued'], {
     status: 'running',
@@ -245,7 +249,7 @@ export async function failInterruptedTasks(store: ComputerStore, now = Date.now(
 }
 
 export async function sweepComputerTasksOnce(): Promise<void> {
-  const d = deps();
+  const d = computerWorkerDeps();
   if (!d) return;
   await failInterruptedTasks(d.store, d.now()).catch((err) =>
     logger.warn('computer interrupted sweep failed', { error: safeError(err) }),

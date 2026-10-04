@@ -10,6 +10,14 @@
  *   POST /api/chat-computer/approvals/:id/approve
  *   POST /api/chat-computer/approvals/:id/cancel
  *
+ * Logins page (sign in to outside sites ahead of time; no AI runs):
+ *   GET    /api/chat-computer/logins                     saved sites + any sign-in in progress
+ *   POST   /api/chat-computer/logins/sign-ins            { url, label? } or { loginId } → open the site
+ *   POST   /api/chat-computer/logins/sign-ins/:id/live   → short-lived live-view URL (control)
+ *   POST   /api/chat-computer/logins/sign-ins/:id/done   "Done, I'm signed in" → save the site
+ *   POST   /api/chat-computer/logins/sign-ins/:id/cancel close without saving
+ *   DELETE /api/chat-computer/logins/:id                 remove the site and clear its cookies
+ *
  * Every lookup is filtered by the caller's org; another org's id is a 404.
  * Live-view URLs are minted per request, sent with Cache-Control: no-store,
  * and never logged or stored (request logs carry the path only).
@@ -26,6 +34,7 @@ import {
   mintLiveView,
   resumeTask,
 } from '../computer/service.js';
+import { cancelSignIn, finishSignIn, loginsState, removeLogin, signInLiveView, startSignIn } from '../computer/logins.js';
 import { HttpError } from '../lib/errors.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -138,5 +147,76 @@ computerRouter.post(
   wrap(async (req, res) => {
     const ctx = await requireOrgContext(req);
     res.json(await decideApproval(ctx.orgId, parseId(req.params.id), ctx.userId, 'cancel'));
+  }),
+);
+
+/* ------------------------------------------------------------------ Logins -- */
+
+const signInSchema = z.object({
+  url: z.string().trim().max(2048).optional(),
+  label: z.string().trim().max(80).optional(),
+  loginId: z.string().uuid().optional(),
+});
+
+computerRouter.get(
+  '/logins',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await loginsState(ctx.orgId, ctx.userId));
+  }),
+);
+
+computerRouter.post(
+  '/logins/sign-ins',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    const parsed = signInSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new HttpError(400, 'Enter the website address, like outlook.office.com.', 'bad_request');
+    const signIn = await startSignIn({
+      orgId: ctx.orgId,
+      userId: ctx.userId,
+      url: parsed.data.url ?? null,
+      label: parsed.data.label ?? null,
+      loginId: parsed.data.loginId ?? null,
+      canManage: ctx.productRole === 'global_admin',
+    });
+    res.json({ signIn });
+  }),
+);
+
+computerRouter.post(
+  '/logins/sign-ins/:id/live',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    const link = await signInLiveView(ctx.orgId, parseId(req.params.id), ctx.userId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.json(link);
+  }),
+);
+
+computerRouter.post(
+  '/logins/sign-ins/:id/done',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    res.json({ login: await finishSignIn(ctx.orgId, parseId(req.params.id), ctx.userId) });
+  }),
+);
+
+computerRouter.post(
+  '/logins/sign-ins/:id/cancel',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    await cancelSignIn(ctx.orgId, parseId(req.params.id), ctx.userId);
+    res.json({ ok: true });
+  }),
+);
+
+computerRouter.delete(
+  '/logins/:id',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    res.json(await removeLogin(ctx.orgId, parseId(req.params.id), ctx.userId));
   }),
 );

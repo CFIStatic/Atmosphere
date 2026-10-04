@@ -180,3 +180,51 @@ export function isAllowedLiveViewUrl(url: string, demo = Boolean(import.meta.env
     return false;
   }
 }
+
+// ---- Logins: sites the company signs in to ahead of time ----
+
+export interface ComputerLogin {
+  id: string;
+  label: string;
+  url: string;
+  host: string;
+  addedBy: string | null;
+  addedAt: string;
+  lastSignedInAt: string | null;
+  lastSignedInBy: string | null;
+  /** True when Remove can also sign Computer out (we recorded which cookies). */
+  canClearCookies: boolean;
+}
+
+export interface ComputerSignIn {
+  sessionId: string;
+  label: string;
+  url: string;
+  host: string;
+  loginId: string | null;
+  startedAt: string;
+  startedBy: string | null;
+  startedByYou: boolean;
+  expiresAt: string;
+}
+
+export interface ComputerLoginsState {
+  configured: boolean;
+  message: string | null;
+  logins: ComputerLogin[];
+  signingIn: ComputerSignIn | null;
+  busy: string | null;
+}
+
+export interface ComputerRemoveLoginResult {
+  removed: true;
+  cookiesCleared: boolean;
+  message: string;
+}
+
+/** Quick picks on Add login. Any https site works; these are just shortcuts. */
+export const LOGIN_QUICK_PICKS: ReadonlyArray<{ label: string; url: string }> = [
+  { label: 'Outlook', url: 'https://outlook.office.com' },
+  { label: 'Gmail', url: 'https://mail.google.com' },
+  { label: 'Xactimate', url: 'https://identity.xactware.com' },
+];

@@ -4,10 +4,12 @@
  * coordinates the model picked, and reads the DOM under a point so the
  * approval gate can classify a click before it happens.
  */
+import { createHash } from 'node:crypto';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
 import { DESCRIBE_AT_POINT, DESCRIBE_FOCUSED, READ_FIELDS, READ_SIGNALS } from '../domScripts.js';
 import type {
   ComputerDriver,
+  CookieSnapshot,
   FormFieldReading,
   MouseButton,
   PageSignals,
@@ -235,6 +237,38 @@ export class PlaywrightDriver implements ComputerDriver {
 
   async cursorPosition(): Promise<[number, number]> {
     return this.cursor;
+  }
+
+  async cookieSnapshot(): Promise<CookieSnapshot> {
+    const out: CookieSnapshot = {};
+    for (const c of await this.context.cookies()) {
+      const print = `${c.name}|${createHash('sha256').update(c.value).digest('hex').slice(0, 16)}|${Math.round(c.expires)}`;
+      (out[c.domain] ??= []).push(print);
+    }
+    return out;
+  }
+
+  async clearSiteData(domains: string[]): Promise<number> {
+    const wanted = new Set(domains);
+    const before = (await this.context.cookies()).filter((c) => wanted.has(c.domain)).length;
+    for (const domain of wanted) {
+      await this.context.clearCookies({ domain });
+      // localStorage / IndexedDB for that origin, so an app-held token goes too.
+      const origin = `https://${domain.replace(/^\./, '')}`;
+      try {
+        const page = await this.active();
+        const cdp = await this.context.newCDPSession(page);
+        await cdp.send('Storage.clearDataForOrigin', {
+          origin,
+          storageTypes: 'local_storage,indexeddb,websql,cache_storage,service_workers',
+        });
+        await cdp.detach().catch(() => undefined);
+      } catch {
+        /* storage clearing is best effort; cookies are what keep a sign-in */
+      }
+    }
+    const after = (await this.context.cookies()).filter((c) => wanted.has(c.domain)).length;
+    return Math.max(0, before - after);
   }
 
   async close() {
