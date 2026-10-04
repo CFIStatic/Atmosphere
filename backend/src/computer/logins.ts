@@ -8,10 +8,17 @@
  * site is listed. No AI model runs here; only browser time is metered
  * (feature 'computer').
  *
- * We never see or store passwords. The only things kept are the site's name,
- * URL, who signed in and when, and the cookie DOMAIN names that changed during
- * sign-in (values are fingerprinted in memory to spot changes, never stored),
- * so Remove can clear them from the profile.
+ * For the live-view sign-in nothing secret is kept: the site's name, URL, who
+ * signed in and when, and the cookie DOMAIN names that changed during sign-in
+ * (values are fingerprinted in memory to spot changes, never stored), so
+ * Remove can clear them from the profile.
+ *
+ * A Global Admin can also save a username and password for a site so
+ * Computer signs back in on its own (autoSignIn.ts). They are sealed with
+ * AES-256-GCM under COMPUTER_CREDENTIAL_KEY (credentialCrypto.ts) before they
+ * reach the database, never logged, never sent to the AI model, and never
+ * returned: the page only ever gets the username (admins only) and "password
+ * saved". Without the key, saving passwords is off with a plain message.
  *
  * The session counts toward the one-live-browser-per-org rule. The CDP
  * connection is held by the process that started the sign-in; if another
@@ -19,10 +26,26 @@
  * without its cookie domains (Remove then cannot clear cookies; it says so).
  */
 import { logger } from '../lib/logger.js';
+import { autoSignIn, type AutoSignInOutcome } from './autoSignIn.js';
+import {
+  CREDENTIALS_OFF_MESSAGE,
+  CredentialsOffError,
+  credentialKeyFingerprint,
+  credentialsEnabled,
+  openCredential,
+  sealCredential,
+} from './credentialCrypto.js';
 import { computerSettings, helperSessionStale, LOGIN_SESSION_SEC, NOT_SET_UP_MESSAGE } from './config.js';
 import { meterBrowserTime } from './metering.js';
 import { ComputerServiceError, cleanUrl } from './service.js';
-import { SessionBusyError, type ComputerLoginRow, type ComputerSessionRow, type ComputerStore, type SessionPurpose } from './store.js';
+import {
+  SessionBusyError,
+  type ComputerCredentialRow,
+  type ComputerLoginRow,
+  type ComputerSessionRow,
+  type ComputerStore,
+  type SessionPurpose,
+} from './store.js';
 import { changedCookieDomains, type ComputerDriver, type ComputerSessionHandle, type CookieSnapshot } from './types.js';
 import { assertComputerAiAllowed, computerAdmin, computerWorkerDeps, type ComputerWorkerDeps } from './worker.js';
 
@@ -37,6 +60,36 @@ export interface LoginView {
   lastSignedInBy: string | null;
   /** True when we recorded which cookies to clear on Remove. */
   canClearCookies: boolean;
+  /** The saved username and password, if any. The password itself is never sent. */
+  credential: CredentialView | null;
+}
+
+export interface CredentialView {
+  saved: true;
+  /** Only for admins (who can manage saved passwords); null for everyone else. */
+  username: string | null;
+  loginUrl: string | null;
+  status: 'ok' | 'needs_attention';
+  attentionReason: string | null;
+  lastUsedAt: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** What the page needs to know about saving passwords. */
+export interface PasswordsState {
+  /** COMPUTER_CREDENTIAL_KEY is set. */
+  enabled: boolean;
+  /** Plain reason when not enabled. */
+  message: string | null;
+  /** This viewer may save, see usernames for, replace and delete saved passwords (Global Admin). */
+  canManage: boolean;
+}
+
+export interface CredentialInput {
+  username: string;
+  password: string;
+  loginUrl?: string | null;
 }
 
 export interface ActiveSignIn {
@@ -49,6 +102,8 @@ export interface ActiveSignIn {
   startedBy: string | null;
   startedByYou: boolean;
   expiresAt: string;
+  /** Set when Computer typed a saved password into the site for this sign-in. */
+  autoSignIn?: { outcome: AutoSignInOutcome; message: string } | null;
 }
 
 export interface LoginsState {
@@ -59,6 +114,7 @@ export interface LoginsState {
   signingIn: ActiveSignIn | null;
   /** Why a new sign-in can't start right now, if so. */
   busy: string | null;
+  passwords: PasswordsState;
 }
 
 /** Sign-ins held open by this process. Key: computer_sessions.id. */
@@ -150,26 +206,67 @@ async function busyReason(d: ComputerWorkerDeps, orgId: string): Promise<string 
   return 'Computer is working on a task for your company right now. Sign-ins can start when it finishes or is stopped.';
 }
 
-export async function loginsState(orgId: string, viewerId: string | null): Promise<LoginsState> {
+function passwordsState(canManage: boolean): PasswordsState {
+  const enabled = credentialsEnabled();
+  return { enabled, message: enabled ? null : CREDENTIALS_OFF_MESSAGE, canManage };
+}
+
+export async function loginsState(orgId: string, viewerId: string | null, canManage = false): Promise<LoginsState> {
   const d = computerWorkerDeps();
   if (!d || !d.provider.configured()) {
-    return { configured: false, message: NOT_SET_UP_MESSAGE, logins: [], signingIn: null, busy: null };
+    return { configured: false, message: NOT_SET_UP_MESSAGE, logins: [], signingIn: null, busy: null, passwords: passwordsState(canManage) };
   }
-  const rows = await d.store.listLogins(orgId);
+  const [rows, creds] = await Promise.all([d.store.listLogins(orgId), d.store.listCredentials(orgId)]);
+  const byLogin = new Map(creds.map((c) => [c.login_id, c]));
   const busy = await busyReason(d, orgId);
   const live = await d.store.liveSession(orgId);
   const signing = live && live.purpose === 'login' ? live : null;
-  const who = await names([...rows.flatMap((r) => [r.created_by, r.last_signed_in_by]), signing?.started_by ?? null]);
+  const who = await names([
+    ...rows.flatMap((r) => [r.created_by, r.last_signed_in_by]),
+    ...creds.map((c) => c.updated_by),
+    signing?.started_by ?? null,
+  ]);
   return {
     configured: true,
     message: null,
-    logins: rows.map((r) => loginView(r, who)),
+    logins: rows.map((r) => loginView(r, who, byLogin.get(r.id) ?? null, canManage)),
     signingIn: signing ? activeView(signing, who, viewerId) : null,
     busy: signing ? null : busy,
+    passwords: passwordsState(canManage),
   };
 }
 
-function loginView(r: ComputerLoginRow, who: Map<string, string>): LoginView {
+/** The page's view of a saved password: never the password; the username for admins only. */
+function credentialView(c: ComputerCredentialRow, who: Map<string, string>, canManage: boolean): CredentialView {
+  let username: string | null = null;
+  let status = c.status;
+  let attentionReason = c.attention_reason;
+  const readable = credentialsEnabled() && c.key_fingerprint === credentialKeyFingerprint();
+  if (!readable && credentialsEnabled()) {
+    status = 'needs_attention';
+    attentionReason = 'This password was saved with a different encryption key. Save it again.';
+  }
+  if (canManage && readable) {
+    try {
+      username = openCredential(c.username_sealed, c.org_id, c.login_id, 'username');
+    } catch {
+      status = 'needs_attention';
+      attentionReason = "This saved login can't be read. Save it again.";
+    }
+  }
+  return {
+    saved: true,
+    username,
+    loginUrl: c.login_url,
+    status,
+    attentionReason,
+    lastUsedAt: c.last_used_at,
+    updatedAt: c.updated_at,
+    updatedBy: c.updated_by ? (who.get(c.updated_by) ?? null) : null,
+  };
+}
+
+function loginView(r: ComputerLoginRow, who: Map<string, string>, cred: ComputerCredentialRow | null = null, canManage = false): LoginView {
   return {
     id: r.id,
     label: r.label,
@@ -180,7 +277,83 @@ function loginView(r: ComputerLoginRow, who: Map<string, string>): LoginView {
     lastSignedInAt: r.last_signed_in_at,
     lastSignedInBy: r.last_signed_in_by ? (who.get(r.last_signed_in_by) ?? null) : null,
     canClearCookies: r.cookie_domains.length > 0,
+    credential: cred ? credentialView(cred, who, canManage) : null,
   };
+}
+
+const NOT_ADMIN = 'Only a Global Admin can save, change or delete saved passwords.';
+
+/** Check a username and password from the page. Errors never repeat the values. */
+function cleanCredential(input: CredentialInput): { username: string; password: string; loginUrl: string | null } {
+  const username = String(input.username ?? '').trim();
+  const password = String(input.password ?? '');
+  if (!username || username.length > 256) throw new ComputerServiceError('Enter the username or email (up to 256 characters).', 'bad_request');
+  if (!password || password.length > 512) throw new ComputerServiceError('Enter the password (up to 512 characters).', 'bad_request');
+  let loginUrl: string | null = null;
+  if (input.loginUrl && String(input.loginUrl).trim()) {
+    loginUrl = cleanUrl(input.loginUrl);
+    if (!loginUrl) throw new ComputerServiceError('The sign-in page address should look like https://example.com/login.', 'bad_request');
+  }
+  return { username, password, loginUrl };
+}
+
+/** Seal and store a username and password for a listed site (replaces any saved one). */
+async function storeCredential(
+  store: ComputerStore,
+  orgId: string,
+  login: ComputerLoginRow,
+  userId: string,
+  creds: { username: string; password: string; loginUrl: string | null },
+  at: string,
+): Promise<ComputerCredentialRow> {
+  const row = await store.putCredential({
+    login_id: login.id,
+    org_id: orgId,
+    username_sealed: sealCredential(creds.username, orgId, login.id, 'username'),
+    password_sealed: sealCredential(creds.password, orgId, login.id, 'password'),
+    key_fingerprint: credentialKeyFingerprint(),
+    login_url: creds.loginUrl,
+    user_id: userId,
+    at,
+  });
+  await audit(store, orgId, null, userId, 'credential_saved', { host: login.host });
+  return row;
+}
+
+function assertCanManage(canManage: boolean | undefined): void {
+  if (!canManage) throw new ComputerServiceError(NOT_ADMIN, 'not_allowed');
+  if (!credentialsEnabled()) throw new CredentialsOffError();
+}
+
+/** Save (or replace) the username and password for a listed site. Global Admin only. */
+export async function saveCredential(input: {
+  orgId: string;
+  loginId: string;
+  userId: string;
+  canManage: boolean;
+  credential: CredentialInput;
+}): Promise<LoginView> {
+  assertCanManage(input.canManage);
+  const store = computerWorkerDeps()?.store;
+  if (!store) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
+  const creds = cleanCredential(input.credential);
+  const login = await store.getLogin(input.orgId, input.loginId);
+  if (!login) throw new ComputerServiceError('That site is not on your Logins list.', 'not_found');
+  const at = new Date(computerWorkerDeps()!.now()).toISOString();
+  const row = await storeCredential(store, input.orgId, login, input.userId, creds, at);
+  return loginView(login, await names([login.created_by, login.last_signed_in_by, row.updated_by]), row, true);
+}
+
+/** Delete the saved username and password for a site (the site stays listed). Global Admin only. */
+export async function deleteCredential(input: { orgId: string; loginId: string; userId: string; canManage: boolean }): Promise<{ deleted: boolean }> {
+  if (!input.canManage) throw new ComputerServiceError(NOT_ADMIN, 'not_allowed');
+  const store = computerWorkerDeps()?.store;
+  if (!store) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
+  const login = await store.getLogin(input.orgId, input.loginId);
+  if (!login) throw new ComputerServiceError('That site is not on your Logins list.', 'not_found');
+  const deleted = await store.deleteCredential(input.orgId, login.id);
+  if (deleted) await audit(store, input.orgId, null, input.userId, 'credential_deleted', { host: login.host });
+  return { deleted };
 }
 
 function activeView(s: ComputerSessionRow, who: Map<string, string>, viewerId: string | null): ActiveSignIn {
@@ -206,8 +379,11 @@ export async function startSignIn(input: {
   label?: string | null;
   loginId?: string | null;
   canManage?: boolean;
+  /** Optional username and password to save for the site (Global Admin only). */
+  credential?: CredentialInput | null;
 }): Promise<ActiveSignIn> {
   const d = need();
+  const creds = input.credential ? (assertCanManage(input.canManage), cleanCredential(input.credential)) : null;
   let url = cleanUrl(input.url);
   let label = String(input.label ?? '').trim().slice(0, 80);
   let loginId: string | null = null;
@@ -228,6 +404,17 @@ export async function startSignIn(input: {
   }
   const busy = await busyReason(d, input.orgId);
   if (busy) throw new ComputerServiceError(busy, 'conflict');
+
+  if (creds) {
+    // Save the password first so the sign-in below can use it. A new site is
+    // listed (not yet marked signed in) so the password has somewhere to live.
+    const at = new Date(d.now()).toISOString();
+    const login =
+      (loginId && (await d.store.getLogin(input.orgId, loginId))) ||
+      (await d.store.saveLogin({ org_id: input.orgId, label, url, host, cookie_domains: [], user_id: input.userId, at, signed_in: false }));
+    loginId = login.id;
+    await storeCredential(d.store, input.orgId, login, input.userId, creds, at);
+  }
 
   let contextId = await d.store.latestContextId(input.orgId, d.provider.id);
   if (!contextId) {
@@ -271,7 +458,24 @@ export async function startSignIn(input: {
     throw new ComputerServiceError(`Could not open the browser: ${safeError(err)}`, 'unavailable');
   }
   const who = await names([input.userId]);
-  return activeView(row, who, input.userId);
+  const view = activeView(row, who, input.userId);
+
+  // A saved password: Computer types it in; the person checks the live view (and does any code) then presses Done.
+  const h = held.get(row.id);
+  if (h && loginId && credentialsEnabled()) {
+    const [login, credential] = await Promise.all([d.store.getLogin(input.orgId, loginId), d.store.getCredential(input.orgId, loginId)]);
+    if (login && credential) {
+      const result = await autoSignIn({
+        store: d.store,
+        driver: h.driver,
+        saved: { login, credential },
+        now: d.now,
+        audit: { sessionId: row.id, userId: input.userId },
+      }).catch(() => ({ outcome: 'incomplete' as const, message: `Computer couldn't fill in the sign-in form for ${login.label}.` }));
+      view.autoSignIn = result;
+    }
+  }
+  return view;
 }
 
 async function liveSignIn(d: ComputerWorkerDeps, orgId: string, sessionId: string): Promise<ComputerSessionRow> {
@@ -352,18 +556,30 @@ export interface RemoveResult {
  * Computer is signed out of it. Domains another saved site also uses (say a
  * shared Microsoft sign-in domain) are kept so that site stays signed in.
  */
-export async function removeLogin(orgId: string, loginId: string, userId: string): Promise<RemoveResult> {
+export async function removeLogin(orgId: string, loginId: string, userId: string, canManage = false): Promise<RemoveResult> {
   const d = computerWorkerDeps();
   if (!d) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
   const login = await d.store.getLogin(orgId, loginId);
   if (!login) throw new ComputerServiceError('That site is not on your Logins list.', 'not_found');
+  // Removing a site deletes its saved password too, so it takes an admin when there is one.
+  const hasCredential = Boolean(await d.store.getCredential(orgId, login.id));
+  if (hasCredential && !canManage) {
+    throw new ComputerServiceError('This site has a saved password. Only a Global Admin can remove it.', 'not_allowed');
+  }
+  const dropLogin = async () => {
+    if (hasCredential) {
+      await d.store.deleteCredential(orgId, login.id);
+      await audit(d.store, orgId, null, userId, 'credential_deleted', { host: login.host });
+    }
+    await d.store.deleteLogin(orgId, login.id);
+  };
   const others = (await d.store.listLogins(orgId)).filter((l) => l.id !== login.id);
   const shared = new Set(others.flatMap((l) => l.cookie_domains));
   const toClear = login.cookie_domains.filter((dom) => !shared.has(dom));
   const keptShared = login.cookie_domains.length - toClear.length;
 
   if (!toClear.length || !d.provider.configured()) {
-    await d.store.deleteLogin(orgId, login.id);
+    await dropLogin();
     await audit(d.store, orgId, null, userId, 'login_removed', { host: login.host, cleared: 0 });
     return {
       removed: true,
@@ -380,7 +596,7 @@ export async function removeLogin(orgId: string, loginId: string, userId: string
   if (busy) throw new ComputerServiceError(`${busy} Remove needs the browser for a few seconds to sign out.`, 'conflict');
   const contextId = await d.store.latestContextId(orgId, d.provider.id);
   if (!contextId) {
-    await d.store.deleteLogin(orgId, login.id);
+    await dropLogin();
     return { removed: true, cookiesCleared: false, message: `Removed ${login.label}.` };
   }
   let row: ComputerSessionRow;
@@ -416,7 +632,7 @@ export async function removeLogin(orgId: string, loginId: string, userId: string
   }
   await driver.close().catch(() => undefined);
   await releaseSession(d, row, userId);
-  await d.store.deleteLogin(orgId, login.id);
+  await dropLogin();
   await audit(d.store, orgId, row.id, userId, 'login_removed', { host: login.host, cleared, domains: toClear.length, keptShared });
   return {
     removed: true,

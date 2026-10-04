@@ -260,6 +260,35 @@ describe('ComputerTaskCard', () => {
     ]);
   });
 
+  it('a saved-login sign-in shows as one plain step', async () => {
+    const ev = (id: number, event: string, detail: Record<string, unknown> = {}, actor = 'agent') => ({
+      id,
+      event,
+      actor,
+      at: '2026-10-04T15:00:00Z',
+      detail,
+    });
+    computerTask.mockResolvedValue({
+      task: task({
+        status: 'succeeded',
+        canWatch: false,
+        result: { title: 'Draft saved', fields: [], notes: null },
+        events: [
+          ev(1, 'task_queued'),
+          ev(2, 'navigate', { host: 'portal.example-carrier.test' }),
+          ev(3, 'auto_sign_in', { host: 'portal.example-carrier.test', outcome: 'signed_in' }, 'system'),
+          ev(4, 'auto_sign_in', { host: 'identity.xactware.com', outcome: 'failed' }, 'system'),
+          ev(5, 'finished', { submitted: false }),
+        ],
+      }),
+    });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    await userEvent.click(await screen.findByRole('button', { name: /Steps \(\d+\)/ }));
+    const steps = within(screen.getByTestId('computer-steps')).getAllByRole('listitem').map((li) => li.textContent);
+    expect(steps).toContain('Signed in to portal.example-carrier.test with the saved login');
+    expect(steps).toContain('The saved login for identity.xactware.com didn’t work');
+  });
+
   it('a submitted task says Submitted only when an approved click went through', async () => {
     computerTask.mockResolvedValue({
       task: task({ status: 'succeeded', canWatch: false, submitted: true, result: { title: 'Claim submitted', fields: [], notes: null } }),

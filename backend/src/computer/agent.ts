@@ -20,6 +20,8 @@ import {
   type GateDecision,
 } from './gate.js';
 import { verifyApprovalFields } from './projection.js';
+import { autoSignIn, findSavedSignIn, savedSignIns, trustedSites, type SavedSignIn } from './autoSignIn.js';
+import { siteOf } from './sites.js';
 import { COMPUTER_CUSTOM_TOOLS, COMPUTER_SYSTEM_PROMPT, COMPUTER_TOOLSET, taskPrompt } from './prompt.js';
 import { encodeTaskResult, resultFromFinish, type ComputerTaskResult } from './result.js';
 import type { ComputerStore, ComputerTaskRow } from './store.js';
@@ -143,12 +145,6 @@ function hostOf(url: string): string | null {
 }
 
 /** Registrable-ish site: last two labels (last three for short second-level like co.uk). */
-function siteOf(host: string): string {
-  const parts = host.split('.').filter(Boolean);
-  if (parts.length <= 2) return host;
-  const sld = parts[parts.length - 2];
-  return parts.slice(sld.length <= 3 && parts[parts.length - 1].length === 2 ? -3 : -2).join('.');
-}
 
 /** Sites the task names: the start URL plus any URL or domain in the person's words. */
 export function allowedSites(task: Pick<ComputerTaskRow, 'start_url' | 'instructions'>): Set<string> {
@@ -394,7 +390,51 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
     }
   };
 
-  /** Custom tools: open_url, request_approval, needs_you, finish. */
+  /** Sites with a saved password, loaded once per run (empty when saving passwords is off). */
+  let saved: SavedSignIn[] = [];
+  /** Same rule as open_url: a saved sign-in is only used for a site this task names (any, if it names none). */
+  const savedForTask = (entry: SavedSignIn, currentHost?: string | null): boolean => {
+    const trusted = trustedSites(entry);
+    if (sites.size === 0 || [...trusted].some((s) => sites.has(s))) return true;
+    return Boolean(currentHost && trusted.has(siteOf(currentHost)));
+  };
+
+  /**
+   * Let the server sign in with a saved password. Returns what to tell the
+   * model; pauses for the person on a code, captcha or failure. The model only
+   * ever sees the outcome text, never the username or password.
+   */
+  const useSavedSignIn = async (entry: SavedSignIn): Promise<string> => {
+    const name = entry.login.label || entry.login.host;
+    const result = await autoSignIn({
+      store,
+      driver,
+      saved: entry,
+      now: run.now,
+      audit: { taskId: task.id, sessionId: task.session_id, jobId: task.job_id },
+    });
+    await store.updateTask(task.id, { current_url: clip(await driver.currentUrl(), 2000) || null, last_action: clip(result.message, 300) });
+    switch (result.outcome) {
+      case 'signed_in':
+      case 'already_signed_in':
+        return `${result.message} Take a screenshot and continue.`;
+      case 'two_factor':
+        await pauseForPerson('two_factor', `${result.message} Enter it in the live view, then press Resume.`);
+        return 'The person entered the code and pressed Resume. Take a screenshot and continue.';
+      case 'captcha':
+        captchaAckUrl = await driver.currentUrl();
+        await pauseForPerson('captcha', `${result.message} Computer never solves captchas. Please complete it in the live view, then press Resume.`);
+        return 'The person handled the captcha and pressed Resume. Take a screenshot and continue.';
+      case 'failed':
+        await pauseForPerson('login', `${result.message} Please sign in yourself in the live view, then press Resume. An admin can update it on Logins.`);
+        return 'The person signed in and pressed Resume. Take a screenshot and continue.';
+      default:
+        await pauseForPerson('login', `${result.message} Please sign in to ${name} in the live view, then press Resume.`);
+        return 'The person signed in and pressed Resume. Take a screenshot and continue.';
+    }
+  };
+
+  /** Custom tools: open_url, request_approval, needs_you, sign_in_saved, finish. */
   const runCustom = async (block: ContentBlock): Promise<{ text: string; isError: boolean; outcome?: AgentOutcome }> => {
     const input = (block.input ?? {}) as Record<string, any>;
     switch (block.name) {
@@ -503,8 +543,26 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
       case 'needs_you': {
         const reason = (['login', 'two_factor', 'captcha', 'other'].includes(input.reason) ? input.reason : 'other') as NeedsYouReason;
         const message = clip(input.message, 400) || 'Please take over in the live view, then press Resume.';
+        if (reason === 'login' && saved.length) {
+          // A sign-in page for a site with a saved password: the server signs in first.
+          const host = hostOf(await driver.currentUrl());
+          const entry = host ? saved.find((s) => trustedSites(s).has(siteOf(host))) : undefined;
+          if (entry) return { text: await useSavedSignIn(entry), isError: false };
+        }
         await pauseForPerson(reason, message);
         return { text: 'The person pressed Resume. Take a screenshot and continue.', isError: false };
+      }
+      case 'sign_in_saved': {
+        const entry = findSavedSignIn(saved, clip(input.site, 300));
+        if (entry && !savedForTask(entry, hostOf(await driver.currentUrl()))) {
+          await audit('blocked', { action: 'sign_in_saved', why: 'outside_task', host: entry.login.host });
+          return { text: `Blocked: ${entry.login.host} is not a site this task names.`, isError: true };
+        }
+        if (!entry) {
+          const known = saved.map((s) => s.login.host).join(', ') || 'none';
+          return { text: `No saved sign-in for that site (saved: ${known}). Use needs_you with reason "login" instead.`, isError: true };
+        }
+        return { text: await useSavedSignIn(entry), isError: false };
       }
       case 'finish': {
         const result = resultFromFinish(input);
@@ -524,11 +582,19 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
 
   try {
     await heartbeat({ current_url: clip(await driver.currentUrl(), 2000) || null });
+    saved = (await savedSignIns(store, task.org_id).catch(() => [] as SavedSignIn[])).filter((s) => savedForTask(s));
     const messages: AgentMessage[] = [
       {
         role: 'user',
         content: [
-          textBlock(taskPrompt({ instructions: task.instructions, startUrl: task.start_url, projection: task.job_projection ?? [] })),
+          textBlock(
+            taskPrompt({
+              instructions: task.instructions,
+              startUrl: task.start_url,
+              projection: task.job_projection ?? [],
+              savedSignIns: saved.map((s) => ({ label: s.login.label, host: s.login.host })),
+            }),
+          ),
           await screenshotBlock(),
         ],
       },

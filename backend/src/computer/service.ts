@@ -144,7 +144,7 @@ export interface ComputerTaskView {
   events: Array<{ id: number; event: string; actor: string; at: string; detail: Record<string, unknown> }>;
 }
 
-const SAFE_DETAIL_KEYS = ['action', 'kind', 'label', 'reason', 'host', 'why', 'status', 'submitted', 'field', 'chars', 'key', 'mode', 'target'];
+const SAFE_DETAIL_KEYS = ['action', 'kind', 'label', 'reason', 'host', 'why', 'status', 'submitted', 'field', 'chars', 'key', 'mode', 'target', 'outcome'];
 
 function safeDetail(detail: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};

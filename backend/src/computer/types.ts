@@ -112,6 +112,14 @@ export interface ComputerDriver {
   cookieSnapshot(): Promise<CookieSnapshot>;
   /** Clear cookies (and that origin's site storage) for these cookie domains. Returns cookies removed. */
   clearSiteData(domains: string[]): Promise<number>;
+  /**
+   * Type a saved username and password straight into the page's sign-in
+   * form and submit it (handles a username page followed by a password
+   * page). Server-side only: the values never go to the model, a log or an
+   * error message. 'no_form' = no sign-in fields on the page;
+   * 'username_only' = the username was sent but no password field followed.
+   */
+  fillSignIn(creds: { username: string; password: string }): Promise<'submitted' | 'username_only' | 'no_form'>;
   close(): Promise<void>;
 }
 

@@ -94,10 +94,19 @@ export class MockSite {
   readonly actions: string[] = [];
   /** The org profile's cookies: domain → fingerprints. Survives sessions, like a persistent context. */
   cookies: Record<string, string[]> = {};
+  /**
+   * The site's real account, when a test wants Sign in to check it: a wrong
+   * password stays on the sign-in page; twoFactor sends a right one to the
+   * code page. Without it, Sign in always goes to the code page.
+   */
+  account: { username: string; password: string; twoFactor?: boolean } | null;
+  /** Sign-ins the site saw (password redacted to its length). */
+  readonly signInAttempts: Array<{ username: string; passwordLength: number; ok: boolean }> = [];
 
-  constructor(opts: { start?: MockPageId; captcha?: boolean } = {}) {
+  constructor(opts: { start?: MockPageId; captcha?: boolean; account?: MockSite['account'] } = {}) {
     this.page = opts.start ?? 'form';
     this.captcha = Boolean(opts.captcha);
+    this.account = opts.account ?? null;
   }
 
   get url() {
@@ -168,10 +177,17 @@ export class MockSite {
       case 'upload':
         this.uploads += 1;
         break;
-      case 'sign_in':
-        this.page = 'two_factor';
+      case 'sign_in': {
         this.focused = null;
+        if (!this.account) {
+          this.page = 'two_factor';
+          break;
+        }
+        const ok = this.values.email === this.account.username && this.values.password === this.account.password;
+        this.signInAttempts.push({ username: this.values.email ?? '', passwordLength: (this.values.password ?? '').length, ok });
+        if (ok) this.page = this.account.twoFactor ? 'two_factor' : 'form';
         break;
+      }
       case 'verify':
         this.page = 'form';
         this.focused = null;
@@ -304,6 +320,16 @@ export class MockDriver implements ComputerDriver {
     }
     this.site.actions.push(`clear:${domains.join(',')}`);
     return n;
+  }
+
+  async fillSignIn(creds: { username: string; password: string }) {
+    if (this.site.page !== 'login') return 'no_form' as const;
+    this.site.actions.push('fill_sign_in');
+    this.site.values.email = creds.username;
+    this.site.values.password = creds.password;
+    const button = this.site.elements().find((e) => e.action === 'sign_in');
+    if (button) this.site.activate(button);
+    return 'submitted' as const;
   }
 
   async close() {

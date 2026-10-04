@@ -260,10 +260,16 @@ test('every /api/chat-computer route sits behind requireAuth and the org check',
     '/logins/sign-ins/:id/done',
     '/logins/sign-ins/:id/cancel',
     '/logins/:id',
+    '/logins/:id/credential',
+    '/logins/:id/credential',
   ]);
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/routes/computer.ts', import.meta.url), 'utf8');
-  assert.equal((src.match(/await requireOrgContext\(req\)/g) ?? []).length, routes.length, 'each handler checks org membership');
+  // Saved-password routes use requireGlobalAdmin, which runs requireOrgContext first.
+  const orgChecks = (src.match(/await requireOrgContext\(req\)/g) ?? []).length;
+  const adminChecks = (src.match(/await requireGlobalAdmin\(req\)/g) ?? []).length;
+  assert.equal(adminChecks, 2, 'saving and deleting a password need a Global Admin');
+  assert.equal(orgChecks + adminChecks, routes.length, 'each handler checks org membership');
   assert.match(src, /Cache-Control', 'no-store'/);
 });
 

@@ -9,6 +9,7 @@
 import type {
   ComputerLiveLink,
   ComputerLogin,
+  ComputerCredentialInput,
   ComputerLoginsState,
   ComputerRemoveLoginResult,
   ComputerSignIn,
@@ -6074,7 +6075,7 @@ export const api = {
   // Logins: sign in to outside sites ahead of time. No agent runs here.
   computerLogins: () => request<ComputerLoginsState>('/api/chat-computer/logins', { cache: 'no-store' }),
 
-  computerStartSignIn: (input: { url?: string; label?: string; loginId?: string }) =>
+  computerStartSignIn: (input: { url?: string; label?: string; loginId?: string; credential?: ComputerCredentialInput }) =>
     request<{ signIn: ComputerSignIn }>('/api/chat-computer/logins/sign-ins', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -6095,6 +6096,19 @@ export const api = {
   computerSignInCancel: (sessionId: string) =>
     request<{ ok: true }>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/cancel`, {
       method: 'POST',
+    }),
+
+  /** Save or replace a site's username and password (Global Admin). The password is never returned. */
+  computerSaveCredential: (loginId: string, credential: ComputerCredentialInput) =>
+    request<{ login: ComputerLogin }>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}/credential`, {
+      method: 'PUT',
+      body: JSON.stringify(credential),
+      cache: 'no-store',
+    }),
+
+  computerDeleteCredential: (loginId: string) =>
+    request<{ deleted: boolean }>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}/credential`, {
+      method: 'DELETE',
     }),
 
   computerRemoveLogin: (loginId: string) =>
