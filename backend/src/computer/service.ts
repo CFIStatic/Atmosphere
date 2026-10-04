@@ -27,7 +27,7 @@ export function computerStatus(): { configured: boolean; provider: string; messa
   return { configured, provider: provider.id, message: configured ? null : NOT_SET_UP_MESSAGE };
 }
 
-function cleanUrl(raw: unknown): string | null {
+export function cleanUrl(raw: unknown): string | null {
   const text = String(raw ?? '').trim();
   if (!text) return null;
   try {

@@ -104,7 +104,27 @@ export interface ComputerDriver {
   readFormFields(): Promise<FormFieldReading[]>;
   pageSignals(): Promise<PageSignals>;
   cursorPosition(): Promise<[number, number]>;
+  /**
+   * Cookie fingerprints by cookie domain: `name|sha256(value)|expires`.
+   * Values are hashed in memory only to spot what a sign-in changed; nothing
+   * here is stored except the domain names.
+   */
+  cookieSnapshot(): Promise<CookieSnapshot>;
+  /** Clear cookies (and that origin's site storage) for these cookie domains. Returns cookies removed. */
+  clearSiteData(domains: string[]): Promise<number>;
   close(): Promise<void>;
+}
+
+export type CookieSnapshot = Record<string, string[]>;
+
+/** Cookie domains that are new or changed between two snapshots. */
+export function changedCookieDomains(before: CookieSnapshot, after: CookieSnapshot): string[] {
+  const out: string[] = [];
+  for (const [domain, prints] of Object.entries(after)) {
+    const prev = new Set(before[domain] ?? []);
+    if (prints.some((p) => !prev.has(p))) out.push(domain);
+  }
+  return out.sort();
 }
 
 export const COMPUTER_TASK_STATUSES = [
