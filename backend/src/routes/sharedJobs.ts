@@ -56,7 +56,7 @@ import {
   type JobSimilaritySeed,
 } from '../shared/similarPastJobs.js';
 import { processSafetySample } from '../safety/sample.js';
-import { processLiveSafetyChunk, recordWorkerOkForParty } from '../safety/live.js';
+import { processLiveSafetyChunkForParty } from '../safety/live.js';
 import { processWellnessHeartbeat } from '../safety/wellness.js';
 import {
   completeChunkedProofUpload,
@@ -1942,26 +1942,9 @@ jobShareRouter.post(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
-      res.json(await processLiveSafetyChunk(admin, party, req.body));
+      res.json(await processLiveSafetyChunkForParty(party, admin, req.body));
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid live sample'));
-      else next(err);
-    }
-  },
-);
-
-jobShareRouter.post(
-  jobShareActionPattern('/proof/safety-ok'),
-  liveSafetyShareLimiter,
-  requireAuth,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { party, admin } = await partyForToken(req.params.token);
-      assertInviteeAccount(req, party);
-      res.json(await recordWorkerOkForParty(party, admin, req.body));
-    } catch (err) {
-      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);
     }
   },

@@ -14,7 +14,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
@@ -180,17 +180,11 @@ safetyRouter.get(
 
 const settingsPatch = z.object({
   autoEscalateToAuthorities: z.boolean().optional(),
-  alertWebhookUrl: z
-    .union([z.string().url(), z.null()])
-    .optional(),
-  alertEmails: z.array(z.string().email().max(200)).max(20).optional(),
   wellnessCheckEnabled: z.boolean().optional(),
   wellnessNoMotionSeconds: z.number().int().min(60).max(7200).optional(),
   wellnessCriticalAfterSeconds: z.number().int().min(60).max(14400).optional(),
   wellnessRequireAlone: z.boolean().optional(),
   liveSafetyEnabled: z.boolean().optional(),
-  alertPhones: z.array(z.string().max(32)).max(10).optional(),
-  escalateAfterSeconds: z.number().int().min(30).max(1800).optional(),
 });
 
 safetyRouter.patch(
@@ -200,21 +194,13 @@ safetyRouter.patch(
     try {
       const ctx = await requireGlobalAdmin(req);
       const body = settingsPatch.parse(req.body ?? {});
-      if (body.alertWebhookUrl && !/^https:\/\//i.test(body.alertWebhookUrl)) {
-        next(forbidden('Webhook URL must be https', 'invalid_webhook'));
-        return;
-      }
       const settings = await updateOrgSafetySettings(adminOrThrow(), ctx.orgId, {
         autoEscalateToAuthorities: body.autoEscalateToAuthorities,
-        alertWebhookUrl: body.alertWebhookUrl,
-        alertEmails: body.alertEmails,
         wellnessCheckEnabled: body.wellnessCheckEnabled,
         wellnessNoMotionSeconds: body.wellnessNoMotionSeconds,
         wellnessCriticalAfterSeconds: body.wellnessCriticalAfterSeconds,
         wellnessRequireAlone: body.wellnessRequireAlone,
         liveSafetyEnabled: body.liveSafetyEnabled,
-        alertPhones: body.alertPhones,
-        escalateAfterSeconds: body.escalateAfterSeconds,
       });
       res.json({
         settings,
@@ -226,9 +212,7 @@ safetyRouter.patch(
       });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid settings'));
-      else if ((err as { code?: string })?.code === 'emergency_number_refused') {
-        next(badRequest((err as Error).message, 'emergency_number_refused'));
-      } else next(err);
+      else next(err);
     }
   },
 );

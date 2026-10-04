@@ -115,7 +115,6 @@ export type SafetyIncident = {
   dismissCategory: SafetyDismissCategory | null;
   reality: SafetyReality | null;
   confirmation: SafetyConfirmation | null;
-  workerOkAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -123,8 +122,6 @@ export type SafetyIncident = {
 export type OrgSafetySettings = {
   orgId: string;
   autoEscalateToAuthorities: boolean;
-  alertWebhookUrl: string | null;
-  alertEmails: string[];
   /** Silent panic / wellness check (no auto-911). */
   wellnessCheckEnabled: boolean;
   /** Seconds of no significant motion before a watch nudge. */
@@ -135,10 +132,6 @@ export type OrgSafetySettings = {
   wellnessRequireAlone: boolean;
   /** Critical live safety while recording. Default ON; org may opt out. */
   liveSafetyEnabled: boolean;
-  /** E.164 numbers for SMS / voice escalation (ladder order). */
-  alertPhones: string[];
-  /** Unacknowledged seconds before the next SMS / voice step. */
-  escalateAfterSeconds: number;
 };
 
 /** Minimum confidence to open an incident (high precision bias). */

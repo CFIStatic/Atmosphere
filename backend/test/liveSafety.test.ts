@@ -1,8 +1,8 @@
 /**
  * Live critical safety: real vs joking / staged / media playback, and alert
- * latency. Providers (Whisper, Haiku screen, Opus confirmation, mail, SMS)
- * are mocked; everything else — rolling context, word list, decisions,
- * incidents, fanout, cap, escalation — is the real code.
+ * latency. Providers (Whisper, Haiku screen, Opus confirmation, mail) are
+ * mocked; everything else — rolling context, word list, decisions,
+ * incidents, admin-only email fanout, cap — is the real code.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +16,7 @@ import {
 } from '../src/safety/classify.js';
 import { decideFromConfirmation, type ConfirmInput, type ConfirmResult } from '../src/safety/confirm.js';
 import type { ScreenInput, ScreenResult } from '../src/safety/screen.js';
-import { processLiveSafetyChunk, recordWorkerOkForParty, resetLiveSafetyForTests } from '../src/safety/live.js';
+import { processLiveSafetyChunk, processLiveSafetyChunkForParty, resetLiveSafetyForTests } from '../src/safety/live.js';
 import { runTranscriptSafetyScan } from '../src/safety/sample.js';
 import { setSafetyProvidersForTests } from '../src/safety/providers.js';
 import {
@@ -28,22 +28,31 @@ import {
   markIncidentAlerted,
   resetSafetyIncidentsForTests,
 } from '../src/safety/incidents.js';
-import { fanoutSafetyAlert } from '../src/safety/alerts.js';
-import {
-  escalationPlan,
-  setSafetyCallProviderForTests,
-  startSafetyEscalation,
-  twilioProviderFromEnv,
-  type SafetyCallProvider,
-} from '../src/safety/escalation.js';
-import { asPhoneList, isEmergencyServiceNumber, updateOrgSafetySettings } from '../src/safety/settings.js';
+import { fanoutSafetyAlert, orgAdminEmails } from '../src/safety/alerts.js';
+import { loadOrgSafetySettings } from '../src/safety/settings.js';
 import { currentAiUsageScope } from '../src/metering/aiUsageContext.js';
 import { PODCAST_NARRATION, PODCAST_SEGMENTS, PODCAST_TRANSCRIPT } from './fixtures/safetyPodcastFalseAlarm.js';
-import type { OrgSafetySettings } from '../src/safety/types.js';
 
 const ORG = '8b2cc105-0000-4000-8000-000000000001';
 const JOB = '8b2cc105-0000-4000-8000-000000000002';
 const PARTY = { org_id: ORG, job_id: JOB, id: '8b2cc105-0000-4000-8000-000000000003' };
+const OWNER_USER = '8b2cc105-0000-4000-8000-0000000000a1';
+
+/** The account's admins — the ONLY people a safety alert may email. */
+const ADMIN_EMAILS = ['admin2@example.com', 'office-mgr@example.com', 'owner@example.com'];
+/**
+ * Everyone else the org row or roster knows about. None of these may ever get
+ * the alert: the recording worker, employees, invited / removed admins, the
+ * legacy custom recipient list, and the legacy webhook.
+ */
+const NON_ADMIN_EMAILS = [
+  'worker@example.com',
+  'employee@example.com',
+  'pm@example.com',
+  'invited-admin@example.com',
+  'removed-admin@example.com',
+  'dispatch@example.com',
+];
 
 type OrgRow = Record<string, unknown>;
 
@@ -51,22 +60,30 @@ function fakeAdmin(opts: { org?: Partial<OrgRow>; proof?: Record<string, unknown
   const org: OrgRow = {
     id: ORG,
     safety_auto_escalate_to_authorities: false,
-    safety_alert_webhook_url: null,
+    created_by: OWNER_USER,
+    // Legacy recipient sources still on the org row — must be ignored.
+    safety_alert_webhook_url: 'https://hooks.example.com/safety',
     safety_alert_emails: ['dispatch@example.com'],
     wellness_check_enabled: true,
     wellness_no_motion_seconds: 300,
     wellness_critical_after_seconds: 600,
     wellness_require_alone: true,
     safety_live_enabled: true,
-    safety_alert_phones: [],
-    safety_escalate_after_seconds: 90,
     ...opts.org,
   };
   const tables: Record<string, unknown> = {
     orgs: org,
     org_members: [
-      { role: 'global_admin', status: 'active', profiles: { email: 'owner@example.com' } },
-      { role: 'global_admin', status: 'active', profiles: { email: 'ops@example.com' } },
+      // Account owner (org creator) — included even if their seat says employee.
+      { user_id: OWNER_USER, role: 'employee', status: 'active', profiles: { email: 'Owner@Example.com' } },
+      { user_id: 'u-admin2', role: 'global_admin', status: 'active', profiles: { email: 'admin2@example.com' } },
+      // Legacy role that maps onto Global Admin.
+      { user_id: 'u-om', role: 'office_manager', status: 'active', profiles: { email: 'office-mgr@example.com' } },
+      { user_id: 'u-worker', role: 'field_technician', status: 'active', profiles: { email: 'worker@example.com' } },
+      { user_id: 'u-emp', role: 'employee', status: 'active', profiles: { email: 'employee@example.com' } },
+      { user_id: 'u-pm', role: 'project_manager', status: 'active', profiles: { email: 'pm@example.com' } },
+      { user_id: 'u-inv', role: 'global_admin', status: 'invited', profiles: { email: 'invited-admin@example.com' } },
+      { user_id: 'u-rm', role: 'global_admin', status: 'removed', profiles: { email: 'removed-admin@example.com' } },
     ],
     job_proofs: opts.proof ?? null,
     job_proof_frames: [],
@@ -191,12 +208,10 @@ function reset() {
   resetSafetyIncidentsForTests();
   resetLiveSafetyForTests();
   setSafetyProvidersForTests(null);
-  setSafetyCallProviderForTests(null);
 }
 
 test.afterEach(() => {
   setSafetyProvidersForTests(null);
-  setSafetyCallProviderForTests(undefined);
 });
 
 /* ------------------------------------------------------------------ */
@@ -318,9 +333,11 @@ test('real fight (transcript + frames) MUST alert — confirmed, parallel email 
   assert.equal(incident.reality, 'real');
   assert.equal(incident.source, 'live_stream');
   assert.ok(incident.alertChannels.includes('email'), `channels ${incident.alertChannels}`);
-  // Every recipient, in parallel, with the live-view link.
+  // Email only, to the account admins only, in parallel, with the live-view link.
+  assert.deepEqual(incident.alertChannels.filter((c) => c !== 'platform').sort(), ['email']);
   const recipients = calls.mail.map((m) => m.to).sort();
-  assert.deepEqual(recipients, ['dispatch@example.com', 'ops@example.com', 'owner@example.com']);
+  assert.deepEqual(recipients, ADMIN_EMAILS);
+  for (const other of NON_ADMIN_EMAILS) assert.ok(!recipients.includes(other), `${other} must not be emailed`);
   for (const m of calls.mail) {
     assert.match(m.html, /Open live view/);
     assert.match(m.html, new RegExp(`/job-progress\\?job=${JOB}&amp;section=timeline`));
@@ -332,7 +349,8 @@ test('real fight (transcript + frames) MUST alert — confirmed, parallel email 
   assert.ok(conf.frames.every((f) => f.atSeconds >= (out.alertAtClipSeconds ?? 0) - 20), 'frames from the last 20 s');
   // Metering: every model call ran in a video_analysis scope; Whisper fees per segment.
   assert.ok(calls.scopes.length > 0 && calls.scopes.every((s) => s === 'video_analysis'), `scopes ${calls.scopes}`);
-  await sleep(20);
+  // Whisper fees are metered off the request path; give a loaded runner time.
+  for (let i = 0; i < 100 && calls.flat.length === 0; i++) await sleep(20);
   assert.ok(calls.flat.length >= 1, `flat ${calls.flat.length}`);
   assert.ok(
     calls.flat.every((r) => r.feature === 'video_analysis' && String(r.requestId).startsWith('whisper_live:clip_fight:')),
@@ -520,17 +538,24 @@ test('org opt-out: live safety off → no provider calls, no alert', async () =>
   assert.equal(calls.screen + calls.whisper + calls.confirm.length, 0);
 });
 
-test('"I\'m OK" is recorded after the alert already went out (never holds it back)', async () => {
-  const { admin, out } = await runFight({});
-  const before = (await getSafetyIncident(admin, out.incidentId!))!;
-  assert.ok(before.alertSentAt, 'alert was sent before any tap');
-  const ok = await recordWorkerOkForParty(PARTY, admin, { incidentId: out.incidentId });
-  assert.ok(ok.workerOkAt, 'ok.workerOkAt');
-  const after = (await getSafetyIncident(admin, out.incidentId!))!;
-  assert.equal(after.status, 'open', 'office still has to acknowledge');
-  await assert.rejects(
-    recordWorkerOkForParty({ ...PARTY, job_id: '8b2cc105-0000-4000-8000-0000000000ff' }, admin, { incidentId: out.incidentId }),
-  );
+test('the worker\'s phone is never told about an alert (response is { enabled } only)', async () => {
+  reset();
+  const calls = installMocks();
+  const admin = fakeAdmin();
+  const res = await processLiveSafetyChunkForParty(PARTY, admin, {
+    clipId: 'clip_worker_view',
+    seq: 1,
+    frame: frame(10, 'fight'),
+    audio: audio(0, "Get off me! He's hitting me!"),
+  });
+  assert.equal(calls.mail.length, ADMIN_EMAILS.length, 'the admins were emailed');
+  assert.deepEqual(res, { enabled: true }, 'nothing about the alert goes back to the phone');
+  const off = await processLiveSafetyChunkForParty(PARTY, fakeAdmin({ org: { safety_live_enabled: false } }), {
+    clipId: 'clip_worker_off',
+    seq: 1,
+    frame: frame(5, 'work'),
+  });
+  assert.deepEqual(off, { enabled: false });
 });
 
 test('dismiss stores the reason category', async () => {
@@ -541,73 +566,79 @@ test('dismiss stores the reason category', async () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* SMS / voice escalation (disabled unless TWILIO_* set; never 911)     */
+/* Recipients: account admins only, email only                          */
 /* ------------------------------------------------------------------ */
 
-test('SMS provider is disabled without TWILIO_* env vars', () => {
-  assert.equal(twilioProviderFromEnv({}), null);
-  assert.equal(twilioProviderFromEnv({ TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'x' }), null);
+test('recipients are exactly the account admins: Global Admins + the account owner, active only', async () => {
+  const got = (await orgAdminEmails(fakeAdmin(), ORG)).sort();
+  assert.deepEqual(got, ADMIN_EMAILS);
+  for (const other of NON_ADMIN_EMAILS) assert.ok(!got.includes(other), `${other} is not an admin`);
 });
 
-test('Twilio provider posts SMS / calls and refuses emergency numbers', async () => {
-  const posts: Array<{ url: string; body: string }> = [];
-  const fakeFetch = async (url: string, init: any) => {
-    posts.push({ url, body: String(init.body) });
-    return { ok: true, status: 201, json: async () => ({ sid: 'SM1' }) };
-  };
-  const p = twilioProviderFromEnv(
-    { TWILIO_ACCOUNT_SID: 'AC123', TWILIO_AUTH_TOKEN: 'tok', TWILIO_FROM_NUMBER: '+15550001111', TWILIO_VOICE_ENABLED: 'true' },
-    fakeFetch,
-  )!;
-  assert.ok(p, 'p');
-  assert.equal((await p.sendSms('+15125550100', 'hello')).ok, true);
-  assert.match(posts[0]!.url, /Accounts\/AC123\/Messages\.json$/);
-  assert.match(posts[0]!.body, /To=%2B15125550100/);
-  assert.equal((await p.sendSms('911', 'x')).ok, false);
-  assert.equal((await p.placeCall('+1911', 'x')).ok, false);
-  assert.equal(posts.length, 1, 'emergency numbers never reach the provider');
-  assert.equal((await p.placeCall('+15125550100', 'Safety alert')).ok, true);
-  assert.match(posts[1]!.url, /Calls\.json$/);
-});
-
-test('phone list refuses emergency numbers', async () => {
-  assert.equal(isEmergencyServiceNumber('911'), true);
-  assert.equal(isEmergencyServiceNumber('+1 911'), true);
-  assert.equal(isEmergencyServiceNumber('+15125550100'), false);
-  assert.deepEqual(asPhoneList(['+1 (512) 555-0100', '911', '112', 'abc']), ['+15125550100']);
-  await assert.rejects(updateOrgSafetySettings(fakeAdmin(), ORG, { alertPhones: ['+15125550100', '911'] }), /never texts or calls emergency/);
-});
-
-test('escalation ladder: immediate SMS, then next steps only while unacknowledged', async () => {
+test('non-admins get nothing: a critical alert emails only admins — no webhook, custom list, SMS or worker', async () => {
   reset();
-  const sent: string[] = [];
-  const fake: SafetyCallProvider = {
-    name: 'fake',
-    voiceEnabled: true,
-    sendSms: async (to) => (sent.push(`sms:${to}`), { ok: true }),
-    placeCall: async (to) => (sent.push(`voice:${to}`), { ok: true }),
-  };
-  setSafetyCallProviderForTests(fake);
-  assert.deepEqual(
-    escalationPlan(['+15125550100', '+15125550101'], 60, true).map((s) => `${s.atMs}:${s.kind}:${s.to}`),
-    ['0:sms:+15125550100', '60000:sms:+15125550101', '60000:voice:+15125550100', '120000:voice:+15125550101'],
-  );
+  const calls = installMocks();
   const admin = fakeAdmin();
-  const { incident } = await createSafetyIncident(admin, {
+  const realFetch = globalThis.fetch;
+  const fetched: string[] = [];
+  globalThis.fetch = (async (url: any) => {
+    fetched.push(String(url));
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    const { incident } = await createSafetyIncident(admin, {
+      orgId: ORG,
+      jobId: JOB,
+      partyId: PARTY.id,
+      classification: { hit: true, category: 'physical_violence', severity: 'critical', confidence: 0.95, title: 'Fight', description: 'd', recommendedAction: 'contact_authorities', clipTimestampSeconds: 1, model: 'm', signals: {} },
+      source: 'live_stream',
+    });
+    const out = await fanoutSafetyAlert(admin, incident);
+    assert.deepEqual(out.recipients.sort(), ADMIN_EMAILS);
+    assert.deepEqual(calls.mail.map((m) => m.to).sort(), ADMIN_EMAILS);
+    assert.deepEqual(out.channels.sort(), ['email', 'platform']);
+    assert.deepEqual(fetched, [], 'no webhook / SMS / voice request is made');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  // Watch severity: recorded in Platform, nobody emailed.
+  const before = calls.mail.length;
+  const { incident: watch } = await createSafetyIncident(admin, {
     orgId: ORG,
     jobId: JOB,
-    classification: { hit: true, category: 'physical_violence', severity: 'critical', confidence: 0.9, title: 'Fight', description: 'd', recommendedAction: 'contact_authorities', clipTimestampSeconds: 1, model: 'm', signals: {} },
+    classification: { hit: true, category: 'medical_distress', severity: 'watch', confidence: 0.8, title: 'Coughing', description: 'd', recommendedAction: 'monitor', clipTimestampSeconds: 1, model: 'm', signals: {} },
     source: 'live_stream',
   });
-  const pending: Array<() => void> = [];
-  const settings = { alertPhones: ['+15125550100', '+15125550101'], escalateAfterSeconds: 60 } as OrgSafetySettings;
-  assert.equal(startSafetyEscalation(admin, incident, settings, { liveViewUrl: 'https://x/jobs/1' }, { setTimeout: (fn) => pending.push(fn) }), true);
-  await sleep(5);
-  assert.deepEqual(sent, ['sms:+15125550100']);
-  await acknowledgeSafetyIncident(admin, incident.id, null);
-  pending.forEach((fn) => fn());
-  await sleep(5);
-  assert.deepEqual(sent, ['sms:+15125550100'], 'acknowledged → ladder stops');
-  setSafetyCallProviderForTests(null);
-  assert.equal(startSafetyEscalation(admin, incident, settings, { liveViewUrl: 'x' }), false, 'no provider → disabled');
+  await fanoutSafetyAlert(admin, watch);
+  assert.equal(calls.mail.length, before);
+});
+
+test('an org with no admin emails sends nothing to anyone else', async () => {
+  reset();
+  const calls = installMocks();
+  const admin = fakeAdmin();
+  const noAdmins = {
+    ...admin,
+    from: (table: string) =>
+      table === 'org_members'
+        ? fakeAdmin().from('job_proof_frames') // [] — nobody on the roster
+        : admin.from(table),
+  };
+  const { incident } = await createSafetyIncident(noAdmins, {
+    orgId: ORG,
+    jobId: JOB,
+    classification: { hit: true, category: 'physical_violence', severity: 'critical', confidence: 0.95, title: 'Fight', description: 'd', recommendedAction: 'dispatch_help', clipTimestampSeconds: 1, model: 'm', signals: {} },
+    source: 'live_stream',
+  });
+  const out = await fanoutSafetyAlert(noAdmins, incident);
+  assert.equal(calls.mail.length, 0, 'the legacy custom list (dispatch@) is not a fallback');
+  assert.deepEqual(out.channels, ['platform'], 'still shown in Platform');
+});
+
+test('settings carry no phone / escalation / custom-recipient fields', async () => {
+  const settings = await loadOrgSafetySettings(fakeAdmin(), ORG);
+  for (const k of ['alertPhones', 'escalateAfterSeconds', 'alertEmails', 'alertWebhookUrl']) {
+    assert.equal(k in settings, false, `${k} removed`);
+  }
+  assert.equal(settings.liveSafetyEnabled, true);
 });

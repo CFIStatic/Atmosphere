@@ -16,12 +16,11 @@ import { buildSafetyAlertPayload } from './alerts.js';
 const baseSettings = (): OrgSafetySettings => ({
   orgId: '11111111-1111-4111-8111-111111111111',
   autoEscalateToAuthorities: false,
-  alertWebhookUrl: null,
-  alertEmails: [],
   wellnessCheckEnabled: true,
   wellnessNoMotionSeconds: WELLNESS_DEFAULT_NO_MOTION_SECONDS,
   wellnessCriticalAfterSeconds: WELLNESS_DEFAULT_CRITICAL_AFTER_SECONDS,
   wellnessRequireAlone: true,
+  liveSafetyEnabled: true,
 });
 
 test('evaluateWellness stays quiet within threshold', () => {

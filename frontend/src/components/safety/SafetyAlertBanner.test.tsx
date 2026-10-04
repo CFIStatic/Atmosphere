@@ -21,7 +21,6 @@ function incident(over: Partial<SafetyIncident> = {}): SafetyIncident {
     createdAt: '2026-10-04T00:31:00.000Z',
     reality: 'real',
     confirmation: 'confirmed',
-    workerOkAt: null,
     ...over,
   };
 }
@@ -68,11 +67,11 @@ describe('SafetyAlertBanner', () => {
     expect(onDismiss).toHaveBeenCalledWith('inc-1', 'false_alarm_media', 'Drill demo for the new hire');
   });
 
-  it('shows the worker "I\'m OK" tap and hides closed or watch-only incidents', () => {
+  it('hides closed or watch-only incidents and shows no worker "I\'m OK" line', () => {
     render(
       <SafetyAlertBanner
         incidents={[
-          incident({ workerOkAt: '2026-10-04T00:31:20.000Z' }),
+          incident(),
           incident({ id: 'inc-2', status: 'acknowledged' }),
           incident({ id: 'inc-3', severity: 'watch' }),
         ]}
@@ -81,7 +80,8 @@ describe('SafetyAlertBanner', () => {
       />,
     );
     expect(screen.getAllByTestId('safety-incident')).toHaveLength(1);
-    expect(screen.getByTestId('safety-worker-ok').textContent).toMatch(/I’m OK/);
+    expect(screen.queryByTestId('safety-worker-ok')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/I’m OK/);
   });
 
   it('renders nothing without open alerts', () => {

@@ -3243,7 +3243,6 @@ export interface SafetyIncident {
   reality?: SafetyReality | null;
   /** confirmed = checked real; unconfirmed = "check live view". */
   confirmation?: 'confirmed' | 'unconfirmed' | null;
-  workerOkAt?: string | null;
   dismissCategory?: SafetyDismissCategory | null;
   dismissReason?: string | null;
 }

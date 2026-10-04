@@ -91,11 +91,6 @@ function IncidentRow({
           .filter(Boolean)
           .join(' · ')}
       </p>
-      {incident.workerOkAt && (
-        <p className="mt-1 text-xs font-semibold text-emerald-700" data-testid="safety-worker-ok">
-          Worker tapped “I’m OK” at {clock(incident.workerOkAt)}
-        </p>
-      )}
 
       {!dismissing ? (
         <div className="mt-2 flex flex-wrap gap-2">

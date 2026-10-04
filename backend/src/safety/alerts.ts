@@ -1,14 +1,16 @@
 /**
- * Alert fanout for safety incidents: email (Resend/SMTP, every recipient in
- * parallel, with a live-view link) + optional webhook + optional SMS / voice
- * escalation (escalation.ts, disabled unless TWILIO_* is configured).
- * Web push: Platform has no web-push subscription infrastructure today, so
- * there is nothing to reuse; email + SMS are the out-of-app channels.
- * Pages are capped per job per hour (SAFETY_ALERT_CAP_PER_JOB_HOUR).
+ * Alert fanout for safety incidents: EMAIL ONLY, to the account's admins —
+ * active org members whose role is Global Admin (incl. the legacy
+ * office_manager / owner / admin spellings) plus the org's creator (the
+ * account owner) while they are an active member. Every admin is emailed in
+ * parallel with a live-view link. No other recipients: no job parties, no
+ * recording worker, no custom lists, no webhook, no SMS / voice. The worker's
+ * phone is never told about an alert. Incidents also show in Platform.
+ * Emails are capped per job per hour (SAFETY_ALERT_CAP_PER_JOB_HOUR).
  *
- * Authorities escalation: when the incident recommends contact_authorities AND
- * the org has autoEscalateToAuthorities=true, the payload includes
- * escalateToAuthorities: true. Atmosphere does NOT call 911 or police APIs.
+ * Authorities flag: when the incident recommends contact_authorities AND the
+ * org has autoEscalateToAuthorities=true, the email says so. Atmosphere does
+ * NOT call 911 or police APIs.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -18,7 +20,6 @@ import { loadOrgSafetySettings } from './settings.js';
 import { countRecentJobAlerts, markIncidentAlerted } from './incidents.js';
 import { SAFETY_ALERT_CAP_PER_JOB_HOUR, type SafetyIncident } from './types.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
-import { startSafetyEscalation } from './escalation.js';
 import { safetyProviderOverrides } from './providers.js';
 
 export type SafetyAlertPayload = {
@@ -85,7 +86,7 @@ export function buildSafetyAlertPayload(
     recommendedAction: incident.recommendedAction,
     escalateToAuthorities: escalate,
     authoritiesNote: escalate
-      ? 'Org policy autoEscalateToAuthorities is ON. Atmosphere does not call 911; your webhook/ops runbook may escalate with human confirmation preferred.'
+      ? 'Org policy autoEscalateToAuthorities is ON. Atmosphere does not call 911; decide yourself whether to call emergency services.'
       : 'Authorities escalation is gated off (default). Set orgs.safety_auto_escalate_to_authorities=true to flag escalateToAuthorities on contact_authorities incidents. Atmosphere never dials 911.',
     source: incident.source,
     createdAt: incident.createdAt,
@@ -119,24 +120,56 @@ export function safetyAlertSubject(incident: SafetyIncident, opts?: { upgraded?:
   return `[Atmosphere Safety] ${prefix}${incident.severity.toUpperCase()}: ${incident.title}`;
 }
 
-async function orgAdminEmails(admin: any, orgId: string): Promise<string[]> {
-  const { data, error } = await admin
-    .from('org_members')
-    .select('role, status, profiles(email)')
-    .eq('org_id', orgId)
-    .eq('status', 'active');
+/** Roles that make someone an account admin (Global Admin seat). */
+function isAccountAdminRole(role: unknown): boolean {
+  const r = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  // Historical owner / admin strings are Global Admin (see requireOrgRole).
+  return r === 'owner' || r === 'admin' || isGlobalAdmin(r);
+}
+
+/**
+ * The only people a safety alert emails: active members of the org with the
+ * Global Admin role, plus the org's creator (account owner) when they are an
+ * active member. Deduped, lowercased.
+ */
+export async function orgAdminEmails(admin: any, orgId: string): Promise<string[]> {
+  const [{ data, error }, ownerRes] = await Promise.all([
+    admin
+      .from('org_members')
+      .select('user_id, role, status, profiles(email)')
+      .eq('org_id', orgId)
+      .eq('status', 'active'),
+    admin.from('orgs').select('created_by').eq('id', orgId).maybeSingle(),
+  ]);
   if (error || !data) return [];
+  const ownerId: string | null = ownerRes?.data?.created_by ?? null;
   const emails: string[] = [];
   const seen = new Set<string>();
   for (const row of data as any[]) {
-    if (!isGlobalAdmin(row.role)) continue;
+    if (row.status !== 'active') continue;
+    const isOwner = ownerId != null && row.user_id === ownerId;
+    if (!isOwner && !isAccountAdminRole(row.role)) continue;
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     const email = typeof profile?.email === 'string' ? profile.email.trim().toLowerCase() : '';
-    if (!email || seen.has(email)) continue;
+    if (!email || !email.includes('@') || seen.has(email)) continue;
     seen.add(email);
     emails.push(email);
   }
   return emails;
+}
+
+/** The alert email exactly as sent (subject, HTML, text). */
+export function safetyAlertEmail(
+  incident: SafetyIncident,
+  payload: SafetyAlertPayload,
+  opts?: { upgraded?: boolean },
+): { subject: string; html: string; text: string } {
+  const subject = safetyAlertSubject(incident, opts);
+  return {
+    subject,
+    html: safetyEmailHtml(payload),
+    text: `${subject}\n\n${payload.title}\n\n${payload.description}\n\nLive view: ${payload.liveViewUrl}\n\nAction: ${payload.recommendedAction}\nEscalate flag: ${payload.escalateToAuthorities}\n\n${payload.authoritiesNote}\n\nAtmosphere never calls 911. If someone is in danger, call emergency services yourself.`,
+  };
 }
 
 function safetyEmailHtml(payload: SafetyAlertPayload): string {
@@ -183,89 +216,49 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-async function postWebhook(url: string, payload: SafetyAlertPayload): Promise<boolean> {
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'user-agent': 'Atmosphere-SafetyAlerts/1.0',
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8_000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('[safety] webhook failed:', err instanceof Error ? err.message : err);
-    return false;
-  }
-}
-
 /**
- * Fan out alerts for a newly created incident. Safe to call fire-and-forget.
- * Rate-limit / dedup is handled at create time.
+ * Email the account admins about a newly created (or upgraded) incident.
+ * Safe to call fire-and-forget. Rate-limit / dedup is handled at create time.
  */
 export async function fanoutSafetyAlert(
   admin: any,
   incident: SafetyIncident,
   opts?: { upgraded?: boolean },
-): Promise<{ channels: string[]; payload: SafetyAlertPayload; capped: boolean }> {
+): Promise<{ channels: string[]; payload: SafetyAlertPayload; capped: boolean; recipients: string[] }> {
   const settings = await loadOrgSafetySettings(admin, incident.orgId);
   const payload = buildSafetyAlertPayload(incident, settings.autoEscalateToAuthorities);
   const channels: string[] = [];
+  let recipients: string[] = [];
 
   // Alert fatigue: past the per-job hourly cap the incident is still recorded
-  // and shown in Platform, but nobody is paged again.
+  // and shown in Platform, but nobody is emailed again.
   const pagedThisHour = await countRecentJobAlerts(admin, { orgId: incident.orgId, jobId: incident.jobId });
   const capped = pagedThisHour >= SAFETY_ALERT_CAP_PER_JOB_HOUR;
 
-  // Watch severity: still persist the incident, but only email on critical
-  // unless a webhook is configured (ops may want all).
+  // Watch severity: persisted and shown in Platform; only critical is emailed.
   const shouldEmail = incident.severity === 'critical' && !capped;
-  const subject = safetyAlertSubject(incident, opts);
-  const tasks: Array<Promise<void>> = [];
   const mailOverride = safetyProviderOverrides().sendMail;
   const send = mailOverride ?? sendSystemMail;
   if (shouldEmail && (mailOverride || systemMailConfigured())) {
-    tasks.push(
-      (async () => {
-        const admins = await orgAdminEmails(admin, incident.orgId);
-        const recipients = [...new Set([...admins, ...settings.alertEmails])].slice(0, 25);
-        if (!recipients.length) return;
-        const html = safetyEmailHtml(payload);
-        const text = `${subject}\n\n${payload.title}\n\n${payload.description}\n\nLive view: ${payload.liveViewUrl}\n\nAction: ${payload.recommendedAction}\nEscalate flag: ${payload.escalateToAuthorities}\n\n${payload.authoritiesNote}`;
-        // Every recipient at once — one slow mailbox never delays the next.
-        const results = await Promise.allSettled(
-          recipients.map((to) => send({ to, subject, html, text })),
-        );
-        for (const r of results) {
-          if (r.status === 'rejected') {
-            console.warn('[safety] email failed:', r.reason instanceof Error ? r.reason.message : r.reason);
-          }
+    recipients = (await orgAdminEmails(admin, incident.orgId)).slice(0, 25);
+    if (recipients.length) {
+      const { subject, html, text } = safetyAlertEmail(incident, payload, opts);
+      // Every admin at once — one slow mailbox never delays the next.
+      const results = await Promise.allSettled(
+        recipients.map((to) => send({ to, subject, html, text })),
+      );
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          console.warn('[safety] email failed:', r.reason instanceof Error ? r.reason.message : r.reason);
         }
-        if (results.some((r) => r.status === 'fulfilled' && (r.value as any)?.ok)) channels.push('email');
-      })(),
-    );
+      }
+      if (results.some((r) => r.status === 'fulfilled' && (r.value as any)?.ok)) channels.push('email');
+    }
   }
-
-  if (settings.alertWebhookUrl) {
-    tasks.push(
-      postWebhook(settings.alertWebhookUrl, payload).then((ok) => {
-        if (ok) channels.push('webhook');
-      }),
-    );
-  }
-  await Promise.all(tasks);
 
   // Always record an internal channel so Platform can show "alerted".
   channels.push('platform');
   if (capped) channels.push('capped');
   await markIncidentAlerted(admin, incident.id, channels);
-
-  // SMS / voice ladder: disabled unless an SMS provider is configured
-  // server-side AND the org listed phone numbers. Never 911. Not awaited.
-  if (incident.severity === 'critical' && !capped) {
-    startSafetyEscalation(admin, incident, settings, payload);
-  }
-  return { channels, payload, capped };
+  return { channels, payload, capped, recipients };
 }

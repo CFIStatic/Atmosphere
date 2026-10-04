@@ -257,8 +257,9 @@ function mediaContextOf(state: ClipState, windowText: string): SafetyMediaContex
 
 /**
  * One live chunk: a frame, an audio segment, or both. Resolves after the
- * screen (and, when it fires, the confirmation and the alert fanout) so the
- * phone can show "Alert sent, tap I'm OK" — the alert never waits on that tap.
+ * screen (and, when it fires, the confirmation and the admin email fanout).
+ * The full result is for the server and tests; the phone only ever gets
+ * `toWorkerResponse` — alerts are never shown to the worker.
  */
 export async function processLiveSafetyChunk(
   admin: any,
@@ -453,32 +454,18 @@ export async function processLiveSafetyChunk(
   );
 }
 
-/** proofRoute / fieldApp adapter: (party, admin, body). */
+/** What the phone gets back: whether live safety is on. Nothing about alerts. */
+export type LiveSafetyWorkerResponse = { enabled: boolean };
+
+export function toWorkerResponse(result: Pick<LiveSafetyResult, 'enabled'>): LiveSafetyWorkerResponse {
+  return { enabled: result.enabled };
+}
+
+/** proofRoute / fieldApp / job-share adapter: (party, admin, body). */
 export async function processLiveSafetyChunkForParty(
   party: { org_id: string; job_id: string; id: string },
   admin: any,
   body: unknown,
-): Promise<LiveSafetyResult> {
-  return processLiveSafetyChunk(admin, party, body);
-}
-
-const workerOkSchema = z.object({ incidentId: z.string().uuid() });
-
-/**
- * Worker tapped "I'm OK". Recorded and shown in Platform; it never recalls or
- * delays an alert that already went out.
- */
-export async function recordWorkerOkForParty(
-  party: { org_id: string; job_id: string; id: string },
-  admin: any,
-  body: unknown,
-): Promise<{ ok: true; incidentId: string; workerOkAt: string | null }> {
-  const { incidentId } = workerOkSchema.parse(body ?? {});
-  const { getSafetyIncident, markWorkerOk } = await import('./incidents.js');
-  const existing = await getSafetyIncident(admin, incidentId);
-  if (!existing || existing.orgId !== party.org_id || existing.jobId !== party.job_id) {
-    throw Object.assign(new Error('Incident not found'), { status: 404, code: 'safety_not_found' });
-  }
-  const updated = await markWorkerOk(admin, incidentId);
-  return { ok: true, incidentId, workerOkAt: updated.workerOkAt };
+): Promise<LiveSafetyWorkerResponse> {
+  return toWorkerResponse(await processLiveSafetyChunk(admin, party, body));
 }

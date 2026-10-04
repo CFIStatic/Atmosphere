@@ -2458,7 +2458,6 @@ function demoSafetyIncidents(jobId: string): Array<Record<string, unknown>> {
         description: 'Two people struggling by the stairs; a worker shouts "get off me". Not a screen or a joke.',
         clipTimestampSeconds: 35, locationLabel: null, recommendedAction: 'contact_authorities', status: 'open',
         source: 'live_stream', createdAt: new Date(now - 60_000).toISOString(), reality: 'real', confirmation: 'confirmed',
-        workerOkAt: null,
       },
       {
         id: `safety-unclear-${jobId}`, orgId: 'demo-org', jobId, category: 'fall_person_down', severity: 'critical',
@@ -2466,7 +2465,6 @@ function demoSafetyIncidents(jobId: string): Array<Record<string, unknown>> {
         description: 'Someone is on the floor near the ladder; the frames do not show whether they are hurt.',
         clipTimestampSeconds: 212, locationLabel: null, recommendedAction: 'dispatch_help', status: 'open',
         source: 'live_stream', createdAt: new Date(now - 20_000).toISOString(), reality: 'unclear', confirmation: 'unconfirmed',
-        workerOkAt: new Date(now - 5_000).toISOString(),
       },
     );
   }

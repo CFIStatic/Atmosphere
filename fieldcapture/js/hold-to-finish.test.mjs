@@ -2055,7 +2055,7 @@ console.log('keyboard chrome: ok');
 /* ------------------------------------------------------------------ */
 {
   assert.equal(typeof Core.createLiveSafetyStream, 'function');
-  assert.equal(typeof Core.postSafetyOk, 'function');
+  assert.equal(Core.postSafetyOk, undefined, 'no worker I\'m OK endpoint');
   sandbox.setInterval = setInterval;
   sandbox.clearInterval = clearInterval;
   sandbox.btoa = btoa;
@@ -2084,7 +2084,6 @@ console.log('keyboard chrome: ok');
   };
   const micTrack = { clone() { return { cloned: true, stop() { this.stopped = true; } }; }, stop() { throw new Error('film mic must not stop'); } };
   const posts = [];
-  const alerts = [];
   const conn = [];
   let failNext = 0;
   let clipSec = 0;
@@ -2111,7 +2110,6 @@ console.log('keyboard chrome: ok');
           : { enabled: true, alert: body.seq > 3 ? { incidentId: 'inc-1', confirmation: 'confirmed' } : null },
       );
     },
-    onAlert: (a) => alerts.push(a),
     onConnection: (online) => conn.push(online),
   });
   const flush = () => new Promise((r) => setTimeout(r, 5));
@@ -2136,7 +2134,6 @@ console.log('keyboard chrome: ok');
   assert.ok(posts[3].audio, '20 s: next segment');
   assert.equal(posts[3].audio.startSeconds, 10);
   assert.deepEqual(posts.map((p) => p.seq), [0, 1, 2, 3]);
-  assert.equal(alerts.length, 1, 'banner shown once per incident');
 
   // Connection drops: two failed posts → "Live safety paused"; back → cleared, nothing queued.
   failNext = 2;
@@ -2162,12 +2159,11 @@ console.log('keyboard chrome: ok');
   off.stop();
 
   // Markup + wiring.
-  assert.match(html, /id="safety-banner"/);
-  assert.match(html, />Alert sent</);
-  assert.match(html, /id="safety-ok-btn"[^>]*>I'm OK</);
+  // Alerts go to the account admins by email only — nothing on the worker's screen.
+  assert.doesNotMatch(html, /safety-banner|safety-ok-btn|Alert sent|I'm OK/);
+  assert.doesNotMatch(appSrc, /showSafetyBanner|postSafetyOk|onAlert|__demoSafetyAlert/);
   assert.match(html, /Live safety paused, no connection/);
   assert.match(appSrc, /createLiveSafetyStream\(safetyCfg\)/);
   assert.match(appSrc, /onConnection: function \(online\)/);
-  assert.match(appSrc, /postSafetyOk\(cfg, alert\.incidentId\)/);
   console.log('live safety stream: ok');
 }

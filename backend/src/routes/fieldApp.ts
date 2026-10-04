@@ -35,7 +35,7 @@ import {
   recordProof,
 } from './proofOfWork.js';
 import { processSafetySampleForParty } from '../safety/sample.js';
-import { processLiveSafetyChunkForParty, recordWorkerOkForParty } from '../safety/live.js';
+import { processLiveSafetyChunkForParty } from '../safety/live.js';
 import { processWellnessHeartbeatForParty } from '../safety/wellness.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
@@ -180,8 +180,6 @@ const liveSafetyLimiter = rateLimit({
 });
 /** POST /api/field-app/jobs/:jobId/proof/safety-live — live audio segment + frame. */
 fieldAppRouter.post('/jobs/:jobId/proof/safety-live', liveSafetyLimiter, proofRoute(processLiveSafetyChunkForParty));
-/** POST /api/field-app/jobs/:jobId/proof/safety-ok — worker tapped "I'm OK" (never delays the alert). */
-fieldAppRouter.post('/jobs/:jobId/proof/safety-ok', liveSafetyLimiter, proofRoute(recordWorkerOkForParty));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

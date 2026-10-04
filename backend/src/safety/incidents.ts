@@ -57,7 +57,6 @@ function rowFromDb(r: any): SafetyIncident {
     dismissCategory: r.dismiss_category ?? null,
     reality: r.reality ?? null,
     confirmation: r.confirmation ?? null,
-    workerOkAt: r.worker_ok_at ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -192,7 +191,6 @@ export async function createSafetyIncident(
     dismiss_category: null,
     reality: c.reality ?? null,
     confirmation: c.confirmation ?? null,
-    worker_ok_at: null,
     created_at: now,
     updated_at: now,
   };
@@ -204,10 +202,10 @@ export async function createSafetyIncident(
   }
 
   let { data, error } = await admin.from('safety_incidents').insert(row).select('*').single();
-  if (error && /reality|confirmation|dismiss_category|worker_ok_at|live_stream/.test(error.message ?? '')) {
+  if (error && /reality|confirmation|dismiss_category|live_stream/.test(error.message ?? '')) {
     // Live-safety migration not applied yet: still record the incident.
-    const { reality, confirmation, dismiss_category, worker_ok_at, ...legacy } = row;
-    void reality; void confirmation; void dismiss_category; void worker_ok_at;
+    const { reality, confirmation, dismiss_category, ...legacy } = row;
+    void reality; void confirmation; void dismiss_category;
     ({ data, error } = await admin
       .from('safety_incidents')
       .insert({
@@ -284,7 +282,7 @@ export async function countRecentJobAlerts(
         r.jobId === input.jobId &&
         r.alertSentAt != null &&
         r.alertSentAt >= since &&
-        r.alertChannels.some((ch) => ch === 'email' || ch === 'sms' || ch === 'voice'),
+        r.alertChannels.includes('email'),
     ).length;
   }
   const { data, error } = await admin
@@ -296,42 +294,8 @@ export async function countRecentJobAlerts(
     .limit(200);
   if (error) return 0;
   return ((data ?? []) as any[]).filter(
-    (r) => Array.isArray(r.alert_channels) && r.alert_channels.some((ch: string) => ch === 'email' || ch === 'sms' || ch === 'voice'),
+    (r) => Array.isArray(r.alert_channels) && r.alert_channels.some((ch: string) => ch === 'email'),
   ).length;
-}
-
-/** Worker tapped "I'm OK" on the phone banner. Never affects whether the alert went out. */
-export async function markWorkerOk(
-  admin: any,
-  id: string,
-): Promise<SafetyIncident> {
-  const now = new Date().toISOString();
-  if (useMemory()) {
-    const row = memory.get(id);
-    if (!row) throw Object.assign(new Error('Incident not found'), { code: 'not_found' });
-    const next: SafetyIncident = { ...row, workerOkAt: row.workerOkAt ?? now, updatedAt: now };
-    memory.set(id, next);
-    return next;
-  }
-  const { data, error } = await admin
-    .from('safety_incidents')
-    .update({ worker_ok_at: now, updated_at: now })
-    .eq('id', id)
-    .is('worker_ok_at', null)
-    .select('*')
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (data) return rowFromDb(data);
-  const existing = await getSafetyIncident(admin, id);
-  if (!existing) throw Object.assign(new Error('Incident not found'), { code: 'not_found' });
-  return existing;
-}
-
-/** Add a channel (sms / voice) after the first fanout. */
-export async function appendIncidentChannel(admin: any, id: string, channel: string): Promise<void> {
-  const current = await getSafetyIncident(admin, id);
-  if (!current || current.alertChannels.includes(channel)) return;
-  await markIncidentAlerted(admin, id, [...current.alertChannels, channel]);
 }
 
 export async function listSafetyIncidents(

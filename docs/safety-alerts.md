@@ -13,7 +13,7 @@ violence, medical distress, verbal threats of serious harm).
 | **Post-upload** | When a proof is filed with client frames, a safety scan runs async. |
 | **Transcript** | After Whisper finishes, transcript heuristics scan for threats / distress. |
 | **Incidents** | Rows in `safety_incidents` with severity `watch` \| `critical`, confidence, clip timestamp, job/location metadata. |
-| **Alerts** | Critical → email org global admins (+ optional `safety_alert_emails`); optional HTTPS webhook; always visible in Platform **Safety**. |
+| **Alerts** | Critical → **email only**, to the account's admins: active org members with the Global Admin role (incl. legacy `office_manager`) plus the org creator (account owner). No job parties, no recording worker, no custom lists, no webhook, no SMS. The worker's phone is never told about an alert. Always visible in Platform. Capped at 6 emails per job per hour. |
 | **Ack / dismiss** | Platform staff + org members can acknowledge or dismiss (false positive). Rate-limit: same job+category within 10 minutes reuses the open incident. |
 
 ## Real-time vs near-real-time
@@ -41,15 +41,12 @@ Ambiguous footage is a **miss**. Confidence floors: watch ≥ 0.72, critical ≥
 3. When an admin sets it to `true` (Platform settings API
    `PATCH /api/safety/settings` with `{ "autoEscalateToAuthorities": true }`),
    alert payloads include `escalateToAuthorities: true`.
-4. That flag is for **your** webhook / ops runbook. Prefer a human confirm step
-   before any external emergency call. Turning the flag on later does **not**
-   enable Atmosphere to dial anyone — you still must integrate and operate that
-   path yourself.
+4. The flag is shown in the admin email. Turning it on does **not** enable
+   Atmosphere to dial anyone — a person decides whether to call.
 
-Also configurable:
-
-- `safety_alert_webhook_url` (HTTPS JSON POST)
-- `safety_alert_emails` (extra recipients beyond global admins)
+Also configurable: `safety_live_enabled` (live screening while recording;
+default on, per-org opt-out). The older `safety_alert_webhook_url` and
+`safety_alert_emails` columns are no longer used — alerts go to admins only.
 
 ## API sketch
 

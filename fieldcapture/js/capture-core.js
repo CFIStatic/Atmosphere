@@ -3827,16 +3827,6 @@
     });
   }
 
-  /** Worker tapped "I'm OK". Never affects the alert that already went out. */
-  function postSafetyOk(opts, incidentId) {
-    opts = opts || {};
-    return apiJson(safetyUrl(opts, 'safety-ok'), {
-      method: 'POST',
-      accessToken: typeof opts.accessToken === 'function' ? opts.accessToken() : opts.accessToken,
-      body: { incidentId: incidentId },
-    });
-  }
-
   var LIVE_AUDIO_TYPES = [
     'audio/webm;codecs=opus',
     'audio/webm',
@@ -3888,8 +3878,8 @@
    * (5 s) it POSTs one 480px frame; every `audioSegmentMs` (10 s) that post
    * also carries the last audio segment as its own small file (a second
    * MediaRecorder on a clone of the mic track — the day film is untouched).
-   * The server transcribes, screens, confirms and alerts; when it reports an
-   * alert, `onAlert(alert)` shows the "Alert sent, tap I'm OK" banner.
+   * The server transcribes, screens, confirms and emails the account admins.
+   * The worker is never told about alerts — the response carries none.
    *
    * Field Capture is a web app and assumes a connection. When posts fail on
    * the network (or the browser reports offline), `onConnection(false)`
@@ -3925,7 +3915,6 @@
     var connected = true;
     var failures = 0;
     var timer = null;
-    var seen = {};
     var audioStream = null;
     var rec = null;
     var recChunks = [];
@@ -3967,18 +3956,6 @@
         teardown();
         if (typeof cfg.onDisabled === 'function') cfg.onDisabled();
         return;
-      }
-      var alert = res.alert;
-      if (alert && alert.incidentId) {
-        var key = alert.incidentId + ':' + (alert.confirmation || '');
-        if (!seen[key]) {
-          seen[key] = true;
-          if (typeof cfg.onAlert === 'function') {
-            try {
-              cfg.onAlert(alert);
-            } catch (e) {}
-          }
-        }
       }
     }
 
@@ -4369,7 +4346,6 @@
     createLiveSafetySampler: createLiveSafetySampler,
     createLiveSafetyStream: createLiveSafetyStream,
     postSafetyLive: postSafetyLive,
-    postSafetyOk: postSafetyOk,
     pickLiveAudioType: pickLiveAudioType,
     postWellnessHeartbeat: postWellnessHeartbeat,
     createLiveWellnessMonitor: createLiveWellnessMonitor,

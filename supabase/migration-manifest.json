@@ -6190,13 +6190,10 @@
       "structurallyVerifiable": true,
       "indistinguishableReason": null,
       "expect": [
-        "column|public.orgs.safety_alert_phones",
-        "column|public.orgs.safety_escalate_after_seconds",
         "column|public.orgs.safety_live_enabled",
         "column|public.safety_incidents.confirmation",
         "column|public.safety_incidents.dismiss_category",
-        "column|public.safety_incidents.reality",
-        "column|public.safety_incidents.worker_ok_at"
+        "column|public.safety_incidents.reality"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
