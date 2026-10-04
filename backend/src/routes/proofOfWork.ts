@@ -7,6 +7,7 @@ import { staleSummaryPatch } from '../audio/summaryFreshness.js';
 import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { HttpError } from '../lib/errors.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
@@ -3659,6 +3660,9 @@ async function runProofAskTurn(input: {
       };
     }
     const sessionDocumentAnswer = result.answeredFromSessionDocument === true;
+    // Only label an answer "From this job file" when it actually came from it:
+    // not an upload answer, not web text, not a capability or small-talk reply.
+    const fromJobFile = !sessionDocumentAnswer && !result.webDerivedAnswer && result.groundedOn !== 0;
     const since = new Date(Date.now() - 30_000).toISOString();
     const { data: recentSame } = await excludeOfficeOnlyRows(
       supabase
@@ -3689,7 +3693,7 @@ async function runProofAskTurn(input: {
         question: storedQuestion,
         answer: storedAnswer,
         model: result.model,
-        grounded_on: sessionDocumentAnswer ? [] : groundedOn,
+        grounded_on: fromJobFile ? groundedOn : [],
         web_sources: sessionDocumentAnswer ? [] : webSources,
         research_trace: result.research ?? null,
         office_only: result.officeOnly === true,
@@ -3815,7 +3819,7 @@ async function runProofAskTurn(input: {
       answer: result.answer,
       model: result.model,
       question: stored ?? null,
-      groundedOn: sessionDocumentAnswer ? 0 : result.groundedOn || groundedOn.length,
+      groundedOn: fromJobFile ? result.groundedOn || groundedOn.length : 0,
       threadId,
       webSources,
     };
@@ -3836,7 +3840,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const input = z
       .object({
-        question: z.string().trim().min(3).max(1000),
+        question: askQuestionText,
         threadId: z.string().uuid().optional().nullable(),
         timeZone: z.string().trim().min(1).max(64).optional(),
         documentIds: z.array(z.string().uuid()).max(8).optional(),

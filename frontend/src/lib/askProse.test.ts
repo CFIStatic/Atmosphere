@@ -130,3 +130,48 @@ describe('parseAskProseBlocks', () => {
     expect(flat).toMatch(/search/i);
   });
 });
+
+describe('parseAskProseBlocks renders Grok-style markdown without raw syntax', () => {
+  const flat = (input: string) =>
+    parseAskProseBlocks(input)
+      .map((block) => {
+        if (block.kind === 'list') return block.items.map((item) => askInlineText(item)).join(' | ');
+        if (block.kind === 'table') return [...block.headers, ...block.rows.flat()].map((cell) => askInlineText(cell)).join(' | ');
+        if (block.kind === 'code') return block.text;
+        return askInlineText(block.children);
+      })
+      .join('\n');
+
+  it('renders `inline code` as a code node, not backticks', () => {
+    const [block] = parseAskProseBlocks('The gate code is `4412`.');
+    expect(block?.kind).toBe('paragraph');
+    const nodes = block?.kind === 'paragraph' ? block.children : [];
+    expect(nodes.some((node) => node.kind === 'code' && node.text === '4412')).toBe(true);
+    expect(flat('The gate code is `4412`.')).not.toContain('`');
+  });
+
+  it('turns any heading depth into a heading and drops rules and quote markers', () => {
+    const blocks = parseAskProseBlocks('#### Scope\n\n---\n\n> Carrier approved the deck.');
+    expect(blocks.map((block) => block.kind)).toEqual(['heading', 'paragraph']);
+    expect(flat('#### Scope\n\n---\n\n> Carrier approved the deck.')).toBe('Scope\nCarrier approved the deck.');
+  });
+
+  it('renders a fenced block as code and keeps snake_case words intact', () => {
+    const blocks = parseAskProseBlocks('Run this:\n\n```\nnpm run build\n```\n\nThe field is claim_number_2 on file.');
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'code', 'paragraph']);
+    expect(flat('The field is claim_number_2 on file.')).toBe('The field is claim_number_2 on file.');
+  });
+
+  it('shows a labelled link as its label, never as raw [label](url)', () => {
+    expect(flat('See [the permit page](https://example.gov/permits) for hours.')).toBe('See the permit page for hours.');
+    const [block] = parseAskProseBlocks('Open [the job](/jobs/abc).');
+    const nodes = block?.kind === 'paragraph' ? block.children : [];
+    expect(nodes.some((node) => node.kind === 'link' && node.href === '/jobs/abc' && node.text === 'the job')).toBe(true);
+  });
+
+  it('keeps paragraphs, lists, bold and tables clean', () => {
+    const text = 'Yes, the deck was approved.\n\n- **Roof:** north slope stripped\n- Skylights stay\n\n| Day | Work |\n| --- | --- |\n| Aug 5 | Tear-off |';
+    expect(parseAskProseBlocks(text).map((block) => block.kind)).toEqual(['paragraph', 'list', 'table']);
+    expect(flat(text)).not.toMatch(/\*\*|\|\s*---/);
+  });
+});

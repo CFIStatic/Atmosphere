@@ -7,7 +7,11 @@ import type { TranscriptChunk } from '../shared/askTranscriptIndex.js';
 import { asksAboutJobFile } from '../shared/askWebSearch.js';
 import type { DocumentFacts, DocumentKind, RelevanceVerdict } from './types.js';
 
-/** One quiet line after an answer, never a substitute for it. */
+/**
+ * Older answers ended with this line. Nothing adds it any more: an upload is
+ * answered like any chat file, with no job-match note. It stays exported so
+ * stored turns that still carry it can be recognised.
+ */
 export const QUIET_UNRELATED_NOTE = "This document doesn't appear to be about this job.";
 
 const RELEVANCE_RE = /\b(related|relevant|belong|attached|match(?:es|ing)? this job)\b/i;
@@ -109,10 +113,39 @@ export function chatUploadShouldAnswer(question: string, documents: AskDocumentV
   const docs = (documents ?? []).filter((doc) => textOf(doc).trim());
   if (!docs.length) return false;
   if (isAboutThisDocument(question) || isAuthorQuestion(question) || namesThese(question, docs)) return true;
+  if (usesNameFromFile(question, docs)) return true;
+  // "What websites can you log in to?" is about Chat, not the file.
+  if (asksAboutAssistant(question)) return false;
   if (namesOtherKind(question, docs)) return false;
   if (asksAboutJobFile(question)) return false;
   if (looksLikeGeneralQuestion(question)) return false;
+  if (isContinuation(question)) return true;
   return refersToUpload(question, docs);
+}
+
+/** Capitalised at a line start, not names. */
+const COMMON_CAPS = new Set(['this', 'that', 'what', 'with', 'from', 'have', 'they', 'there', 'their', 'when', 'where', 'which', 'your', 'about', 'energy', 'total', 'page', 'date', 'note', 'notes', 'summary', 'document', 'invoice', 'estimate', 'contract', 'scope', 'project', 'company', 'companies']);
+
+const POINTS_AT_UPLOAD = /\b(it|this|that|these|those|document|doc|upload|uploaded|attachment|file|note)\b/i;
+
+/**
+ * A question about Chat itself: what it can do, sign in to, or reach. These
+ * are answered directly and never from an uploaded file.
+ */
+export function asksAboutAssistant(question: string): boolean {
+  const q = question.trim();
+  if (!q || POINTS_AT_UPLOAD.test(q)) return false;
+  if (!/\b(?:you|u|your|yours)\b/i.test(q)) return false;
+  return /\b(?:able to|capable|allowed to|have access|access to|log\s*-?\s*(?:in|on)(?:to)?|logins?|logged\s+in|sign\s*-?\s*(?:in|on)(?:to)?|signed\s+in|signin|passwords?|accounts?|browse|websites?|web\s+sites?|internet|online|computer|browser|capabilit\w*|features?|tools?)\b|\bwhat\s+(?:can|do)\s+(?:you|u)\s+do\b/i.test(
+    q,
+  );
+}
+
+/** "Tell me more", "go on": keep going on the file this chat is about. */
+function isContinuation(question: string): boolean {
+  return /^(?:tell me more|more|go on|continue|keep going|elaborate|expand(?: on (?:that|it))?|more details?|explain more|say more)[.!?]*$/i.test(
+    question.trim(),
+  );
 }
 
 /**
@@ -142,40 +175,33 @@ function looksLikeGeneralQuestion(question: string): boolean {
   return /\b(who is|weather|news|score|population|capital of|stock price|nfl|nba|how do i|how to)\b/i.test(question);
 }
 
+/**
+ * Whole words only, and most of the question's content words must be in the
+ * file. One shared word ("able" inside the text) must not pull an unrelated
+ * question onto the upload.
+ */
 function refersToUpload(question: string, docs: AskDocumentView[]): boolean {
   if (/\b(it|this|that|these|those)\b/i.test(question)) return true;
   if (/\b(document|upload|attachment|note)\b/i.test(question)) return true;
+  const words = [...new Set(tokens(question).filter((word) => !STOP.has(word) && word.length > 3))];
+  if (!words.length) return false;
+  if (usesNameFromFile(question, docs)) return true;
+  const hay = new Set(tokens(docs.map((doc) => textOf(doc)).join('\n')));
+  const hits = words.filter(
+    (word) => hay.has(word) || hay.has(`${word}s`) || (word.endsWith('s') && hay.has(word.slice(0, -1))),
+  );
+  return hits.length >= Math.ceil(words.length / 2);
+}
+
+/** A name the file uses ("Jettx", "Blox") is enough on its own. */
+function usesNameFromFile(question: string, docs: AskDocumentView[]): boolean {
   const words = tokens(question).filter((word) => !STOP.has(word) && word.length > 3);
   if (!words.length) return false;
-  const hay = docs.map((doc) => textOf(doc)).join('\n').toLowerCase();
-  const hits = words.filter((word) => hay.includes(word));
-  return hits.length > 0;
-}
-
-export type DocumentAnswerOptions = {
-  /** False on follow-ups after this chat already said the quiet line. */
-  quietNote?: boolean;
-};
-
-function withUnrelatedNote(
-  answer: string,
-  doc: AskDocumentView | null,
-  opts?: DocumentAnswerOptions,
-): string {
-  if (!answer || !doc || documentIsJobKnowledge(doc)) return answer;
-  if (opts?.quietNote === false) return answer;
-  if (/\bnot related to this job\b/i.test(answer)) return answer;
-  if (answer.includes(QUIET_UNRELATED_NOTE)) return answer;
-  return `${answer}\n\n${QUIET_UNRELATED_NOTE}`;
-}
-
-/** True when an earlier assistant turn already added the quiet line. */
-export function quietNoteAlreadySaid(
-  history: Array<{ role?: string | null; text?: string | null }> | null | undefined,
-): boolean {
-  return (history ?? []).some(
-    (turn) => turn.role === 'assistant' && String(turn.text ?? '').includes(QUIET_UNRELATED_NOTE),
+  const text = docs.map((doc) => textOf(doc)).join('\n');
+  const names = new Set(
+    [...text.matchAll(/\b[A-Z][A-Za-z0-9]{3,}\b/g)].map((m) => m[0].toLowerCase()).filter((word) => !COMMON_CAPS.has(word)),
   );
+  return words.some((word) => names.has(word));
 }
 
 function indefinite(word: string): string {
@@ -301,38 +327,70 @@ export function describeDocument(doc: AskDocumentView): string {
     return `This is a ${when}${label}${by} about ${whose}: ${listed}.`;
   }
 
-  const bits: string[] = [];
-  let opener = 'This is';
+  // No model: name what the file covers instead of pasting its text back.
+  let opener = `${doc.filename} is`;
   if (year || author) {
     opener += ` a${year ? ` ${year}` : ''}${/\bnote\b/i.test(flat) ? ' note' : ' document'}`;
     if (author) opener += ` by ${author}`;
   } else {
-    opener += ` ${doc.filename}`;
+    opener += ' a document';
   }
-  bits.push(`${opener}.`);
-  const skip = new Set(
-    linesOf(text)
-      .filter((line) => line.length < 80)
-      .map((line) => line.replace(/\s+/g, ' ').toLowerCase()),
-  );
-  const prose = flat
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 40 && !skip.has(sentence.toLowerCase()) && !/\bnot an?\b/i.test(sentence))
-    .slice(0, 2);
-  for (const sentence of prose) bits.push(sentence.endsWith('.') ? sentence : `${sentence}.`);
-  return bits.slice(0, 4).join(' ');
+  const entries = namedEntries(text);
+  if (entries.length) {
+    const theme = /\bvision\b/i.test(flat) && /\bcompan(?:y|ies)\b/i.test(flat)
+      ? `${author ? 'his' : 'these'} companies and vision`
+      : 'these';
+    return `${opener} about ${theme}: ${listed(entries.map((entry) => `${entry.name} (${entry.what})`))}.`;
+  }
+  const topics = headingTopics(text, doc.filename, author);
+  if (topics.length) return `${opener}. It covers ${listed(topics)}.`;
+  return `${opener}. Ask me anything about what it says.`;
+}
+
+function listed(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+/** "Jettx – long distance wireless power, …" lines: a name and a short description. */
+function namedEntries(text: string): Array<{ name: string; what: string }> {
+  const flat = text.replace(/\r/g, '');
+  const found: Array<{ name: string; what: string }> = [];
+  const re = /(?:^|\n|[.!?]\s+|\s)([A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z][A-Za-z0-9&.'-]*){0,3})\s+[–—-]\s+([^\n–—]+?)(?=\s+[A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z][A-Za-z0-9&.'-]*){0,3}\s+[–—-]\s|\n|$)/g;
+  for (const match of flat.matchAll(re)) {
+    const name = match[1]!.trim();
+    const firstClause = match[2]!.split(/[,;.]/)[0]!.split(/\s+(?:where|that|which|who|we|and we)\s/i)[0]!.trim();
+    const words = firstClause.split(/\s+/).filter(Boolean).slice(0, 8);
+    while (words.length > 1 && /^(?:and|or|for|of|to|the|a|an|with|in|on|by)$/i.test(words[words.length - 1]!)) words.pop();
+    if (!name || !words.length) continue;
+    // Lower-case ordinary words; keep acronyms such as PE or VC.
+    const what = words.map((word) => (/^[A-Z0-9/&.-]{2,}$/.test(word) ? word : word.toLowerCase())).join(' ');
+    if (found.some((entry) => entry.name === name)) continue;
+    found.push({ name, what });
+    if (found.length >= 6) break;
+  }
+  return found;
+}
+
+/** Short heading lines, not the title, byline, or a date. */
+function headingTopics(text: string, filename: string, author: string | null): string[] {
+  const title = filename.replace(/\.[a-z0-9]+$/i, '').toLowerCase();
+  return linesOf(text)
+    .filter((line) => line.length >= 3 && line.length <= 48 && !/[.!?:]$/.test(line))
+    .filter((line) => line.toLowerCase() !== title && !/^by\s/i.test(line) && !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line))
+    .filter((line) => !author || !line.includes(author))
+    .slice(0, 4);
 }
 
 export function answerFromJobDocuments(
   question: string,
   documents: AskDocumentView[] | null | undefined,
   evidence: Array<{ source: string; text: string }> = [],
-  opts?: DocumentAnswerOptions,
 ): string | null {
   const docs = (documents ?? []).filter((doc) => textOf(doc).trim());
   if (!docs.length) return null;
-  const about = isAboutThisDocument(question);
+  const about = isAboutThisDocument(question) || isContinuation(question);
   const uploads = docs.filter((doc) => !documentIsJobKnowledge(doc));
   const attached = docs.filter((doc) => documentIsJobKnowledge(doc));
   const uploadsOnly = uploads.length > 0 && attached.length === 0;
@@ -364,7 +422,7 @@ export function answerFromJobDocuments(
     return `${target.filename} is related to this job and is on the file.${reason ? ` ${reason}` : ''}`;
   }
 
-  const note = (answer: string, doc: AskDocumentView | null) => withUnrelatedNote(answer, doc, opts);
+  const note = (answer: string, _doc: AskDocumentView | null) => answer;
   const uploadMiss = (doc: AskDocumentView | null) => note('This document does not show that.', doc);
 
   const namedUploads = uploads.filter((doc) => namesThese(question, [doc]));
@@ -443,7 +501,8 @@ export function answerFromJobDocuments(
     if (!documentIsJobKnowledge(doc) || uploadsOnly) return uploadMiss(doc);
     return documentMiss(question, docs);
   }
-  return note(`“${quote}” ${cite(doc, hit.location)}`, doc);
+  // Never a bare quote: say where the line comes from.
+  return note(`The closest passage is “${quote}” ${cite(doc, hit.location)}.`, doc);
 }
 
 export function documentChunksForGrounding(
@@ -470,7 +529,7 @@ export function documentChunksForGrounding(
         proofId: `doc:${doc.id}`,
         jobId: '',
         orgId: '',
-        clipTitle: `${doc.filename}, ${location}`,
+        clipTitle: location === 'document' ? doc.filename : `${doc.filename}, ${location}`,
         workDate: null,
         seq: row.seq ?? index,
         startSec: null,
@@ -572,7 +631,16 @@ function clipQuote(text: string, question: string): string | null {
   const words = tokens(question).filter((word) => !STOP.has(word));
   const lines = text.split(/\n/).map((line) => line.trim()).filter(Boolean);
   const hit = lines.find((line) => words.some((word) => line.toLowerCase().includes(word)));
-  const quote = (hit ?? text).replace(/\s+/g, ' ').trim().slice(0, 240);
+  let quote = (hit ?? text).replace(/\s+/g, ' ').trim();
+  if (quote.length > 240) {
+    // One long line (a flattened file): quote from the first matching word, not the opening.
+    const lower = quote.toLowerCase();
+    const at = Math.min(...words.map((word) => lower.indexOf(word)).filter((index) => index >= 0), quote.length);
+    const start = at < quote.length ? Math.max(0, quote.lastIndexOf(' ', Math.max(0, at - 1)) + 1) : 0;
+    const window = quote.slice(start, start + 200);
+    const end = window.length < 200 ? window.length : Math.max(window.lastIndexOf(' '), 1);
+    quote = window.slice(0, end).trim();
+  }
   return quote.length >= 2 ? quote : null;
 }
 

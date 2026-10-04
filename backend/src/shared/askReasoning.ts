@@ -13,6 +13,7 @@
  * forwarded as they arrive. Network Ask tools in one turn run together.
  * In-memory lookup tools are timed as one batch; they do not wait on a model.
  */
+import { CHAT_VOICE_RULES } from './askProse.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import { geminiMeasuredUsage, mergeMeasuredUsages } from '../lib/providerUsage.js';
@@ -120,7 +121,7 @@ Rules:
 2. Stay strictly grounded in tool results. Never invent clips, quotes, times, people, rooms, defects, or scope.
 3. If the file lacks something, say that in one short sentence, then give the best answer the file does support.
 4. The first sentence is the answer. Then only the detail the reader needs. No "Certainly", "Great question", or other filler.
-5. Write clean markdown: short paragraphs, bullets only for parallel items, **bold** for the key fact, a table when comparing visits. No raw ids, no UTC (use the timestamps the tools already localized), no duplicated job names, no stray transcript fragments in the prose.
+5. Write clean markdown: short paragraphs, bullets only for parallel items, **bold** sparingly for one key fact, a table when comparing visits. No raw ids, no UTC (use the timestamps the tools already localized), no duplicated job names, no stray transcript fragments in the prose.
 6. A request to produce something (homeowner summary, scope note, visit comparison, open issues, punch list, email, estimate) is a task. Write a real document from the job context, wrapped as:
    ⟦artifact⟧
    the copyable note
@@ -134,7 +135,7 @@ Rules:
    ⟦followups: question one? ;; question two?⟧
 10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
 11. On a tool-call turn, do not write the answer yet.
-12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user is wrong, answer politely and name the day: "That line is actually from Sep 21 — here's the clip." Never write "The file does have that." Answer first. No canned filler. Never stop at one line that only says the file does not have it.
+12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user is wrong, answer politely and name the day: "That line is actually from Sep 21 — here's the clip." Never write "The file does have that." Answer first. No canned filler. Never stop at one line that only says the file does not have it. A very short message ("?", "ok", "hi", "thanks") is conversation, not a question the file failed to answer: reply in a sentence or two and offer what this job can answer.
 13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.
 14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
@@ -172,7 +173,8 @@ Rules:
 11. The raw transcript (authoritative) decides what was said and how much. The AI summary may be stale; when they disagree, follow the transcript and do not repeat the summary's claim.
 12. A "how many" question gets the number first, counted from the raw transcript lines: "There are **5** lines in the transcript." Then list them if asked.
 13. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly in the first sentence that it is not in the evidence. Do not guess.
-14. For a specific question, answer in one direct sentence from the exact transcript lines and timed events, then only the supporting quotes with their times. The AI summary is supplementary. Never paste a whole transcript for a narrow question.`;
+14. For a specific question, answer in one direct sentence from the exact transcript lines and timed events, then only the supporting quotes with their times. The AI summary is supplementary. Never paste a whole transcript for a narrow question.
+15. A very short message ("?", "ok", "hi", "thanks") is conversation, not a question the file failed to answer: reply in a sentence or two and offer what this job can answer.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -332,7 +334,7 @@ function toolUses(blocks: Anthropic.ContentBlock[]): LookupCall[] {
 }
 
 function withAskSituation(system: string, timeZone?: string | null): string {
-  return `${system}\n\n${askClockSystemRules(new Date(), timeZone || 'America/Chicago')}\n\n${askWebCapabilityRules()}`;
+  return `${system}\n\n${CHAT_VOICE_RULES}\n\n${askClockSystemRules(new Date(), timeZone || 'America/Chicago')}\n\n${askWebCapabilityRules()}`;
 }
 
 async function webSearchLookupResult(

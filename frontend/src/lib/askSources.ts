@@ -465,6 +465,11 @@ export function parseAskActionsTrailer(raw: string): AskActionChip[] {
  * answer for chip rendering. Body text no longer contains "(Source: …)" or
  * the machine trailers.
  */
+/** A quote from an uploaded document (doc:<id>#<location>), not a recording. */
+export function isDocumentQuoteSource(sourceId: string | null | undefined): boolean {
+  return /^doc:/i.test(String(sourceId ?? '').trim());
+}
+
 export function parseAskQuoteTrailer(raw: string): AskMomentQuote[] {
   const match = String(raw ?? '').match(QUOTES_TRAILER_RE);
   if (!match) return [];
@@ -479,7 +484,8 @@ export function parseAskQuoteTrailer(raw: string): AskMomentQuote[] {
     const clipTitle = clipField.replace(/^clip=/, '').trim();
     out.push({
       sourceId: id,
-      speaker: displaySpeakerLabel(trim(speaker)),
+      // Document excerpts never get "Unidentified speaker".
+      speaker: isDocumentQuoteSource(id) ? '' : displaySpeakerLabel(trim(speaker)),
       text: text.slice(0, 180),
       atSeconds: moment?.atSeconds ?? null,
       proofId: moment?.proofId,

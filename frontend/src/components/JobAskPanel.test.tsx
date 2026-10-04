@@ -18,7 +18,15 @@ const createAskThread = vi.fn();
 const answerSpeakerVerification = vi.fn();
 
 vi.mock('../lib/api', () => ({
-  ApiError: class ApiError extends Error {},
+  ApiError: class ApiError extends Error {
+    status: number;
+    code?: string;
+    constructor(status = 0, message = '', code?: string) {
+      super(message);
+      this.status = status;
+      this.code = code;
+    }
+  },
   api: {
     sharedJob: (...args: unknown[]) => sharedJob(...args),
     jobProofs: (...args: unknown[]) => jobProofs(...args),
@@ -1028,7 +1036,10 @@ describe('JobAskPanel', () => {
         });
       });
       expect(screen.getAllByTestId('ask-message-attachments')).toHaveLength(1);
-      expect(screen.getAllByTestId('ask-document-job-note')).toHaveLength(1);
+      // No job-match note, and an older stored answer that ends with it renders without it.
+      expect(screen.queryByTestId('ask-document-job-note')).not.toBeInTheDocument();
+      expect(screen.queryByText(/doesn't appear to be about this job/)).not.toBeInTheDocument();
+      expect(await screen.findByText(/Jack Cyganiak's companies and vision/)).toBeInTheDocument();
       expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
     } finally {
       globalThis.fetch = originalFetch;
@@ -1115,6 +1126,69 @@ describe('JobAskPanel', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('shows a document excerpt with the file name and no speaker', async () => {
+    askAboutProofs.mockResolvedValue({
+      answer:
+        'Blox Group works on automated construction.\n\n⟦quotes: doc:00000000-0000-4000-8000-00000000d303#document||Blox Group – Automated construction, Flying movable apartment units.|clip=The Future.docx ;; video/job-1038/p1/walk@4.2|Unidentified speaker|The tarp came off the north slope.|clip=Walkthrough⟧',
+      groundedOn: 0,
+      model: null,
+      question: null,
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText('Ask what you forgot…');
+    await user.type(box, 'what does Blox Group do?');
+    await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+    const quotes = await screen.findAllByTestId('ask-quote');
+    expect(quotes).toHaveLength(2);
+    expect(quotes[0]).toHaveTextContent('The Future.docx');
+    expect(quotes[0]).not.toHaveTextContent(/Unidentified speaker/);
+    expect(quotes[0]).not.toHaveTextContent(/^·|· ·/);
+    // Transcript quotes keep their speaker label.
+    expect(quotes[1]).toHaveTextContent('Unidentified speaker · Walkthrough');
+    expect(screen.getByText('Blox Group works on automated construction.')).toBeInTheDocument();
+  });
+
+  it('sends a one-character message and shows a friendly line instead of a validation error', async () => {
+    const { ApiError } = await import('../lib/api');
+    const user = userEvent.setup();
+    askAboutProofs.mockResolvedValueOnce({
+      answer: 'Happy to help. Ask me about the clips, the scope, or who is on this job.',
+      groundedOn: 0,
+      model: null,
+      question: null,
+    });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText('Ask what you forgot…');
+    await user.type(box, '?');
+    await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+    await waitFor(() => {
+      expect(askAboutProofs).toHaveBeenCalledWith('job-1038', '?', { threadId: 'thr-1' });
+    });
+    expect(await screen.findByText(/Happy to help/)).toBeInTheDocument();
+
+    askAboutProofs.mockRejectedValueOnce(
+      new (ApiError as unknown as new (s: number, m: string, c: string) => Error)(
+        400,
+        'String must contain at least 3 character(s)',
+        'validation_error',
+      ),
+    );
+    await user.type(box, 'ok');
+    await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+    const failure = await screen.findByTestId('ask-error');
+    expect(failure).not.toHaveTextContent(/String must contain/);
+    expect(failure).toHaveTextContent(/didn't go through/);
   });
 
 });

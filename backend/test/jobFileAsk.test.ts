@@ -474,7 +474,7 @@ test('a question about an uploaded document skips web search', async () => {
     assert.match(about.answer, /2023 vision note by Jack Cyganiak/);
     assert.match(about.answer, /Jettx \(long-distance wireless power, including space-based power\)/);
     assert.match(about.answer, /Blox Group \(automated ground stations\)/);
-    assert.match(about.answer, /doesn't appear to be about this job/);
+    assert.doesNotMatch(about.answer, /doesn't appear to be about this job/);
     assert.doesNotMatch(about.answer, /is an invoice/i);
     assert.doesNotMatch(about.answer, /The Future By Jack Cyganiak/);
     assert.doesNotMatch(about.answer, /\(The Future\.docx, document\)/);
@@ -577,4 +577,157 @@ test('isDuplicateAskTurn reuses only the same answer in the same thread', () => 
   assert.equal(isDuplicateAskTurn({ answer, thread_id: 'thr-1' }, 'thr-2', answer), false);
   assert.equal(isDuplicateAskTurn({ answer: 'different', thread_id: 'thr-1' }, 'thr-1', answer), false);
   assert.equal(isDuplicateAskTurn(undefined, 'thr-1', answer), false);
+});
+
+const FUTURE_TEXT = [
+  'The Future',
+  'By Jack Cyganiak',
+  '8/11/2023',
+  'My companies and vision',
+  'Jettx – long distance wireless power, energy, transmission space base power',
+  'Blox Group – Automated construction, Flying movable apartment units.',
+  'Aero Corp – Hypersonic Individual air travel for freight and people',
+  'El Presidente Ventures – PE / VC firm where we fund deep tech startups we take higher equity positions and give access to our portfolio companies access to our research lab and research staff.',
+].join('\n');
+
+const FUTURE_DOC = {
+  id: 'future-real',
+  filename: 'The Future.docx',
+  attached: false,
+  relevance: 'not_related',
+  extractedText: FUTURE_TEXT,
+  chunks: [{ location: 'document', text: FUTURE_TEXT }],
+};
+
+type UploadComplete = NonNullable<Parameters<typeof answerFromJobFile>[0]['uploadComplete']>;
+
+function stubComplete(text: string, seen: Array<{ system: string; user: string }>): UploadComplete {
+  return (async (req: { system: string; user: string }) => {
+    seen.push({ system: req.system, user: req.user });
+    return { text, model: 'stub-model', usage: null };
+  }) as unknown as UploadComplete;
+}
+
+test('what is this about: the model summarizes the upload, with no job-match note', async () => {
+  const seen: Array<{ system: string; user: string }> = [];
+  const summary =
+    'This is a 2023 vision note by Jack Cyganiak describing four ventures: Jettx (long-distance wireless power), Blox Group (automated construction and movable apartment units), Aero Corp (hypersonic air travel), and El Presidente Ventures, a PE/VC firm backing deep tech startups.\n\n' +
+    "This document doesn't appear to be about this job.";
+  const result = await answerFromJobFile({
+    question: 'what this about',
+    file,
+    apiKey: null,
+    sessionDocuments: [FUTURE_DOC],
+    uploadComplete: stubComplete(summary, seen),
+  });
+  assert.equal(seen.length, 1);
+  assert.match(seen[0]!.user, /=== File: The Future\.docx ===/);
+  assert.match(seen[0]!.user, /Aero Corp – Hypersonic/);
+  assert.match(seen[0]!.user, /Question: what this about$/);
+  assert.match(seen[0]!.system, /real summary/);
+  assert.match(seen[0]!.system, /Do not comment on whether the file is related to this job/);
+  assert.equal(result.answeredFromSessionDocument, true);
+  assert.equal(result.officeOnly, true);
+  assert.equal(result.model, 'stub-model');
+  assert.match(result.answer, /^This is a 2023 vision note by Jack Cyganiak/);
+  assert.doesNotMatch(result.answer, /doesn't appear to be about this job/);
+  assert.doesNotMatch(result.answer, /The Future By Jack Cyganiak 8\/11\/2023/);
+
+  // Follow-ups keep the same file and the earlier turns, minus the old note.
+  const follow: Array<{ system: string; user: string }> = [];
+  await answerFromJobFile({
+    question: 'what does Aero Corp do?',
+    file,
+    apiKey: null,
+    sessionDocuments: [FUTURE_DOC],
+    history: [
+      { role: 'user', text: 'what this about' },
+      { role: 'assistant', text: `Old answer.\n\n${QUIET_UNRELATED_NOTE}` },
+    ],
+    uploadComplete: stubComplete('Aero Corp is building hypersonic individual air travel for freight and people.', follow),
+  });
+  assert.match(follow[0]!.user, /=== File: The Future\.docx ===/);
+  assert.match(follow[0]!.user, /Assistant: Old answer\./);
+  assert.ok(!follow[0]!.user.includes(QUIET_UNRELATED_NOTE));
+});
+
+test('upload answers keep only exact quotes and never a quote-only reply', async () => {
+  const seen: Array<{ system: string; user: string }> = [];
+  const mixed = await answerFromJobFile({
+    question: 'what does Blox Group do?',
+    file,
+    apiKey: null,
+    sessionDocuments: [FUTURE_DOC],
+    uploadComplete: stubComplete(
+      'Blox Group works on automated construction. The file lists it as “Automated construction, Flying movable apartment units.” (The Future.docx). It also says “Blox builds rockets on Mars.” (The Future.docx).',
+      seen,
+    ),
+  });
+  assert.match(mixed.answer, /Blox Group works on automated construction\./);
+  assert.match(mixed.answer, /“Automated construction, Flying movable apartment units\.”/);
+  assert.doesNotMatch(mixed.answer, /rockets on Mars/);
+  assert.doesNotMatch(mixed.answer, /Unidentified speaker/);
+
+  // A reply that is only a quote is not used; the plain fallback answers instead.
+  const quoteOnly = await answerFromJobFile({
+    question: 'what does Blox Group do?',
+    file,
+    apiKey: null,
+    sessionDocuments: [FUTURE_DOC],
+    uploadComplete: stubComplete('“Blox Group – Automated construction, Flying movable apartment units.” (The Future.docx)', []),
+  });
+  assert.doesNotMatch(quoteOnly.answer, /^\s*“/);
+  assert.doesNotMatch(quoteOnly.answer, /Unidentified speaker/);
+});
+
+test('a question about Chat after an upload is answered directly, not from the file', async () => {
+  const seen: Array<{ system: string; user: string }> = [];
+  const result = await answerFromJobFile({
+    question: 'what websites are you able to login too',
+    file,
+    apiKey: null,
+    sessionDocuments: [FUTURE_DOC],
+    history: [
+      { role: 'user', text: 'what this about' },
+      { role: 'assistant', text: 'This is a 2023 vision note by Jack Cyganiak.' },
+    ],
+    uploadComplete: stubComplete('should not be called', seen),
+    toolContext: { access: 'org' } as never,
+  });
+  assert.equal(seen.length, 0);
+  assert.notEqual(result.answeredFromSessionDocument, true);
+  assert.match(result.answer, /sign in/i);
+  assert.doesNotMatch(result.answer, /⟦quotes|Blox Group|Unidentified speaker|The Future\.docx/);
+  assert.deepEqual(result.toolResults, []);
+});
+
+test('short messages are accepted by every Ask route', async () => {
+  const { askQuestionText } = await import('../src/shared/askQuestionSchema.js');
+  for (const q of ['?', 'ok', 'hi', '  ?  ']) assert.equal(askQuestionText.safeParse(q).success, true, q);
+  assert.equal(askQuestionText.safeParse('   ').success, false);
+  for (const route of ['proofOfWork', 'progressShare', 'evidencePortal', 'chatDocuments']) {
+    const src = readFileSync(join(here, `../src/routes/${route}.ts`), 'utf8');
+    assert.match(src, /question: askQuestionText/, route);
+    assert.doesNotMatch(src, /question: z\.string\(\)\.trim\(\)\.min\(3\)/, route);
+  }
+  const result = await answerFromJobFile({ question: '?', file, apiKey: null });
+  assert.ok(result.answer.trim());
+});
+
+test('the Computer capability answer matches what Computer does', async () => {
+  const { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } = await import('../src/shared/askComputerCapability.js');
+  const ready = computerCapabilityAnswer({ access: 'org', configured: true });
+  assert.match(ready, /no fixed list/i);
+  assert.match(ready, /sign in yourself in the live view/);
+  assert.match(ready, /never type passwords or verification codes/);
+  assert.match(ready, /remembered for your organization/);
+  assert.match(ready, /before anything is submitted, sent, paid, signed or deleted/);
+  assert.match(computerCapabilityAnswer({ access: 'org', configured: false }), /isn't set up/);
+  assert.doesNotMatch(computerCapabilityAnswer({ access: 'viewer', configured: true }), /live view/);
+  for (const q of ['what websites are you able to login too', 'can you log into my accounts?', 'can you use a browser?', 'what sites can you sign in to']) {
+    assert.equal(looksLikeComputerCapabilityAsk(q), true, q);
+  }
+  for (const q of ['can you search the web for tile prices', 'fill out the permit form on example.gov', 'what is the lockbox code', '?']) {
+    assert.equal(looksLikeComputerCapabilityAsk(q), false, q);
+  }
 });

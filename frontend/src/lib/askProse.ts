@@ -1,7 +1,9 @@
 /**
  * Safe Ask markdown — ChatGPT / Claude / Grok style bubbles without HTML injection.
  *
- * Supports: paragraphs, bullet/numbered lists, **bold**, *italic*.
+ * Supports: paragraphs, bullet/numbered lists, headings, simple tables,
+ * **bold**, *italic*, `inline code`, fenced code, and labelled in-app links.
+ * Rules (---), quote markers (>) and stray markdown never show as raw text.
  * Everything else is plain text. Cite/seek tokens stay in text leaves for
  * splitAnswerCites to turn into buttons.
  */
@@ -12,13 +14,15 @@ export type AskInline =
   | { kind: 'text'; text: string }
   | { kind: 'bold'; children: AskInline[] }
   | { kind: 'italic'; children: AskInline[] }
-  | { kind: 'link'; text: string; href: string };
+  | { kind: 'link'; text: string; href: string }
+  | { kind: 'code'; text: string };
 
 export type AskProseBlock =
   | { kind: 'paragraph'; children: AskInline[] }
   | { kind: 'heading'; level: 2 | 3; children: AskInline[] }
   | { kind: 'list'; ordered: boolean; items: AskInline[][] }
-  | { kind: 'table'; headers: AskInline[][]; rows: AskInline[][][] };
+  | { kind: 'table'; headers: AskInline[][]; rows: AskInline[][][] }
+  | { kind: 'code'; text: string };
 
 export function splitAskArtifact(input: string): { prose: string; artifact: string | null } {
   const text = String(input ?? '');
@@ -136,7 +140,26 @@ function parseInline(input: string): AskInline[] {
     buf = '';
   };
 
+  const isWordChar = (ch: string | undefined) => Boolean(ch && /[\p{L}\p{N}]/u.test(ch));
+
   while (i < input.length) {
+    if (input[i] === '\\' && /[\\`*_[\]#|>-]/.test(input[i + 1] ?? '')) {
+      buf += input[i + 1];
+      i += 2;
+      continue;
+    }
+    if (input[i] === '`') {
+      const end = input.indexOf('`', i + 1);
+      if (end > i + 1) {
+        flush();
+        nodes.push({ kind: 'code', text: input.slice(i + 1, end) });
+        i = end + 1;
+        continue;
+      }
+      // A lone backtick never shows as markdown.
+      i += 1;
+      continue;
+    }
     if (input[i] === '[') {
       const link = input.slice(i).match(ASK_LINK_RE);
       if (link) {
@@ -176,7 +199,7 @@ function parseInline(input: string): AskInline[] {
       i += 1;
       continue;
     }
-    if (input.startsWith('__', i)) {
+    if (input.startsWith('__', i) && !isWordChar(input[i - 1])) {
       const end = input.indexOf('__', i + 2);
       if (end > i + 2) {
         flush();
@@ -187,14 +210,15 @@ function parseInline(input: string): AskInline[] {
       i += 2;
       continue;
     }
-    if (input[i] === '_' && input[i + 1] !== '_') {
+    if (input[i] === '_' && input[i + 1] !== '_' && !isWordChar(input[i - 1])) {
       const end = input.indexOf('_', i + 1);
-      if (end > i + 1 && input[end + 1] !== '_') {
+      if (end > i + 1 && input[end + 1] !== '_' && !isWordChar(input[end + 1])) {
         flush();
         nodes.push({ kind: 'italic', children: parseInline(input.slice(i + 1, end)) });
         i = end + 1;
         continue;
       }
+      // Unmatched _ — skip.
       i += 1;
       continue;
     }
@@ -246,11 +270,34 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
       flushAll();
       continue;
     }
-    const heading = line.match(/^\s*(#{1,3})\s+(.*)$/);
+    const fence = line.match(/^\s*(```|~~~)/);
+    if (fence) {
+      flushAll();
+      const code: string[] = [];
+      index += 1;
+      while (index < lines.length && !(lines[index] ?? '').trim().startsWith(fence[1]!)) {
+        code.push(lines[index] ?? '');
+        index += 1;
+      }
+      if (code.some((row) => row.trim())) blocks.push({ kind: 'code', text: code.join('\n').replace(/\s+$/, '') });
+      continue;
+    }
+    // Horizontal rules read as noise in a chat bubble.
+    if (/^\s*(?:-{3,}|_{3,}|\*{3,}|={3,})\s*$/.test(line)) {
+      flushAll();
+      continue;
+    }
+    const quoted = line.match(/^\s*>\s?(.*)$/);
+    if (quoted) {
+      flushList();
+      if ((quoted[1] ?? '').trim()) paragraphLines.push((quoted[1] ?? '').trim());
+      continue;
+    }
+    const heading = line.match(/^\s*(#{1,6})\s+(.*)$/);
     if (heading) {
       flushAll();
       const level = (heading[1] ?? '').length >= 3 ? 3 : 2;
-      blocks.push({ kind: 'heading', level, children: inline((heading[2] ?? '').trim()) });
+      blocks.push({ kind: 'heading', level, children: inline((heading[2] ?? '').replace(/\s+#+\s*$/, '').trim()) });
       continue;
     }
     if (/^\s*\|.+\|\s*$/.test(line)) {
@@ -303,7 +350,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
 export function askInlineText(nodes: AskInline[]): string {
   return nodes
     .map((node) => {
-      if (node.kind === 'text' || node.kind === 'link') return node.text;
+      if (node.kind === 'text' || node.kind === 'link' || node.kind === 'code') return node.text;
       return askInlineText(node.children);
     })
     .join('');

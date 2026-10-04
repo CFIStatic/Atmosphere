@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -361,7 +362,7 @@ progressShareRouter.post(
       const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
       const input = z
         .object({
-          question: z.string().trim().min(3).max(1000),
+          question: askQuestionText,
           threadId: z.string().uuid().optional().nullable(),
         })
         .parse(req.body ?? {});

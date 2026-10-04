@@ -35,7 +35,10 @@ export type AskAttachment = {
   typeLabel: string;
 };
 
-/** Quiet line the answer may add when the upload is not about this job. */
+/**
+ * Job-match line older answers ended with. Answers no longer add it; stored
+ * turns that still carry it have it removed before they render.
+ */
 export const QUIET_DOCUMENT_NOTE = "This document doesn't appear to be about this job.";
 
 export function attachmentTypeLabel(filename: string, kindLabel?: string | null): string {
@@ -53,13 +56,14 @@ export function chipFromDocument(doc: ChatDocumentCard): AskAttachment {
   };
 }
 
-export function splitQuietDocumentNote(text: string): { answer: string; note: string | null } {
-  const trimmed = text.trim();
-  if (!trimmed.endsWith(QUIET_DOCUMENT_NOTE)) return { answer: trimmed, note: null };
-  return {
-    answer: trimmed.slice(0, -QUIET_DOCUMENT_NOTE.length).trim(),
-    note: QUIET_DOCUMENT_NOTE,
-  };
+/** Removes the old job-match line from a stored answer. Nothing renders it. */
+export function stripLegacyDocumentNote(text: string): string {
+  return String(text ?? '')
+    .split('\n')
+    .filter((line) => !line.includes(QUIET_DOCUMENT_NOTE))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 async function readError(res: Response): Promise<string> {
@@ -140,7 +144,6 @@ export async function askChatDocuments(
   question: string,
   documentIds: string[],
   jobId?: string | null,
-  opts?: { quietNote?: boolean },
 ): Promise<string | null> {
   const res = await fetch('/api/operations/documents/ask', {
     method: 'POST',
@@ -150,12 +153,11 @@ export async function askChatDocuments(
       question,
       documentIds,
       jobId: jobId ?? undefined,
-      ...(opts?.quietNote === false ? { quietNote: false } : {}),
     }),
   });
   if (!res.ok) throw new Error(await readError(res));
   const body = (await res.json()) as { answer?: string | null };
   if (body.answer == null) return null;
-  const answer = String(body.answer).trim();
+  const answer = stripLegacyDocumentNote(String(body.answer));
   return answer || null;
 }
