@@ -39,6 +39,7 @@
 		AFC000000000000000000223 /* RecordingConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000123 /* RecordingConsentView.swift */; };
 		AFC000000000000000000224 /* RecordingAckStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000124 /* RecordingAckStore.swift */; };
 		AFC000000000000000000215 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000115 /* Assets.xcassets */; };
+		AFC000000000000000000225 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000125 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -77,6 +78,7 @@
 		AFC000000000000000000123 /* RecordingConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingConsentView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000124 /* RecordingAckStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingAckStore.swift; sourceTree = "<group>"; };
 		AFC000000000000000000115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AFC000000000000000000125 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +124,7 @@
 				AFC00000000000000000001A /* Models */,
 				AFC000000000000000000115 /* Assets.xcassets */,
 				AFC000000000000000000113 /* Info.plist */,
+				AFC000000000000000000125 /* PrivacyInfo.xcprivacy */,
 				AFC000000000000000000114 /* FieldCapture.entitlements */,
 			);
 			path = AtmosphereFieldCapture;
@@ -286,6 +289,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AFC000000000000000000215 /* Assets.xcassets in Resources */,
+				AFC000000000000000000225 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

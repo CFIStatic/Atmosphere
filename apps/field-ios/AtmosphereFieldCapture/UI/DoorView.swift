@@ -36,27 +36,31 @@ struct DoorView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
                     .cornerRadius(12)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Measured for the twin")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(FieldTheme.faint)
-                            .textCase(.uppercase)
-                        ForEach(session.twinRooms) { room in
-                            HStack {
-                                Text(room.name).font(.system(size: 13, weight: .semibold))
-                                Spacer()
-                                Text(room.detail).font(FieldTheme.mono).foregroundStyle(FieldTheme.muted)
+                    // RoomPlan is still a stub — keep the twin panel off until it
+                    // returns real rooms (see FieldFeatures.roomPlanTwin).
+                    if FieldFeatures.roomPlanTwin && !session.twinRooms.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Measured for the twin")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(FieldTheme.faint)
+                                .textCase(.uppercase)
+                            ForEach(session.twinRooms) { room in
+                                HStack {
+                                    Text(room.name).font(.system(size: 13, weight: .semibold))
+                                    Spacer()
+                                    Text(room.detail).font(FieldTheme.mono).foregroundStyle(FieldTheme.muted)
+                                }
+                                .font(.system(size: 13))
+                                .padding(10)
+                                .background(FieldTheme.bg)
+                                .cornerRadius(8)
                             }
-                            .font(.system(size: 13))
-                            .padding(10)
-                            .background(FieldTheme.bg)
-                            .cornerRadius(8)
                         }
+                        .padding(14)
+                        .background(FieldTheme.panel)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
+                        .cornerRadius(12)
                     }
-                    .padding(14)
-                    .background(FieldTheme.panel)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
-                    .cornerRadius(12)
 
                     if let m = session.manifest {
                         Text(
@@ -65,6 +69,12 @@ struct DoorView: View {
                         .font(FieldTheme.mono)
                         .font(.system(size: 11))
                         .foregroundStyle(FieldTheme.faint)
+                    }
+
+                    if let note = session.stoppedEarlyNote {
+                        Text(note)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FieldTheme.rec)
                     }
 
                     if !session.filingDetail.isEmpty {

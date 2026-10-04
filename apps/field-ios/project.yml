@@ -16,7 +16,12 @@ targets:
     type: application
     platform: iOS
     sources:
-      - AtmosphereFieldCapture
+      - path: AtmosphereFieldCapture
+        excludes:
+          - PrivacyInfo.xcprivacy
+      # App Store privacy manifest — copied into the app bundle as a resource.
+      - path: AtmosphereFieldCapture/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.atmosphere.fieldcapture
@@ -28,8 +33,8 @@ targets:
         CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: "NO"
         CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]: "NO"
         CODE_SIGN_IDENTITY[sdk=iphonesimulator*]: "-"
-        CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: false
         TARGETED_DEVICE_FAMILY: "1"
@@ -38,11 +43,26 @@ targets:
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
     info:
       path: AtmosphereFieldCapture/Info.plist
+      # Keep in sync with AtmosphereFieldCapture/Info.plist — `xcodegen generate`
+      # rewrites that file from these properties.
       properties:
+        CFBundleDisplayName: Field Capture
+        CFBundleName: Atmosphere Field Capture
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: Field Capture films the workday so the office can verify work on site.
         NSMicrophoneUsageDescription: Field Capture records microphone audio with the day film so the office can hear the site, not only see it.
-        NSLocationWhenInUseUsageDescription: Location attributes stretches of the day film to the right job.
+        NSLocationWhenInUseUsageDescription: Field Capture uses your location while you film to suggest the job you are at and to note where each film was recorded. You can still pick the job yourself.
         ATMOSPHERE_API_BASE: https://atmosphere-production.up.railway.app
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.atmosphere.fieldcapture
+            CFBundleURLSchemes:
+              - atmosphere-field
     entitlements:
       path: AtmosphereFieldCapture/FieldCapture.entitlements
