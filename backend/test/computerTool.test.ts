@@ -1,9 +1,9 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 /**
  * Computer from Chat's side: the org-only start_computer_task tool, the
  * "not set up" state, the approval gate's classification rules, and the
  * allowlisted job projection.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyClick, classifyKey, classifyType, kindFromLabel } from '../src/computer/gate.js';
@@ -259,4 +259,13 @@ test('every /api/chat-computer route sits behind requireAuth and the org check',
   const src = readFileSync(new URL('../src/routes/computer.ts', import.meta.url), 'utf8');
   assert.equal((src.match(/await requireOrgContext\(req\)/g) ?? []).length, routes.length, 'each handler checks org membership');
   assert.match(src, /Cache-Control', 'no-store'/);
+});
+
+test('Browserbase credentials tolerate NAME=value and quotes pasted from a .env file', async () => {
+  const { cleanEnvSecret } = await import('../src/computer/config.js');
+  assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', 'BROWSERBASE_API_KEY=bb_test_x '), 'bb_test_x');
+  assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', '"bb_test_x"'), 'bb_test_x');
+  assert.equal(cleanEnvSecret('BROWSERBASE_PROJECT_ID', " 'p-1' "), 'p-1');
+  assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', 'bb_test_x'), 'bb_test_x');
+  assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', undefined), '');
 });

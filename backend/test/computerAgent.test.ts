@@ -1,10 +1,10 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 /**
  * Computer (Chat's browser agent) end to end on the mock provider: a
  * scripted model clicks and types on a fake claim form while the real gate,
  * store contract, worker and metering run. A "person" callback stands in
  * for the human answering approval and Needs-you cards.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ContentBlock, ComputerModel, ComputerModelRequest, ComputerModelResponse } from '../src/computer/agent.js';

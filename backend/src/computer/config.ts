@@ -57,9 +57,22 @@ export function computerSettings(): ComputerSettings {
   };
 }
 
+/**
+ * Tolerate a value pasted as `NAME=value` or wrapped in quotes (an easy slip
+ * when copying from a .env file), so the key still authenticates.
+ */
+export function cleanEnvSecret(name: string, raw: string | undefined): string {
+  let v = (raw ?? '').trim();
+  if (v.startsWith(`${name}=`)) v = v.slice(name.length + 1).trim();
+  if (v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 export function browserbaseCredentials(): { apiKey: string; projectId: string } | null {
-  const apiKey = (process.env.BROWSERBASE_API_KEY ?? '').trim();
-  const projectId = (process.env.BROWSERBASE_PROJECT_ID ?? '').trim();
+  const apiKey = cleanEnvSecret('BROWSERBASE_API_KEY', process.env.BROWSERBASE_API_KEY);
+  const projectId = cleanEnvSecret('BROWSERBASE_PROJECT_ID', process.env.BROWSERBASE_PROJECT_ID);
   if (!apiKey || !projectId) return null;
   return { apiKey, projectId };
 }
