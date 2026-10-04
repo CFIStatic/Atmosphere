@@ -51,6 +51,8 @@ function task(over: Partial<ComputerTaskView> = {}): ComputerTaskView {
     lastAction: 'typed into “Claim number”',
     currentUrl: 'https://portal.example.test/claims/new',
     resultSummary: null,
+    result: null,
+    submitted: false,
     error: null,
     createdAt: '2026-10-04T15:00:00Z',
     startedAt: '2026-10-04T15:00:01Z',
@@ -99,8 +101,10 @@ describe('ComputerTaskCard', () => {
   it('shows a running task with Watch, Take control and Stop', async () => {
     computerTask.mockResolvedValue({ task: task() });
     render(<ComputerTaskCard path={`computer-task:${ID}`} />);
-    expect(await screen.findByText('Step 4 of 60')).toBeInTheDocument();
-    expect(screen.getByText('portal.example.test')).toBeInTheDocument();
+    expect(await screen.findByTestId('computer-task-title')).toHaveTextContent('portal.example.test: in progress');
+    expect(screen.getByTestId('computer-task-pill')).toHaveTextContent('Working');
+    expect(screen.queryByText(/Step \d+ of \d+/)).toBeNull();
+    expect(screen.queryByText('Fill out the claim form on portal.example.test')).toBeNull();
     expect(screen.getByRole('button', { name: 'Watch' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Take control' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
@@ -133,6 +137,8 @@ describe('ComputerTaskCard', () => {
     computerTask.mockResolvedValue({ task: task({ status: 'awaiting_approval', approval }) });
     render(<ComputerTaskCard path={`computer-task:${ID}`} />);
     const card = await screen.findByTestId('computer-approval-card');
+    expect(screen.getByTestId('computer-task-pill')).toHaveTextContent('Waiting for approval');
+    expect(screen.getByTestId('computer-task-title')).toHaveTextContent('portal.example.test: ready to submit claim');
     expect(within(card).getByTestId('computer-approval-screenshot')).toHaveAttribute('src', approval.screenshot);
     const rows = within(card).getAllByTestId('computer-approval-field');
     expect(rows).toHaveLength(2);
@@ -167,6 +173,8 @@ describe('ComputerTaskCard', () => {
     render(<ComputerTaskCard path={`computer-task:${ID}`} />);
     const card = await screen.findByTestId('computer-needs-you-card');
     expect(card).toHaveTextContent('Enter the code the site sent you.');
+    expect(screen.getByTestId('computer-task-pill')).toHaveTextContent('Needs you');
+    expect(screen.getByTestId('computer-task-title')).toHaveTextContent('portal.example.test: code needed');
     await userEvent.click(within(card).getByRole('button', { name: 'Take control' }));
     await waitFor(() => expect(computerLiveView).toHaveBeenCalledWith(ID, 'control'));
     await userEvent.click(within(card).getByRole('button', { name: "I'm done, resume" }));
@@ -183,6 +191,92 @@ describe('ComputerTaskCard', () => {
     expect(await screen.findByText('Saved the draft. Nothing was submitted.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Watch' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+  });
+
+  it('done, not submitted: site and title, the fields filled, one note, and steps in plain words', async () => {
+    // The real httpbin run (task 172a749a): 2 model turns, 14 audit events.
+    const ev = (id: number, event: string, detail: Record<string, unknown> = {}) => ({
+      id,
+      event,
+      actor: 'agent',
+      at: '2026-10-04T15:00:00Z',
+      detail,
+    });
+    computerTask.mockResolvedValue({
+      task: task({
+        status: 'succeeded',
+        canWatch: false,
+        stepCount: 2,
+        startUrl: 'https://httpbin.org/forms/post',
+        currentUrl: 'https://httpbin.org/forms/post',
+        instructions: 'Fill in the form at https://httpbin.org/forms/post with this job. Do not submit.',
+        resultSummary: 'No customer details on this job, so test values were used.',
+        result: {
+          title: 'Form filled',
+          fields: [
+            { label: 'Customer name:', value: 'Test Customer' },
+            { label: 'Telephone', value: '555-0100' },
+            { label: 'E-mail address', value: 'test@example.com' },
+          ],
+          notes: 'No customer details on this job, so test values were used.',
+        },
+        events: [
+          ev(1, 'task_queued'),
+          ev(2, 'task_started'),
+          ev(3, 'context_created'),
+          ev(4, 'session_started'),
+          ev(5, 'navigate', { host: 'httpbin.org' }),
+          ev(6, 'action', { action: 'left_click', target: { tag: 'input', label: 'Customer name:' } }),
+          ev(7, 'action', { action: 'type', field: 'Customer name:', chars: 13 }),
+          ev(8, 'action', { action: 'left_click', target: { tag: 'input', label: 'Telephone:' } }),
+          ev(9, 'action', { action: 'type', field: 'Telephone:', chars: 8 }),
+          ev(10, 'action', { action: 'left_click', target: { tag: 'input', label: 'E-mail address:' } }),
+          ev(11, 'action', { action: 'type', field: 'E-mail address:', chars: 16 }),
+          ev(12, 'finished', { submitted: false }),
+          ev(13, 'session_ended'),
+          ev(14, 'task_finished', { status: 'succeeded', submitted: false }),
+        ],
+      }),
+    });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    expect(await screen.findByTestId('computer-task-title')).toHaveTextContent('httpbin.org: form filled');
+    expect(screen.getByTestId('computer-task-pill')).toHaveTextContent('Done, not submitted');
+    const fields = screen.getByTestId('computer-result-fields');
+    expect(fields).toHaveTextContent('Customer name');
+    expect(fields).not.toHaveTextContent('Customer name:');
+    expect(fields).toHaveTextContent('555-0100');
+    expect(screen.getByTestId('computer-result-note')).toHaveTextContent('No customer details on this job, so test values were used.');
+    expect(screen.queryByText(/Step \d+ of/)).toBeNull();
+    expect(screen.queryByText(/Fill in the form at/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Steps (6)' }));
+    const steps = within(screen.getByTestId('computer-steps')).getAllByRole('listitem').map((li) => li.textContent);
+    expect(steps).toEqual([
+      'Opened a browser',
+      'Opened httpbin.org',
+      'Filled in “Customer name”',
+      'Filled in “Telephone”',
+      'Filled in “E-mail address”',
+      'Finished',
+    ]);
+  });
+
+  it('a submitted task says Submitted only when an approved click went through', async () => {
+    computerTask.mockResolvedValue({
+      task: task({ status: 'succeeded', canWatch: false, submitted: true, result: { title: 'Claim submitted', fields: [], notes: null } }),
+    });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    expect(await screen.findByTestId('computer-task-pill')).toHaveTextContent('Submitted');
+    expect(screen.getByTestId('computer-task-title')).toHaveTextContent('portal.example.test: claim submitted');
+  });
+
+  it('failed and stopped pills', async () => {
+    computerTask.mockResolvedValueOnce({ task: task({ status: 'failed', canWatch: false, error: 'Stopped: the site did not load.' }) });
+    const { unmount } = render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    expect(await screen.findByTestId('computer-task-pill')).toHaveTextContent('Failed');
+    unmount();
+    computerTask.mockResolvedValueOnce({ task: task({ status: 'canceled', canWatch: false, resultSummary: 'Canceled.' }) });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    expect(await screen.findByTestId('computer-task-pill')).toHaveTextContent('Stopped');
   });
 });
 

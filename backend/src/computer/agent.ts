@@ -21,6 +21,7 @@ import {
 } from './gate.js';
 import { verifyApprovalFields } from './projection.js';
 import { COMPUTER_CUSTOM_TOOLS, COMPUTER_SYSTEM_PROMPT, COMPUTER_TOOLSET, taskPrompt } from './prompt.js';
+import { encodeTaskResult, resultFromFinish, type ComputerTaskResult } from './result.js';
 import type { ComputerStore, ComputerTaskRow } from './store.js';
 import type { ComputerDriver, NeedsYouReason } from './types.js';
 
@@ -57,6 +58,8 @@ export interface AgentMessage {
 export interface AgentOutcome {
   status: 'succeeded' | 'failed' | 'canceled';
   summary?: string;
+  /** Structured result from finish (fields, submitted, note). */
+  result?: ComputerTaskResult;
   error?: string;
   submitted?: boolean;
 }
@@ -333,7 +336,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           target: target ? { tag: target.tag, label: clip(target.label, 80) } : null,
           consequential: decision.type === 'consequential' ? decision.kind : null,
         });
-        return done(`${action.replace('_', ' ')} on “${clip(target?.label, 60) || 'the page'}”`);
+        return done(target?.label ? `Clicked “${clip(target.label, 60)}”` : 'Clicked on the page');
       }
       case 'left_mouse_down':
       case 'left_mouse_up': {
@@ -356,13 +359,13 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           return fail('Blocked: dragging onto that control is not allowed. Use left_click.');
         }
         await driver.drag([start[0], start[1]], [coord![0], coord![1]]);
-        return done('drag');
+        return done('Dragged on the page');
       }
       case 'scroll': {
         const at = inView(coord) ? coord! : [driver.viewport.width / 2, driver.viewport.height / 2];
         const dir = ['up', 'down', 'left', 'right'].includes(input.scroll_direction) ? input.scroll_direction : 'down';
         await driver.scroll(at[0], at[1], dir, Number(input.scroll_amount) || 3);
-        return done(`scroll ${dir}`);
+        return done(`Scrolled ${dir}`);
       }
       case 'type': {
         const text = String(input.text ?? '');
@@ -373,7 +376,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         await driver.type(text);
         // Never log what was typed; it can be personal information.
         await audit('action', { action, chars: text.length, field: clip(focused?.label, 80) || null });
-        return done(`typed into “${clip(focused?.label, 60) || 'the page'}”`);
+        return done(focused?.label ? `Typed in “${clip(focused.label, 60)}”` : 'Typed on the page');
       }
       case 'key': {
         const combo = String(input.text ?? '');
@@ -384,7 +387,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         const repeat = Math.min(50, Math.max(1, Number(input.repeat) || 1));
         await driver.key(combo, repeat);
         await audit('action', { action, key: clip(combo, 40), repeat });
-        return done(`pressed ${clip(combo, 40)}`);
+        return done(`Pressed ${clip(combo, 40)}`);
       }
       default:
         return fail(`Unsupported action "${clip(action, 40)}".`);
@@ -417,7 +420,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         }
         await driver.navigate(parsed.toString());
         await audit('navigate', { host: parsed.hostname });
-        await store.updateTask(task.id, { current_url: clip(await driver.currentUrl(), 2000), last_action: `opened ${parsed.hostname}` });
+        await store.updateTask(task.id, { current_url: clip(await driver.currentUrl(), 2000), last_action: `Opened ${parsed.hostname}` });
         return { text: 'Opened. Take a screenshot to see it.', isError: false };
       }
       case 'request_approval': {
@@ -504,8 +507,12 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         return { text: 'The person pressed Resume. Take a screenshot and continue.', isError: false };
       }
       case 'finish': {
-        const summary = clip(input.summary, 4000) || 'Done.';
-        return { text: 'Finished.', isError: false, outcome: { status: 'succeeded', summary, submitted: Boolean(input.submitted) } };
+        const result = resultFromFinish(input);
+        return {
+          text: 'Finished.',
+          isError: false,
+          outcome: { status: 'succeeded', summary: encodeTaskResult(result), result, submitted: result.submitted },
+        };
       }
       default:
         return { text: `Unknown tool "${clip(block.name, 40)}".`, isError: true };

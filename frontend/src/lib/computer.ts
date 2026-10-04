@@ -58,7 +58,12 @@ export interface ComputerTaskView {
   maxSteps: number;
   lastAction: string | null;
   currentUrl: string | null;
+  /** Plain note for the person (older tasks: the whole summary). */
   resultSummary: string | null;
+  /** What Computer filled in, when it reported it. */
+  result: { title: string | null; fields: Array<{ label: string; value: string }>; notes: string | null } | null;
+  /** True only when an approved submit-type click went through. */
+  submitted: boolean;
   error: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -122,49 +127,174 @@ export const NEEDS_YOU_TITLE: Record<NonNullable<ComputerTaskView['needsYou']>['
   other: 'Your turn',
 };
 
+/** Plain-word lines for the Steps list. Housekeeping events are left out. */
 const EVENT_LABEL: Record<string, string> = {
-  task_queued: 'Queued',
-  task_started: 'Started a browser',
-  session_started: 'Browser ready',
+  task_started: 'Opened a browser',
   navigate: 'Opened a page',
-  action: 'Acted on the page',
-  blocked: 'Blocked an action',
-  approval_requested: 'Asked for approval',
+  action: 'Worked on the page',
+  blocked: 'Held back an action',
+  approval_requested: 'Asked for your approval',
+  approval_granted: 'You approved',
   approved: 'You approved',
   approval_used: 'Clicked the approved button',
-  approval_canceled: 'You canceled the approval',
+  approval_canceled: 'You canceled',
+  approval_declined: 'You declined',
+  approval_superseded: 'You took over before approving',
   needs_you: 'Paused for you',
-  resume_requested: 'You pressed Resume',
-  resumed: 'Resumed',
+  resumed: 'Carried on',
   took_control: 'You took control',
-  handed_back: 'You handed back control',
-  live_view_opened: 'Live view opened',
+  handed_back: 'You handed back',
+  budget_reached: 'Stopped at the spending cap',
+  step_cap: 'Stopped at the step limit',
   finished: 'Finished',
-  task_finished: 'Task closed',
-  session_ended: 'Browser closed',
-  cancel_requested: 'Cancel requested',
-  budget_reached: 'Reached the spending cap',
-  step_cap: 'Reached the step limit',
 };
 
+/** Events that are bookkeeping, not steps a person cares about. */
+const HIDDEN_EVENTS = new Set([
+  'task_queued',
+  'context_created',
+  'session_started',
+  'session_ended',
+  'live_view_opened',
+  'task_finished',
+  'resume_requested',
+  'cancel_requested',
+]);
+
+const NEEDS_YOU_STEP: Record<string, string> = {
+  login: 'Paused for you to sign in',
+  two_factor: 'Paused for you to enter a code',
+  captcha: 'Paused for you to complete a captcha',
+  other: 'Paused for you',
+};
+
+/** A page's field label without the trailing colon ("Telephone:" → "Telephone"). */
+export function cleanFieldLabel(label: unknown): string {
+  return String(label ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s*[:：*]+$/, '');
+}
+
+function clickTarget(event: ComputerTaskEvent): string {
+  const t = event.detail?.target;
+  return t && typeof t === 'object' ? cleanFieldLabel((t as { label?: string }).label) : '';
+}
+
 export function computerEventLabel(event: ComputerTaskEvent): string {
-  const base = EVENT_LABEL[event.event] ?? event.event.replace(/_/g, ' ');
+  const base = EVENT_LABEL[event.event] ?? 'Worked on the page';
   const d = event.detail ?? {};
   if (event.event === 'action') {
-    const action = String(d.action ?? '').replace(/_/g, ' ');
-    const field = d.field ? ` in “${String(d.field)}”` : '';
-    const target = d.target && typeof d.target === 'object' && (d.target as { label?: string }).label
-      ? ` “${(d.target as { label?: string }).label}”`
-      : '';
-    if (action === 'type') return `Typed${field}`;
+    const action = String(d.action ?? '');
+    const field = cleanFieldLabel(d.field);
+    const target = clickTarget(event);
+    if (action === 'type') return field ? `Typed in “${field}”` : 'Typed on the page';
     if (action === 'key') return `Pressed ${String(d.key ?? 'a key')}`;
-    return `${action.charAt(0).toUpperCase()}${action.slice(1)}${target}`;
+    if (action.endsWith('click')) return target ? `Clicked “${target}”` : 'Clicked on the page';
+    return base;
   }
   if (event.event === 'navigate' && d.host) return `Opened ${String(d.host)}`;
+  if (event.event === 'blocked' && d.why === 'outside_task') return `Stayed on the task instead of opening ${String(d.host ?? 'another site')}`;
   if (event.event === 'blocked' && d.label) return `Held “${String(d.label)}” for your approval`;
-  if (event.event === 'blocked' && d.why === 'outside_task') return `Refused to leave the task (${String(d.host ?? 'another site')})`;
-  if (event.event === 'needs_you' && d.reason) return `Paused for you (${String(d.reason).replace('_', ' ')})`;
+  if (event.event === 'approval_requested' && d.label) return `Asked you before clicking “${String(d.label)}”`;
+  if (event.event === 'needs_you') return NEEDS_YOU_STEP[String(d.reason ?? 'other')] ?? NEEDS_YOU_STEP.other;
+  if (event.event === 'finished') return d.submitted ? 'Finished and submitted' : 'Finished';
   return base;
+}
+
+/** The steps worth showing a person, in order, in plain words. */
+export function computerStepLines(events: readonly ComputerTaskEvent[]): Array<{ id: number; text: string }> {
+  const shown = events.filter((e) => !HIDDEN_EVENTS.has(e.event));
+  const lines: Array<{ id: number; text: string }> = [];
+  for (let i = 0; i < shown.length; i += 1) {
+    const e = shown[i];
+    const next = shown[i + 1];
+    // Click a field, then type in it: one step, "Filled in “Telephone”".
+    if (
+      e.event === 'action' &&
+      String(e.detail?.action ?? '').endsWith('click') &&
+      next?.event === 'action' &&
+      next.detail?.action === 'type' &&
+      clickTarget(e) &&
+      clickTarget(e) === cleanFieldLabel(next.detail?.field)
+    ) {
+      lines.push({ id: e.id, text: `Filled in “${clickTarget(e)}”` });
+      i += 1;
+      continue;
+    }
+    lines.push({ id: e.id, text: computerEventLabel(e) });
+  }
+  return lines;
+}
+
+/** The status pill on the task card. */
+export type ComputerPill = 'Working' | 'Needs you' | 'Waiting for approval' | 'Done, not submitted' | 'Submitted' | 'Failed' | 'Stopped';
+
+export function computerPill(task: Pick<ComputerTaskView, 'status' | 'submitted'>): ComputerPill {
+  switch (task.status) {
+    case 'queued':
+    case 'running':
+      return 'Working';
+    case 'needs_you':
+      return 'Needs you';
+    case 'awaiting_approval':
+      return 'Waiting for approval';
+    case 'succeeded':
+      return task.submitted ? 'Submitted' : 'Done, not submitted';
+    case 'failed':
+      return 'Failed';
+    case 'canceled':
+      return task.submitted ? 'Submitted' : 'Stopped';
+  }
+}
+
+function hostOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+/** Header words while paused; the Needs-you card below says what to do. */
+const NEEDS_YOU_SHORT: Record<NonNullable<ComputerTaskView['needsYou']>['reason'], string> = {
+  login: 'sign-in needed',
+  two_factor: 'code needed',
+  captcha: 'captcha needed',
+  other: 'paused',
+};
+
+/** "httpbin.org: form filled": the site, then a short title for where things stand. */
+export function computerCardTitle(task: ComputerTaskView): string {
+  const site = hostOf(task.currentUrl) ?? hostOf(task.startUrl) ?? hostOf(task.approval?.pageUrl ?? null);
+  let what: string;
+  switch (task.status) {
+    case 'queued':
+      what = 'starting';
+      break;
+    case 'running':
+      what = 'in progress';
+      break;
+    case 'needs_you':
+      what = NEEDS_YOU_SHORT[task.needsYou?.reason ?? 'other'];
+      break;
+    case 'awaiting_approval':
+      what = task.approval ? `ready to ${task.approval.buttonLabel.toLowerCase()}` : 'ready for your approval';
+      break;
+    case 'succeeded': {
+      const t = task.result?.title?.trim();
+      what = t ? t.charAt(0).toLowerCase() + t.slice(1) : task.submitted ? 'submitted' : task.result?.fields.length ? 'form filled' : 'done';
+      break;
+    }
+    case 'failed':
+      what = "didn't finish";
+      break;
+    case 'canceled':
+      what = 'stopped';
+      break;
+  }
+  return site ? `${site}: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
 }
 
 /**

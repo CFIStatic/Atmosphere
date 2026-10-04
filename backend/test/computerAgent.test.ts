@@ -170,6 +170,38 @@ test('fills the form without submitting', async () => {
   assert.equal(h.provider.ended.length, 1, 'browser session released');
 });
 
+test('finish reports a structured result: fields, submitted, one plain note', async () => {
+  const h = await setup({
+    turns: [
+      [computer('left_click', { coordinate: AT.insured }), computer('type', { text: 'Jane Testcase' })],
+      [
+        tool('finish', {
+          title: 'Form filled.',
+          fields: [
+            { label: 'Insured name', value: 'Jane Testcase' },
+            { label: '', value: 'dropped: no label' },
+          ],
+          submitted: true,
+          notes: 'No customer details on this job, so test values were used.',
+        }),
+      ],
+    ],
+  });
+  const out = await h.run();
+  assert.equal(out?.status, 'succeeded');
+  const task = await h.store.getTask(ORG, h.taskId);
+  assert.ok(task?.result_summary?.startsWith('{"v":1'), 'stored as versioned JSON in result_summary');
+  const view = await loadTaskView(ORG, h.taskId, USER);
+  assert.deepEqual(view.result, {
+    title: 'Form filled',
+    fields: [{ label: 'Insured name', value: 'Jane Testcase' }],
+    notes: 'No customer details on this job, so test values were used.',
+  });
+  assert.equal(view.resultSummary, 'No customer details on this job, so test values were used.');
+  assert.equal(view.submitted, false, 'the model saying "submitted" is not enough: no approved click went through');
+});
+
+
 test('a submit click is blocked without an approval (and so is Enter)', async () => {
   let blockedText = '';
   let enterText = '';
@@ -247,6 +279,10 @@ test('an approval lets exactly one submit through', async () => {
   assert.equal(bySource['Claim number'].source, 'Job: Claim number');
   assert.equal(bySource['Property address'].verified, false, 'a value not from the job or the message is flagged');
   assert.ok(h.store.audit.some((e) => e.event === 'approval_used'));
+  const view = await loadTaskView(ORG, h.taskId, USER);
+  assert.equal(view.submitted, true, 'an approved click went through');
+  assert.equal(view.resultSummary, 'Submitted the claim.', 'an old-style summary still reads as the note');
+  assert.equal(view.result?.fields.length, 3, 'no fields from finish: the approval fields are shown');
 });
 
 test('an approval covers one click only, and only the approved button', async () => {
