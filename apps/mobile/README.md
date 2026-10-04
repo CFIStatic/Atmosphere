@@ -76,13 +76,16 @@ npx cap open ios       # Xcode (on a Mac)
 5. **Codemagic → Team settings → Team integrations → Developer Portal → Manage
    keys → Add key**: name it exactly **`atmosphere_asc`**, enter Issuer ID, Key
    ID, upload the `.p8`.
-6. **Codemagic → Team settings → codemagic.yaml settings → Code signing
-   identities**:
-   - iOS certificates → Generate certificate → type *Apple Distribution*, key
-     `atmosphere_asc`; download it (shown once), then upload it on the same tab.
-   - iOS provisioning profiles → create an *App Store* profile for
-     `com.atmosphere.fieldcapture` with that certificate (developer.apple.com →
-     Profiles), then Fetch profiles in Codemagic and download it.
+6. **Signing key (automatic signing, nothing to upload by hand)**: make an
+   RSA 2048 private key on a Mac:
+   `ssh-keygen -t rsa -b 2048 -m PEM -f ios_distribution_private_key -q -N ""`.
+   In the Codemagic app → Environment variables, add `CERTIFICATE_PRIVATE_KEY`
+   = the whole file contents (including the BEGIN/END lines), **Secret** on,
+   group **`ios_signing`**. Each build then runs `app-store-connect
+   fetch-signing-files com.atmosphere.fieldcapture --type IOS_APP_STORE --create`,
+   which finds or creates the Apple Distribution certificate for that key and
+   the App Store profile. Keep the key file safe: it is the same certificate
+   on every build. Apple allows only a few distribution certificates per team.
 7. **Codemagic → Add application** → this GitHub repo → codemagic.yaml.
    Optionally set `APP_STORE_APPLE_ID` (the app's Apple ID number) as an
    environment variable so build numbers follow TestFlight.

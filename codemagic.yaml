@@ -2,8 +2,11 @@
 # around https://app.atmosphereteam.com). No secrets live in this file:
 #   - App Store Connect access comes from the Codemagic team integration named
 #     `atmosphere_asc` (Team settings → Team integrations → Developer Portal).
-#   - Signing files come from Codemagic "Code signing identities" matched by
-#     distribution type + bundle id (ios_signing below).
+#   - Signing is automatic: each build fetches (or creates) the App Store
+#     distribution certificate and provisioning profile from Apple with the
+#     Codemagic CLI, using that integration plus CERTIFICATE_PRIVATE_KEY
+#     (an RSA 2048 PEM private key, secret, in the Codemagic env var group
+#     `ios_signing`). Nothing has to be uploaded to "Code signing identities".
 # Builds start manually from the Codemagic UI (no triggering block).
 # See apps/mobile/README.md for the one-time Apple + Codemagic setup.
 
@@ -15,10 +18,10 @@ workflows:
     integrations:
       app_store_connect: atmosphere_asc
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.atmosphere.fieldcapture
+      groups:
+        - ios_signing # CERTIFICATE_PRIVATE_KEY (secret)
       vars:
+        BUNDLE_ID: com.atmosphere.fieldcapture
         MOBILE_DIR: apps/mobile
         XCODE_PROJECT: apps/mobile/ios/App/App.xcodeproj
         XCODE_SCHEME: App
@@ -48,6 +51,15 @@ workflows:
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
+      - name: Set up keychain for code signing
+        script: keychain initialize
+      - name: Fetch signing files (App Store certificate + profile)
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add signing certificate to keychain
+        script: keychain add-certificates
       - name: Set up code signing settings on Xcode project
         script: |
           xcode-project use-profiles --project "$XCODE_PROJECT"
