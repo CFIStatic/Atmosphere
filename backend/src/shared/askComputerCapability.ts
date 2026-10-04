@@ -29,6 +29,6 @@ export function computerCapabilityAnswer(input: { access: 'org' | 'viewer'; conf
   }
   return [
     "There's no fixed list. With Computer I can open a browser and work on almost any website for this job, like a claim portal or a permit form, and I stop and check with you before anything is submitted, sent, paid, signed or deleted.",
-    "When a site needs a login, I pause and you sign in yourself in the live view. I never type passwords or verification codes. That sign-in is remembered for your organization, so next time it's already done.",
+    "When a site needs a login, I pause and you sign in yourself in the live view. I never type passwords or verification codes. That sign-in is remembered for your organization, so next time it's already done, and you can sign in to a site ahead of time from Logins in the sidebar.",
   ].join('\n\n');
 }

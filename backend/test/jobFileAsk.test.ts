@@ -721,6 +721,7 @@ test('the Computer capability answer matches what Computer does', async () => {
   assert.match(ready, /sign in yourself in the live view/);
   assert.match(ready, /never type passwords or verification codes/);
   assert.match(ready, /remembered for your organization/);
+  assert.match(ready, /ahead of time from Logins/);
   assert.match(ready, /before anything is submitted, sent, paid, signed or deleted/);
   assert.match(computerCapabilityAnswer({ access: 'org', configured: false }), /isn't set up/);
   assert.doesNotMatch(computerCapabilityAnswer({ access: 'viewer', configured: true }), /live view/);
