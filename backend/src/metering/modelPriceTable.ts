@@ -27,7 +27,20 @@ export const PRICE_SOURCES = {
   google: 'https://ai.google.dev/gemini-api/docs/pricing',
   tavily: 'https://docs.tavily.com/documentation/api-credits',
   openai: 'https://developers.openai.com/api/docs/pricing',
+  browserbase: 'https://www.browserbase.com/pricing',
 } as const;
+
+/**
+ * Browserbase hosted-browser time, USD per browser hour: the Developer plan's
+ * overage rate. Override with COMPUTER_BROWSER_USD_PER_HOUR when the plan
+ * changes (Startup is $0.10).
+ */
+export const DEFAULT_BROWSER_USD_PER_HOUR = 0.12;
+
+function browserUsdPerHour(): number {
+  const raw = Number(process.env.COMPUTER_BROWSER_USD_PER_HOUR);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_BROWSER_USD_PER_HOUR;
+}
 
 export type PricedProvider = 'anthropic' | 'google' | 'openai' | 'tavily';
 
@@ -75,6 +88,8 @@ export interface ModelPriceTable {
   tavilyUsdPerCredit: number;
   /** @deprecated Kept for older callers: one basic search. */
   tavilySearchUsd: number;
+  /** Hosted browser (Browserbase) for Chat's Computer, USD per browser hour. */
+  browserUsdPerHour: number;
 }
 
 /** Anthropic: 5m write 1.25×, 1h write 2×, read 0.1× of base input. */
@@ -182,6 +197,7 @@ export function modelPriceTable(): ModelPriceTable {
     whisperUsdPerMinute: 0.006,
     tavilyUsdPerCredit: 0.008,
     tavilySearchUsd: 0.008,
+    browserUsdPerHour: browserUsdPerHour(),
   };
 }
 
@@ -297,6 +313,19 @@ export function tavilyCreditsCostNanos(table: ModelPriceTable, credits = 1): num
   const n = Math.max(0, Number(credits) || 0);
   if (n === 0) return 0;
   return usdToNanos(table.tavilyUsdPerCredit * n);
+}
+
+/**
+ * Hosted browser time → nanodollars. Billed in whole minutes with a
+ * one-minute minimum, the way Browserbase bills.
+ */
+export function browserMinutes(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 1;
+  return Math.max(1, Math.ceil(seconds / 60));
+}
+
+export function browserTimeCostNanos(table: ModelPriceTable, seconds: number): number {
+  return usdToNanos((browserMinutes(seconds) / 60) * table.browserUsdPerHour);
 }
 
 export function tavilySearchCostNanos(table: ModelPriceTable, searches = 1): number {

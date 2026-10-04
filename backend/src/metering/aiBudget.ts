@@ -451,6 +451,7 @@ export const AI_FEATURE_LABELS: Record<string, string> = {
   document_analysis: 'Document analysis',
   web_search: 'Web search',
   chat: 'Chat',
+  computer: 'Computer',
   other: 'Other',
 };
 

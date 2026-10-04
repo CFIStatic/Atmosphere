@@ -10,6 +10,7 @@
  * Nothing here ships in a normal build: `main.tsx` only imports this module
  * when VITE_DEMO is set, so production bundles never contain it.
  */
+import { computerDemoRoutes, demoComputerAnswer } from './computerMock';
 import { isLiveFirstPath } from './liveFirst';
 import { jobSharePagePath } from '../lib/jobSharePath';
 import type {
@@ -494,6 +495,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
         web_search: newest
           ? { ...zeroTokens(), events: 1, totalTokens: 0, priceNanos: searchNanos }
           : zeroTokens(),
+        computer: zeroTokens(),
         other: zeroTokens(),
       },
     };
@@ -568,6 +570,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
             chat: { ...zeroTokens(), totalTokens: chatTokens },
             ask: { ...zeroTokens(), totalTokens: askTokens },
             web_search: zeroTokens(),
+            computer: zeroTokens(),
             other: zeroTokens(),
           },
         };
@@ -2472,6 +2475,7 @@ function demoSafetyIncidents(jobId: string): Array<Record<string, unknown>> {
 }
 
 const routes: Array<[string, RegExp, Handler]> = [
+  ...computerDemoRoutes,
   ['GET', /^\/api\/safety\/incidents$/, () => {
     const jobId = LAST_QUERY.jobId ?? '';
     const all = demoSafetyIncidents(jobId);
@@ -4267,6 +4271,28 @@ const routes: Array<[string, RegExp, Handler]> = [
           code: 'ai_budget_limited',
           canManage: true,
           state: 'limited',
+        },
+      };
+    }
+    const computerAnswer = demoComputerAnswer(String(b.question ?? ''));
+    if (computerAnswer) {
+      const created = new Date().toISOString();
+      return {
+        stream: true,
+        body: {
+          answer: computerAnswer,
+          groundedOn: 0,
+          model: null,
+          threadId: 'thread-demo',
+          question: {
+            id: `q-${Date.now()}`,
+            question: String(b.question ?? ''),
+            answer: computerAnswer,
+            model: null,
+            grounded_on: [],
+            created_at: created,
+            thread_id: 'thread-demo',
+          },
         },
       };
     }

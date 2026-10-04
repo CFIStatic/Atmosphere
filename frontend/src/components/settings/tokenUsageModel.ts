@@ -20,6 +20,7 @@ export const TOKEN_FEATURE_COLOR: Record<TokenFeature, string> = {
   chat: 'rgb(var(--success-600))',
   ask: 'rgb(var(--caution-600))',
   web_search: 'rgb(var(--ink-600))',
+  computer: 'rgb(var(--brand-300))',
   other: 'rgb(var(--ink-400))',
 };
 
@@ -28,6 +29,7 @@ export const TOKEN_FEATURE_TRACK: Record<TokenFeature, string> = {
   chat: 'bg-success-600',
   ask: 'bg-caution-600',
   web_search: 'bg-ink-600',
+  computer: 'bg-brand-300',
   other: 'bg-ink-400',
 };
 
