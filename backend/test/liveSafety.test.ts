@@ -28,7 +28,16 @@ import {
   markIncidentAlerted,
   resetSafetyIncidentsForTests,
 } from '../src/safety/incidents.js';
-import { fanoutSafetyAlert, orgAdminEmails } from '../src/safety/alerts.js';
+import {
+  buildSafetyAlertPayload,
+  fanoutSafetyAlert,
+  formatRecordingTime,
+  orgAdminEmails,
+  SAFETY_ACTION_LABELS,
+  SAFETY_CATEGORY_LABELS,
+  safetyAlertEmail,
+} from '../src/safety/alerts.js';
+import { SAFETY_CATEGORIES, SAFETY_RECOMMENDED_ACTIONS } from '../src/safety/types.js';
 import { loadOrgSafetySettings } from '../src/safety/settings.js';
 import { currentAiUsageScope } from '../src/metering/aiUsageContext.js';
 import { PODCAST_NARRATION, PODCAST_SEGMENTS, PODCAST_TRANSCRIPT } from './fixtures/safetyPodcastFalseAlarm.js';
@@ -641,4 +650,50 @@ test('settings carry no phone / escalation / custom-recipient fields', async () 
     assert.equal(k in settings, false, `${k} removed`);
   }
   assert.equal(settings.liveSafetyEnabled, true);
+});
+
+/* ------------------------------------------------------------------ */
+/* Alert email reads like a person wrote it                             */
+/* ------------------------------------------------------------------ */
+
+test('alert email: plain words, no developer text, one 911 line, live view + Platform link kept', async () => {
+  for (const c of SAFETY_CATEGORIES) assert.ok(SAFETY_CATEGORY_LABELS[c] && !SAFETY_CATEGORY_LABELS[c].includes('_'), c);
+  for (const a of SAFETY_RECOMMENDED_ACTIONS) assert.ok(SAFETY_ACTION_LABELS[a] && !SAFETY_ACTION_LABELS[a].includes('_'), a);
+  assert.equal(formatRecordingTime(35), '0:35');
+  assert.equal(formatRecordingTime(212), '3:32');
+  assert.equal(formatRecordingTime(3725), '1:02:05');
+
+  reset();
+  const admin = fakeAdmin();
+  for (const confirmation of ['confirmed', 'unconfirmed'] as const) {
+    for (const autoEscalate of [false, true]) {
+      const { incident } = await createSafetyIncident(admin, {
+        orgId: ORG,
+        jobId: JOB,
+        classification: {
+          hit: true, category: 'physical_violence', severity: 'critical', confidence: 0.93,
+          title: confirmation === 'unconfirmed' ? 'Unconfirmed: check live view — Possible fight' : 'Worker being assaulted',
+          description: 'd', recommendedAction: 'contact_authorities', clipTimestampSeconds: 35, model: 'm', signals: {},
+          confirmation, reality: confirmation === 'confirmed' ? 'real' : 'unclear',
+        },
+        source: 'live_stream',
+      });
+      const mail = safetyAlertEmail(incident, buildSafetyAlertPayload(incident, autoEscalate));
+      for (const body of [mail.html, mail.text]) {
+        assert.match(body, /Category: Physical violence/);
+        assert.match(body, /Recommended: Contact authorities/);
+        assert.match(body, /Time in recording: 0:35/);
+        assert.doesNotMatch(body, /physical_violence|contact_authorities|safety_auto_escalate|escalateToAuthorities|Escalate|gated off|into clip/i);
+        assert.equal(body.match(/never calls 911/g)?.length, 1, 'exactly one 911 line');
+        assert.match(body, /\/job-progress\?job=/);
+      }
+      assert.match(mail.html, />Open live view</);
+      assert.match(mail.html, /Acknowledge or dismiss \(with a reason\) in Platform/);
+      assert.match(
+        mail.subject,
+        confirmation === 'unconfirmed' ? /UNCONFIRMED — check live view: Possible fight/ : /CRITICAL: Worker being assaulted/,
+      );
+      resetSafetyIncidentsForTests();
+    }
+  }
 });

@@ -9,8 +9,9 @@
  * Emails are capped per job per hour (SAFETY_ALERT_CAP_PER_JOB_HOUR).
  *
  * Authorities flag: when the incident recommends contact_authorities AND the
- * org has autoEscalateToAuthorities=true, the email says so. Atmosphere does
- * NOT call 911 or police APIs.
+ * org has autoEscalateToAuthorities=true, the payload sets
+ * escalateToAuthorities (internal; the email shows only plain-word fields).
+ * Atmosphere does NOT call 911 or police APIs.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -18,7 +19,12 @@ import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { loadOrgSafetySettings } from './settings.js';
 import { countRecentJobAlerts, markIncidentAlerted } from './incidents.js';
-import { SAFETY_ALERT_CAP_PER_JOB_HOUR, type SafetyIncident } from './types.js';
+import {
+  SAFETY_ALERT_CAP_PER_JOB_HOUR,
+  type SafetyCategory,
+  type SafetyIncident,
+  type SafetyRecommendedAction,
+} from './types.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { safetyProviderOverrides } from './providers.js';
 
@@ -168,20 +174,71 @@ export function safetyAlertEmail(
   return {
     subject,
     html: safetyEmailHtml(payload),
-    text: `${subject}\n\n${payload.title}\n\n${payload.description}\n\nLive view: ${payload.liveViewUrl}\n\nAction: ${payload.recommendedAction}\nEscalate flag: ${payload.escalateToAuthorities}\n\n${payload.authoritiesNote}\n\nAtmosphere never calls 911. If someone is in danger, call emergency services yourself.`,
+    text: [
+      subject,
+      '',
+      payload.title,
+      '',
+      payload.description,
+      '',
+      ...emailDetails(payload).map(([k, v]) => `${k}: ${v}`),
+      '',
+      `Open live view: ${payload.liveViewUrl}`,
+      `Acknowledge or dismiss (with a reason) in Platform: ${payload.liveViewUrl}`,
+      '',
+      'Atmosphere never calls 911. If someone is in danger, call emergency services yourself.',
+    ].join('\n'),
   };
 }
 
-function safetyEmailHtml(payload: SafetyAlertPayload): string {
+/** Plain-word labels for the email — every category and recommendation. */
+export const SAFETY_CATEGORY_LABELS: Record<SafetyCategory, string> = {
+  fall_person_down: 'Fall / person down',
+  physical_violence: 'Physical violence',
+  verbal_threat: 'Verbal threat',
+  medical_distress: 'Medical distress',
+  other_emergency: 'Other emergency',
+  silent_panic_wellness: 'No movement (wellness check)',
+};
+
+export const SAFETY_ACTION_LABELS: Record<SafetyRecommendedAction, string> = {
+  monitor: 'Keep an eye on it',
+  dispatch_help: 'Send someone to help',
+  contact_authorities: 'Contact authorities',
+};
+
+function plainLabel(map: Record<string, string>, code: string): string {
+  return map[code] ?? code.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/** 35 → "0:35"; 3725 → "1:02:05". */
+export function formatRecordingTime(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+function emailDetails(payload: SafetyAlertPayload): Array<[string, string]> {
   const loc =
     payload.location.label ||
     (payload.location.lat != null && payload.location.lon != null
       ? `${payload.location.lat.toFixed(5)}, ${payload.location.lon.toFixed(5)}`
-      : 'Unknown location');
-  const ts =
-    payload.clipTimestampSeconds != null
-      ? `${payload.clipTimestampSeconds}s into clip`
-      : 'timestamp unknown';
+      : 'Unknown');
+  return [
+    ['Category', plainLabel(SAFETY_CATEGORY_LABELS, payload.category)],
+    ['Confidence', `${(payload.confidence * 100).toFixed(0)}%`],
+    [
+      'Time in recording',
+      payload.clipTimestampSeconds != null ? formatRecordingTime(payload.clipTimestampSeconds) : 'Unknown',
+    ],
+    ['Location', loc],
+    ['Recommended', plainLabel(SAFETY_ACTION_LABELS, payload.recommendedAction)],
+  ];
+}
+
+function safetyEmailHtml(payload: SafetyAlertPayload): string {
   const banner =
     payload.confirmation === 'unconfirmed'
       ? `<p style="margin:0 0 12px;padding:8px 10px;background:#fff4d6;border:1px solid #e0b100;border-radius:6px"><strong>Unconfirmed.</strong> The automatic check could not tell whether this is real. Open the live view now.</p>`
@@ -195,14 +252,10 @@ function safetyEmailHtml(payload: SafetyAlertPayload): string {
   <p style="margin:0 0 16px"><a href="${escapeHtml(payload.liveViewUrl)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;border-radius:8px;text-decoration:none">Open live view</a></p>
   <p>${escapeHtml(payload.description)}</p>
   <ul>
-    <li>Category: ${escapeHtml(payload.category)}</li>
-    <li>Confidence: ${(payload.confidence * 100).toFixed(0)}%</li>
-    <li>Clip: ${escapeHtml(ts)}</li>
-    <li>Location: ${escapeHtml(loc)}</li>
-    <li>Recommended: ${escapeHtml(payload.recommendedAction)}</li>
-    <li>Escalate to authorities flag: ${payload.escalateToAuthorities ? 'YES (policy on — no auto-dial)' : 'no'}</li>
+${emailDetails(payload)
+  .map(([k, v]) => `    <li>${escapeHtml(k)}: ${escapeHtml(v)}</li>`)
+  .join('\n')}
   </ul>
-  <p style="color:#555;font-size:13px">${escapeHtml(payload.authoritiesNote)}</p>
   <p style="font-size:13px">Acknowledge or dismiss (with a reason) in Platform: <a href="${escapeHtml(payload.liveViewUrl)}">${escapeHtml(payload.liveViewUrl)}</a></p>
   <p style="font-size:12px;color:#555">Atmosphere never calls 911. If someone is in danger, call emergency services yourself.</p>
 </body></html>`;
