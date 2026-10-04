@@ -30,6 +30,7 @@ import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
+import { ComputerTaskCard } from './computer/ComputerTaskCard';
 import type { AskWebSource } from '../lib/askWebSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -361,6 +362,7 @@ function AskAnswerBody({
 }) {
   const extracted = extractAskSources(text);
   const { quotes, followUps } = extracted;
+  const computerTasks = extracted.actions.filter((action) => action.tool === 'start_computer_task');
   const { prose, artifact } = splitAskArtifact(extracted.body);
   const blocks = parseAskProseBlocks(
     sanitizeSpeakerProse(prose, {
@@ -375,6 +377,9 @@ function AskAnswerBody({
         <p className="whitespace-pre-wrap">{prose}</p>
       ) : null}
       {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
+      {computerTasks.map((action, i) => (
+        <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
+      ))}
       <AskWebResults sources={webSources} />
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />

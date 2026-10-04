@@ -6,6 +6,7 @@
  * `VITE_API_BASE_URL` if the backend is served from a different origin.
  */
 
+import type { ComputerLiveLink, ComputerTaskView } from './computer';
 import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
 import { progressShareApiPath } from './progressSharePath';
 import type { TermsStatus } from './terms';
@@ -6102,6 +6103,38 @@ export const api = {
         body: JSON.stringify(input),
       },
     ),
+
+  // ---- Computer (Chat's browser agent; org members only) ----
+  // Mounted at /api/chat-computer: /api/computer was the removed desktop agent
+  // product (the unused client above) and must stay unmounted.
+  computerSetup: () =>
+    request<{ configured: boolean; provider: string; message: string | null }>('/api/chat-computer/status'),
+
+  computerTask: (id: string) =>
+    request<{ task: ComputerTaskView }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}`),
+
+  /** A fresh, short-lived live-view link for this viewer. Never store or log it. */
+  computerLiveView: (id: string, mode: 'watch' | 'control') =>
+    request<ComputerLiveLink>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/live`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+      cache: 'no-store',
+    }),
+
+  computerHandBack: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/hand-back`, { method: 'POST' }),
+
+  computerResume: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
+
+  computerCancel: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+
+  computerApprove: (approvalId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/approve`, { method: 'POST' }),
+
+  computerCancelApproval: (approvalId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/cancel`, { method: 'POST' }),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
@@ -6332,7 +6365,7 @@ export interface BillingOnboardingStatus {
 }
 
 /** Feature ids as the ledger stores them (`token_usage_events.feature`). */
-export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'other'] as const;
+export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'computer', 'other'] as const;
 export type TokenFeature = (typeof TOKEN_FEATURES)[number];
 
 /**
@@ -6340,7 +6373,7 @@ export type TokenFeature = (typeof TOKEN_FEATURES)[number];
  * the ledger's `ask` rows are shown (and summed) under "Chat"; totals are
  * unchanged. The stored feature id stays `ask`.
  */
-export const TOKEN_DISPLAY_FEATURES = ['video_analysis', 'chat', 'web_search', 'other'] as const;
+export const TOKEN_DISPLAY_FEATURES = ['video_analysis', 'chat', 'web_search', 'computer', 'other'] as const;
 export type TokenDisplayFeature = (typeof TOKEN_DISPLAY_FEATURES)[number];
 
 export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
@@ -6348,13 +6381,14 @@ export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
   chat: 'Chat',
   ask: 'Chat',
   web_search: 'Web search',
+  computer: 'Computer',
   other: 'Other',
 };
 
 /** Usage-display category for a stored feature id (`ask` → `chat`). */
 export function tokenDisplayFeature(feature: string | null | undefined): TokenDisplayFeature {
   if (feature === 'ask' || feature === 'chat') return 'chat';
-  if (feature === 'video_analysis' || feature === 'web_search') return feature;
+  if (feature === 'video_analysis' || feature === 'web_search' || feature === 'computer') return feature;
   return 'other';
 }
 

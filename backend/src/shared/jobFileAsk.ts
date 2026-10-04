@@ -862,6 +862,8 @@ export async function answerFromJobFile(input: {
             ? { topic: input.question }
             : name === 'search_crm'
               ? { query: input.question }
+            : name === 'start_computer_task'
+              ? { instructions: input.question }
             : name === 'update_job_fields'
               ? parseJobFieldUpdatesFromQuestion(input.question)
               : name === 'propose_revoke_access'
@@ -883,6 +885,19 @@ export async function answerFromJobFile(input: {
     for (const name of sequential) toolResults.push(await runTool(name));
     if (parallel.length) toolResults.push(...(await Promise.all(parallel.map((name) => runTool(name)))));
     webHits = collectWebHitsFromToolResults(toolResults);
+  }
+
+  // A browser task is the whole turn: say what happens next and show the card.
+  const computer = toolResults.find((r) => r.tool === 'start_computer_task');
+  if (computer) {
+    const lead = computer.ok
+      ? "I'm opening a browser to do that. I'll fill in only this job's details and what you wrote, and I'll stop and ask you before anything is submitted, sent, paid, signed or deleted. If the site needs you to sign in or enter a code, I'll pause and you can take over."
+      : computer.ui?.path === 'computer-task:not-set-up'
+        ? "I can't work in a browser for you yet."
+        : computer.summary;
+    const answer = `${lead}\n\n${formatActionsTrailer([computer])}`;
+    emit(answer);
+    return { ...empty, answer, groundedOn: 0, toolResults };
   }
 
   const zone = input.lookup?.timeZone || 'America/Chicago';

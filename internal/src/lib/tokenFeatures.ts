@@ -4,10 +4,11 @@ export const FEATURE_LABELS: Record<string, string> = {
   video_analysis: 'Video analysis',
   chat: 'Chat',
   web_search: 'Web search',
+  computer: 'Computer',
   other: 'Other',
 };
 
-const FEATURE_ORDER = ['video_analysis', 'chat', 'web_search', 'other'];
+const FEATURE_ORDER = ['video_analysis', 'chat', 'web_search', 'computer', 'other'];
 
 type FeatureRow = NonNullable<TokenUsageAnalyticsPayload['byFeature']>[number];
 
