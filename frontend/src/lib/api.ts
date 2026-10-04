@@ -3173,18 +3173,6 @@ export interface AuthResponse {
 }
 
 
-export type SafetySeverity = 'watch' | 'critical';
-export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
-export type SafetyReality = 'real' | 'joking' | 'staged' | 'media_playback' | 'unclear';
-export type SafetyDismissCategory =
-  | 'false_alarm_media'
-  | 'joking'
-  | 'staged'
-  | 'not_an_emergency'
-  | 'handled'
-  | 'duplicate'
-  | 'other';
-
 
 /* ------------------------------------------------------------------ */
 /* Trade playbooks                                                     */
@@ -3230,29 +3218,6 @@ export interface TradePlaybook {
   updatedAt: string;
   steps?: PlaybookStep[];
   sources?: PlaybookSource[];
-}
-
-export interface SafetyIncident {
-  id: string;
-  orgId: string;
-  jobId: string | null;
-  category: string;
-  severity: SafetySeverity;
-  confidence: number;
-  title: string;
-  description: string;
-  clipTimestampSeconds: number | null;
-  locationLabel: string | null;
-  recommendedAction: string;
-  status: SafetyStatus;
-  source: string;
-  createdAt: string;
-  /** Model verdict: real / joking / staged / media_playback / unclear. */
-  reality?: SafetyReality | null;
-  /** confirmed = checked real; unconfirmed = "check live view". */
-  confirmation?: 'confirmed' | 'unconfirmed' | null;
-  dismissCategory?: SafetyDismissCategory | null;
-  dismissReason?: string | null;
 }
 
 
@@ -4133,28 +4098,6 @@ export const api = {
       `/api/operations/shared/${jobId}/live/${encodeURIComponent(clipId)}`,
       { method: 'GET' },
     ),
-
-  jobSafetyIncidents: (jobId: string, status: 'open' | 'all' = 'open') =>
-    request<{
-      incidents: SafetyIncident[];
-      counts: { open: number; criticalOpen: number };
-    }>(
-      `/api/safety/incidents?jobId=${encodeURIComponent(jobId)}&status=${encodeURIComponent(status)}`,
-      { method: 'GET' },
-    ),
-
-  ackSafetyIncident: (id: string) =>
-    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/ack`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    }),
-
-  /** Dismiss needs a reason category (and a note for "other"). */
-  dismissSafetyIncident: (id: string, category: SafetyDismissCategory, reason?: string) =>
-    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/dismiss`, {
-      method: 'POST',
-      body: JSON.stringify(reason ? { category, reason } : { category }),
-    }),
 
 
 

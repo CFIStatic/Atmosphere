@@ -1775,73 +1775,6 @@
           $('#site-text').textContent = site.label;
           $('#sitestrip').className = 'sitestrip' + (site.lat == null ? ' unsure' : '');
         });
-        // Live critical safety: a 480px frame every 5 s + a 10 s audio segment.
-        // The server screens, confirms (real / joking / staged / media) and
-        // emails the account admins in seconds. Nothing is shown to the worker
-        // about alerts; only the connection notice below.
-        if ((Core.createLiveSafetyStream || Core.createLiveSafetySampler) && !DEMO && (LIVE || (state.account && state.accessToken))) {
-          try {
-            if (rec.safetySampler && rec.safetySampler.stop) rec.safetySampler.stop();
-            var safetyCfg = {
-              videoEl: videoEl,
-              stream: stream,
-              apiBase: state.apiBase || Core.resolveApiBase(),
-              jobId: LIVE ? null : state.activeJobId,
-              token: LIVE ? state.shareToken : null,
-              accessToken: function () {
-                return state.accessToken;
-              },
-              clipId: rec.clipId,
-              atSeconds: function () {
-                return state.seconds || 0;
-              },
-              site: function () {
-                return state.site;
-              },
-              workDate: Core.localDateISO(Date.now()),
-              phase: 'after',
-              onConnection: function (online) {
-                setSafetyPaused(!online);
-              },
-            };
-            rec.safetySampler = Core.createLiveSafetyStream
-              ? Core.createLiveSafetyStream(safetyCfg)
-              : Core.createLiveSafetySampler(safetyCfg);
-          } catch (e) {
-            /* never block capture */
-          }
-        }
-        // Silent panic / wellness: motion + alone heartbeats (office nudge only).
-        if (Core.createLiveWellnessMonitor && !DEMO && (LIVE || (state.account && state.accessToken))) {
-          try {
-            if (rec.wellnessMonitor && rec.wellnessMonitor.stop) rec.wellnessMonitor.stop();
-            rec.wellnessMonitor = Core.createLiveWellnessMonitor({
-              videoEl: videoEl,
-              apiBase: state.apiBase || Core.resolveApiBase(),
-              jobId: LIVE ? null : state.activeJobId,
-              token: LIVE ? state.shareToken : null,
-              accessToken: function () {
-                return state.accessToken;
-              },
-              clipId: rec.clipId,
-              atSeconds: function () {
-                return state.seconds || 0;
-              },
-              site: function () {
-                return state.site;
-              },
-              // Default alone-on-site: single active capture device. Office can
-              // disable requireAlone via PATCH /api/safety/settings.
-              aloneOnSite: function () {
-                return true;
-              },
-              workDate: Core.localDateISO(Date.now()),
-              phase: 'after',
-            });
-          } catch (e) {
-            /* never block capture */
-          }
-        }
         // Office Live WebRTC — parallel to durable part uploads; never blocks capture.
         startLiveRtcPublisher(rec);
       })
@@ -1871,28 +1804,6 @@
    * (not a phone-only draft) or a job-share link, and signal right now. A
    * recording that cannot stream simply uploads whole at the end.
    */
-
-  function stopSafetySampler(rec) {
-    setSafetyPaused(false);
-    if (!rec || !rec.safetySampler) return;
-    try {
-      rec.safetySampler.stop();
-    } catch (e) {}
-    rec.safetySampler = null;
-  }
-
-  function setSafetyPaused(paused) {
-    var el = $('#safety-paused');
-    if (el) el.hidden = !paused;
-  }
-
-  function stopWellnessMonitor(rec) {
-    if (!rec || !rec.wellnessMonitor) return;
-    try {
-      rec.wellnessMonitor.stop();
-    } catch (e) {}
-    rec.wellnessMonitor = null;
-  }
 
   function stopLiveRtcPublisher(rec) {
     if (!rec || !rec.livePublisher) return;
@@ -2032,8 +1943,6 @@
     if (!state.recorder || stopping) return;
     var recorder = state.recorder;
     var rec = state.recording || null;
-    stopSafetySampler(rec);
-    stopWellnessMonitor(rec);
     stopLiveRtcPublisher(rec);
     var boundJobId = (rec && rec.jobId) || state.activeJobId;
     var boundJob = jobById(boundJobId);
@@ -2638,10 +2547,6 @@
       }
     }
     window.__startDemoDay = startDemoDay;
-    /* Demo only: preview the live-safety paused notice. */
-    window.__demoSafetyPaused = function (paused) {
-      setSafetyPaused(paused !== false);
-    };
     when('#daybtn', function (btn) {
       btn.onclick = startDemoDay;
     });
