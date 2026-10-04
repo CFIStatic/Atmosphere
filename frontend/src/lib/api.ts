@@ -6,7 +6,14 @@
  * `VITE_API_BASE_URL` if the backend is served from a different origin.
  */
 
-import type { ComputerLiveLink, ComputerTaskView } from './computer';
+import type {
+  ComputerLiveLink,
+  ComputerLogin,
+  ComputerLoginsState,
+  ComputerRemoveLoginResult,
+  ComputerSignIn,
+  ComputerTaskView,
+} from './computer';
 import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
 import { progressShareApiPath } from './progressSharePath';
 import type { TermsStatus } from './terms';
@@ -6119,6 +6126,37 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ mode }),
       cache: 'no-store',
+    }),
+
+  // Logins: sign in to outside sites ahead of time. No agent runs here.
+  computerLogins: () => request<ComputerLoginsState>('/api/chat-computer/logins', { cache: 'no-store' }),
+
+  computerStartSignIn: (input: { url?: string; label?: string; loginId?: string }) =>
+    request<{ signIn: ComputerSignIn }>('/api/chat-computer/logins/sign-ins', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Control-mode live link for a sign-in. Never store or log it. */
+  computerSignInLive: (sessionId: string) =>
+    request<ComputerLiveLink>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/live`, {
+      method: 'POST',
+      cache: 'no-store',
+    }),
+
+  computerSignInDone: (sessionId: string) =>
+    request<{ login: ComputerLogin }>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/done`, {
+      method: 'POST',
+    }),
+
+  computerSignInCancel: (sessionId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/cancel`, {
+      method: 'POST',
+    }),
+
+  computerRemoveLogin: (loginId: string) =>
+    request<ComputerRemoveLoginResult>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}`, {
+      method: 'DELETE',
     }),
 
   computerHandBack: (id: string) =>

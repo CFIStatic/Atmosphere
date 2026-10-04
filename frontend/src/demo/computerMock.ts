@@ -4,7 +4,7 @@
  * approval, and a permit site that stops for a verification code. All data
  * here is synthetic TEST DATA; no real browser is involved.
  */
-import type { ComputerTaskView } from '../lib/computer';
+import type { ComputerLogin, ComputerSignIn, ComputerTaskView } from '../lib/computer';
 
 type Scenario = 'claim' | 'permit';
 
@@ -264,3 +264,96 @@ export const computerDemoRoutes: Array<[string, RegExp, Handler]> = [
     return { body: { ok: true } };
   }],
 ];
+
+// ---- Logins (demo): a list kept in memory and a fake sign-in page ----
+
+const demoLogins: ComputerLogin[] = [];
+let demoSignIn: ComputerSignIn | null = null;
+
+function demoSignInPage(host: string) {
+  const html = `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f3f3f3;display:grid;place-items:center;height:100vh">
+<div style="background:#fff;width:440px;padding:44px;box-shadow:0 2px 6px rgba(0,0,0,.2)">
+<div style="font-size:13px;color:#666">${host}</div>
+<h1 style="font-size:24px;font-weight:600;margin:12px 0 16px">Sign in</h1>
+<input placeholder="Email, phone, or Skype" style="width:100%;border:0;border-bottom:1px solid #666;padding:8px 0;font-size:15px">
+<div style="text-align:right;margin-top:28px"><button style="background:#0067b8;color:#fff;border:0;padding:8px 32px;font-size:15px">Next</button></div>
+<p style="font-size:11px;color:#999;margin-top:24px">TEST DATA: demo sign-in page</p></div></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+function demoLiveUrl(host: string): string {
+  const injected = (globalThis as { __DEMO_LIVE_URL?: string }).__DEMO_LIVE_URL;
+  return typeof injected === 'string' && injected ? injected : demoSignInPage(host);
+}
+
+function demoHost(raw: string): { url: string; host: string } | null {
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return { url: u.toString(), host: u.hostname.toLowerCase() };
+  } catch {
+    return null;
+  }
+}
+
+computerDemoRoutes.push(
+  ['GET', /^\/api\/chat-computer\/logins$/, () => ({
+    body: { configured: true, message: null, logins: demoLogins, signingIn: demoSignIn, busy: null },
+  })],
+  ['POST', /^\/api\/chat-computer\/logins\/sign-ins$/, (_m, b) => {
+    if (demoSignIn) return { status: 409, body: { error: `Someone is signing in to ${demoSignIn.label} right now.`, code: 'busy' } };
+    const existing = typeof b.loginId === 'string' ? demoLogins.find((l) => l.id === b.loginId) : undefined;
+    const target = existing ? { url: existing.url, host: existing.host } : demoHost(String(b.url ?? ''));
+    if (!target) return { status: 400, body: { error: 'Enter a web address like https://portal.example.com.', code: 'bad_url' } };
+    const now = Date.now();
+    demoSignIn = {
+      sessionId: `d0e00000-0000-4000-8000-${String(now).slice(-12).padStart(12, '0')}`,
+      label: existing?.label ?? (String(b.label ?? '').trim() || target.host),
+      url: target.url,
+      host: target.host,
+      loginId: existing?.id ?? null,
+      startedAt: new Date(now).toISOString(),
+      startedBy: 'Dana Ruiz',
+      startedByYou: true,
+      expiresAt: new Date(now + 15 * 60_000).toISOString(),
+    };
+    return { body: { signIn: demoSignIn } };
+  }],
+  ['POST', /^\/api\/chat-computer\/logins\/sign-ins\/([\w-]+)\/live$/, (m) => {
+    if (!demoSignIn || demoSignIn.sessionId !== m[1]) return notFound;
+    return { body: { url: demoLiveUrl(demoSignIn.host), expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(), mode: 'control' } };
+  }],
+  ['POST', /^\/api\/chat-computer\/logins\/sign-ins\/([\w-]+)\/done$/, (m) => {
+    if (!demoSignIn || demoSignIn.sessionId !== m[1]) return notFound;
+    const now = new Date().toISOString();
+    let login = demoLogins.find((l) => l.host === demoSignIn!.host);
+    if (login) {
+      login.lastSignedInAt = now;
+      login.lastSignedInBy = 'Dana Ruiz';
+    } else {
+      login = {
+        id: `d0e10000-0000-4000-8000-${String(demoLogins.length + 1).padStart(12, '0')}`,
+        label: demoSignIn.label,
+        url: demoSignIn.url,
+        host: demoSignIn.host,
+        addedBy: 'Dana Ruiz',
+        addedAt: now,
+        lastSignedInAt: now,
+        lastSignedInBy: 'Dana Ruiz',
+        canClearCookies: true,
+      };
+      demoLogins.push(login);
+    }
+    demoSignIn = null;
+    return { body: { login } };
+  }],
+  ['POST', /^\/api\/chat-computer\/logins\/sign-ins\/([\w-]+)\/cancel$/, () => {
+    demoSignIn = null;
+    return { body: { ok: true } };
+  }],
+  ['DELETE', /^\/api\/chat-computer\/logins\/([\w-]+)$/, (m) => {
+    const i = demoLogins.findIndex((l) => l.id === m[1]);
+    if (i < 0) return notFound;
+    const [gone] = demoLogins.splice(i, 1);
+    return { body: { removed: true, cookiesCleared: true, message: `Removed ${gone.label}. Computer is signed out of it.` } };
+  }],
+);
