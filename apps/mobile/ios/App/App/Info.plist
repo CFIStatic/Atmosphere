@@ -28,10 +28,16 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Field Capture films the workday so the office can see the work on site.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Atmosphere may use your location to tag job recordings with the job site.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Field Capture notes where each day film was recorded so the office knows which site it shows.</string>
+	<string>Atmosphere may use your location to tag job recordings with the job site.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Field Capture records sound with the day film so the office can hear the site, not only see it.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Atmosphere may save photos and videos from your jobs to your photo library when you ask it to.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Atmosphere lets you pick photos and videos from your library to add to a job.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

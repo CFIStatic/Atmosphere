@@ -36,6 +36,11 @@ test('Info.plist: permission strings, encryption, versions, no background audio'
     'NSCameraUsageDescription',
     'NSMicrophoneUsageDescription',
     'NSLocationWhenInUseUsageDescription',
+    // Apple flags a missing Always string (ITMS-90683) even though the app
+    // never asks for Always access; keep it as a purpose string only.
+    'NSLocationAlwaysAndWhenInUseUsageDescription',
+    'NSPhotoLibraryUsageDescription',
+    'NSPhotoLibraryAddUsageDescription',
   ]) {
     assert.equal(typeof info[key], 'string', key);
     assert.ok(info[key].length > 20, key);
@@ -45,7 +50,6 @@ test('Info.plist: permission strings, encryption, versions, no background audio'
   assert.equal(info.CFBundleVersion, '$(CURRENT_PROJECT_VERSION)');
   assert.equal(info.CFBundleIdentifier, '$(PRODUCT_BUNDLE_IDENTIFIER)');
   assert.equal(info.UIBackgroundModes, undefined);
-  assert.equal(info.NSLocationAlwaysAndWhenInUseUsageDescription, undefined);
   assert.deepEqual(info.UISupportedInterfaceOrientations, ['UIInterfaceOrientationPortrait']);
   assert.equal(info.CFBundleDisplayName, 'Field Capture');
 });
