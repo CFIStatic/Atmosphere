@@ -3810,6 +3810,122 @@
     };
   }
 
+  /**
+   * Keyboard-aware chrome. On iOS Safari and the installed PWA the on-screen
+   * keyboard shrinks the visual viewport, and the bottom record button and
+   * the Field Capture | Dashboard bar ride up over the job list. While a text
+   * field is being typed into we set <html data-keyboard="open"> so CSS can
+   * hide that chrome; it comes back on blur or when the keyboard closes.
+   *
+   * Signals: focusin/focusout on text fields (immediate, before the keyboard
+   * animates) plus visualViewport resize (catches "Done" / swipe-down, which
+   * close the keyboard without blurring the field). Focus alone only hides
+   * on touch devices, so a desktop with a hardware keyboard keeps its chrome.
+   */
+  var KEYBOARD_MIN_SHRINK_PX = 120;
+  var NON_TEXT_INPUT_TYPES = {
+    button: 1, checkbox: 1, radio: 1, range: 1, file: 1, submit: 1,
+    reset: 1, image: 1, color: 1, hidden: 1,
+  };
+
+  function isTextEntry(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.isContentEditable) return true;
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea') return !el.readOnly && !el.disabled;
+    if (tag !== 'input') return false;
+    var type = String(el.type || 'text').toLowerCase();
+    if (NON_TEXT_INPUT_TYPES[type]) return false;
+    return !el.readOnly && !el.disabled;
+  }
+
+  function keyboardShrunk(baselineHeight, viewportHeight, minShrink) {
+    var base = Number(baselineHeight);
+    var now = Number(viewportHeight);
+    if (!(base > 0) || !(now > 0)) return false;
+    return base - now >= (minShrink == null ? KEYBOARD_MIN_SHRINK_PX : minShrink);
+  }
+
+  function bindKeyboardChrome(win, doc, opts) {
+    win = win || (typeof window !== 'undefined' ? window : null);
+    doc = doc || (win && win.document);
+    if (!win || !doc || !doc.documentElement || !doc.addEventListener) return null;
+    var root = doc.documentElement;
+    var vv = win.visualViewport || null;
+    var minShrink = (opts && opts.minShrink) || KEYBOARD_MIN_SHRINK_PX;
+    var touch = opts && typeof opts.touch === 'boolean'
+      ? opts.touch
+      : Boolean(win.matchMedia && win.matchMedia('(pointer: coarse)').matches);
+    var schedule = (opts && opts.defer) || function (fn) { win.setTimeout(fn, 0); };
+
+    var focused = false;     // a text field has focus
+    var shrunk = false;      // the visual viewport is short by a keyboard
+    var sawKeyboard = false; // this focus has seen the keyboard open
+    var baseline = vv ? vv.height : 0;
+
+    function apply() {
+      // Hide on focus for touch (the keyboard is coming), keep hidden while the
+      // viewport is shrunk, and restore once the keyboard has gone away even
+      // if the field kept focus.
+      var open = focused && (shrunk || (touch && !sawKeyboard));
+      if (open) root.setAttribute('data-keyboard', 'open');
+      else root.removeAttribute('data-keyboard');
+    }
+
+    function measure() {
+      if (vv) {
+        if (!focused) {
+          // No field focused, so no keyboard: this is the full height
+          // (tracks the Safari toolbar collapsing / rotation).
+          baseline = vv.height;
+          shrunk = false;
+        } else {
+          if (vv.height > baseline) baseline = vv.height;
+          shrunk = keyboardShrunk(baseline, vv.height, minShrink);
+          if (shrunk) sawKeyboard = true;
+        }
+      }
+      apply();
+    }
+
+    function onFocusIn(e) {
+      if (!isTextEntry(e.target)) return;
+      if (!focused) {
+        measure(); // baseline from the height just before the keyboard
+        sawKeyboard = false;
+      }
+      focused = true;
+      measure();
+    }
+
+    function onFocusOut() {
+      // Focus may hop between fields; decide after it lands.
+      schedule(function () {
+        focused = isTextEntry(doc.activeElement);
+        if (!focused) sawKeyboard = false;
+        measure();
+      });
+    }
+
+    doc.addEventListener('focusin', onFocusIn, true);
+    doc.addEventListener('focusout', onFocusOut, true);
+    if (vv && vv.addEventListener) vv.addEventListener('resize', measure);
+
+    if (isTextEntry(doc.activeElement)) focused = true;
+    measure();
+
+    return {
+      isOpen: function () { return root.getAttribute('data-keyboard') === 'open'; },
+      measure: measure,
+      stop: function () {
+        doc.removeEventListener('focusin', onFocusIn, true);
+        doc.removeEventListener('focusout', onFocusOut, true);
+        if (vv && vv.removeEventListener) vv.removeEventListener('resize', measure);
+        root.removeAttribute('data-keyboard');
+      },
+    };
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     DAY_FILM_MAX_WIDTH: DAY_FILM_MAX_WIDTH,
@@ -3845,6 +3961,10 @@
     buildFieldCaptureSupportUrl: buildFieldCaptureSupportUrl,
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
+    bindKeyboardChrome: bindKeyboardChrome,
+    isTextEntry: isTextEntry,
+    keyboardShrunk: keyboardShrunk,
+    KEYBOARD_MIN_SHRINK_PX: KEYBOARD_MIN_SHRINK_PX,
     todayISO: todayISO,
     knownDurationSeconds: knownDurationSeconds,
     formatClipLength: formatClipLength,

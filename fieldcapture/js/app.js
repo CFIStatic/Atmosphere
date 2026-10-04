@@ -15,6 +15,10 @@
     return;
   }
 
+  // Typing (job search, new-job form) hides the record button and the
+  // Field Capture | Dashboard bar so they do not ride up over the list.
+  if (Core.bindKeyboardChrome) Core.bindKeyboardChrome(window, document);
+
   var params = new URLSearchParams(location.search);
   var TOKEN = params.get('token') || params.get('share') || '';
   var FORCE_DEMO = params.get('demo') === '1';

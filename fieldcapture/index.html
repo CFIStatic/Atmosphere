@@ -400,6 +400,11 @@
   }
   .switchbar a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
   .app[data-switch="off"] .switchbar { display: none; }
+  /* Keyboard open (search / typing): the record button and the product bar
+     would ride up above the iOS keyboard over the job list. Hide them until
+     the field blurs or the keyboard closes (capture-core bindKeyboardChrome). */
+  html[data-keyboard="open"] #s-home .recwrap,
+  html[data-keyboard="open"] .switchbar { display: none !important; }
 
   /* ---------- today's jobs: tap to select, no raw links ---------- */
   .expect { margin-top: 18px; }

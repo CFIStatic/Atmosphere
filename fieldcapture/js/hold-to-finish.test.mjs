@@ -1952,3 +1952,100 @@ await (async function retryGetUserMediaAfterDenial() {
   assert.ok(stops.includes('second'), 'a failed start stops the tracks it acquired');
   assert.equal(second.getStream(), null);
 })();
+
+// ---- Keyboard open: record button + Field Capture | Dashboard bar hide ----
+{
+  assert.match(
+    html,
+    /html\[data-keyboard="open"\] #s-home \.recwrap,\s*html\[data-keyboard="open"\] \.switchbar \{ display: none !important; \}/,
+    'keyboard-open CSS hides the home record button and the product bar',
+  );
+  assert.match(appSrc, /Core\.bindKeyboardChrome\(window, document\)/, 'app binds keyboard chrome');
+
+  function fakeEnv() {
+    const listeners = {};
+    const vvListeners = {};
+    const attrs = {};
+    const root = {
+      setAttribute: (k, v) => { attrs[k] = String(v); },
+      removeAttribute: (k) => { delete attrs[k]; },
+      getAttribute: (k) => (k in attrs ? attrs[k] : null),
+    };
+    const doc = {
+      documentElement: root,
+      activeElement: null,
+      addEventListener: (t, fn) => { listeners[t] = fn; },
+      removeEventListener: (t) => { delete listeners[t]; },
+    };
+    const vv = {
+      height: 844, width: 390,
+      addEventListener: (t, fn) => { vvListeners[t] = fn; },
+      removeEventListener: (t) => { delete vvListeners[t]; },
+    };
+    const win = { visualViewport: vv, document: doc, setTimeout };
+    const input = { nodeType: 1, tagName: 'INPUT', type: 'search', readOnly: false, disabled: false };
+    const button = { nodeType: 1, tagName: 'BUTTON', type: 'button' };
+    const focus = (el) => { doc.activeElement = el; listeners.focusin({ target: el }); };
+    const blur = () => { const was = doc.activeElement; doc.activeElement = null; listeners.focusout({ target: was }); };
+    const resize = (h) => { vv.height = h; vvListeners.resize(); };
+    return { win, doc, vv, attrs, input, button, focus, blur, resize };
+  }
+  const now = (fn) => fn();
+
+  assert.equal(Core.isTextEntry({ nodeType: 1, tagName: 'INPUT', type: 'search' }), true);
+  assert.equal(Core.isTextEntry({ nodeType: 1, tagName: 'INPUT', type: 'checkbox' }), false);
+  assert.equal(Core.isTextEntry({ nodeType: 1, tagName: 'TEXTAREA' }), true);
+  assert.equal(Core.isTextEntry({ nodeType: 1, tagName: 'BUTTON' }), false);
+  assert.equal(Core.keyboardShrunk(844, 500), true, 'iPhone keyboard (~340px) reads as open');
+  assert.equal(Core.keyboardShrunk(844, 780), false, 'Safari toolbar change is not a keyboard');
+
+  // iOS (touch): hide on focus, stay hidden with the keyboard, restore on blur.
+  {
+    const e = fakeEnv();
+    Core.bindKeyboardChrome(e.win, e.doc, { touch: true, defer: now });
+    assert.equal(e.attrs['data-keyboard'], undefined, 'chrome visible at rest');
+    e.focus(e.input);
+    assert.equal(e.attrs['data-keyboard'], 'open', 'hidden as soon as search is focused');
+    e.resize(500);
+    assert.equal(e.attrs['data-keyboard'], 'open', 'hidden while the keyboard is up');
+    e.blur();
+    e.resize(844);
+    assert.equal(e.attrs['data-keyboard'], undefined, 'restored on blur');
+  }
+  // Keyboard dismissed with Done / swipe while the field keeps focus.
+  {
+    const e = fakeEnv();
+    Core.bindKeyboardChrome(e.win, e.doc, { touch: true, defer: now });
+    e.focus(e.input);
+    e.resize(500);
+    e.resize(844);
+    assert.equal(e.attrs['data-keyboard'], undefined, 'restored when the keyboard closes without blur');
+    e.resize(500);
+    assert.equal(e.attrs['data-keyboard'], 'open', 'hidden again when the keyboard reopens');
+  }
+  // Non-text focus never hides; desktop (fine pointer) only hides on a real shrink.
+  {
+    const e = fakeEnv();
+    Core.bindKeyboardChrome(e.win, e.doc, { touch: true, defer: now });
+    e.focus(e.button);
+    assert.equal(e.attrs['data-keyboard'], undefined, 'a button focus is not typing');
+    const d = fakeEnv();
+    Core.bindKeyboardChrome(d.win, d.doc, { touch: false, defer: now });
+    d.focus(d.input);
+    assert.equal(d.attrs['data-keyboard'], undefined, 'desktop keeps the chrome while typing');
+    d.resize(480);
+    assert.equal(d.attrs['data-keyboard'], 'open', 'but hides if a keyboard does shrink the viewport');
+  }
+  // Toolbar growth while focused raises the baseline instead of reading as a keyboard.
+  {
+    const e = fakeEnv();
+    e.vv.height = 760;
+    Core.bindKeyboardChrome(e.win, e.doc, { touch: true, defer: now });
+    e.focus(e.input);
+    e.resize(844);
+    e.resize(500);
+    e.resize(830);
+    assert.equal(e.attrs['data-keyboard'], undefined, 'closed keyboard measured against the grown baseline');
+  }
+}
+console.log('keyboard chrome: ok');
