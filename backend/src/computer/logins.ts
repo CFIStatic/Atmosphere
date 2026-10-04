@@ -250,9 +250,8 @@ export async function startSignIn(input: {
     if (err instanceof SessionBusyError) throw new ComputerServiceError(err.message, 'conflict');
     throw err;
   }
-  let handle: ComputerSessionHandle | null = null;
   try {
-    handle = await d.provider.createSession({ orgId: input.orgId, contextId, timeoutSec: LOGIN_SESSION_SEC + 60 });
+    const handle = await d.provider.createSession({ orgId: input.orgId, contextId, timeoutSec: LOGIN_SESSION_SEC + 60 });
     const startedAt = handle.startedAt.toISOString();
     await d.store.updateSession(row.id, { status: 'active', provider_session_id: handle.providerSessionId, started_at: startedAt });
     row = { ...row, status: 'active', provider_session_id: handle.providerSessionId, started_at: startedAt };
@@ -400,7 +399,7 @@ export async function removeLogin(orgId: string, loginId: string, userId: string
     if (err instanceof SessionBusyError) throw new ComputerServiceError(err.message, 'conflict');
     throw err;
   }
-  let cleared = 0;
+  let cleared: number;
   let driver: ComputerDriver | null = null;
   try {
     const handle = await d.provider.createSession({ orgId, contextId, timeoutSec: 120 });
