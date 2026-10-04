@@ -7,7 +7,6 @@ import {
   type Job,
   type JobParty,
   type ProofResponse,
-  type SafetyIncident,
   type SharedJobRecord,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
@@ -23,7 +22,6 @@ import {
   type JobFileBeat,
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
-import { SafetyAlertBanner } from '../components/safety/SafetyAlertBanner';
 import { OfficeLiveView } from '../components/shared/OfficeLiveView';
 
 /**
@@ -40,7 +38,6 @@ export function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
-  const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -48,16 +45,14 @@ export function JobDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [detail, nextRecord, nextProofs, nextSafety] = await Promise.all([
+      const [detail, nextRecord, nextProofs] = await Promise.all([
         api.getJob(id),
         api.sharedJob(id).catch(() => null),
         api.jobProofs(id).catch(() => null),
-        api.jobSafetyIncidents(id, 'open').catch(() => ({ incidents: [], counts: { open: 0, criticalOpen: 0 } })),
       ]);
       setJob(detail.job);
       setRecord(nextRecord);
       setProofs(nextProofs);
-      setSafetyIncidents(nextSafety.incidents ?? []);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load that job.');
     } finally {
@@ -160,13 +155,6 @@ export function JobDetailPage() {
             <ErrorNote message={error} />
           </div>
         )}
-
-        
-      <SafetyAlertBanner
-        incidents={safetyIncidents}
-        onAck={(id) => api.ackSafetyIncident(id).then(() => load())}
-        onDismiss={(id, category, note) => api.dismissSafetyIncident(id, category, note).then(() => load())}
-      />
 
         {blockers.length > 0 && (
           <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">

@@ -59,7 +59,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/access', label: 'Access', internal: true },
       { to: '/legal', label: 'Legal holds', internal: true },
-      { to: '/safety', label: 'Safety', internal: true },
       { to: '/system', label: 'System status' },
     ],
   },

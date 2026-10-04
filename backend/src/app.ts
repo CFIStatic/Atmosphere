@@ -34,7 +34,6 @@ import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
 import { playbooksRouter } from './routes/playbooks.js';
-import { safetyRouter } from './routes/safety.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
 import { childPrivacyRouter } from './routes/childPrivacy.js';
@@ -148,10 +147,6 @@ export function createApp(): Express {
   // Every raised limit therefore has to be declared in this one place.
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const voiceSamplePath = /^\/api\/speaker-identity\/(?:voiceprint|enrollment-requests\/[^/]+\/confirm)\/?$/;
-  // Near-real-time safety samples carry 1–3 small JPEGs while recording.
-  // The live safety stream adds a ~10 s audio segment (base64) per post.
-  const safetySamplePath =
-    /\/proof\/safety-(?:sample|live)\/?$/;
   // Day-film filing POSTs stills (base64 JPEG) only — never the video bytes
   // (those go to signed storage / multipart parts). A ~32s laptop clip still
   // used to 413 here: six ~900px JPEGs as base64 routinely exceed the global
@@ -162,7 +157,6 @@ export function createApp(): Express {
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
   const voiceSampleJson = express.json({ limit: '2mb' });
-  const safetySampleJson = express.json({ limit: '2.5mb' });
   const proofRecordJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {
@@ -176,8 +170,6 @@ export function createApp(): Express {
       ? avatarJson
       : voiceSamplePath.test(req.path) && (req.method === 'POST' || req.method === 'PUT')
         ? voiceSampleJson
-        : safetySamplePath.test(req.path)
-        ? safetySampleJson
         : proofRecordPath.test(req.path) && req.method === 'POST'
           ? proofRecordJson
           : standardJson;
@@ -193,7 +185,6 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/legal', legalRouter);
-  app.use('/api/safety', safetyRouter);
   app.use('/api/motion-clips', motionClipsRouter);
   app.use('/api/daily-report', dailyReportRouter);
   app.use('/api/child-privacy', childPrivacyRouter);

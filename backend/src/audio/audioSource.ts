@@ -37,11 +37,6 @@ const NEGATED =
 const BROADCAST_LINE =
   /\b(coming up next|stay tuned|after the break|back after this|brought to you by|breaking news|don't forget to (?:like|subscribe)|like and subscribe|smash that like|this episode|in today's video|welcome back to the (?:show|channel)|tonight on)\b/i;
 
-/** True when a line reads like broadcast / online video ("like and subscribe", "this episode"). */
-export function soundsLikeBroadcast(text: string | null | undefined): boolean {
-  return BROADCAST_LINE.test(String(text ?? ''));
-}
-
 type TimedRow = { atSeconds?: number | null; startSeconds?: number | null; endSeconds?: number | null; text?: string | null; description?: string | null; summary?: string | null };
 
 function sentences(text: string): string[] {
