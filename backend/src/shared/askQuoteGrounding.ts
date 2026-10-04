@@ -228,10 +228,16 @@ function trailerText(value: string, cap: number): string {
   return value.replace(/[|⟧⟦]/g, ' ').replace(/;;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cap);
 }
 
+/** An uploaded-document excerpt (doc:<id>#<location>) has no speaker. */
+function isDocumentSource(sourceId: string): boolean {
+  return sourceId.startsWith('doc:');
+}
+
 function formatQuotes(quotes: AskMomentQuote[]): string {
   const parts = quotes.slice(0, 6).map((quote) => {
     const clip = trailerText(String(quote.clipTitle ?? ''), 80);
-    return `${quote.sourceId}|${trailerText(speakerLabelOrUnidentified(quote.speaker), 40)}|${trailerText(quote.text, 180)}${clip ? `|clip=${clip}` : ''}`;
+    const speaker = isDocumentSource(quote.sourceId) ? '' : trailerText(speakerLabelOrUnidentified(quote.speaker), 40);
+    return `${quote.sourceId}|${speaker}|${trailerText(quote.text, 180)}${clip ? `|clip=${clip}` : ''}`;
   });
   return parts.length ? `⟦quotes: ${parts.join(' ;; ')}⟧` : '';
 }
@@ -239,7 +245,7 @@ function formatQuotes(quotes: AskMomentQuote[]): string {
 function quoteFor(match: Match): AskMomentQuote {
   return {
     sourceId: match.chunk.cite,
-    speaker: speakerLabelOrUnidentified(match.chunk.speaker ?? UNIDENTIFIED_SPEAKER),
+    speaker: isDocumentSource(match.chunk.cite) ? '' : speakerLabelOrUnidentified(match.chunk.speaker ?? UNIDENTIFIED_SPEAKER),
     text: match.text,
     atSeconds: match.chunk.startSec,
     clipTitle: match.chunk.clipTitle,

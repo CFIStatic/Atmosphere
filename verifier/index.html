@@ -8091,7 +8091,7 @@
     });
     function send(text) {
       var q = String(text || '').trim();
-      if (q.length < 3) return;
+      if (!q) return;
       if (item._askBusy) return;
       item._askBusy = true;
       var pendingDocs = (item._pendingDocs || []).slice();

@@ -997,6 +997,26 @@
        "Okay, I'm going to set it up now."
       ]
      }
+    },
+    {
+     "id": "style-short-question",
+     "type": "multi_hop",
+     "question": "?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["what do you want to know"],
+      "mustNotContain": ["String must contain", "does not have that", "Nothing on this file matches"]
+     }
+    },
+    {
+     "id": "style-thanks",
+     "type": "multi_hop",
+     "question": "thanks",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["Glad that helped"],
+      "mustNotContain": ["does not have that", "Let me know", "No one is listed"]
+     }
     }
    ]
   },
@@ -1568,8 +1588,8 @@
      "question": "what is this about",
      "expect": {
       "answerType": "answer",
-      "mustContain": ["900 Pine", "invoice", "Unrelated-Invoice.pdf", "doesn't appear to be about this job"],
-      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached"]
+      "mustContain": ["900 Pine", "invoice", "Unrelated-Invoice.pdf"],
+      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached", "doesn't appear to be about this job"]
      }
     },
     {
@@ -1578,8 +1598,8 @@
      "question": "What's the total on it?",
      "expect": {
       "answerType": "answer",
-      "mustContain": ["$900.00", "page 1", "Unrelated-Invoice.pdf", "doesn't appear to be about this job"],
-      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached"]
+      "mustContain": ["$900.00", "page 1", "Unrelated-Invoice.pdf"],
+      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached", "doesn't appear to be about this job"]
      }
     }
    ]

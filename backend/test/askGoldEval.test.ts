@@ -42,8 +42,9 @@ test('current clip Ask passes the release gate on the synthetic gold', async () 
   assert.equal(report.metrics.criticalAssertions, 0);
   assert.equal(report.metrics.summaryContradictions, 0);
   assert.equal(report.webSearch, 'disabled');
-  assert.equal(report.metrics.questions, 64);
-  assert.equal(report.metrics.correct, 64);
+  // 64 + two Chat style checks ("?" and "thanks").
+  assert.equal(report.metrics.questions, 66);
+  assert.equal(report.metrics.correct, 66);
   const md = reportMarkdown(report);
   assert.match(md, new RegExp(`correctness \\| ${report.metrics.correct}/${report.metrics.questions}`));
   assert.match(md, /Web search: disabled \(no live results\)/);

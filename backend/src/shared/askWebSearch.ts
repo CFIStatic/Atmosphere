@@ -250,23 +250,21 @@ export function professionalWebCapabilityAnswer(question?: string): string {
   const q = trim(question ?? '').toLowerCase();
   if (!isAskWebSearchConfigured()) {
     return (
-      'I can only use this job file and in-product tools right now — public web search is not configured in this environment. ' +
-      'Ask about anything on the file and I will ground the answer there.'
+      "Not right now — I can't search the public web here, so I can only answer from this job file and the app's own tools. " +
+      "Ask me anything about the job and I'll answer from what's on it."
     );
   }
 
   if (/\bwhat\s+(can|do)\s+you\s+(search|look\s*up)/i.test(q)) {
     return (
-      'Yes — I can search the public web for outside knowledge like codes, products, manufacturers, standards, prices, weather, news, and sports schedules. ' +
-      'Job-file evidence still always wins for on-job facts. ' +
-      'Tell me what you want looked up and I will search for it.'
+      'Yes, I can search the public web for things like codes, products, manufacturers, standards, prices, weather, news and sports schedules. ' +
+      "For anything about this job, what's on the job still wins."
     );
   }
 
   return (
-    'Yes — I can search the public web for outside knowledge when you need it. ' +
-    'Job-file evidence still always wins for on-job facts. ' +
-    'Want me to look something specific up?'
+    "Yes, I can search the public web when you need outside info like codes, prices or news. " +
+    "For anything about this job, what's on the job still wins."
   );
 }
 

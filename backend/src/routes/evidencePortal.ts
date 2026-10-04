@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -118,7 +119,7 @@ const askLimiter = rateLimit({
 });
 
 const askBody = z.object({
-  question: z.string().trim().min(3).max(1000),
+  question: askQuestionText,
   history: z
     .array(
       z.object({

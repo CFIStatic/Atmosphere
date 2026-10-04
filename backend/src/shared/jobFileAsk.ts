@@ -16,12 +16,15 @@ import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, quietNoteAlreadySaid, sessionAnswerIsPrivate, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, sessionAnswerIsPrivate, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
+import { answerChatUploadsWithModel } from './askUploadAnswer.js';
+import { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } from './askComputerCapability.js';
+import { computerStatus } from '../computer/service.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
-import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
+import { ASK_PROSE_FORMAT_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   formatCollectionRecord,
@@ -154,25 +157,25 @@ export interface JobFileAskContext {
   mentionSupplement?: string | null;
 }
 
-const FILE_QA_SYSTEM = `You are a sharp, friendly expert on this job file. Answer like a top-tier chat assistant: natural, clear, easy to scan — never a forensic dump or a thin keyword match.
+const FILE_QA_SYSTEM = `You are a sharp, friendly expert on this job file. Answer like Grok Bot: lead with the answer, natural and brief, easy to scan — never a forensic dump or a thin keyword match.
 
 The record may contain any mix of: job identity, brief facts (any labels), scope lines including do-nots, notes and messages, invited companies, tasks, crew, work logs, memory events, uploaded documents, and video readings / mic transcripts. Treat every section as first-class evidence. A job with no video is still answerable from the rest of the file.
 
 Rules:
 1. Answer questions about this job, its videos, people, findings, or records only from the record given. Do not invent job facts, prices, or coverage decisions. Web search never replaces or overrides that evidence.
 2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job and WEB SEARCH RESULTS are provided, answer from those results for any public topic. Never invent what happened on this job from the web, and never quote web text as a speaker.
-3. LAYERED DEFAULT for broad asks: short natural opener, a few markdown bullets with **Label:** when listing, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
+3. LAYERED DEFAULT for broad asks: the first sentence is the answer, then a few short sentences or, only for parallel facts, a tight bullet list. Do not dump every quote or document excerpt on the first pass, and do not end with an invite or a "let me know" line.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
 5. Cite job-file sources via ⟦sources: …⟧. Do not write markdown links, bare URLs, or a Web results heading — the app attaches web sources separately. Never "(Source: …)" parentheticals or raw URL dumps in the job sentences.
 6. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
 7. Speech on a recording and written notes are both evidence. For conversation topics, summarize first; only paste verbatim lines when depth was requested — never answer talk questions from vision-only room/screen descriptions.
-8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.
+8. Tone: warm expert colleague, plain words and contractions, no stiff disclaimers, no meta openers like "Here's a summary".
 9. The raw mic transcript is authoritative for what was said and how much. An AI summary or conversation brief may be stale; when it disagrees with the transcript, follow the transcript and do not repeat the summary's claim.
 10. A "how many" question (lines, utterances, quotes, times something was said) gets the number first, counted from the raw transcript lines: "There are **5** lines in the transcript." Then list them if asked.
 11. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly that it is not in the evidence. Do not guess or answer with a nearby detail.
 12. Quotes are exact transcript words only, never paraphrased inside quotation marks, each followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15).
 13. Speakers: use only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)" as a speaker.
-14. Documents uploaded in this chat are evidence for questions about those files, even when they are not about this job. Answer from the full uploaded text. A summary is 2–4 sentences in your own words: do not paste the opening lines back, do not call the file an invoice or any other type unless the text or filename says it is, and do not end with a "(filename, document)" citation. A specific fact may quote an exact substring with the file name and page, like “Total: $4,280.00” (Estimate.pdf, page 1). If the upload is not about this job, add "${QUIET_UNRELATED_NOTE}" once, after the first answer only, never on a follow-up. Do not search the web for a question about an uploaded document. Do not label that answer as coming from the job file. Job-file questions still use the job record, and job evidence beats web results.
+14. Documents uploaded in this chat are evidence for questions about those files, even when they are not about this job. Answer from the full uploaded text. A summary is 2–4 sentences in your own words: do not paste the opening lines back, do not call the file an invoice or any other type unless the text or filename says it is, and do not end with a "(filename, document)" citation. A specific fact may quote an exact substring with the file name and page, like “Total: $4,280.00” (Estimate.pdf, page 1). Never comment on whether an upload is related to this job. Do not search the web for a question about an uploaded document. Do not label that answer as coming from the job file. Job-file questions still use the job record, and job evidence beats web results.
 
 ` + ASK_PROSE_FORMAT_RULES;
 
@@ -461,6 +464,17 @@ function looksLikeOverview(question: string): boolean {
   );
 }
 
+function sentence(value: string): string {
+  const text = trim(value).replace(/\s+/g, ' ');
+  if (!text) return '';
+  return /[.!?…:)"”]$/.test(text) ? text : `${text}.`;
+}
+
+function plainStatus(value: unknown): string {
+  return trim(value).replace(/[_-]+/g, ' ').toLowerCase();
+}
+
+/** Raw overview: compact, used by the fast-path classifier and old callers. */
 function overviewFromFile(file: JobFileAskContext): string {
   const parts: string[] = [];
   if (file.job?.title) parts.push(file.job.title);
@@ -480,20 +494,120 @@ function overviewFromFile(file: JobFileAskContext): string {
   return parts.join('. ').slice(0, 600) || 'This job file does not have that.';
 }
 
-/**
- * Deterministic answer from whatever is already on the file. Used when no
- * model key is wired, and as a fallback if the model call fails.
- */
-export function groundedJobFileAnswer(question: string, file: JobFileAskContext): string {
-  const rows = jobFileCorpus(file);
-  if (!rows.length) {
-    return 'Nothing is on this job file yet, so there is nothing to answer from.';
+/** Spoken overview: lead with what the job is, then the few things that matter. */
+function readableOverview(file: JobFileAskContext): string {
+  const job = file.job;
+  const facts = asFacts(file.facts);
+  const address = facts.find((fact) => /address|site|property/i.test(fact.label));
+  const lines: string[] = [];
+  const title = trim(job?.title);
+  if (title) {
+    const where = address ? `, at ${address.value}` : '';
+    const status = plainStatus(job?.status);
+    lines.push(sentence(`${title}${where}${status ? ` — it's ${status}` : ''}`));
+  } else if (address) {
+    lines.push(sentence(`This job is at ${address.value}`));
   }
+  const description = trim(job?.description);
+  if (description) lines.push(sentence(description));
+  else if (trim(file.briefNote)) lines.push(sentence(trim(file.briefNote)));
+  const excluded = (file.scope ?? []).filter((line) => /exclud/i.test(trim(line.state)) && trim(line.title));
+  if (excluded.length) {
+    const titles = excluded.map((line) => trim(line.title)).slice(0, 3);
+    lines.push(
+      titles.every((t) => /^(do not|don'?t|never|no)\b/i.test(t))
+        ? titles.map(sentence).join(' ')
+        : sentence(`Out of scope: ${titles.join('; ')}`),
+    );
+  }
+  const latest = trim(file.clips?.[0]?.summary);
+  if (latest) lines.push(sentence(`Latest video: ${latest}`));
+  if (lines.length) return lines.join(' ').slice(0, 700);
+  const first = jobFileCorpus(file)[0];
+  return first ? readableRow(first) : 'This job file does not have that.';
+}
 
-  if (looksLikeOverview(question)) return overviewFromFile(file);
+/** One corpus row as a plain sentence, without internal section tags. */
+function readableRow(row: CorpusRow): string {
+  const source = row.source;
+  const text = trim(row.text).replace(/\s+/g, ' ');
+  if (source.startsWith('brief · ')) {
+    const label = source.slice('brief · '.length);
+    const value = text.startsWith(`${label}:`) ? trim(text.slice(label.length + 1)) : text;
+    return sentence(`${label}: ${value}`);
+  }
+  if (source.startsWith('scope · ')) {
+    const state = source.slice('scope · '.length);
+    const body = text.startsWith(`${state}:`) ? trim(text.slice(state.length + 1)) : text;
+    if (/exclud/i.test(state)) {
+      return /^(do not|don'?t|never|no)\b/i.test(body) ? sentence(body) : sentence(`Out of scope: ${body}`);
+    }
+    if (/^(included|listed|in[_ ]?scope)$/i.test(state)) return sentence(`In scope: ${body}`);
+    return sentence(`${plainStatus(state).replace(/^./, (c) => c.toUpperCase())}: ${body}`);
+  }
+  if (source.startsWith('note · ')) return sentence(text);
+  if (source.startsWith('document · ')) {
+    const name = source.slice('document · '.length);
+    return sentence(`${name}: ${text.slice(0, 400)}`);
+  }
+  if (source.startsWith('clip · ') || source.startsWith('mic · ')) {
+    const label = source.replace(/^(clip|mic) · /, '');
+    const lead = source.startsWith('mic') ? 'On the mic' : 'In the video';
+    return sentence(`${lead} (${label}): ${text.slice(0, 400)}`);
+  }
+  switch (source) {
+    case 'invited':
+      return sentence(`Invited: ${text}`);
+    case 'task':
+      return sentence(`Task: ${text}`);
+    case 'crew':
+      return sentence(`Crew: ${text}`);
+    case 'brief note':
+    case 'description':
+    case 'memory':
+    case 'log':
+    case 'schedule':
+    case 'claim':
+    case 'policy':
+    case 'job':
+    default:
+      return sentence(text);
+  }
+}
+
+const SMALL_TALK_RE =
+  /^(?:\?+|hi|hey|hello|yo|thanks|thank you|thx|ty|ok|okay|k|cool|got it|great|nice|perfect|sounds good)[\s!.?]*$/i;
+
+/** "?", "ok", "thanks", "hi": conversation, not a question the file failed to answer. */
+export function isChatSmallTalk(question: string): boolean {
+  return SMALL_TALK_RE.test(trim(question));
+}
+
+function smallTalkReply(question: string): string | null {
+  const q = trim(question);
+  if (!SMALL_TALK_RE.test(q)) return null;
+  if (/^\?+$/.test(q)) {
+    return "What do you want to know? I can pull up the scope, who's on the job, what the videos show, or anything in the files.";
+  }
+  if (/^(thanks|thank you|thx|ty)/i.test(q)) return "You're welcome.";
+  if (/^(hi|hey|hello|yo)/i.test(q)) return "Hi! What do you want to know about this job?";
+  return 'Got it.';
+}
+
+type GroundedLookup =
+  | { kind: 'empty' }
+  | { kind: 'overview' }
+  | { kind: 'none' }
+  | { kind: 'clips'; text: string }
+  | { kind: 'rows'; rows: CorpusRow[] };
+
+function lookupJobFile(question: string, file: JobFileAskContext): GroundedLookup {
+  const rows = jobFileCorpus(file);
+  if (!rows.length) return { kind: 'empty' };
+  if (looksLikeOverview(question)) return { kind: 'overview' };
 
   const words = tokens(question);
-  if (!words.length) return overviewFromFile(file);
+  if (!words.length) return { kind: 'overview' };
 
   const need = words.some((word) => word.length >= 6) ? 1 : Math.min(words.length >= 2 ? 2 : 1, words.length);
   const scored = rows
@@ -508,16 +622,62 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
   if (!scored.length) {
     // Clip-only keyword path still helps "what did the videos show" wording.
     if ((file.clips ?? []).length && /video|clip|film|footage|mic|said/i.test(question)) {
-      return groundedCollectionAnswer(question, file.clips ?? []);
+      return { kind: 'clips', text: groundedCollectionAnswer(question, file.clips ?? []) };
     }
-    return 'This job file does not have that.';
+    return { kind: 'none' };
   }
+  return { kind: 'rows', rows: scored.slice(0, 2).map(({ row }) => row) };
+}
 
-  const top = scored.slice(0, 2);
-  return top
-    .map(({ row }) => `${row.source}: ${row.text}`.replace(/\s+/g, ' ').trim())
-    .join(' ')
-    .slice(0, 700);
+/**
+ * Deterministic answer from whatever is already on the file, in its raw
+ * "section: text" form. Routing (fast path, web supplement) reads this shape.
+ */
+export function groundedJobFileAnswer(question: string, file: JobFileAskContext): string {
+  const hit = lookupJobFile(question, file);
+  switch (hit.kind) {
+    case 'empty':
+      return 'Nothing is on this job file yet, so there is nothing to answer from.';
+    case 'overview':
+      return overviewFromFile(file);
+    case 'none':
+      return 'This job file does not have that.';
+    case 'clips':
+      return hit.text;
+    case 'rows':
+      return hit.rows
+        .map((row) => `${row.source}: ${row.text}`.replace(/\s+/g, ' ').trim())
+        .join(' ')
+        .slice(0, 700);
+  }
+}
+
+/**
+ * The same deterministic answer, written for the person reading Chat: no
+ * internal section tags ("brief ·", "scope · excluded"), no doubled labels,
+ * and a friendly reply to "?", "ok" or "thanks". Used when no model key is
+ * wired, on the fast path, and as a fallback if the model call fails.
+ */
+export function readableJobFileAnswer(question: string, file: JobFileAskContext): string {
+  const hit = lookupJobFile(question, file);
+  if (hit.kind === 'none' || hit.kind === 'overview') {
+    const small = smallTalkReply(question);
+    if (small) return small;
+  }
+  switch (hit.kind) {
+    case 'empty':
+      return smallTalkReply(question) ?? "There's nothing on this job file yet, so I don't have anything to answer from.";
+    case 'overview':
+      return readableOverview(file);
+    case 'none':
+      return 'This job file does not have that.';
+    case 'clips':
+      return sentence(hit.text);
+    case 'rows': {
+      const lines = [...new Set(hit.rows.map(readableRow).filter(Boolean))];
+      return lines.join(' ').slice(0, 700);
+    }
+  }
 }
 
 /**
@@ -649,17 +809,18 @@ function keepDocumentAnswer(question: string, answer: string): boolean {
  * that are not on the job. Job questions and questions about a different
  * document kind fall through so the job file stays first.
  */
+function readableUploads(documents: AskDocumentView[] | null | undefined): AskDocumentView[] {
+  return (documents ?? []).filter((doc) => trim(doc.extractedText) || (doc.chunks ?? []).some((chunk) => trim(chunk.text)));
+}
+
+/** No model: a deterministic answer from the upload text (never a text dump). */
 function answerFromChatUploads(
   question: string,
   documents: AskDocumentView[] | null | undefined,
-  history?: Array<{ role?: string | null; text?: string | null }> | null,
 ): string | null {
-  const docs = (documents ?? []).filter((doc) => trim(doc.extractedText) || (doc.chunks?.length ?? 0) > 0 || trim(doc.filename));
-  const readable = docs.filter((doc) => trim(doc.extractedText) || (doc.chunks ?? []).some((chunk) => trim(chunk.text)));
+  const readable = readableUploads(documents);
   if (!chatUploadShouldAnswer(question, readable)) return null;
-  const direct = answerFromJobDocuments(question, readable, [], {
-    quietNote: !quietNoteAlreadySaid(history),
-  });
+  const direct = answerFromJobDocuments(question, readable, []);
   if (!direct) return 'This document does not show that.';
   return enforceQuoteGrounding(normalizeAskProse(direct), {
     chunks: documentChunksForGrounding(readable, { includeUploads: true }),
@@ -785,6 +946,8 @@ export async function answerFromJobFile(input: {
    * are ignored for share and homeowner Ask.
    */
   sessionDocuments?: AskDocumentView[] | null;
+  /** Test hook for the upload answer completion. */
+  uploadComplete?: typeof completeAskText;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -811,10 +974,14 @@ export async function answerFromJobFile(input: {
     input.onToken?.(text);
   };
   const grounded = groundedJobFileAnswer(input.question, input.file);
+  // What the reader sees when the deterministic path answers.
+  const spoken = readableJobFileAnswer(input.question, input.file);
+  // "From this job file" only under answers that came from it, not "You're welcome."
+  const spokenFromJob = !isChatSmallTalk(input.question) && !/does not have that/i.test(spoken);
   const groundedOn = countJobFileSources(input.file);
   const apiKey = (input.apiKey ?? '').trim();
   const empty = {
-    answer: grounded,
+    answer: spoken,
     model: null as string | null,
     groundedOn: 0,
     usage: null as MeasuredUsage | null,
@@ -822,27 +989,54 @@ export async function answerFromJobFile(input: {
     toolResults: [] as AskToolResult[],
   };
 
+  // "What websites can you log in to?" is about Chat, not the file or an upload.
+  if (looksLikeComputerCapabilityAsk(input.question)) {
+    const answer = computerCapabilityAnswer({
+      access: input.toolContext?.access === 'org' ? 'org' : 'viewer',
+      configured: computerStatus().configured,
+    });
+    emit(answer);
+    return { ...empty, answer, groundedOn: 0, toolResults: [], webHits: [] };
+  }
+
   // Capability-only ("can you search Google?") → short professional yes, no live
   // search, no model star soup / google.com junk citations.
   if (looksLikePureWebCapabilityAsk(input.question)) {
     const answer = professionalWebCapabilityAnswer(input.question);
     emit(answer);
-    return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
+    return { ...empty, answer, groundedOn: 0, toolResults: [], webHits: [] };
   }
 
   const sessionCovers = chatUploadShouldAnswer(input.question, input.sessionDocuments);
-  const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments, input.history);
   const officeOnly = sessionAnswerIsPrivate(input.question, input.sessionDocuments);
-  if (fromUploads) {
+  if (sessionCovers) {
+    // The model reads the attached file and answers in its own words.
+    if (input.uploadComplete || isAskModelConfigured(apiKey || null)) {
+      const modeled = await answerChatUploadsWithModel({
+        question: input.question,
+        documents: readableUploads(input.sessionDocuments),
+        history: input.history,
+        apiKey: apiKey || null,
+        fetchFn: input.fetchFn,
+        signal: input.signal,
+        complete: input.uploadComplete,
+      }).catch(() => null);
+      if (modeled) {
+        emit(modeled.answer);
+        return {
+          ...empty,
+          answer: modeled.answer,
+          model: modeled.model,
+          usage: modeled.usage,
+          groundedOn: 0,
+          answeredFromSessionDocument: true,
+          officeOnly,
+        };
+      }
+    }
+    const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments) ?? 'This document does not show that.';
     emit(fromUploads);
     return { ...empty, answer: fromUploads, groundedOn: 0, answeredFromSessionDocument: true, officeOnly };
-  }
-  if (sessionCovers) {
-    const miss = quietNoteAlreadySaid(input.history)
-      ? 'This document does not show that.'
-      : `This document does not show that.\n\n${QUIET_UNRELATED_NOTE}`;
-    emit(miss);
-    return { ...empty, answer: miss, groundedOn: 0, answeredFromSessionDocument: true, officeOnly };
   }
 
   const fromDocuments = answerFromAttachedDocuments(input.question, input.file);
@@ -914,8 +1108,8 @@ export async function answerFromJobFile(input: {
 
   const mentionScoped = Boolean(trim(input.file.mentionSupplement));
   if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
-    emit(grounded);
-    return { ...empty, answer: grounded, groundedOn: 0, toolResults };
+    emit(spoken);
+    return { ...empty, answer: spoken, groundedOn: 0, toolResults };
   }
 
   // Prefer tools when they answered (status/fields/update) — still allow model
@@ -950,8 +1144,8 @@ export async function answerFromJobFile(input: {
     preferJobFileGroundedFastPath(input.question, grounded) &&
     !webUsable
   ) {
-    emit(grounded);
-    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
+    emit(spoken);
+    return { ...empty, answer: spoken, groundedOn: spokenFromJob ? groundedOn : 0, toolResults, webHits };
   }
   if (!isAskModelConfigured(apiKey || null) && input.lookup && isRoomQuestion(input.question)) {
     const roomAnswer = answerRoomQuestion(input.question, roomClipsFromCatalog(input.lookup));
@@ -966,7 +1160,7 @@ export async function answerFromJobFile(input: {
     if (webHits.length || webAnswer) {
       const jobAnswer = toolOnly.length && asksAboutJobFile(input.question)
         ? toolOnly.map((r) => r.summary).join(' ')
-        : grounded;
+        : spoken;
       const fallback = webFallbackAnswer({
         question: input.question,
         jobAnswer,
@@ -990,14 +1184,14 @@ export async function answerFromJobFile(input: {
       emit(answer);
       return { ...empty, answer, groundedOn, toolResults, webHits };
     }
-    emit(grounded);
-    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
+    emit(spoken);
+    return { ...empty, answer: spoken, groundedOn: spokenFromJob ? groundedOn : 0, toolResults, webHits };
   }
 
   const record = formatJobFileRecord(input.file).trim();
   if (!input.lookup && !record && !toolResults.length && !webUsable) {
-    emit(grounded);
-    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
+    emit(spoken);
+    return { ...empty, answer: spoken, groundedOn: spokenFromJob ? groundedOn : 0, toolResults, webHits };
   }
 
   const sourceHistory = input.history ?? [];
@@ -1058,7 +1252,7 @@ export async function answerFromJobFile(input: {
         if (hit?.url && !webHits.some((row) => row.url === hit.url)) webHits.push(hit);
       }
     }
-    let answer = normalizeAskProse(looked.answer);
+    let answer = trimChatFiller(normalizeAskProse(looked.answer), { question: input.question });
     // Final check before render: every quote is a retrieved transcript line or an uploaded document.
     const documentChunks = documentChunksForGrounding(documentViews(input.file));
     answer = enforceQuoteGrounding(answer, {
@@ -1118,7 +1312,7 @@ export async function answerFromJobFile(input: {
       const jobAnswer = asksAboutJobFile(input.question)
         ? toolOnly.length
           ? toolOnly.map((r) => r.summary).join(' ')
-          : grounded
+          : spoken
         : '';
       const fallback = webFallbackAnswer({
         question: input.question,
@@ -1133,13 +1327,13 @@ export async function answerFromJobFile(input: {
       return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
     }
     const toolOnly = toolResults.filter((r) => r.ok);
-    const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : grounded;
+    const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : spoken;
     const trailer = formatActionsTrailer(toolResults);
     const answer = trailer ? `${prose}\n\n${trailer}` : prose;
     emit(answer);
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
-  let answer = normalizeAskProse(completed.text);
+  let answer = trimChatFiller(normalizeAskProse(completed.text), { question: input.question });
   const applied = applyWebResults(answer, input.question, webHits, webAnswer);
   answer = applied.answer;
   const actions = formatActionsTrailer(toolResults);

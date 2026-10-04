@@ -14,7 +14,7 @@ import { extractOffice, parseBiff } from '../src/documents/extractOffice.js';
 import { readOle, writeOleStream } from '../src/documents/ole.js';
 import { documentRoomRows } from '../src/documents/rooms.js';
 import { addressesMatch } from '../src/documents/classify.js';
-import { answerFromJobDocuments, chatDocumentInJobScope, chatUploadShouldAnswer, documentChunksForGrounding, sessionAnswerIsPrivate, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../src/documents/answer.js';
+import { answerFromJobDocuments, asksAboutAssistant, chatDocumentInJobScope, chatUploadShouldAnswer, describeDocument, documentChunksForGrounding, sessionAnswerIsPrivate, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../src/documents/answer.js';
 import { readPdf } from '../src/documents/extractPdf.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../src/documents/load.js';
 import { extractCsv, extractPlain } from '../src/documents/text.js';
@@ -539,25 +539,25 @@ test('document answers cite the estimate total and the floor plan', () => {
   assert.match(rooms, /Floor-Plan\.pdf, page 1/);
 });
 
-test('an unrelated upload is answered, with one quiet line after', () => {
+test('an unrelated upload is answered with no job-match note', () => {
   const invoice = DOCUMENTS[2]!;
   const about = answerFromJobDocuments('what is this about', [invoice]);
   assert.match(about ?? '', /900 Pine Avenue/);
   assert.match(about ?? '', /invoice/i);
   assert.match(about ?? '', /Unrelated-Invoice\.pdf/);
-  assert.match(about ?? '', new RegExp(QUIET_UNRELATED_NOTE.replace(/[.]/g, '\\.')));
+  assert.ok(!(about ?? '').includes(QUIET_UNRELATED_NOTE));
   assert.doesNotMatch(about ?? '', /Not related/);
   assert.doesNotMatch(about ?? '', /Nothing on the document matches/);
   assert.doesNotMatch(about ?? '', /was not attached/);
 
   const casual = answerFromJobDocuments('what this about', [invoice]);
   assert.match(casual ?? '', /900 Pine Avenue/);
-  assert.match(casual ?? '', /doesn't appear to be about this job/);
+  assert.doesNotMatch(casual ?? '', /doesn't appear to be about this job/);
 
   const follow = answerFromJobDocuments("What's the total on it?", [invoice]);
   assert.match(follow ?? '', /\$900\.00/);
   assert.match(follow ?? '', /page 1/);
-  assert.match(follow ?? '', /doesn't appear to be about this job/);
+  assert.doesNotMatch(follow ?? '', /doesn't appear to be about this job/);
   assert.doesNotMatch(follow ?? '', /Not related/);
   const groundedFollow = enforceQuoteGrounding(follow!, {
     chunks: documentChunksForGrounding([invoice], { includeUploads: true }),
@@ -602,19 +602,18 @@ test('a vision note is summarized in prose, not mislabeled or dumped', () => {
   assert.match(about ?? '', /2023 vision note by Jack Cyganiak/);
   assert.match(about ?? '', /Jettx \(long-distance wireless power, including space-based power\)/);
   assert.match(about ?? '', /Blox Group \(automated ground stations\)/);
-  assert.match(about ?? '', /doesn't appear to be about this job/);
+  assert.doesNotMatch(about ?? '', /doesn't appear to be about this job/);
   assert.doesNotMatch(about ?? '', /is an invoice/i);
   assert.doesNotMatch(about ?? '', /The Future By Jack Cyganiak/);
   assert.doesNotMatch(about ?? '', /My companies and vision\./);
   assert.doesNotMatch(about ?? '', /\(The Future\.docx, document\)/);
-  assert.equal((about ?? '').split(QUIET_UNRELATED_NOTE).length, 2);
 });
 
-test('who wrote it reads the byline, and a follow-up drops the quiet line and web search', () => {
+test('who wrote it reads the byline, and a follow-up stays off web search', () => {
   const wrote = answerFromJobDocuments('Who wrote it?', [VISION_NOTE]);
   assert.match(wrote ?? '', /Jack Cyganiak wrote it/);
   assert.doesNotMatch(wrote ?? '', /does not show/);
-  const follow = answerFromJobDocuments('Who wrote it?', [VISION_NOTE], [], { quietNote: false });
+  const follow = answerFromJobDocuments('Who wrote it?', [VISION_NOTE], []);
   assert.match(follow ?? '', /Jack Cyganiak/);
   assert.doesNotMatch(follow ?? '', /doesn't appear to be about this job/);
   assert.equal(chatUploadShouldAnswer("What's the population of France?", [VISION_NOTE]), false);
@@ -627,13 +626,83 @@ test('who wrote it reads the byline, and a follow-up drops the quiet line and we
   assert.equal(sessionAnswerIsPrivate('Who wrote it?', [VISION_NOTE]), true);
   assert.equal(sessionAnswerIsPrivate('What does Jettx build?', [VISION_NOTE]), true);
   assert.equal(sessionAnswerIsPrivate("What's the population of France?", [VISION_NOTE]), false);
-  const jettx = answerFromJobDocuments('What does Jettx build?', [VISION_NOTE], [], { quietNote: false });
+  const jettx = answerFromJobDocuments('What does Jettx build?', [VISION_NOTE], []);
   assert.match(jettx ?? '', /Jettx builds long-distance wireless power, including space-based power/);
   assert.doesNotMatch(jettx ?? '', /\(The Future\.docx, document\)/);
   assert.doesNotMatch(jettx ?? '', /doesn't appear to be about this job/);
   const missing = answerFromJobDocuments("What's the total on it?", [VISION_NOTE]);
   assert.match(missing ?? '', /does not show/);
   assert.notEqual(missing, null);
+});
+
+/** The Future.docx as extracted: name – description lines, no sentences. */
+const FUTURE_LINES = [
+  'The Future',
+  'By Jack Cyganiak',
+  '8/11/2023',
+  'My companies and vision',
+  'Jettx – long distance wireless power, energy, transmission space base power',
+  'Blox Group – Automated construction, Flying movable apartment units.',
+  'Aero Corp – Hypersonic Individual air travel for freight and people',
+  'El Presidente Ventures – PE / VC firm where we fund deep tech startups we take higher equity positions and give access to our portfolio companies access to our research lab and research staff.',
+];
+
+function futureDoc(text: string): AskDocumentView {
+  return { id: 'future-real', filename: 'The Future.docx', attached: false, relevance: 'not_related', extractedText: text };
+}
+
+test('what is this about: a summary with no job note and no text dump', () => {
+  for (const text of [FUTURE_LINES.join('\n'), FUTURE_LINES.join(' ')]) {
+    const doc = futureDoc(text);
+    const about = answerFromJobDocuments('what this about', [doc]) ?? '';
+    assert.match(about, /2023 document by Jack Cyganiak/);
+    assert.match(about, /Jettx \(long distance wireless power\)/);
+    assert.match(about, /Blox Group \(automated construction\)/);
+    assert.match(about, /El Presidente Ventures \(PE \/ VC firm\)/);
+    assert.ok(!about.includes(QUIET_UNRELATED_NOTE));
+    assert.doesNotMatch(about, /The Future By Jack Cyganiak 8\/11\/2023/);
+    assert.doesNotMatch(about, /we take higher equity positions/);
+    assert.equal(describeDocument(doc), about);
+  }
+});
+
+test('a question about Chat itself never lands on the upload', () => {
+  const doc = futureDoc(FUTURE_LINES.join('\n'));
+  for (const q of [
+    'what websites are you able to login too',
+    'what sites can you sign in to?',
+    'can you log into my accounts',
+    'what can you do',
+    'are you able to use a browser',
+  ]) {
+    assert.equal(asksAboutAssistant(q), true, q);
+    assert.equal(chatUploadShouldAnswer(q, [doc]), false, q);
+    assert.equal(answerFromJobDocuments(q, [doc]), null, q);
+  }
+  // Questions that point at the file still go to it.
+  assert.equal(chatUploadShouldAnswer('can you summarize this', [doc]), true);
+  assert.equal(chatUploadShouldAnswer('what does Aero Corp do', [doc]), true);
+  assert.equal(chatUploadShouldAnswer('do you think Jettx will work?', [doc]), true);
+  assert.equal(chatUploadShouldAnswer('tell me more', [doc]), true);
+});
+
+test('one shared word does not pull an unrelated question onto the upload', () => {
+  const doc = futureDoc(`${FUTURE_LINES.join('\n')}\nWe are able to move fast.`);
+  assert.equal(chatUploadShouldAnswer('which crew members are able to work saturday', [doc]), false);
+});
+
+test('a document answer is never a bare quote and carries no speaker', () => {
+  const doc = futureDoc(FUTURE_LINES.join('\n'));
+  const direct = answerFromJobDocuments('what does Aero Corp do', [doc]) ?? '';
+  assert.doesNotMatch(direct, /^\s*“/);
+  const grounded = enforceQuoteGrounding(direct, {
+    chunks: documentChunksForGrounding([doc], { includeUploads: true }),
+    question: 'what does Aero Corp do',
+  }).answer;
+  assert.match(grounded, /Aero Corp – Hypersonic Individual air travel for freight and people/);
+  assert.match(grounded, /⟦quotes: doc:future-real#document\|\|/);
+  assert.doesNotMatch(grounded, /Unidentified speaker/);
+  assert.match(grounded, /clip=The Future\.docx⟧/);
 });
 
 test('an unrelated document is flagged and a missing fact is stated plainly', () => {
@@ -969,4 +1038,9 @@ test('an unauthenticated document upload is refused before the body is parsed', 
   } finally {
     await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
+});
+
+test('a name from the file keeps a "you" question on the file', () => {
+  const doc = futureDoc(FUTURE_LINES.join('\n'));
+  assert.equal(chatUploadShouldAnswer('are you able to tell me what Jettx does', [doc]), true);
 });

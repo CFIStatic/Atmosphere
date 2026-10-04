@@ -28,7 +28,7 @@ import {
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
-import { extractAskSources, type AskSourceChip } from '../lib/askSources';
+import { extractAskSources, isDocumentQuoteSource, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
 import type { AskWebSource } from '../lib/askWebSources';
@@ -39,7 +39,7 @@ import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
-import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, splitQuietDocumentNote, type AskAttachment } from '../lib/chatDocuments';
+import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 
 /**
@@ -120,14 +120,24 @@ function AskQuoteList({
         >
           <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
           <span className="mt-0.5 block text-[11px] text-ink-500">
-            {quote.speaker}
-            {quote.clipTitle ? ` · ${quote.clipTitle}` : ''}
-            {quote.atSeconds != null ? ` · ${formatMomentClock(quote.atSeconds)}` : ''}
+            {quoteAttribution(quote)}
           </span>
         </button>
       ))}
     </div>
   );
+}
+
+/** A document excerpt has no speaker: only clip quotes carry one. */
+function quoteAttribution(quote: ReturnType<typeof extractAskSources>['quotes'][number]): string {
+  return [
+    isDocumentQuoteSource(quote.sourceId) ? '' : quote.speaker,
+    quote.clipTitle ?? '',
+    quote.atSeconds != null ? formatMomentClock(quote.atSeconds) : '',
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function formatMomentClock(seconds: number): string {
@@ -216,6 +226,16 @@ function AskInlineNodes({
             </a>
           );
         }
+        if (node.kind === 'code') {
+          return (
+            <code
+              key={`c-${index}`}
+              className="rounded bg-paper-100 px-1 py-px font-mono text-[0.9em] text-ink-900"
+            >
+              {node.text}
+            </code>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold text-ink-900">
@@ -251,6 +271,16 @@ function AskBlocks({
             <Tag key={`h-${bi}`} className="text-[15px] font-semibold tracking-tight text-ink-900">
               <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
             </Tag>
+          );
+        }
+        if (block.kind === 'code') {
+          return (
+            <pre
+              key={`code-${bi}`}
+              className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-[13px] leading-snug text-ink-900"
+            >
+              {block.text}
+            </pre>
           );
         }
         if (block.kind === 'table') {
@@ -1012,7 +1042,9 @@ export function JobAskPanel({
       setAskFailure({
         message:
           err instanceof ApiError
-            ? err.message
+            ? err.code === 'validation_error'
+              ? "That message didn't go through. Try rewording it."
+              : err.message
             : err instanceof Error && err.message === 'empty_answer'
               ? 'No answer came back. Try again.'
               : 'Could not answer that from the file.',
@@ -1121,7 +1153,6 @@ export function JobAskPanel({
                 .reverse()
                 .find((row) => row.role === 'assistant')?.id;
               const showActions = turn.role === 'assistant' && turn.content.trim();
-              const quiet = turn.role === 'assistant' ? splitQuietDocumentNote(turn.content) : null;
               return (
               <li
                 key={turn.id}
@@ -1143,7 +1174,7 @@ export function JobAskPanel({
                   ) : null}
                   {turn.role === 'assistant' ? (
                     <AskAnswerBody
-                      text={quiet?.note ? quiet.answer : turn.content}
+                      text={stripLegacyDocumentNote(turn.content)}
                       events={analysisEvents
                         .filter((event) =>
                           !turn.groundedIds?.length
@@ -1167,13 +1198,7 @@ export function JobAskPanel({
                       <MentionText text={turn.content} onDark />
                     </p>
                   )}
-                  {quiet?.note ? (
-                    <p className="mt-2 text-xs leading-relaxed text-ink-400" data-testid="ask-document-job-note">
-                      {quiet.note}
-                    </p>
-                  ) : null}
                   {turn.role === 'assistant' &&
-                    !quiet?.note &&
                     turn.groundedOn != null &&
                     turn.groundedOn > 0 &&
                     !isComputerTaskAnswer(turn.content) && (
@@ -1185,7 +1210,7 @@ export function JobAskPanel({
                         type="button"
                         data-testid="ask-message-copy"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(copyableAskText(turn.content)).then(() => {
+                          void navigator.clipboard?.writeText(copyableAskText(stripLegacyDocumentNote(turn.content))).then(() => {
                             setCopiedTurnId(turn.id);
                           });
                         }}

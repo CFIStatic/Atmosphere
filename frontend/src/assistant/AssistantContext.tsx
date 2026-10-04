@@ -16,7 +16,7 @@ import {
 } from '../domain/routing';
 import { dataClient } from '../data/client';
 import type { ApprovalRequest } from '../domain/types';
-import { askChatDocuments, QUIET_DOCUMENT_NOTE, type AskAttachment } from '../lib/chatDocuments';
+import { askChatDocuments, type AskAttachment } from '../lib/chatDocuments';
 
 /**
  * The single Atmosphere assistant.
@@ -138,10 +138,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(async () => {
       let answer: string | null = null;
       try {
-        const quietAlready = messagesRef.current.some(
-          (message) => message.author === 'atmosphere' && message.text.includes(QUIET_DOCUMENT_NOTE),
-        );
-        answer = await askChatDocuments(trimmed, documentIds, opts?.jobId, { quietNote: !quietAlready });
+        answer = await askChatDocuments(trimmed, documentIds, opts?.jobId);
       } catch (err) {
         answer = err instanceof Error ? err.message : 'This document does not show that.';
       }
