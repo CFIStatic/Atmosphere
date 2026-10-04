@@ -2,7 +2,8 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { config } from '../config.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
-import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
+import { unscopedAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
+import { deleteOwnAccount, supabaseAccountDeletionStore } from '../account/deleteAccount.js';
 import {
   setSessionCookies,
   clearSessionCookies,
@@ -306,6 +307,24 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response, next: Nex
   try {
     const terms = await loadTermsStatus(req.user!.id, req.accessToken);
     res.json({ user: publicUser(req.user!), terms });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/auth/account
+ * Deletes the signed-in person's own account (App Store guideline 5.1.1(v)).
+ * Removes their login, profile, and org memberships; jobs, files, and videos
+ * stay with the company. Returns 409 `last_admin` when they are the only
+ * admin of an org that still has other active members.
+ */
+authRouter.delete('/account', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const store = supabaseAccountDeletionStore(unscopedAdmin());
+    const result = await deleteOwnAccount(store, req.user!.id);
+    clearSessionCookies(res, req.hostname);
+    res.json(result);
   } catch (err) {
     next(err);
   }

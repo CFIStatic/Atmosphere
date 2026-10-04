@@ -1,5 +1,9 @@
 # Atmosphere Field Capture — App Store (iOS)
 
+> **Superseded.** The App Store app is now the Field Capture website wrapped
+> with Capacitor — see [`apps/mobile`](../mobile/README.md). Same bundle id
+> (`com.atmosphere.fieldcapture`). This Swift app is kept for reference only.
+
 Native iPhone client: **one button to film the day (video + microphone)**, plus
 **on-device measurement** for a **property digital twin**.
 

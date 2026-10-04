@@ -265,8 +265,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=upload-success-simple-1/);
-assert.match(html, /js\/app\.js\?v=upload-success-simple-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
+assert.match(html, /js\/app\.js\?v=app-shell-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -1851,8 +1851,8 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 }
 
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=upload-success-simple-1/);
-assert.match(html, /js\/app\.js\?v=upload-success-simple-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
+assert.match(html, /js\/app\.js\?v=app-shell-1/);
 
 const DENIED_GUM =
   'The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.';

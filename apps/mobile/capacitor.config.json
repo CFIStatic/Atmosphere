@@ -1,0 +1,23 @@
+{
+  "appId": "com.atmosphere.fieldcapture",
+  "appName": "Field Capture",
+  "webDir": "www",
+  "backgroundColor": "#FBFAF7",
+  "appendUserAgent": "AtmosphereFieldCapture",
+  "loggingBehavior": "none",
+  "server": {
+    "url": "https://app.atmosphereteam.com",
+    "allowNavigation": [
+      "app.atmosphereteam.com",
+      "platform.atmosphereteam.com"
+    ],
+    "errorPath": "offline.html"
+  },
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -115,12 +115,14 @@
     var settings = document.getElementById('fc-menu-settings');
     var support = document.getElementById('fc-menu-support');
     var signout = document.getElementById('fc-menu-signout');
+    var deleteAccount = document.getElementById('fc-menu-delete');
     if (wrap) wrap.hidden = !on;
     if (!on) closeFieldAccountMenu();
     var accountActions = Boolean(opts && opts.account);
     if (settings) settings.hidden = !accountActions;
     if (support) support.hidden = !on;
     if (signout) signout.hidden = !accountActions;
+    if (deleteAccount) deleteAccount.hidden = !accountActions;
     if (on) refreshFieldSupportLink();
   }
 
@@ -1770,6 +1772,7 @@
       .start()
       .then(function () {
         show('s-rec');
+        announceRecording('start', { stream: stream });
         state.stopWatch = state.recorder.watchPosition(function (site) {
           state.site = site;
           $('#site-text').textContent = site.label;
@@ -2028,8 +2031,37 @@
    * door as done, and let the queue file it in the background. The crew can
    * go Home and start the next day immediately — including with no signal.
    */
-  function finishLiveDay() {
+  /**
+   * Recording lifecycle as DOM events, so a wrapper (the iPhone/Android app
+   * shell, js/native-bridge.js) can keep the screen awake while filming and
+   * finish the day when the phone locks. A normal browser has no listeners:
+   * nothing changes on the website.
+   */
+  function announceRecording(phase, detail) {
+    try {
+      document.dispatchEvent(new CustomEvent('fieldcapture:recording-' + phase, { detail: detail || {} }));
+    } catch (e) {}
+  }
+
+  /* Shown on the door when the app shell finished the day for the worker
+     (phone locked, app sent to the background, a call took the mic). */
+  var stopNote = '';
+  function setStopNote(text) {
+    var el = $('#door-stop-note');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+  }
+
+  document.addEventListener('fieldcapture:finish-now', function (ev) {
     if (!state.recorder || stopping) return;
+    var reason = ev && ev.detail && ev.detail.reason;
+    finishLiveDay(typeof reason === 'string' ? reason : '');
+  });
+
+  function finishLiveDay(note) {
+    if (!state.recorder || stopping) return;
+    stopNote = typeof note === 'string' ? note : '';
     var recorder = state.recorder;
     var rec = state.recording || null;
     stopSafetySampler(rec);
@@ -2075,6 +2107,7 @@
         });
         state.doorFilmId = entry.id;
         markJobFilmed(boundJobId);
+        announceRecording('stop', { saved: true });
         renderDoorSaved(entry);
         if (!filmQueue) return undefined;
         var settle = streamed
@@ -2090,6 +2123,7 @@
         stopping = false;
         state.recorder = null;
         state.recording = null;
+        announceRecording('stop', { saved: false });
         renderDoorNotSaved(err);
       });
   }
@@ -2162,6 +2196,8 @@
     show('s-door');
     setDoorTitle('Done.', 'warn');
     setDoorSub('');
+    setStopNote(stopNote);
+    stopNote = '';
     setDoorJob(
       entry.jobName || 'Job',
       'Filing with the office in the background — you can start the next one.',
@@ -2266,6 +2302,8 @@
   /** The recorder had nothing to save (empty film, mic missing): say so, no queue entry. */
   function renderDoorNotSaved(err) {
     state.doorFilmId = null;
+    setStopNote('');
+    stopNote = '';
     show('s-door');
     setDoorTitle('Not saved', 'fail');
     setDoorSub('Recording was not saved.');
@@ -2831,6 +2869,56 @@
       });
     }
 
+    /**
+     * App Store guideline 5.1.1(v): the person can delete their own account
+     * from inside the app. Their login, profile, and team membership go; jobs,
+     * files, and videos stay with the company. The only admin of a company
+     * that still has other people in it is asked to hand over admin first.
+     */
+    var deletingAccount = false;
+    function deleteFieldAccount() {
+      closeFieldAccountMenu();
+      if (deletingAccount || !Core.deleteAccount) return;
+      var waiting = filmQueue ? filmQueue.pending() : [];
+      var warning =
+        'Delete your Atmosphere account?\n\n' +
+        'This removes your login, your profile, and your place on the team. It cannot be undone.\n\n' +
+        'Jobs, files, and videos you filmed belong to your company and stay with it.';
+      if (waiting.length) {
+        warning +=
+          '\n\n' +
+          (waiting.length === 1 ? '1 day' : waiting.length + ' days') +
+          ' still on this phone will not be sent to the office.';
+      }
+      if (!window.confirm(warning)) return;
+      deletingAccount = true;
+      withSession(function (accessToken) {
+        return Core.deleteAccount(API_BASE, accessToken);
+      })
+        .then(function (result) {
+          deletingAccount = false;
+          writeStoredSession(null, null);
+          state.account = false;
+          state.owner = '';
+          state.jobs = [];
+          state.activeJobId = null;
+          showJobAdd(false);
+          if (frame) frame.setAttribute('src', 'about:blank');
+          showLoginError('');
+          bootBlocked();
+          showBlockedMsg(
+            (result && result.message) ||
+              'Your account was deleted. Jobs, files, and videos stay with the company.',
+          );
+        })
+        .catch(function (err) {
+          deletingAccount = false;
+          window.alert(
+            (err && err.message) || 'Your account could not be deleted right now. Try again in a moment.',
+          );
+        });
+    }
+
     var whoBtn = document.getElementById('who-btn');
     var whoMenu = document.getElementById('who-menu');
     if (whoBtn && whoMenu) {
@@ -2869,6 +2957,10 @@
     var menuSignout = document.getElementById('fc-menu-signout');
     if (menuSignout) {
       menuSignout.addEventListener('click', signOutFieldAccount);
+    }
+    var menuDelete = document.getElementById('fc-menu-delete');
+    if (menuDelete) {
+      menuDelete.addEventListener('click', deleteFieldAccount);
     }
 
     if (frame) {

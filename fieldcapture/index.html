@@ -219,6 +219,7 @@
     background: var(--bg); outline: none;
   }
   .who-menu button.danger { color: var(--fail); border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 7px 7px; }
+  .who-menu button.delete-account { color: var(--fail); font-size: 12px; font-weight: 500; opacity: 0.85; }
   .theme-toggle {
     display: inline-flex; align-items: center; justify-content: flex-start;
     color: var(--ink);
@@ -941,6 +942,7 @@
           Support
         </a>
         <button type="button" role="menuitem" id="fc-menu-signout" class="danger">Sign out</button>
+        <button type="button" role="menuitem" id="fc-menu-delete" class="delete-account" hidden>Delete account</button>
       </div>
     </div>
   </div>
@@ -1132,6 +1134,8 @@
     <div class="door">
       <h2 id="door-title">Uploaded</h2>
       <p class="sub" id="door-sub"></p>
+      <!-- Only the iPhone/Android app shell fills this (phone locked mid-recording). -->
+      <p class="sub" id="door-stop-note" hidden></p>
       <div class="door-job" id="door-job" hidden>
         <b id="door-job-name"></b>
         <span id="door-job-note"></span>
@@ -1192,7 +1196,8 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=upload-success-simple-1"></script>
-<script src="js/app.js?v=upload-success-simple-1"></script>
+<script src="js/capture-core.js?v=app-shell-1"></script>
+<script src="js/app.js?v=app-shell-1"></script>
+<script src="js/native-bridge.js?v=app-shell-1"></script>
 </body>
 </html>
