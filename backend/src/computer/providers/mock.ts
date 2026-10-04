@@ -92,6 +92,8 @@ export class MockSite {
   uploads = 0;
   captcha: boolean;
   readonly actions: string[] = [];
+  /** The org profile's cookies: domain → fingerprints. Survives sessions, like a persistent context. */
+  cookies: Record<string, string[]> = {};
 
   constructor(opts: { start?: MockPageId; captcha?: boolean } = {}) {
     this.page = opts.start ?? 'form';
@@ -288,6 +290,20 @@ export class MockDriver implements ComputerDriver {
 
   async cursorPosition(): Promise<[number, number]> {
     return this.cursor;
+  }
+
+  async cookieSnapshot() {
+    return Object.fromEntries(Object.entries(this.site.cookies).map(([d, v]) => [d, [...v]]));
+  }
+
+  async clearSiteData(domains: string[]) {
+    let n = 0;
+    for (const d of domains) {
+      n += this.site.cookies[d]?.length ?? 0;
+      delete this.site.cookies[d];
+    }
+    this.site.actions.push(`clear:${domains.join(',')}`);
+    return n;
   }
 
   async close() {

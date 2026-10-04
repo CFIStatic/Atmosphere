@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 191,
+    "migrationCount": 192,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -208,7 +208,8 @@
     "20261003190200_customer_metering_summary_for_member.sql",
     "20261003200000_live_safety_real_vs_media.sql",
     "20261004150000_token_usage_feature_computer.sql",
-    "20261004150100_computer_tasks.sql"
+    "20261004150100_computer_tasks.sql",
+    "20261004180000_computer_logins.sql"
   ],
   "migrations": [
     {
@@ -6311,6 +6312,38 @@
         "table|public.computer_tasks",
         "trigger|public.computer_audit_events.computer_audit_events_no_truncate",
         "trigger|public.computer_audit_events.computer_audit_events_no_update"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261004180000_computer_logins",
+      "file": "20261004180000_computer_logins.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.computer_logins.cookie_domains",
+        "column|public.computer_logins.created_at",
+        "column|public.computer_logins.created_by",
+        "column|public.computer_logins.host",
+        "column|public.computer_logins.id",
+        "column|public.computer_logins.label",
+        "column|public.computer_logins.last_signed_in_at",
+        "column|public.computer_logins.last_signed_in_by",
+        "column|public.computer_logins.org_id",
+        "column|public.computer_logins.updated_at",
+        "column|public.computer_logins.url",
+        "column|public.computer_sessions.login_id",
+        "column|public.computer_sessions.purpose",
+        "column|public.computer_sessions.started_by",
+        "column|public.computer_sessions.target_label",
+        "column|public.computer_sessions.target_url",
+        "index|public.computer_logins.computer_logins_org_host_key",
+        "index|public.computer_logins.computer_logins_pkey",
+        "policy|public.computer_logins.computer_logins_no_user_access",
+        "rls|public.computer_logins",
+        "table|public.computer_logins"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

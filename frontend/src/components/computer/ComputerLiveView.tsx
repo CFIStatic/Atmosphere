@@ -19,13 +19,24 @@ export function ComputerLiveView({
   onClose,
   onTakeControl,
   onHandBack,
+  mint,
+  controlHint,
 }: {
+  /** Task id, or any stable key for the session when `mint` is given. */
   taskId: string;
   mode: 'watch' | 'control';
   onClose: () => void;
   onTakeControl?: () => void;
   onHandBack?: () => void;
+  /** Mint a link some other way (Logins sign-in sessions). Defaults to the task's live view. */
+  mint?: () => Promise<ComputerLiveLink>;
+  /** Replaces the footer line shown in control mode. */
+  controlHint?: string;
 }) {
+  const mintRef = useRef(mint);
+  useEffect(() => {
+    mintRef.current = mint;
+  }, [mint]);
   const [link, setLink] = useState<ComputerLiveLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<number | null>(null);
@@ -54,7 +65,7 @@ export function ComputerLiveView({
     let cancelled = false;
     const load = async () => {
       try {
-        const next = await api.computerLiveView(taskId, mode);
+        const next = mintRef.current ? await mintRef.current() : await api.computerLiveView(taskId, mode);
         if (cancelled) return;
         if (!isAllowedLiveViewUrl(next.url)) {
           setError('The live view link did not come from the browser service.');
@@ -161,7 +172,8 @@ export function ComputerLiveView({
         {portrait ? 'Turn your phone sideways for a bigger view. ' : ''}
         {watching
           ? 'Watch only. Take control to use the mouse and keyboard yourself.'
-          : 'Computer is paused while you have control. Sign in or make changes, then hand back. Your login stays saved for next time.'}
+          : (controlHint ??
+            'Computer is paused while you have control. Sign in or make changes, then hand back. Your login stays saved for next time.')}
       </p>
     </div>
   );

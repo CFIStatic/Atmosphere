@@ -19,6 +19,7 @@ export const ES: MessageCatalog = {
   'nav.system': 'Sistema',
   'nav.startJob': 'Empezar un trabajo',
   'nav.dashboard': 'Panel',
+  'nav.logins': 'Inicios de sesión',
   'nav.connectCrm': 'Conectar',
   'nav.settings': 'Ajustes',
   'nav.support': 'Soporte',

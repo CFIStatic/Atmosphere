@@ -254,6 +254,12 @@ test('every /api/chat-computer route sits behind requireAuth and the org check',
     '/tasks/:id/cancel',
     '/approvals/:id/approve',
     '/approvals/:id/cancel',
+    '/logins',
+    '/logins/sign-ins',
+    '/logins/sign-ins/:id/live',
+    '/logins/sign-ins/:id/done',
+    '/logins/sign-ins/:id/cancel',
+    '/logins/:id',
   ]);
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/routes/computer.ts', import.meta.url), 'utf8');
