@@ -16,7 +16,14 @@
  *   POST   /api/chat-computer/logins/sign-ins/:id/live   → short-lived live-view URL (control)
  *   POST   /api/chat-computer/logins/sign-ins/:id/done   "Done, I'm signed in" → save the site
  *   POST   /api/chat-computer/logins/sign-ins/:id/cancel close without saving
- *   DELETE /api/chat-computer/logins/:id                 remove the site and clear its cookies
+ *   DELETE /api/chat-computer/logins/:id                 remove the site, its saved password, and its cookies
+ *   PUT    /api/chat-computer/logins/:id/credential      { username, password, loginUrl? } save/replace (Global Admin)
+ *   DELETE /api/chat-computer/logins/:id/credential      delete the saved password (Global Admin)
+ *
+ * Saved passwords: only a Global Admin (productRole 'global_admin': DB roles
+ * global_admin and office_manager) may save, see usernames for, replace or
+ * delete them; any member can run tasks that use them. Request bodies are
+ * never logged, and no response ever carries a password.
  *
  * Every lookup is filtered by the caller's org; another org's id is a 404.
  * Live-view URLs are minted per request, sent with Cache-Control: no-store,
@@ -34,9 +41,19 @@ import {
   mintLiveView,
   resumeTask,
 } from '../computer/service.js';
-import { cancelSignIn, finishSignIn, loginsState, removeLogin, signInLiveView, startSignIn } from '../computer/logins.js';
+import { CredentialsOffError } from '../computer/credentialCrypto.js';
+import {
+  cancelSignIn,
+  deleteCredential,
+  finishSignIn,
+  loginsState,
+  removeLogin,
+  saveCredential,
+  signInLiveView,
+  startSignIn,
+} from '../computer/logins.js';
 import { HttpError } from '../lib/errors.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
 export const computerRouter = Router();
@@ -46,6 +63,7 @@ const idSchema = z.string().uuid();
 const liveSchema = z.object({ mode: z.enum(['watch', 'control']).default('watch') });
 
 function toHttp(err: unknown): unknown {
+  if (err instanceof CredentialsOffError) return new HttpError(503, err.message, 'credentials_disabled');
   if (!(err instanceof ComputerServiceError)) return err;
   const status =
     err.code === 'not_found'
@@ -152,18 +170,28 @@ computerRouter.post(
 
 /* ------------------------------------------------------------------ Logins -- */
 
+/** Lengths are checked in logins.ts so error messages never repeat a value. */
+const credentialSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+  loginUrl: z.string().max(2048).nullable().optional(),
+});
+
 const signInSchema = z.object({
   url: z.string().trim().max(2048).optional(),
   label: z.string().trim().max(80).optional(),
   loginId: z.string().uuid().optional(),
+  credential: credentialSchema.optional(),
 });
+
+const isAdmin = (ctx: { productRole: string }) => ctx.productRole === 'global_admin';
 
 computerRouter.get(
   '/logins',
   wrap(async (req, res) => {
     const ctx = await requireOrgContext(req);
     res.setHeader('Cache-Control', 'no-store');
-    res.json(await loginsState(ctx.orgId, ctx.userId));
+    res.json(await loginsState(ctx.orgId, ctx.userId, isAdmin(ctx)));
   }),
 );
 
@@ -179,8 +207,10 @@ computerRouter.post(
       url: parsed.data.url ?? null,
       label: parsed.data.label ?? null,
       loginId: parsed.data.loginId ?? null,
-      canManage: ctx.productRole === 'global_admin',
+      canManage: isAdmin(ctx),
+      credential: parsed.data.credential ?? null,
     });
+    res.setHeader('Cache-Control', 'no-store');
     res.json({ signIn });
   }),
 );
@@ -217,6 +247,32 @@ computerRouter.delete(
   '/logins/:id',
   wrap(async (req, res) => {
     const ctx = await requireOrgContext(req);
-    res.json(await removeLogin(ctx.orgId, parseId(req.params.id), ctx.userId));
+    res.json(await removeLogin(ctx.orgId, parseId(req.params.id), ctx.userId, isAdmin(ctx)));
+  }),
+);
+
+computerRouter.put(
+  '/logins/:id/credential',
+  wrap(async (req, res) => {
+    const ctx = await requireGlobalAdmin(req);
+    const parsed = credentialSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new HttpError(400, 'Enter the username and password.', 'bad_request');
+    const login = await saveCredential({
+      orgId: ctx.orgId,
+      loginId: parseId(req.params.id),
+      userId: ctx.userId,
+      canManage: isAdmin(ctx),
+      credential: parsed.data,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ login });
+  }),
+);
+
+computerRouter.delete(
+  '/logins/:id/credential',
+  wrap(async (req, res) => {
+    const ctx = await requireGlobalAdmin(req);
+    res.json(await deleteCredential({ orgId: ctx.orgId, loginId: parseId(req.params.id), userId: ctx.userId, canManage: isAdmin(ctx) }));
   }),
 );

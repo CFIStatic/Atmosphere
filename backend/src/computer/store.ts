@@ -111,7 +111,33 @@ export interface SavedLogin {
   cookie_domains: string[];
   user_id: string | null;
   at: string;
+  /** false: list the site (e.g. a password was saved first) without marking it signed in. */
+  signed_in?: boolean;
 }
+
+/** A saved sign-in. The username and password are sealed (credentialCrypto.ts); never plaintext. */
+export interface ComputerCredentialRow {
+  login_id: string;
+  org_id: string;
+  username_sealed: string;
+  password_sealed: string;
+  key_fingerprint: string;
+  login_url: string | null;
+  status: 'ok' | 'needs_attention';
+  attention_reason: string | null;
+  last_used_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NewCredential = Pick<
+  ComputerCredentialRow,
+  'login_id' | 'org_id' | 'username_sealed' | 'password_sealed' | 'key_fingerprint' | 'login_url'
+> & { user_id: string | null; at: string };
+
+export type CredentialPatch = Partial<Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at'>>;
 
 export interface ComputerAuditRow {
   id: number;
@@ -177,6 +203,12 @@ export interface ComputerStore {
   /** Insert or update the org's entry for this host (cookie domains are merged). */
   saveLogin(row: SavedLogin): Promise<ComputerLoginRow>;
   deleteLogin(orgId: string, id: string): Promise<boolean>;
+  listCredentials(orgId: string): Promise<ComputerCredentialRow[]>;
+  getCredential(orgId: string, loginId: string): Promise<ComputerCredentialRow | null>;
+  /** Save or replace the site's sign-in; status goes back to ok. */
+  putCredential(row: NewCredential): Promise<ComputerCredentialRow>;
+  updateCredential(orgId: string, loginId: string, patch: CredentialPatch): Promise<void>;
+  deleteCredential(orgId: string, loginId: string): Promise<boolean>;
   insertApproval(row: NewApproval): Promise<ComputerApprovalRow>;
   getApproval(orgId: string | null, id: string): Promise<ComputerApprovalRow | null>;
   latestApproval(taskId: string): Promise<ComputerApprovalRow | null>;
@@ -362,8 +394,7 @@ export class SupabaseComputerStore implements ComputerStore {
       label: row.label,
       url: row.url,
       cookie_domains: [...new Set([...(prev?.cookie_domains ?? []), ...row.cookie_domains])].sort(),
-      last_signed_in_at: row.at,
-      last_signed_in_by: row.user_id,
+      ...(row.signed_in === false ? {} : { last_signed_in_at: row.at, last_signed_in_by: row.user_id }),
       updated_at: row.at,
     };
     if (prev) {
@@ -382,6 +413,63 @@ export class SupabaseComputerStore implements ComputerStore {
 
   async deleteLogin(orgId: string, id: string) {
     const { data, error } = await this.db.from('computer_logins').delete().eq('org_id', orgId).eq('id', id).select('id');
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
+  }
+
+  async listCredentials(orgId: string) {
+    const { data, error } = await this.db.from('computer_login_credentials').select('*').eq('org_id', orgId).limit(200);
+    if (error) throw error;
+    return (data ?? []) as ComputerCredentialRow[];
+  }
+
+  async getCredential(orgId: string, loginId: string) {
+    const { data, error } = await this.db
+      .from('computer_login_credentials')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('login_id', loginId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ComputerCredentialRow | null) ?? null;
+  }
+
+  async putCredential(row: NewCredential) {
+    const { user_id, at, ...rest } = row;
+    const prev = await this.getCredential(row.org_id, row.login_id);
+    const values = {
+      ...rest,
+      status: 'ok' as const,
+      attention_reason: null,
+      updated_by: user_id,
+      updated_at: at,
+      ...(prev ? {} : { created_by: user_id, created_at: at }),
+    };
+    const { data, error } = await this.db
+      .from('computer_login_credentials')
+      .upsert(values, { onConflict: 'login_id' })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as ComputerCredentialRow;
+  }
+
+  async updateCredential(orgId: string, loginId: string, patch: CredentialPatch) {
+    const { error } = await this.db
+      .from('computer_login_credentials')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('login_id', loginId);
+    if (error) throw error;
+  }
+
+  async deleteCredential(orgId: string, loginId: string) {
+    const { data, error } = await this.db
+      .from('computer_login_credentials')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('login_id', loginId)
+      .select('login_id');
     if (error) throw error;
     return Array.isArray(data) && data.length > 0;
   }
@@ -469,6 +557,7 @@ export class MemoryComputerStore implements ComputerStore {
   approvals = new Map<string, ComputerApprovalRow>();
   sessions = new Map<string, ComputerSessionRow>();
   logins = new Map<string, ComputerLoginRow>();
+  credentials = new Map<string, ComputerCredentialRow>();
   audit: ComputerAuditRow[] = [];
   private seq = 0;
 
@@ -624,8 +713,8 @@ export class MemoryComputerStore implements ComputerStore {
       label: row.label,
       url: row.url,
       cookie_domains: [...new Set([...(prev?.cookie_domains ?? []), ...row.cookie_domains])].sort(),
-      last_signed_in_at: row.at,
-      last_signed_in_by: row.user_id,
+      last_signed_in_at: row.signed_in === false ? (prev?.last_signed_in_at ?? null) : row.at,
+      last_signed_in_by: row.signed_in === false ? (prev?.last_signed_in_by ?? null) : row.user_id,
       updated_at: row.at,
     };
     this.logins.set(next.id, next);
@@ -636,6 +725,45 @@ export class MemoryComputerStore implements ComputerStore {
     const l = this.logins.get(id);
     if (!l || l.org_id !== orgId) return false;
     this.logins.delete(id);
+    this.credentials.delete(id); // on delete cascade
+    return true;
+  }
+
+  async listCredentials(orgId: string) {
+    return [...this.credentials.values()].filter((c) => c.org_id === orgId).map((c) => ({ ...c }));
+  }
+
+  async getCredential(orgId: string, loginId: string) {
+    const c = this.credentials.get(loginId);
+    return c && c.org_id === orgId ? { ...c } : null;
+  }
+
+  async putCredential(row: NewCredential) {
+    const { user_id, at, ...rest } = row;
+    const prev = this.credentials.get(row.login_id);
+    const next: ComputerCredentialRow = {
+      ...rest,
+      status: 'ok',
+      attention_reason: null,
+      last_used_at: prev?.last_used_at ?? null,
+      created_by: prev ? prev.created_by : user_id,
+      created_at: prev?.created_at ?? at,
+      updated_by: user_id,
+      updated_at: at,
+    };
+    this.credentials.set(row.login_id, next);
+    return { ...next };
+  }
+
+  async updateCredential(orgId: string, loginId: string, patch: CredentialPatch) {
+    const c = this.credentials.get(loginId);
+    if (c && c.org_id === orgId) this.credentials.set(loginId, { ...c, ...patch, updated_at: new Date().toISOString() });
+  }
+
+  async deleteCredential(orgId: string, loginId: string) {
+    const c = this.credentials.get(loginId);
+    if (!c || c.org_id !== orgId) return false;
+    this.credentials.delete(loginId);
     return true;
   }
 

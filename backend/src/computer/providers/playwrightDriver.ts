@@ -5,7 +5,7 @@
  * approval gate can classify a click before it happens.
  */
 import { createHash } from 'node:crypto';
-import type { Browser, BrowserContext, Frame, Page } from 'playwright-core';
+import type { Browser, BrowserContext, Frame, Locator, Page } from 'playwright-core';
 import { DESCRIBE_AT_POINT, DESCRIBE_FOCUSED, READ_FIELDS, READ_SIGNALS } from '../domScripts.js';
 import type {
   ComputerDriver,
@@ -64,6 +64,46 @@ export function toPlaywrightKey(combo: string): string {
 }
 
 type RawDescriptor = TargetDescriptor & { frameRect: { x: number; y: number } | null };
+
+/** Username / email inputs, most specific first. */
+const USERNAME_SELECTORS = [
+  'input[autocomplete="username"]:visible',
+  'input[type="email"]:visible',
+  'input[name*="email" i]:visible',
+  'input[name*="user" i]:visible',
+  'input[name*="login" i]:visible',
+  'input[id*="email" i]:visible',
+  'input[id*="user" i]:visible',
+  'input[id*="login" i]:visible',
+];
+const PASSWORD_SELECTOR = 'input[type="password"]:visible';
+
+async function firstPresent(page: Page, selectors: string[]): Promise<Locator | null> {
+  for (const sel of selectors) {
+    const loc = page.locator(sel).first();
+    if ((await loc.count().catch(() => 0)) > 0) return loc;
+  }
+  return null;
+}
+
+/** Submit the field's form: its submit button if it has one, else Enter. */
+async function submitFrom(page: Page, field: Locator): Promise<void> {
+  const clicked = await field
+    .evaluate((el) => {
+      type Clickable = { click(): void };
+      const form = (el as unknown as { form?: { querySelector(s: string): Clickable | null } | null }).form;
+      const btn = form?.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+      if (btn) {
+        btn.click();
+        return true;
+      }
+      return false;
+    })
+    .catch(() => false);
+  if (!clicked) await field.press('Enter');
+  await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
+  await page.waitForTimeout(1_500);
+}
 
 function strip(raw: RawDescriptor | null): TargetDescriptor | null {
   if (!raw) return null;
@@ -269,6 +309,36 @@ export class PlaywrightDriver implements ComputerDriver {
     }
     const after = (await this.context.cookies()).filter((c) => wanted.has(c.domain)).length;
     return Math.max(0, before - after);
+  }
+
+  async fillSignIn(creds: { username: string; password: string }): Promise<'submitted' | 'username_only' | 'no_form'> {
+    try {
+      const page = await this.active();
+      let sentUsername = false;
+      for (let round = 0; round < 3; round += 1) {
+        const password = await firstPresent(page, [PASSWORD_SELECTOR]);
+        const username = await firstPresent(page, USERNAME_SELECTORS);
+        if (password) {
+          if (username && !sentUsername) await username.fill(creds.username);
+          await password.fill(creds.password);
+          await submitFrom(page, password);
+          return 'submitted';
+        }
+        if (username && !sentUsername) {
+          // A username-first page (Microsoft, Google): send it, then wait for the password page.
+          await username.fill(creds.username);
+          sentUsername = true;
+          await submitFrom(page, username);
+          await page.locator(PASSWORD_SELECTOR).first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => undefined);
+          continue;
+        }
+        break;
+      }
+      return sentUsername ? 'username_only' : 'no_form';
+    } catch {
+      // Playwright errors can quote the call; never pass one on.
+      throw new Error('Could not fill in the sign-in form.');
+    }
   }
 
   async close() {

@@ -141,6 +141,7 @@ const EVENT_LABEL: Record<string, string> = {
   approval_declined: 'You declined',
   approval_superseded: 'You took over before approving',
   needs_you: 'Paused for you',
+  auto_sign_in: 'Signed in with the saved login',
   resumed: 'Carried on',
   took_control: 'You took control',
   handed_back: 'You handed back',
@@ -197,6 +198,15 @@ export function computerEventLabel(event: ComputerTaskEvent): string {
   if (event.event === 'blocked' && d.why === 'outside_task') return `Stayed on the task instead of opening ${String(d.host ?? 'another site')}`;
   if (event.event === 'blocked' && d.label) return `Held “${String(d.label)}” for your approval`;
   if (event.event === 'approval_requested' && d.label) return `Asked you before clicking “${String(d.label)}”`;
+  if (event.event === 'auto_sign_in') {
+    const host = d.host ? String(d.host) : 'the site';
+    const outcome = String(d.outcome ?? '');
+    if (outcome === 'signed_in' || outcome === 'already_signed_in') return `Signed in to ${host} with the saved login`;
+    if (outcome === 'two_factor') return `Signed in to ${host} with the saved login; it asked for a code`;
+    if (outcome === 'captcha') return `Used the saved login for ${host}; it showed a captcha`;
+    if (outcome === 'failed') return `The saved login for ${host} didn’t work`;
+    return `Tried the saved login for ${host}`;
+  }
   if (event.event === 'needs_you') return NEEDS_YOU_STEP[String(d.reason ?? 'other')] ?? NEEDS_YOU_STEP.other;
   if (event.event === 'finished') return d.submitted ? 'Finished and submitted' : 'Finished';
   return base;
@@ -324,7 +334,36 @@ export interface ComputerLogin {
   lastSignedInBy: string | null;
   /** True when Remove can also sign Computer out (we recorded which cookies). */
   canClearCookies: boolean;
+  /** A saved username and password, if any. The password itself never comes back. */
+  credential: ComputerSavedCredential | null;
 }
+
+export interface ComputerSavedCredential {
+  saved: true;
+  /** Only sent to admins. */
+  username: string | null;
+  loginUrl: string | null;
+  status: 'ok' | 'needs_attention';
+  attentionReason: string | null;
+  lastUsedAt: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface ComputerCredentialInput {
+  username: string;
+  password: string;
+  loginUrl?: string | null;
+}
+
+export type ComputerAutoSignInOutcome =
+  | 'signed_in'
+  | 'already_signed_in'
+  | 'two_factor'
+  | 'captcha'
+  | 'failed'
+  | 'incomplete'
+  | 'unavailable';
 
 export interface ComputerSignIn {
   sessionId: string;
@@ -336,6 +375,8 @@ export interface ComputerSignIn {
   startedBy: string | null;
   startedByYou: boolean;
   expiresAt: string;
+  /** Set when Computer typed a saved password into the site for this sign-in. */
+  autoSignIn?: { outcome: ComputerAutoSignInOutcome; message: string } | null;
 }
 
 export interface ComputerLoginsState {
@@ -344,6 +385,8 @@ export interface ComputerLoginsState {
   logins: ComputerLogin[];
   signingIn: ComputerSignIn | null;
   busy: string | null;
+  /** Saving passwords: on only when the server has its encryption key; managed by Global Admins. */
+  passwords?: { enabled: boolean; message: string | null; canManage: boolean };
 }
 
 export interface ComputerRemoveLoginResult {

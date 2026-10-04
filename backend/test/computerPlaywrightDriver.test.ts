@@ -66,6 +66,45 @@ test('Playwright driver reads targets for the gate', { skip: browser ? false : '
   }
 });
 
+test('fillSignIn types a saved login into a username-first sign-in, then the password page', { skip: browser ? false : 'no local Chromium' }, async () => {
+  const PASSWORD = 'PW-SECRET-zq9-Atmosphere-TEST-7781-driver';
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 800 } });
+  const posted: string[] = [];
+  await context.route('https://login.example-sso.test/**', async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (req.method() === 'POST') posted.push(`${path}?${req.postData() ?? ''}`);
+    const html =
+      path === '/start'
+        ? '<form method="post" action="/password"><input type="email" name="loginfmt"><button>Next</button></form>'
+        : path === '/password'
+          ? '<form method="post" action="/done"><input type="password" name="passwd"><input type="submit" value="Sign in"></form>'
+          : path === '/combined'
+            ? '<form method="post" action="/done"><input name="username"><input type="password" name="pw"><button type="submit">Log in</button></form>'
+            : '<p>Welcome back</p>';
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><body>${html}</body></html>` });
+  });
+  const page = await context.newPage();
+  const driver = new PlaywrightDriver(browser!, context, page, { width: 1280, height: 800 });
+  try {
+    await page.goto('https://login.example-sso.test/start');
+    assert.equal(await driver.fillSignIn({ username: 'saved@example.test', password: PASSWORD }), 'submitted');
+    assert.equal(new URL(page.url()).pathname, '/done');
+    assert.deepEqual(posted, ['/password?loginfmt=saved%40example.test', `/done?passwd=${PASSWORD}`]);
+    assert.equal((await driver.pageSignals()).hasPasswordField, false);
+
+    posted.length = 0;
+    await page.goto('https://login.example-sso.test/combined');
+    assert.equal(await driver.fillSignIn({ username: 'saved', password: PASSWORD }), 'submitted');
+    assert.deepEqual(posted, [`/done?username=saved&pw=${PASSWORD}`]);
+
+    // Already signed in: nothing to fill.
+    assert.equal(await driver.fillSignIn({ username: 'saved', password: PASSWORD }), 'no_form');
+  } finally {
+    await context.close();
+  }
+});
+
 test.after(async () => {
   await browser?.close();
 });

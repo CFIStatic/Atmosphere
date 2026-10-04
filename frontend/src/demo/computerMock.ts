@@ -6,7 +6,7 @@
  */
 import type { ComputerLogin, ComputerSignIn, ComputerTaskView } from '../lib/computer';
 
-type Scenario = 'claim' | 'permit' | 'httpbin';
+type Scenario = 'claim' | 'permit' | 'httpbin' | 'autologin';
 
 interface DemoTask {
   id: string;
@@ -25,9 +25,10 @@ const IDS: Record<Scenario, string> = {
   claim: 'c0de0000-0000-4000-8000-00000000c001',
   permit: 'c0de0000-0000-4000-8000-00000000c002',
   httpbin: 'c0de0000-0000-4000-8000-00000000c003',
+  autologin: 'c0de0000-0000-4000-8000-00000000c004',
 };
 
-const RUN_MS: Record<Scenario, number> = { claim: 9_000, permit: 4_000, httpbin: 5_000 };
+const RUN_MS: Record<Scenario, number> = { claim: 9_000, permit: 4_000, httpbin: 5_000, autologin: 5_000 };
 
 const FIELDS = [
   { label: 'Insured name', value: 'Dana Whitfield (TEST)', source: 'Job brief: Insured name', verified: true },
@@ -73,6 +74,7 @@ function scenarioFor(question: string): Scenario | 'not_set_up' | null {
   if (!/(portal|website|web form|online|\.com|\.gov|\.org|\.net|\.test|https?:\/\/)/.test(q)) return null;
   if (q.includes('not set up')) return 'not_set_up';
   if (q.includes('httpbin')) return 'httpbin';
+  if (/saved (login|password)|sign(s)? (back )?in/.test(q)) return 'autologin';
   if (/permit|city|county/.test(q)) return 'permit';
   return 'claim';
 }
@@ -113,7 +115,11 @@ function view(t: DemoTask): ComputerTaskView {
   let approval: ComputerTaskView['approval'] = null;
   let finishedAt: string | null = null;
   const host =
-    t.scenario === 'claim' ? 'portal.example-carrier.test' : t.scenario === 'httpbin' ? 'httpbin.org' : 'permits.example-city.test';
+    t.scenario === 'claim' || t.scenario === 'autologin'
+      ? 'portal.example-carrier.test'
+      : t.scenario === 'httpbin'
+        ? 'httpbin.org'
+        : 'permits.example-city.test';
   if (t.canceledAt) {
     status = 'canceled';
     resultSummary = 'Canceled. Nothing was submitted.';
@@ -152,8 +158,23 @@ function view(t: DemoTask): ComputerTaskView {
         expiresAt: new Date(t.createdAt + runMs + 10 * 60_000).toISOString(),
       };
     }
-  } else if (t.scenario === 'httpbin') {
-    if (elapsed >= runMs) {
+  } else if (t.scenario === 'httpbin' || t.scenario === 'autologin') {
+    if (t.scenario === 'autologin' && elapsed >= runMs) {
+      status = 'succeeded';
+      stepCount = 9;
+      resultSummary = 'Saved as a draft. Nothing was submitted.';
+      result = {
+        title: 'Draft saved',
+        fields: [
+          { label: 'Claim number', value: 'CLM-TEST-48213' },
+          { label: 'Date of loss', value: '09/28/2026' },
+        ],
+        notes: resultSummary,
+      };
+      finishedAt = new Date(t.createdAt + runMs).toISOString();
+    } else if (t.scenario === 'autologin') {
+      lastAction = 'Signed in to Carrier portal with the saved login.';
+    } else if (elapsed >= runMs) {
       status = 'succeeded';
       resultSummary = 'No customer details on this job, so test values were used.';
       result = {
@@ -212,7 +233,20 @@ function view(t: DemoTask): ComputerTaskView {
     { id: 13, event: 'session_ended', actor: 'system', at: at(runMs), detail: {} },
     { id: 14, event: 'task_finished', actor: 'system', at: at(runMs), detail: { status: 'succeeded', submitted: false } },
   ].filter((e) => Date.parse(e.at) <= now);
-  const events: ComputerTaskView['events'] = t.scenario === 'httpbin' ? httpbinEvents : [
+  // Demo of an automatic sign-in: the server typed the saved login; the audit row is host + outcome only.
+  const autologinEvents: ComputerTaskView['events'] = [
+    { id: 1, event: 'task_queued', actor: 'user', at: at(0), detail: {} },
+    { id: 2, event: 'session_started', actor: 'system', at: at(300), detail: {} },
+    { id: 3, event: 'navigate', actor: 'agent', at: at(700), detail: { host: 'portal.example-carrier.test' } },
+    { id: 4, event: 'auto_sign_in', actor: 'system', at: at(1400), detail: { host: 'portal.example-carrier.test', outcome: 'signed_in' } },
+    { id: 5, event: 'action', actor: 'agent', at: at(2200), detail: { action: 'left_click', target: { tag: 'input', label: 'Claim number' } } },
+    { id: 6, event: 'action', actor: 'agent', at: at(2400), detail: { action: 'type', field: 'Claim number', chars: 14 } },
+    { id: 7, event: 'action', actor: 'agent', at: at(3000), detail: { action: 'left_click', target: { tag: 'input', label: 'Date of loss' } } },
+    { id: 8, event: 'action', actor: 'agent', at: at(3200), detail: { action: 'type', field: 'Date of loss', chars: 10 } },
+    { id: 9, event: 'action', actor: 'agent', at: at(3800), detail: { action: 'left_click', target: { tag: 'button', label: 'Save draft' } } },
+    { id: 10, event: 'finished', actor: 'agent', at: at(runMs), detail: { submitted: false } },
+  ].filter((e) => Date.parse(e.at) <= now);
+  const events: ComputerTaskView['events'] = t.scenario === 'httpbin' ? httpbinEvents : t.scenario === 'autologin' ? autologinEvents : [
     { id: 1, event: 'task_queued', actor: 'user', at: new Date(t.createdAt).toISOString(), detail: {} },
     { id: 2, event: 'session_started', actor: 'system', at: new Date(t.createdAt + 400).toISOString(), detail: {} },
     { id: 3, event: 'navigate', actor: 'agent', at: new Date(t.createdAt + 900).toISOString(), detail: { host } },
@@ -261,7 +295,7 @@ function liveHtml(t: DemoTask) {
       ? formPage(0, { title: '', host: 'permits.example-city.test', twoFactor: true })
       : formPage(v.status === 'awaiting_approval' ? 5 : filled, {
           title: t.scenario === 'claim' ? 'New property claim' : t.scenario === 'httpbin' ? 'Pizza order (httpbin test form)' : 'Roofing permit application',
-          host: t.scenario === 'claim' ? 'portal.example-carrier.test' : t.scenario === 'httpbin' ? 'httpbin.org' : 'permits.example-city.test',
+          host: t.scenario === 'httpbin' ? 'httpbin.org' : t.scenario === 'permit' ? 'permits.example-city.test' : 'portal.example-carrier.test',
         });
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
@@ -324,6 +358,51 @@ export const computerDemoRoutes: Array<[string, RegExp, Handler]> = [
 
 const demoLogins: ComputerLogin[] = [];
 let demoSignIn: ComputerSignIn | null = null;
+let demoSeeded = false;
+
+/** Demo passwords: the page only ever gets the username and "saved"; the demo throws the password away. */
+function demoCredential(username: string, loginUrl: string | null): NonNullable<ComputerLogin['credential']> {
+  const now = new Date().toISOString();
+  return { saved: true, username, loginUrl, status: 'ok', attentionReason: null, lastUsedAt: null, updatedAt: now, updatedBy: 'Dana Ruiz' };
+}
+
+/** Optional starting list for screenshots (window.__DEMO_LOGIN_SEED = true). */
+function seedDemoLogins() {
+  if (demoSeeded || !(globalThis as { __DEMO_LOGIN_SEED?: boolean }).__DEMO_LOGIN_SEED) return;
+  demoSeeded = true;
+  const day = 86_400_000;
+  demoLogins.push(
+    {
+      id: 'd0e10000-0000-4000-8000-000000000101',
+      label: 'Outlook',
+      url: 'https://outlook.office.com/',
+      host: 'outlook.office.com',
+      addedBy: 'Dana Ruiz',
+      addedAt: new Date(Date.now() - 6 * day).toISOString(),
+      lastSignedInAt: new Date(Date.now() - 2 * day).toISOString(),
+      lastSignedInBy: 'Dana Ruiz',
+      canClearCookies: true,
+      credential: null,
+    },
+    {
+      id: 'd0e10000-0000-4000-8000-000000000102',
+      label: 'Xactimate',
+      url: 'https://identity.xactware.com/',
+      host: 'identity.xactware.com',
+      addedBy: 'Dana Ruiz',
+      addedAt: new Date(Date.now() - 20 * day).toISOString(),
+      lastSignedInAt: new Date(Date.now() - 9 * day).toISOString(),
+      lastSignedInBy: 'Dana Ruiz',
+      canClearCookies: true,
+      credential: {
+        ...demoCredential('estimates@ruizroofing.test', null),
+        status: 'needs_attention',
+        attentionReason: 'The saved password didn’t work on Oct 3.',
+        lastUsedAt: new Date(Date.now() - day).toISOString(),
+      },
+    },
+  );
+}
 
 function demoSignInPage(host: string) {
   const html = `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f3f3f3;display:grid;place-items:center;height:100vh">
@@ -336,9 +415,20 @@ function demoSignInPage(host: string) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
-function demoLiveUrl(host: string): string {
+/** After a saved-password sign-in: the site's signed-in home page. */
+function demoSignedInPage(host: string) {
+  const html = `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f3f3f3">
+<div style="background:#1e3a8a;color:#fff;padding:12px 24px;font-weight:600">${host}<span style="float:right;font-weight:400">claims@ruizroofing.test ▾</span></div>
+<div style="max-width:560px;margin:40px auto;background:#fff;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
+<h1 style="font-size:22px;margin:0 0 8px">Welcome back</h1><p style="color:#555;margin:0">You're signed in. Open claims: 3</p>
+<p style="font-size:11px;color:#999;margin-top:24px">TEST DATA: demo portal</p></div></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+function demoLiveUrl(host: string, signedIn = false): string {
   const injected = (globalThis as { __DEMO_LIVE_URL?: string }).__DEMO_LIVE_URL;
-  return typeof injected === 'string' && injected ? injected : demoSignInPage(host);
+  if (typeof injected === 'string' && injected) return injected;
+  return signedIn ? demoSignedInPage(host) : demoSignInPage(host);
 }
 
 function demoHost(raw: string): { url: string; host: string } | null {
@@ -351,31 +441,74 @@ function demoHost(raw: string): { url: string; host: string } | null {
 }
 
 computerDemoRoutes.push(
-  ['GET', /^\/api\/chat-computer\/logins$/, () => ({
-    body: { configured: true, message: null, logins: demoLogins, signingIn: demoSignIn, busy: null },
-  })],
+  ['GET', /^\/api\/chat-computer\/logins$/, () => {
+    seedDemoLogins();
+    return {
+      body: {
+        configured: true,
+        message: null,
+        logins: demoLogins,
+        signingIn: demoSignIn,
+        busy: null,
+        passwords: { enabled: true, message: null, canManage: true },
+      },
+    };
+  }],
   ['POST', /^\/api\/chat-computer\/logins\/sign-ins$/, (_m, b) => {
     if (demoSignIn) return { status: 409, body: { error: `Someone is signing in to ${demoSignIn.label} right now.`, code: 'busy' } };
     const existing = typeof b.loginId === 'string' ? demoLogins.find((l) => l.id === b.loginId) : undefined;
     const target = existing ? { url: existing.url, host: existing.host } : demoHost(String(b.url ?? ''));
     if (!target) return { status: 400, body: { error: 'Enter a web address like https://portal.example.com.', code: 'bad_url' } };
     const now = Date.now();
+    const cred = b.credential && typeof b.credential === 'object' ? (b.credential as { username?: string; loginUrl?: string | null }) : null;
+    let loginId = existing?.id ?? null;
+    if (cred) {
+      // A new site is listed (not signed in yet) so its password has somewhere to live.
+      let login = existing ?? demoLogins.find((l) => l.host === target.host);
+      if (!login) {
+        login = {
+          id: `d0e10000-0000-4000-8000-${String(demoLogins.length + 1).padStart(12, '0')}`,
+          label: String(b.label ?? '').trim() || target.host,
+          url: target.url,
+          host: target.host,
+          addedBy: 'Dana Ruiz',
+          addedAt: new Date(now).toISOString(),
+          lastSignedInAt: null,
+          lastSignedInBy: null,
+          canClearCookies: false,
+          credential: null,
+        };
+        demoLogins.push(login);
+      }
+      login.credential = demoCredential(String(cred.username ?? ''), cred.loginUrl ?? null);
+      loginId = login.id;
+    }
+    const saved = loginId ? demoLogins.find((l) => l.id === loginId)?.credential : null;
     demoSignIn = {
       sessionId: `d0e00000-0000-4000-8000-${String(now).slice(-12).padStart(12, '0')}`,
       label: existing?.label ?? (String(b.label ?? '').trim() || target.host),
       url: target.url,
       host: target.host,
-      loginId: existing?.id ?? null,
+      loginId,
       startedAt: new Date(now).toISOString(),
       startedBy: 'Dana Ruiz',
       startedByYou: true,
       expiresAt: new Date(now + 15 * 60_000).toISOString(),
     };
-    return { body: { signIn: demoSignIn } };
+    const label = demoSignIn.label;
+    return {
+      body: {
+        signIn: {
+          ...demoSignIn,
+          autoSignIn: saved ? { outcome: 'signed_in', message: `Signed in to ${label} with the saved login.` } : null,
+        },
+      },
+    };
   }],
   ['POST', /^\/api\/chat-computer\/logins\/sign-ins\/([\w-]+)\/live$/, (m) => {
     if (!demoSignIn || demoSignIn.sessionId !== m[1]) return notFound;
-    return { body: { url: demoLiveUrl(demoSignIn.host), expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(), mode: 'control' } };
+    const signedIn = Boolean(demoSignIn.loginId && demoLogins.find((l) => l.id === demoSignIn!.loginId)?.credential);
+    return { body: { url: demoLiveUrl(demoSignIn.host, signedIn), expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(), mode: 'control' } };
   }],
   ['POST', /^\/api\/chat-computer\/logins\/sign-ins\/([\w-]+)\/done$/, (m) => {
     if (!demoSignIn || demoSignIn.sessionId !== m[1]) return notFound;
@@ -384,6 +517,8 @@ computerDemoRoutes.push(
     if (login) {
       login.lastSignedInAt = now;
       login.lastSignedInBy = 'Dana Ruiz';
+      login.canClearCookies = true;
+      if (login.credential) login.credential = { ...login.credential, status: 'ok', attentionReason: null, lastUsedAt: now };
     } else {
       login = {
         id: `d0e10000-0000-4000-8000-${String(demoLogins.length + 1).padStart(12, '0')}`,
@@ -395,6 +530,7 @@ computerDemoRoutes.push(
         lastSignedInAt: now,
         lastSignedInBy: 'Dana Ruiz',
         canClearCookies: true,
+        credential: null,
       };
       demoLogins.push(login);
     }
@@ -410,5 +546,18 @@ computerDemoRoutes.push(
     if (i < 0) return notFound;
     const [gone] = demoLogins.splice(i, 1);
     return { body: { removed: true, cookiesCleared: true, message: `Removed ${gone.label}. Computer is signed out of it.` } };
+  }],
+  ['PUT', /^\/api\/chat-computer\/logins\/([\w-]+)\/credential$/, (m, b) => {
+    const login = demoLogins.find((l) => l.id === m[1]);
+    if (!login) return notFound;
+    login.credential = demoCredential(String(b.username ?? ''), typeof b.loginUrl === 'string' ? b.loginUrl : null);
+    return { body: { login } };
+  }],
+  ['DELETE', /^\/api\/chat-computer\/logins\/([\w-]+)\/credential$/, (m) => {
+    const login = demoLogins.find((l) => l.id === m[1]);
+    if (!login) return notFound;
+    const deleted = Boolean(login.credential);
+    login.credential = null;
+    return { body: { deleted } };
   }],
 );

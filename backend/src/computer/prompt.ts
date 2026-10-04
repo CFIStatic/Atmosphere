@@ -22,6 +22,7 @@ WHAT YOU MAY TYPE
 
 SIGN-IN, TWO-FACTOR, CAPTCHA
 - Never type passwords, one-time codes, or security answers. When a page needs a sign-in, a verification code, or a captcha, call needs_you and wait. The person does it in the live view, and their login is remembered for next time.
+- If the site is listed in <saved_sign_ins>, call sign_in_saved with its host instead when you reach its sign-in page. The server types the saved username and password itself; you never see them. If it reports a code, captcha or problem, the person is asked to take over.
 - Never try to solve, bypass, or click through a captcha.
 
 APPROVAL
@@ -89,6 +90,16 @@ export const COMPUTER_CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'sign_in_saved',
+    description:
+      'Sign in to a site listed in <saved_sign_ins> with its saved username and password. The server fills in the sign-in form; you never see the values. Call it on (or before) that site\'s sign-in page.',
+    input_schema: {
+      type: 'object',
+      properties: { site: { type: 'string', description: 'The host from <saved_sign_ins>, e.g. "portal.example.com".' } },
+      required: ['site'],
+    },
+  },
+  {
     name: 'finish',
     description: 'End the task. Report what you filled in, whether anything was submitted, and at most one plain note.',
     input_schema: {
@@ -128,12 +139,18 @@ export function taskPrompt(input: {
   instructions: string;
   startUrl: string | null;
   projection: ProjectedJobField[];
+  /** Sites with a saved password: label and host only, never the username or password. */
+  savedSignIns?: Array<{ label: string; host: string }>;
 }): string {
   const fields = input.projection.map((f) => ({ key: f.key, label: f.label, value: f.value }));
+  const saved = input.savedSignIns ?? [];
   return [
     `<task>\n${xmlEscape(input.instructions)}\n</task>`,
     input.startUrl ? `<start_url>${xmlEscape(input.startUrl)}</start_url>` : '<start_url>none given</start_url>',
     `<job_fields>\n${xmlEscape(JSON.stringify(fields, null, 1))}\n</job_fields>`,
+    ...(saved.length
+      ? [`<saved_sign_ins>\n${saved.map((s) => `- ${xmlEscape(s.label)} (${xmlEscape(s.host)})`).join('\n')}\n</saved_sign_ins>`]
+      : []),
     'The screenshot shows the browser now. Start the task.',
   ].join('\n\n');
 }

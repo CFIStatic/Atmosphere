@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 192,
+    "migrationCount": 193,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -209,7 +209,8 @@
     "20261003200000_live_safety_real_vs_media.sql",
     "20261004150000_token_usage_feature_computer.sql",
     "20261004150100_computer_tasks.sql",
-    "20261004180000_computer_logins.sql"
+    "20261004180000_computer_logins.sql",
+    "20261004200000_computer_login_credentials.sql"
   ],
   "migrations": [
     {
@@ -6344,6 +6345,35 @@
         "policy|public.computer_logins.computer_logins_no_user_access",
         "rls|public.computer_logins",
         "table|public.computer_logins"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261004200000_computer_login_credentials",
+      "file": "20261004200000_computer_login_credentials.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.computer_login_credentials.attention_reason",
+        "column|public.computer_login_credentials.created_at",
+        "column|public.computer_login_credentials.created_by",
+        "column|public.computer_login_credentials.key_fingerprint",
+        "column|public.computer_login_credentials.last_used_at",
+        "column|public.computer_login_credentials.login_id",
+        "column|public.computer_login_credentials.login_url",
+        "column|public.computer_login_credentials.org_id",
+        "column|public.computer_login_credentials.password_sealed",
+        "column|public.computer_login_credentials.status",
+        "column|public.computer_login_credentials.updated_at",
+        "column|public.computer_login_credentials.updated_by",
+        "column|public.computer_login_credentials.username_sealed",
+        "index|public.computer_login_credentials.computer_login_credentials_org_idx",
+        "index|public.computer_login_credentials.computer_login_credentials_pkey",
+        "policy|public.computer_login_credentials.computer_login_credentials_no_user_access",
+        "rls|public.computer_login_credentials",
+        "table|public.computer_login_credentials"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
