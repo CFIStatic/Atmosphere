@@ -306,6 +306,26 @@ final class AtmosphereClient: ObservableObject {
         }
     }
 
+    /// Server reply for `DELETE /api/auth/account`.
+    struct AccountDeletionResult: Decodable {
+        let ok: Bool?
+        let message: String?
+    }
+
+    /// Permanently deletes the signed-in person's Atmosphere account
+    /// (App Store guideline 5.1.1(v)). Jobs, files, and videos stay with the
+    /// company. Only the Atmosphere API can do this, so there is no direct
+    /// Supabase fallback.
+    func deleteAccount() async throws -> AccountDeletionResult {
+        guard usesBFF else {
+            throw APIError.http(
+                status: 0,
+                body: "Deleting an account needs a connection to Atmosphere. Try again when you have signal."
+            )
+        }
+        return try await send(path: "/api/auth/account", method: "DELETE", bodyData: nil, authed: true)
+    }
+
     // MARK: - Field app bridge
 
     struct FieldMe: Decodable {

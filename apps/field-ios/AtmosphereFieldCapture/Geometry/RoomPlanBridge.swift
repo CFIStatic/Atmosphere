@@ -5,6 +5,15 @@ import RoomPlan
 import RealityKit
 #endif
 
+/// Feature switches for unfinished capture features.
+enum FieldFeatures {
+    /// RoomPlan twin measuring. `RoomPlanBridge` is still a stub that never
+    /// returns rooms, so the measuring UI and empty geometry sessions stay off
+    /// until the RoomCaptureViewController host is wired in. Flip to `true`
+    /// once real rooms come back.
+    static let roomPlanTwin = false
+}
+
 /**
  * On-device room measurement for the property digital twin.
  *

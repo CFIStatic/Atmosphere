@@ -9,6 +9,9 @@ struct TodayView: View {
     @State private var jobQuery = ""
     @State private var showNewJob = false
     @State private var safariURL: URL?
+    @State private var confirmingDeleteAccount = false
+    @State private var deletingAccount = false
+    @State private var deleteAccountError: String?
 
     private var appearance: AppearancePreference {
         AppearancePreference(rawValue: themeRaw) ?? .light
@@ -177,6 +180,42 @@ struct TodayView: View {
             SafariView(url: item.url)
                 .ignoresSafeArea()
         }
+        .alert("Delete your account?", isPresented: $confirmingDeleteAccount) {
+            Button("Delete account", role: .destructive) {
+                deleteAccount()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This removes your login, your profile, and your place on the team. It cannot be undone. Jobs, files, and videos you filmed belong to your company and stay with it. Films still waiting to upload on this phone will not be sent."
+            )
+        }
+        .alert(
+            "Account not deleted",
+            isPresented: Binding(
+                get: { deleteAccountError != nil },
+                set: { if !$0 { deleteAccountError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteAccountError ?? "")
+        }
+    }
+
+    private func deleteAccount() {
+        guard !deletingAccount else { return }
+        deletingAccount = true
+        Task {
+            do {
+                try await auth.deleteAccount()
+                session.jobs = []
+                PendingJobsStore.clear()
+            } catch {
+                deleteAccountError = AuthSession.plainMessage(for: error)
+            }
+            deletingAccount = false
+        }
     }
 
     private var header: some View {
@@ -238,6 +277,10 @@ struct TodayView: View {
                             PendingJobsStore.clear()
                         }
                     }
+                    Button("Delete account…", role: .destructive) {
+                        confirmingDeleteAccount = true
+                    }
+                    .disabled(deletingAccount)
                 }
             } label: {
                 FieldAccountChip(

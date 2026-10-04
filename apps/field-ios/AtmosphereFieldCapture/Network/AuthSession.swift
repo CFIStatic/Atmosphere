@@ -338,6 +338,27 @@ final class AuthSession: ObservableObject {
         clearLink()
     }
 
+    /// Permanently delete this person's account, then forget it on this phone.
+    /// On success the app returns to the connect screen with the server's
+    /// plain-words summary. Throws when the server refuses (for example, the
+    /// only admin of a company that still has other people in it).
+    func deleteAccount() async throws {
+        try await ensureFreshAccess()
+        let result = try await api.deleteAccount()
+        clearLink()
+        lastError = nil
+        confirmationNotice = result.message ?? "Your account was deleted."
+    }
+
+    /// Readable text for an account action error (drops the "API 409:" prefix).
+    static func plainMessage(for error: Error) -> String {
+        if let apiError = error as? APIError, case let .http(_, body) = apiError {
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return error.localizedDescription
+    }
+
     /// Used by the API client when a request gets 401 mid-session.
     func refreshAccessToken() async throws {
         try await ensureFreshAccess(forceRefresh: true)

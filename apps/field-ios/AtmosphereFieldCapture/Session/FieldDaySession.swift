@@ -25,6 +25,8 @@ final class FieldDaySession: ObservableObject {
     @Published var shareCompany: String?
     /// When set, RootView presents the recording-on-property disclosure before startDay.
     @Published var pendingRecordingConsentJobId: String?
+    /// Shown on the door when a call, lock, or camera error cut the film short.
+    @Published var stoppedEarlyNote: String?
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
@@ -228,6 +230,13 @@ final class FieldDaySession: ObservableObject {
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }
         activeClipId = ClipId.mint()
+        stoppedEarlyNote = nil
+        // A call, lock, or camera error ends the film without hold-to-finish;
+        // save whatever was written instead of dropping it.
+        recorder.onUnexpectedFinish = { [weak self] result in
+            guard let self else { return }
+            Task { await self.saveInterruptedRecording(result) }
+        }
         do {
             try await recorder.prepare()
             locator.configure(jobs: jobs)
@@ -247,6 +256,7 @@ final class FieldDaySession: ObservableObject {
         twinRooms = []
         manifest = nil
         filingDetail = ""
+        stoppedEarlyNote = nil
         await startDay()
     }
 
@@ -263,138 +273,181 @@ final class FieldDaySession: ObservableObject {
     func finishDay(api: AtmosphereClient) async {
         lastError = nil
         uploading = true
-        defer { uploading = false }
+        defer {
+            uploading = false
+            recorder.endBackgroundSave()
+        }
         do {
             let url = try await recorder.finishDay()
+            try await saveRecordedFilm(url: url, api: api)
+        } catch {
+            if case CaptureError.notRecording = error, recorder.interruptionMessage != nil {
+                // The film already stopped on its own (call, lock) and is
+                // being saved by `saveInterruptedRecording`.
+                return
+            }
+            showNotSaved(error)
+        }
+    }
+
+    /// Recording ended without hold-to-finish (call, lock, camera error, 24h
+    /// cap). Keep the file that was written and let the crew start a new
+    /// segment from the door.
+    func saveInterruptedRecording(_ result: Result<URL, Error>) async {
+        let reason = recorder.interruptionMessage ?? "Recording stopped on its own."
+        uploading = true
+        defer {
+            uploading = false
+            recorder.endBackgroundSave()
+        }
+        do {
+            let url = try result.get()
+            lastError = nil
+            try await saveRecordedFilm(url: url, api: nil)
+            stoppedEarlyNote = "\(reason) What was filmed up to that point is saved. Tap Record another to keep going."
+        } catch {
             locator.stop()
-            let tracks = try await DayFilmRecorder.probeTracks(url: url)
-            guard tracks.hasAudio, tracks.hasVideo else {
-                throw CaptureError.missingAudio
-            }
-            let durationSeconds = tracks.duration > 0
-                ? tracks.duration
-                : Double(max(elapsedSeconds, recorder.elapsedSeconds))
+            recorder.teardown()
+            showNotSaved(error)
+            stoppedEarlyNote = reason
+        }
+    }
 
-            guard let jobId = activeJobId ?? jobs.first?.id else {
-                throw APIError.http(status: 0, body: "No job selected for this day film.")
-            }
+    private func showNotSaved(_ error: Error) {
+        lastError = error.localizedDescription
+        phase = .door
+        doorChecks = [
+            DoorCheck(id: "err", label: "Not saved", detail: error.localizedDescription, ok: false),
+        ]
+        filingDetail = "Recording was not saved."
+    }
 
-            let workDate = Self.todayStamp()
-            let clipId = ClipId.resolve(activeClipId)
-            activeClipId = clipId
-            let job = jobs.first(where: { $0.id == jobId })
-            let jobName = job?.name ?? jobId
-            let draft: JobDraftPayload? = PendingJobsStore.isLocalJobId(jobId)
-                ? JobDraftPayload(title: job?.createTitle ?? jobName, situation: job?.situation ?? "")
-                : nil
-            let mode: DayFilmQueueEntry.Mode = isShareMode ? .share : .account
-            let token = isShareMode ? shareToken : nil
+    /// Probe A/V → persist locally → queue upload → door. `api` is only used
+    /// for optional extras (twin geometry, job sync); filing goes through the
+    /// upload queue, which is already bound to the signed-in client.
+    private func saveRecordedFilm(url: URL, api: AtmosphereClient?) async throws {
+        locator.stop()
+        let tracks = try await DayFilmRecorder.probeTracks(url: url)
+        guard tracks.hasAudio, tracks.hasVideo else {
+            throw CaptureError.missingAudio
+        }
+        let durationSeconds = tracks.duration > 0
+            ? tracks.duration
+            : Double(max(elapsedSeconds, recorder.elapsedSeconds))
 
-            let entry = try await DayFilmQueueStore.shared.persistFilm(
-                from: url,
-                jobId: jobId,
-                jobName: jobName,
-                clipId: clipId,
-                workDate: workDate,
-                durationSeconds: durationSeconds,
-                lat: locator.coordinate?.latitude,
-                lon: locator.coordinate?.longitude,
-                accuracyM: nil,
-                mode: mode,
-                shareToken: token,
-                jobDraft: draft
-            )
-            doorFilmId = entry.id
-            await uploadQueue.enqueuePersisted(entry)
+        guard let jobId = activeJobId ?? jobs.first?.id else {
+            throw APIError.http(status: 0, body: "No job selected for this day film.")
+        }
 
-            // Optional RoomPlan twin — never blocks filing; skip in share mode
-            // (geometry needs org auth).
-            var geometrySessionId: String?
-            var twinId: String?
-            if !isShareMode {
-                roomPlan.detectCapabilities()
-                await roomPlan.captureRooms()
-                do {
-                    let geo = try await api.openGeometrySession(
-                        lidarAvailable: roomPlan.lidarAvailable,
-                        label: "Field day \(workDate)",
-                        videoRef: entry.fileName
-                    )
-                    geometrySessionId = geo.session.id
-                    twinId = geo.twin.id
-                    let rooms = roomPlan.asIngestRooms()
-                    if !rooms.isEmpty {
-                        try await api.ingestGeometry(
-                            sessionId: geo.session.id,
-                            body: .init(
-                                source: "roomplan",
-                                rooms: rooms,
-                                mesh: nil,
-                                videoRef: entry.fileName,
-                                work: nil
-                            )
+        let workDate = Self.todayStamp()
+        let clipId = ClipId.resolve(activeClipId)
+        activeClipId = clipId
+        let job = jobs.first(where: { $0.id == jobId })
+        let jobName = job?.name ?? jobId
+        let draft: JobDraftPayload? = PendingJobsStore.isLocalJobId(jobId)
+            ? JobDraftPayload(title: job?.createTitle ?? jobName, situation: job?.situation ?? "")
+            : nil
+        let mode: DayFilmQueueEntry.Mode = isShareMode ? .share : .account
+        let token = isShareMode ? shareToken : nil
+
+        let entry = try await DayFilmQueueStore.shared.persistFilm(
+            from: url,
+            jobId: jobId,
+            jobName: jobName,
+            clipId: clipId,
+            workDate: workDate,
+            durationSeconds: durationSeconds,
+            lat: locator.coordinate?.latitude,
+            lon: locator.coordinate?.longitude,
+            accuracyM: nil,
+            mode: mode,
+            shareToken: token,
+            jobDraft: draft
+        )
+        doorFilmId = entry.id
+        await uploadQueue.enqueuePersisted(entry)
+
+        // Optional RoomPlan twin — never blocks filing; skip in share mode
+        // (geometry needs org auth). Off while `RoomPlanBridge` is a stub so
+        // no empty geometry sessions are opened.
+        var geometrySessionId: String?
+        var twinId: String?
+        if FieldFeatures.roomPlanTwin, !isShareMode, let api {
+            roomPlan.detectCapabilities()
+            await roomPlan.captureRooms()
+            do {
+                let geo = try await api.openGeometrySession(
+                    lidarAvailable: roomPlan.lidarAvailable,
+                    label: "Field day \(workDate)",
+                    videoRef: entry.fileName
+                )
+                geometrySessionId = geo.session.id
+                twinId = geo.twin.id
+                let rooms = roomPlan.asIngestRooms()
+                if !rooms.isEmpty {
+                    try await api.ingestGeometry(
+                        sessionId: geo.session.id,
+                        body: .init(
+                            source: "roomplan",
+                            rooms: rooms,
+                            mesh: nil,
+                            videoRef: entry.fileName,
+                            work: nil
                         )
-                        twinRooms = rooms.map {
-                            TwinRoomSummary(
-                                id: $0.name,
-                                name: $0.name,
-                                detail: $0.floorAreaSqFt.map { "\($0) SF" }
-                                    ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
-                            )
-                        }
-                    } else {
-                        twinRooms = [
-                            TwinRoomSummary(
-                                id: "pending",
-                                name: "Twin pending measure",
-                                detail: "Video + audio saved · RoomPlan pass when available"
-                            ),
-                        ]
+                    )
+                    twinRooms = rooms.map {
+                        TwinRoomSummary(
+                            id: $0.name,
+                            name: $0.name,
+                            detail: $0.floorAreaSqFt.map { "\($0) SF" }
+                                ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                        )
                     }
-                } catch {
+                } else {
                     twinRooms = [
                         TwinRoomSummary(
-                            id: "skip",
-                            name: "Twin deferred",
-                            detail: "Day film is saved; twin measure can retry later"
+                            id: "pending",
+                            name: "Twin pending measure",
+                            detail: "Video + audio saved · RoomPlan pass when available"
                         ),
                     ]
                 }
-            } else {
-                twinRooms = []
+            } catch {
+                twinRooms = [
+                    TwinRoomSummary(
+                        id: "skip",
+                        name: "Twin deferred",
+                        detail: "Day film is saved; twin measure can retry later"
+                    ),
+                ]
             }
-
-            let byteSize = entry.byteSize
-            manifest = DayFilmManifest(
-                mediaId: nil,
-                sessionId: nil,
-                twinId: twinId,
-                geometrySessionId: geometrySessionId,
-                videoRef: entry.fileName,
-                durationSeconds: durationSeconds,
-                byteSize: byteSize,
-                contentType: "video/mp4",
-                hasAudio: true,
-                hasVideo: true,
-                capturedAt: Date(),
-                clipId: clipId
-            )
-
-            doorChecks = savedDoorChecks(jobName: jobName, clipId: clipId, twinId: twinId)
-            filingDetail = "Saved on this phone — filing to the office…"
-            recorder.teardown()
-            try? FileManager.default.removeItem(at: url)
-            phase = .door
-            // Kick pending job sync so films can remap off local-* ids.
-            if !isShareMode { syncPendingJobs(api: api) }
-        } catch {
-            lastError = error.localizedDescription
-            phase = .door
-            doorChecks = [
-                DoorCheck(id: "err", label: "Not saved", detail: error.localizedDescription, ok: false),
-            ]
-            filingDetail = "Recording was not saved."
+        } else {
+            twinRooms = []
         }
+
+        let byteSize = entry.byteSize
+        manifest = DayFilmManifest(
+            mediaId: nil,
+            sessionId: nil,
+            twinId: twinId,
+            geometrySessionId: geometrySessionId,
+            videoRef: entry.fileName,
+            durationSeconds: durationSeconds,
+            byteSize: byteSize,
+            contentType: "video/mp4",
+            hasAudio: true,
+            hasVideo: true,
+            capturedAt: Date(),
+            clipId: clipId
+        )
+
+        doorChecks = savedDoorChecks(jobName: jobName, clipId: clipId, twinId: twinId)
+        filingDetail = "Saved on this phone — filing to the office…"
+        recorder.teardown()
+        try? FileManager.default.removeItem(at: url)
+        phase = .door
+        // Kick pending job sync so films can remap off local-* ids.
+        if !isShareMode, let api { syncPendingJobs(api: api) }
     }
 
     func applyFiledNotification(proofId: String?, storagePath: String?, byteSize: Int64?) {
@@ -416,13 +469,17 @@ final class FieldDaySession: ObservableObject {
                 detail: "actions + dictation in the Verifier",
                 ok: true
             ),
-            DoorCheck(
-                id: "4",
-                label: "Twin session",
-                detail: updated.twinId ?? "—",
-                ok: updated.twinId != nil
-            ),
         ]
+        if FieldFeatures.roomPlanTwin {
+            doorChecks.append(
+                DoorCheck(
+                    id: "4",
+                    label: "Twin session",
+                    detail: updated.twinId ?? "—",
+                    ok: updated.twinId != nil
+                )
+            )
+        }
         filingDetail = "Filed to the office."
     }
 
@@ -451,10 +508,11 @@ final class FieldDaySession: ObservableObject {
         lastError = nil
         doorFilmId = nil
         activeClipId = nil
+        stoppedEarlyNote = nil
     }
 
     private func savedDoorChecks(jobName: String, clipId: String, twinId: String?) -> [DoorCheck] {
-        [
+        var checks = [
             DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
             DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
             DoorCheck(
@@ -469,13 +527,18 @@ final class FieldDaySession: ObservableObject {
                 detail: "actions + dictation in the Verifier",
                 ok: true
             ),
-            DoorCheck(
-                id: "4",
-                label: "Twin session",
-                detail: twinId ?? "—",
-                ok: twinId != nil
-            ),
         ]
+        if FieldFeatures.roomPlanTwin {
+            checks.append(
+                DoorCheck(
+                    id: "4",
+                    label: "Twin session",
+                    detail: twinId ?? "—",
+                    ok: twinId != nil
+                )
+            )
+        }
+        return checks
     }
 
     static func todayStampPublic() -> String { todayStamp() }
