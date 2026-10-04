@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { isAllowedLiveViewUrl, type ComputerLiveLink } from '../../lib/computer';
 
+/** The remote browser's viewport (providers/browserbase.ts creates it at this size). */
+const VIEW_W = 1280;
+const VIEW_H = 800;
+
 /**
  * The live browser for a Computer task. Watch shows it with the pointer
  * blocked; Take control lets this viewer use the mouse and keyboard (the
@@ -25,6 +29,26 @@ export function ComputerLiveView({
   const [link, setLink] = useState<ComputerLiveLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<number | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [box, setBox] = useState<{ w: number; h: number }>({ w: 640, h: 400 });
+
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setBox({ w: width, h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [expanded]);
+
+  // Expanded: fit inside the overlay. Inline: fill the card's width.
+  const scale = expanded ? Math.min(box.w / VIEW_W, box.h / VIEW_H) || 0.5 : box.w / VIEW_W || 0.5;
+  const offsetX = expanded ? Math.max(0, (box.w - VIEW_W * scale) / 2) : 0;
+  const offsetY = expanded ? Math.max(0, (box.h - VIEW_H * scale) / 2) : 0;
+  const portrait = expanded && box.h > box.w;
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +77,17 @@ export function ComputerLiveView({
 
   const watching = mode === 'watch';
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-paper-0" data-testid="computer-live-view">
+    <div
+      className={
+        expanded
+          ? 'fixed inset-0 z-50 flex flex-col bg-ink-900'
+          : 'overflow-hidden rounded-xl border border-line bg-paper-0'
+      }
+      data-testid="computer-live-view"
+      role={expanded ? 'dialog' : undefined}
+      aria-modal={expanded ? true : undefined}
+      aria-label={expanded ? 'Computer live view' : undefined}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-paper-50 px-3 py-2">
         <div className="flex items-center gap-2 text-[12px] font-semibold text-ink-800">
           <span className={`h-2 w-2 rounded-full ${watching ? 'bg-success-600' : 'bg-brand-600'}`} aria-hidden />
@@ -80,20 +114,39 @@ export function ComputerLiveView({
           ) : null}
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+          >
+            {expanded ? 'Shrink' : 'Full screen'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(false);
+              onClose();
+            }}
             className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
           >
             Close
           </button>
         </div>
       </div>
-      <div className="relative w-full bg-ink-900" style={{ aspectRatio: '1280 / 800' }}>
+      <div ref={boxRef} className={expanded ? 'relative min-h-0 flex-1 overflow-hidden' : 'relative w-full overflow-hidden bg-ink-900'} style={expanded ? undefined : { height: Math.round(VIEW_H * scale) }}>
         {link ? (
+          // The remote browser is 1280×800. Render the frame at that size and
+          // scale it to fit, so a phone sees the whole page (input coordinates
+          // follow the CSS transform).
           <iframe
             title={watching ? 'Computer live view (watch only)' : 'Computer live view (you have control)'}
             src={link.url}
-            className="absolute inset-0 h-full w-full border-0"
-            style={watching ? { pointerEvents: 'none' } : undefined}
+            className="absolute left-0 top-0 border-0 bg-paper-0"
+            style={{
+              width: VIEW_W,
+              height: VIEW_H,
+              transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+              transformOrigin: 'top left',
+              ...(watching ? { pointerEvents: 'none' as const } : {}),
+            }}
             referrerPolicy="no-referrer"
             allow="clipboard-read; clipboard-write"
             data-testid="computer-live-iframe"
@@ -103,17 +156,13 @@ export function ComputerLiveView({
             {error ?? 'Connecting to the browser…'}
           </div>
         )}
-        {watching && link ? (
-          <div className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-ink-900/75 px-2.5 py-1 text-[11px] text-paper-50">
-            Watch only. Take control to use the mouse.
-          </div>
-        ) : null}
       </div>
-      {!watching ? (
-        <p className="border-t border-line px-3 py-2 text-[11px] text-ink-600">
-          Computer is paused while you have control. Sign in or make changes, then hand back. Your login stays saved for next time.
-        </p>
-      ) : null}
+      <p className="border-t border-line bg-paper-0 px-3 py-2 text-[11px] text-ink-600">
+        {portrait ? 'Turn your phone sideways for a bigger view. ' : ''}
+        {watching
+          ? 'Watch only. Take control to use the mouse and keyboard yourself.'
+          : 'Computer is paused while you have control. Sign in or make changes, then hand back. Your login stays saved for next time.'}
+      </p>
     </div>
   );
 }

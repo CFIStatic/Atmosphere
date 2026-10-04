@@ -42,34 +42,27 @@ export function ComputerApprovalCard({
         <img
           src={approval.screenshot}
           alt={`The page before clicking ${approval.buttonLabel}`}
-          className="w-full rounded-lg border border-line bg-paper-0"
+          className="mx-auto max-h-64 w-auto max-w-full rounded-lg border border-line bg-paper-0 object-contain"
           data-testid="computer-approval-screenshot"
         />
       ) : null}
       {approval.fields.length ? (
-        <div className="overflow-hidden rounded-lg border border-line bg-paper-0">
-          <table className="w-full text-left text-[13px]">
-            <thead className="bg-paper-50 text-[11px] uppercase tracking-wide text-ink-500">
-              <tr>
-                <th className="px-2.5 py-1.5 font-semibold">Field</th>
-                <th className="px-2.5 py-1.5 font-semibold">Value</th>
-                <th className="px-2.5 py-1.5 font-semibold">Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {approval.fields.map((f, i) => (
-                <tr key={`${f.label}-${i}`} className="border-t border-line align-top" data-testid="computer-approval-field">
-                  <td className="px-2.5 py-1.5 text-ink-600">{f.label}</td>
-                  <td className="break-words px-2.5 py-1.5 font-medium text-ink-900">{f.value}</td>
-                  <td className={`px-2.5 py-1.5 text-[12px] ${f.verified ? 'text-success-600' : 'font-semibold text-danger-600'}`}>
-                    {f.verified ? '✓ ' : '⚠ '}
-                    {f.source}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-paper-0" aria-label="Filled fields">
+          {approval.fields.map((f, i) => (
+            <li
+              key={`${f.label}-${i}`}
+              className="grid gap-x-3 gap-y-0.5 px-2.5 py-2 text-[13px] sm:grid-cols-[minmax(7rem,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)]"
+              data-testid="computer-approval-field"
+            >
+              <span className="text-[12px] text-ink-600 sm:text-[13px]">{f.label}</span>
+              <span className="break-words font-medium text-ink-900">{f.value}</span>
+              <span className={`text-[12px] ${f.verified ? 'text-success-600' : 'font-semibold text-danger-600'}`}>
+                {f.verified ? '✓ ' : '⚠ '}
+                {f.source}
+              </span>
+            </li>
+          ))}
+        </ul>
       ) : (
         <p className="text-sm text-ink-600">Computer did not list any filled fields.</p>
       )}
