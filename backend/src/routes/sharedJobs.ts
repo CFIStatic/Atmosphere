@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { assertInviteeAccount } from '../shared/inviteeJobAccess.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
-import { HttpError, badRequest } from '../lib/errors.js';
+import { HttpError } from '../lib/errors.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
   JOB_SHARE_COOKIE,
@@ -55,9 +55,6 @@ import {
   roomsFromAnalysis,
   type JobSimilaritySeed,
 } from '../shared/similarPastJobs.js';
-import { processSafetySample } from '../safety/sample.js';
-import { processLiveSafetyChunkForParty } from '../safety/live.js';
-import { processWellnessHeartbeat } from '../safety/wellness.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -1901,65 +1898,6 @@ jobShareRouter.post(
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
       res.json(await completeChunkedProofUpload(party, admin, req.body));
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/** Near-real-time safety sample while filming / uploading chunks. */
-jobShareRouter.post(
-  jobShareActionPattern('/proof/safety-sample'),
-  shareLimiter,
-  requireAuth,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { party, admin } = await partyForToken(req.params.token);
-      assertInviteeAccount(req, party);
-      res.json(await processSafetySample(admin, party, req.body));
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/** Live safety stream (frame every 5 s + 10 s audio) — its own rate budget. */
-const liveSafetyShareLimiter = rateLimit({
-  windowMs: 60_000,
-  limit: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many live safety samples.', code: 'rate_limited' },
-});
-
-jobShareRouter.post(
-  jobShareActionPattern('/proof/safety-live'),
-  liveSafetyShareLimiter,
-  requireAuth,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { party, admin } = await partyForToken(req.params.token);
-      assertInviteeAccount(req, party);
-      res.json(await processLiveSafetyChunkForParty(party, admin, req.body));
-    } catch (err) {
-      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid live sample'));
-      else next(err);
-    }
-  },
-);
-
-jobShareRouter.post(
-  jobShareActionPattern('/proof/wellness-heartbeat'),
-  shareLimiter,
-  requireAuth,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { party, admin } = await partyForToken(req.params.token);
-      assertInviteeAccount(req, party);
-      res.json(await processWellnessHeartbeat(admin, party, req.body));
     } catch (err) {
       next(err);
     }

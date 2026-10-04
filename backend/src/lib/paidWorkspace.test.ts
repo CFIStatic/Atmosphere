@@ -102,8 +102,6 @@ test('write paths call the server lock', () => {
     'routes/org.ts',
     'routes/jobIntake.ts',
     'routes/mediaCatalog.ts',
-    'safety/sample.ts',
-    'safety/wellness.ts',
   ];
   for (const file of files) {
     const src = readFileSync(resolve(here, '..', file), 'utf8');

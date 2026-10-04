@@ -1871,7 +1871,7 @@ const DENIED_GUM =
 }
 {
   const from = appSrc.indexOf('.catch(function (err) {', appSrc.indexOf('function startLiveDayAfterConsent'));
-  const end = appSrc.indexOf('function stopSafetySampler');
+  const end = appSrc.indexOf('function stopLiveRtcPublisher');
   assert.ok(from > 0 && end > from, 'start failure catch must exist');
   const src = appSrc.slice(from, end);
   assert.match(src, /state\.recorder = null/, 'a failed start must drop the recorder so the next tap can retry');
@@ -2051,119 +2051,21 @@ await (async function retryGetUserMediaAfterDenial() {
 console.log('keyboard chrome: ok');
 
 /* ------------------------------------------------------------------ */
-/* Live critical safety stream (frame every 5 s + 10 s audio segment)  */
+/* No live safety / wellness stream: recording sends only the film.    */
 /* ------------------------------------------------------------------ */
 {
-  assert.equal(typeof Core.createLiveSafetyStream, 'function');
-  assert.equal(Core.postSafetyOk, undefined, 'no worker I\'m OK endpoint');
-  sandbox.setInterval = setInterval;
-  sandbox.clearInterval = clearInterval;
-  sandbox.btoa = btoa;
-
-  function FakeRecorder(stream, opts) {
-    this.stream = stream;
-    this.mimeType = (opts && opts.mimeType) || 'audio/webm';
-    this.state = 'inactive';
-    FakeRecorder.made.push(this);
+  for (const name of [
+    'createLiveSafetyStream',
+    'createLiveSafetySampler',
+    'postSafetyLive',
+    'postSafetySample',
+    'postWellnessHeartbeat',
+    'createLiveWellnessMonitor',
+  ]) {
+    assert.equal(Core[name], undefined, `${name} is gone`);
   }
-  FakeRecorder.made = [];
-  FakeRecorder.isTypeSupported = (t) => t === 'audio/webm;codecs=opus';
-  FakeRecorder.prototype.start = function () { this.state = 'recording'; };
-  FakeRecorder.prototype.stop = function () {
-    this.state = 'inactive';
-    if (this.ondataavailable) this.ondataavailable({ data: new Blob(['x'.repeat(300)], { type: 'audio/webm' }) });
-    if (this.onstop) this.onstop();
-  };
-  const listeners = {};
-  const fakeWin = {
-    navigator: { onLine: true },
-    Blob,
-    MediaStream: function (tracks) { this.tracks = tracks; this.getTracks = () => tracks; },
-    addEventListener: (n, fn) => { listeners[n] = fn; },
-    removeEventListener: (n) => { delete listeners[n]; },
-  };
-  const micTrack = { clone() { return { cloned: true, stop() { this.stopped = true; } }; }, stop() { throw new Error('film mic must not stop'); } };
-  const posts = [];
-  const conn = [];
-  let failNext = 0;
-  let clipSec = 0;
-  let nowMs = 0;
-  const stream = Core.createLiveSafetyStream({
-    win: fakeWin,
-    MediaRecorder: FakeRecorder,
-    stream: { getAudioTracks: () => [micTrack] },
-    grabFrame: () => 'F'.repeat(200),
-    atSeconds: () => clipSec,
-    now: () => nowMs,
-    clipId: 'clip_abcdef',
-    frameIntervalMs: 5000,
-    audioSegmentMs: 10000,
-    post: (body) => {
-      if (failNext > 0) {
-        failNext -= 1;
-        return Promise.reject(new TypeError('Failed to fetch'));
-      }
-      posts.push(body);
-      return Promise.resolve(
-        body.seq === 3
-          ? { enabled: true, alert: { incidentId: 'inc-1', confirmation: 'confirmed', severity: 'critical', title: 'x' } }
-          : { enabled: true, alert: body.seq > 3 ? { incidentId: 'inc-1', confirmation: 'confirmed' } : null },
-      );
-    },
-    onConnection: (online) => conn.push(online),
-  });
-  const flush = () => new Promise((r) => setTimeout(r, 5));
-  assert.equal(FakeRecorder.made.length, 1, 'audio segment recorder started on a cloned mic track');
-  assert.equal(FakeRecorder.made[0].stream.tracks[0].cloned, true);
-  assert.equal(FakeRecorder.made[0].mimeType, 'audio/webm;codecs=opus');
-
-  for (let i = 1; i <= 4; i++) {
-    clipSec = i * 5;
-    nowMs = i * 5000;
-    stream.tick();
-    await flush();
-  }
-  assert.equal(posts.length, 4, 'one post per 5 s tick');
-  assert.ok(posts.every((p) => p.frame && p.frame.base64.length >= 80), 'every post carries a frame');
-  assert.equal(posts[0].audio, undefined, '5 s: frame only');
-  assert.ok(posts[1].audio, '10 s: frame + audio segment');
-  assert.equal(posts[1].audio.durationSeconds, 10);
-  assert.equal(posts[1].audio.startSeconds, 0);
-  assert.equal(posts[1].audio.mimeType, 'audio/webm');
-  assert.equal(posts[2].audio, undefined);
-  assert.ok(posts[3].audio, '20 s: next segment');
-  assert.equal(posts[3].audio.startSeconds, 10);
-  assert.deepEqual(posts.map((p) => p.seq), [0, 1, 2, 3]);
-
-  // Connection drops: two failed posts → "Live safety paused"; back → cleared, nothing queued.
-  failNext = 2;
-  stream.tick(); await flush();
-  assert.deepEqual(conn, [], 'one blip is not an outage');
-  stream.tick(); await flush();
-  assert.deepEqual(conn, [false], 'paused notice after two failures');
-  const before = posts.length;
-  listeners.online && listeners.online();
-  await flush();
-  assert.deepEqual(conn, [false, true], 'resumes automatically');
-  assert.equal(posts.length, before + 1, 'resumes with a fresh chunk; nothing replayed');
-  assert.ok(posts.every((p) => p.delayed === undefined), 'no offline queue');
-
-  // Org opted out → stream stops itself.
-  const off = Core.createLiveSafetyStream({
-    win: fakeWin, grabFrame: () => 'F'.repeat(200), clipId: 'clip_off_1',
-    post: () => Promise.resolve({ enabled: false }), onDisabled: () => { off.disabledSeen = true; },
-  });
-  off.tick(); await flush();
-  assert.equal(off.disabledSeen, true);
-  stream.stop();
-  off.stop();
-
-  // Markup + wiring.
-  // Alerts go to the account admins by email only — nothing on the worker's screen.
-  assert.doesNotMatch(html, /safety-banner|safety-ok-btn|Alert sent|I'm OK/);
-  assert.doesNotMatch(appSrc, /showSafetyBanner|postSafetyOk|onAlert|__demoSafetyAlert/);
-  assert.match(html, /Live safety paused, no connection/);
-  assert.match(appSrc, /createLiveSafetyStream\(safetyCfg\)/);
-  assert.match(appSrc, /onConnection: function \(online\)/);
-  console.log('live safety stream: ok');
+  assert.doesNotMatch(html, /safety-paused|Live safety paused/);
+  assert.doesNotMatch(appSrc, /safetySampler|wellnessMonitor|setSafetyPaused|__demoSafetyPaused/);
+  assert.doesNotMatch(coreSrc, /\/proof\/(?:safety-live|safety-sample|wellness-heartbeat)/);
+  console.log('no live safety stream: ok');
 }

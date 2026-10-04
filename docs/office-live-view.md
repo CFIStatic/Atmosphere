@@ -68,4 +68,3 @@ pairs will fall back to the parts player (~15–35s).
 
 - Stream-while-recording: `fieldcapture/js/capture-core.js` (`createDayFilmStreamer`, `createLiveRtcPublisher`)
 - Signaling: `backend/src/live/liveSignalHub.ts`
-- Safety near-realtime samples (~25s): `docs/safety-alerts.md`
