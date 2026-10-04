@@ -110,8 +110,11 @@ test('Add login: opens the site on the org profile, person signs in, Done saves 
   assert.ok(!JSON.stringify(h.store.audit).includes('live.mock.invalid'), 'live-view URL is never stored');
 
   // The person signs in through the live view (password + 2FA on Microsoft's pages).
-  h.site.cookies['.login.microsoftonline.com'] = ['ESTSAUTH|9f|0'];
-  h.site.cookies['outlook.office.com'] = ['X-OWA|77|0'];
+  // Long, distinctive values: a short one like "9f" turns up in random UUIDs.
+  const SECRET_A = 'SECRET-COOKIE-VALUE-x7q-estsauth';
+  const SECRET_B = 'SECRET-COOKIE-VALUE-k3z-owa';
+  h.site.cookies['.login.microsoftonline.com'] = [`ESTSAUTH|${SECRET_A}|0`];
+  h.site.cookies['outlook.office.com'] = [`X-OWA|${SECRET_B}|0`];
   h.advance(90_000);
 
   const saved = await finishSignIn(ORG, signIn.sessionId, USER);
@@ -120,7 +123,11 @@ test('Add login: opens the site on the org profile, person signs in, Done saves 
   assert.ok(saved.lastSignedInAt);
   const row = (await h.store.listLogins(ORG))[0];
   assert.deepEqual(row.cookie_domains, ['.login.microsoftonline.com', 'outlook.office.com']);
-  assert.ok(!JSON.stringify(row).includes('9f'), 'no cookie values stored');
+  for (const secret of [SECRET_A, SECRET_B]) {
+    assert.ok(!JSON.stringify(row).includes(secret), 'no cookie values stored');
+    assert.ok(!JSON.stringify(h.store.audit).includes(secret), 'no cookie values audited');
+    assert.ok(!JSON.stringify(await h.store.listLogins(ORG)).includes('SECRET-COOKIE-VALUE'));
+  }
   assert.equal(await h.store.liveSession(ORG), null, 'browser released');
   assert.equal(h.provider.ended.length, 1);
 
