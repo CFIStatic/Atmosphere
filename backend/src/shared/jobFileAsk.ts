@@ -60,6 +60,9 @@ import {
   type AskToolResult,
 } from './askTools.js';
 
+/** The one line above a Computer task card in Chat. */
+export const COMPUTER_LEAD = "Opening a browser now, and I'll check with you before anything is submitted.";
+
 export interface JobFileAskJob {
   title?: string | null;
   jobNumber?: string | number | null;
@@ -887,11 +890,11 @@ export async function answerFromJobFile(input: {
     webHits = collectWebHitsFromToolResults(toolResults);
   }
 
-  // A browser task is the whole turn: say what happens next and show the card.
+  // A browser task is the whole turn: one short line, then the card.
   const computer = toolResults.find((r) => r.tool === 'start_computer_task');
   if (computer) {
     const lead = computer.ok
-      ? "I'm opening a browser to do that. I'll fill in only this job's details and what you wrote, and I'll stop and ask you before anything is submitted, sent, paid, signed or deleted. If the site needs you to sign in or enter a code, I'll pause and you can take over."
+      ? COMPUTER_LEAD
       : computer.ui?.path === 'computer-task:not-set-up'
         ? "I can't work in a browser for you yet."
         : computer.summary;

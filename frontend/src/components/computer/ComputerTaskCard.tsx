@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import {
-  COMPUTER_STATUS_LABEL,
-  computerEventLabel,
+  cleanFieldLabel,
+  computerCardTitle,
+  computerPill,
+  computerStepLines,
   computerTaskIsActive,
   computerTaskRef,
+  type ComputerPill,
   type ComputerTaskView,
 } from '../../lib/computer';
 import { SpinnerIcon } from '../icons';
@@ -14,23 +17,14 @@ import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
 
 const POLL_MS = 1500;
 
-function hostOf(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).host;
-  } catch {
-    return null;
-  }
-}
-
-const TONE: Record<ComputerTaskView['status'], string> = {
-  queued: 'bg-paper-200 text-ink-700',
-  running: 'bg-success-50 text-success-600',
-  awaiting_approval: 'bg-caution-50 text-caution-600',
-  needs_you: 'bg-brand-50 text-brand-700',
-  succeeded: 'bg-success-50 text-success-600',
-  failed: 'bg-danger-50 text-danger-600',
-  canceled: 'bg-paper-200 text-ink-600',
+const PILL_TONE: Record<ComputerPill, string> = {
+  Working: 'bg-success-50 text-success-600',
+  'Needs you': 'bg-brand-50 text-brand-700',
+  'Waiting for approval': 'bg-caution-50 text-caution-600',
+  'Done, not submitted': 'bg-paper-200 text-ink-700',
+  Submitted: 'bg-success-50 text-success-600',
+  Failed: 'bg-danger-50 text-danger-600',
+  Stopped: 'bg-paper-200 text-ink-600',
 };
 
 export function ComputerNotSetUpCard() {
@@ -119,7 +113,10 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   }
 
   const active = computerTaskIsActive(task.status);
-  const host = hostOf(task.currentUrl) ?? hostOf(task.startUrl);
+  const pill = computerPill(task);
+  const steps = computerStepLines(task.events);
+  const fields = task.result?.fields ?? [];
+  const finished = task.status === 'succeeded' || task.status === 'failed' || task.status === 'canceled';
   const takeControl = () => setLive('control');
   const handBack = () =>
     act(async () => {
@@ -129,23 +126,20 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
 
   return (
     <div className="space-y-2.5 rounded-xl border border-line bg-paper-0 p-3" data-testid="computer-task-card">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Computer</span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[task.status]}`}>
-            {task.status === 'running' || task.status === 'queued' ? <SpinnerIcon className="h-3 w-3 animate-spin" /> : null}
-            {COMPUTER_STATUS_LABEL[task.status]}
-          </span>
-        </div>
-        <span className="text-[11px] text-ink-500">
-          Step {task.stepCount} of {task.maxSteps}
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <p className="min-w-0 break-words text-[15px] font-semibold text-ink-900" data-testid="computer-task-title">
+          {computerCardTitle(task)}
+        </p>
+        <span
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${PILL_TONE[pill]}`}
+          data-testid="computer-task-pill"
+        >
+          {pill === 'Working' ? <SpinnerIcon className="h-3 w-3 animate-spin" /> : null}
+          {pill}
         </span>
       </div>
-      <p className="line-clamp-2 text-sm text-ink-800">{task.instructions}</p>
-      {active ? (
-        <p className="text-[12px] text-ink-600">
-          {host ? <span className="font-medium text-ink-700">{host}</span> : null}
-          {host && (task.lastAction || task.statusDetail) ? ' · ' : null}
+      {task.status === 'running' || task.status === 'queued' ? (
+        <p className="text-[13px] text-ink-600" data-testid="computer-task-now">
           {task.statusDetail || task.lastAction || (task.status === 'queued' ? 'Waiting for a browser…' : 'Working…')}
         </p>
       ) : null}
@@ -185,11 +179,21 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
         />
       ) : null}
 
+      {finished && fields.length ? (
+        <dl className="divide-y divide-line rounded-lg border border-line text-sm" data-testid="computer-result-fields">
+          {fields.map((f, i) => (
+            <div key={`${f.label}-${i}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 px-2.5 py-1.5">
+              <dt className="text-ink-600">{cleanFieldLabel(f.label)}</dt>
+              <dd className="break-words font-medium text-ink-900">{f.value || '(left blank)'}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {task.status === 'succeeded' && task.resultSummary ? (
-        <p className="rounded-lg bg-success-50 px-2.5 py-2 text-sm text-ink-800">{task.resultSummary}</p>
+        <p className="text-sm text-ink-700" data-testid="computer-result-note">{task.resultSummary}</p>
       ) : null}
       {(task.status === 'failed' || task.status === 'canceled') && (task.error || task.resultSummary) ? (
-        <p className="rounded-lg bg-paper-100 px-2.5 py-2 text-sm text-ink-700">{task.error || task.resultSummary}</p>
+        <p className="text-sm text-ink-700" data-testid="computer-result-note">{task.error || task.resultSummary}</p>
       ) : null}
       {error ? <p className="text-[12px] text-danger-600">{error}</p> : null}
 
@@ -228,15 +232,15 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
           className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
           aria-expanded={showSteps}
         >
-          {showSteps ? 'Hide steps' : `Steps (${task.events.length})`}
+          {showSteps ? 'Hide steps' : `Steps (${steps.length})`}
         </button>
       </div>
 
       {showSteps ? (
         <div className="space-y-2">
-          <ol className="max-h-48 space-y-0.5 overflow-auto rounded-lg bg-paper-50 px-2.5 py-2 text-[12px] text-ink-700" data-testid="computer-steps">
-            {task.events.map((e) => (
-              <li key={e.id}>{computerEventLabel(e)}</li>
+          <ol className="max-h-48 list-decimal space-y-0.5 overflow-auto rounded-lg bg-paper-50 py-2 pe-2.5 ps-7 text-[12px] text-ink-700" data-testid="computer-steps">
+            {steps.map((line) => (
+              <li key={line.id}>{line.text}</li>
             ))}
           </ol>
           {task.jobFields.length ? (
