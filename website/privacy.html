@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Jettx LLC Privacy Policy — how we collect, process, retain, and disclose personal data. Last updated 09/14/2026." />
+  <meta name="description" content="Jettx LLC Privacy Policy — how we collect, process, retain, and disclose personal data. Last updated 10/04/2026." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Privacy policy · Atmosphere</title>
   <meta property="og:title" content="Privacy policy · Atmosphere" />
-  <meta property="og:description" content="Jettx LLC Privacy Policy — how we collect, process, retain, and disclose personal data. Last updated 09/14/2026." />
+  <meta property="og:description" content="Jettx LLC Privacy Policy — how we collect, process, retain, and disclose personal data. Last updated 10/04/2026." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -104,7 +104,7 @@
   <article class="docs-prose" style="max-width: 68ch;">
     <div class="eyebrow mono">Legal</div>
     <h1>Jettx LLC Privacy Policy</h1>
-    <p class="lede">Last updated: 09/14/2026</p>
+    <p class="lede">Last updated: 10/04/2026</p>
     <p>Jettx LLC ("Company", "we", "our", or "us") respects your privacy and is committed to protecting it through our compliance with this policy. This policy describes how we collect, process, retain, and disclose personal data about you when providing services to you through our websites, applications, products, and services that link to this policy (our "Services") and our practices for using, maintaining, protecting, and disclosing that information.</p>
     <p>This policy applies only to information we collect:</p>
     <ul>
@@ -123,6 +123,7 @@
       <li>Account and contact information, including name, address, email address, phone number, and other contact information you provide us.</li>
       <li>Payment information, including credit card or debit card information and information about the payment methods and services you use in connection with the Services.</li>
       <li>Account history, including information about your subscription, account, transactions, purchases, order history, or discounts.</li>
+      <li id="saved-logins-data">Saved website logins, if your organization uses Computer. This is the list of outside websites your organization asks Computer to sign in to and, where a Global Admin chooses to save them, the username and password for each site (stored encrypted). It also includes the cookies and other session data those sites set, which are kept in your organization's cloud browser profile. See <a href="#computer-logins">Computer and Saved Website Logins</a>.</li>
     </ul>
     <p>If collected by us and as required under applicable law, we will collect and process sensitive personal data only with your consent. If you choose not to provide or allow us to collect some information, we may not be able to provide you with requested features, services, or information.</p>
     <p>We also collect:</p>
@@ -197,6 +198,56 @@
       <li>Payment information.</li>
       <li>Account history, including information about your subscription, account, transactions, purchases, order history, or discounts.</li>
     </ul>
+    <h2 id="computer-logins">Computer and Saved Website Logins</h2>
+    <p>Computer is an optional feature in Atmosphere Chat. A member of your organization can ask it to fill in a form on another website, such as an insurance carrier or supplier portal, and it does the work in a cloud browser. The Logins page lets your organization keep Computer signed in to those websites. This section explains what we store for these features and how we handle it.</p>
+    <h3>What we store</h3>
+    <ul>
+      <li><strong>The sites on your Logins list.</strong> For each one we store the site's name and address, who added it, when it was last signed in, and the names of the cookie domains the site set during sign-in. We do not store cookie values in our database.</li>
+      <li><strong>Saved usernames and passwords.</strong> If a Global Admin chooses to save a username and password for a site, we encrypt both with AES-256-GCM before storing them. Saving a password is optional; a member can instead sign in to the site themselves in the browser.</li>
+      <li><strong>Browser session data.</strong> Each organization has one cloud browser profile, held by our browser provider, Browserbase. Cookies and other session data that websites set while Computer is signed in stay in that profile between tasks, so Computer stays signed in.</li>
+      <li><strong>Task records.</strong> For each Computer task we keep the request, its status, an activity log, and every approval request. An approval request includes a screenshot of the page and the values Computer filled in. The activity log does not record typed values or saved usernames and passwords.</li>
+    </ul>
+    <h3>Why we use it</h3>
+    <p>We use saved logins and browser session data only to sign Computer in to the matching website on your organization's behalf and to complete the tasks members of your organization ask for.</p>
+    <h3>Who can access saved usernames and passwords</h3>
+    <ul>
+      <li>Only our servers can decrypt a saved username or password. They do so only at the moment of sign-in, and type it straight into that website's own sign-in page in the cloud browser. A saved password is only typed on the website it was saved for.</li>
+      <li>Global Admins in your organization can save, replace and delete saved passwords and can see the saved username. After a password is saved, no one can view it in Atmosphere.</li>
+      <li>Other members of your organization can run Computer tasks that use a saved login, but they cannot see the username or password.</li>
+      <li>Saved logins belong to your organization, not to the person who saved them.</li>
+    </ul>
+    <h3>What the AI receives</h3>
+    <p>Computer is driven by Anthropic's Claude computer-use model. To decide what to click and type, the model receives screenshots of the web pages Computer is working on, the member's request, and limited job details needed for the task. <strong>The model never receives saved passwords.</strong> When a site asks for a sign-in, our server types the saved username and password itself, and password fields show only masked characters on screen. Screenshots can still show anything the website itself displays, which may include your username or account name.</p>
+    <p>If a site asks for a verification code or shows a captcha, Computer pauses and a person from your organization handles it in the live view. Computer does not solve captchas.</p>
+    <h3>Human approval</h3>
+    <p>Computer is designed to stop and ask a person in your organization for approval before it clicks anything that would submit, send, pay, delete, sign, accept terms or upload. The approval request shows a screenshot of the page and each value Computer filled in. Each approval covers one action and expires.</p>
+    <h3>How long we keep it and how to delete it</h3>
+    <ul>
+      <li>Saved sites, usernames and passwords are kept until your organization removes them or its account is deleted.</li>
+      <li>A Global Admin can delete a saved password at any time from the Logins page.</li>
+      <li>Pressing <strong>Remove</strong> on a site deletes its saved username and password and clears that site's cookies from your organization's browser profile, which signs Computer out of it. If another site on your list shares the same sign-in (for example, a shared Microsoft sign-in), that shared sign-in is kept so the other site stays signed in. If a site's cookies were not recorded when it was added, the Logins page tells you that Computer may still be signed in there.</li>
+      <li>When your organization's account is deleted, its saved sites and saved usernames and passwords are deleted with it. You can also ask us to delete your organization's browser profile by contacting us at <a href="mailto:jack@jettx.ai">jack@jettx.ai</a>.</li>
+    </ul>
+    <h3>How we protect it</h3>
+    <ul>
+      <li>Usernames and passwords are encrypted with AES-256-GCM. The encryption key is kept on our servers, separate from the database, and each encrypted value only opens for the organization, site and field it was saved for.</li>
+      <li>The tables that hold Computer data can only be read by our servers. People using the app cannot read them directly, and every request is checked against the requester's organization.</li>
+      <li>Saved usernames and passwords are never written to our logs or activity records and are never returned by the app, except that a Global Admin can see a saved username.</li>
+      <li>Live view links to the cloud browser expire within minutes and are not stored.</li>
+    </ul>
+    <p>These measures reduce risk but, as described in <a href="#how-we-protect">How We Protect Your Personal Data</a>, no system is completely secure.</p>
+    <h2 id="service-providers">Service Providers (Subprocessors)</h2>
+    <p>We use service providers to run the Services. They process personal data on our behalf, under contract, only to provide their service to us. Our service providers include:</p>
+    <ul>
+      <li><strong>Railway</strong>: application hosting.</li>
+      <li><strong>Supabase</strong>: database, account sign-in and file storage.</li>
+      <li><strong>Stripe</strong>: payments and billing.</li>
+      <li><strong>Resend</strong>: email delivery.</li>
+      <li><strong>Anthropic</strong>: AI models (Claude), including for Chat and for Computer. For Computer, Anthropic receives screenshots of the web pages Computer is working on. It never receives saved passwords.</li>
+      <li><strong>OpenAI</strong>: speech-to-text transcription.</li>
+      <li><strong>Google</strong>: AI models (Gemini) for image and video analysis.</li>
+      <li><strong>Browserbase</strong>: the cloud browser used by Computer. Browserbase holds each organization's browser profile, including cookies and session data. Because the browser runs on Browserbase's systems, the pages Computer visits and what is typed into them, including a saved password at sign-in, pass through Browserbase.</li>
+    </ul>
     <h2>Your Rights and Choices About Your Information</h2>
     <p>This section describes mechanisms you can use to control certain uses and disclosures of your information and rights you may have under state law, depending on where you live.</p>
     <p>Advertising, marketing, cookies, and other tracking technologies choices:</p>
@@ -224,7 +275,7 @@
     <p>California residents who have provided us with personal information have the right (under California Civil Code§ 1798.83) to request and obtain from us, once each year, the details of any personal information we shared with a third party for that third party’s direct marketing purposes during the prior calendar year. The details would include the categories of personal information and the names and addresses of the third party with which it was shared.</p>
     <p>To request information about this sharing, you may submit a request with "Your California Privacy Rights" in the subject line, along with your first and last name, and complete mailing address (including street address, city, state, and zip code) by sending an email message to <a href="mailto:jack@jettx.ai">jack@jettx.ai</a>.</p>
     <p>If you do not submit and send your request with complete information as set forth above, we will not be able to process the request.</p>
-    <h2>How We Protect Your Personal Data</h2>
+    <h2 id="how-we-protect">How We Protect Your Personal Data</h2>
     <p>We use commercially reasonable administrative, physical, and technical measures designed to protect your personal data from accidental loss or destruction and from unauthorized access, use, alteration, and disclosure. However, no website, mobile application, system, electronic storage, or online service is completely secure, and we cannot guarantee the security of your personal data transmitted to, through, using, or in connection with the Services. In particular, email, texts, and chats sent to or from the Services may not be secure, and you should carefully decide what information you send to us via such communications channels. Any transmission of personal data is at your own risk.</p>
     <p>The safety and security of your information also depends on you. You are responsible for taking steps to protect your personal data against unauthorized use, disclosure, and access.</p>
     <h2>How We Retain Your Personal Data</h2>
