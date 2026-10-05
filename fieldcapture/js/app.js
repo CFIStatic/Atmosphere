@@ -2831,6 +2831,11 @@
       showJobAdd(false);
       if (frame) frame.setAttribute('src', 'about:blank');
       showLoginError('');
+      // Nothing from the deleted login stays filled in on the sign-in form.
+      var deletedEmail = document.getElementById('login-email');
+      var deletedPassword = document.getElementById('login-password');
+      if (deletedEmail) deletedEmail.value = '';
+      if (deletedPassword) deletedPassword.value = '';
       bootBlocked();
       showBlockedMsg(message || 'Your account was deleted. Jobs, files, and videos stay with the company.');
     }
