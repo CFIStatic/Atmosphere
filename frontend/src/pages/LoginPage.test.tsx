@@ -233,3 +233,31 @@ describe('LoginPage', () => {
     expect(queueRedirect).toHaveBeenCalled();
   });
 });
+
+describe('LoginPage in the iPhone/Android app shell', () => {
+  beforeEach(() => {
+    authState.user = null;
+    authState.loading = false;
+    authState.membership = null;
+    authState.membershipLoading = false;
+  });
+
+  it('sends Create an account to the website in the system browser, not the in-app wizard', () => {
+    document.documentElement.dataset.appShell = 'ios';
+    try {
+      renderLogin();
+      const link = screen.getByRole('link', { name: 'Create an account' });
+      expect(link.getAttribute('href')).toBe('https://atmosphereteam.com/signup');
+      expect(link.getAttribute('target')).toBe('_blank');
+    } finally {
+      delete document.documentElement.dataset.appShell;
+    }
+  });
+
+  it('keeps the in-app signup link in a browser', () => {
+    renderLogin();
+    const link = screen.getByRole('link', { name: 'Create an account' });
+    expect(link.getAttribute('href')).toMatch(/^\/signup/);
+    expect(link.getAttribute('target')).toBeNull();
+  });
+});

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceBilling } from '../../lib/api';
 
 const getBillingWorkspace = vi.fn();
@@ -296,5 +296,47 @@ describe('BillingSection', () => {
 
     expect(await screen.findByText(/Only an owner or billing manager/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage plan and payment method' })).toBeNull();
+  });
+});
+
+describe('BillingSection in the iPhone app', () => {
+  beforeEach(() => {
+    document.documentElement.dataset.appShell = 'ios';
+    getBillingWorkspace.mockReset().mockResolvedValue(paid);
+    getInvoices.mockReset().mockResolvedValue({ invoices: [invoice, openInvoice], complimentary: false });
+    getTokenUsage.mockReset().mockResolvedValue(tokenUsage);
+    getAiAllowance.mockReset().mockResolvedValue({
+      state: 'ok',
+      paused: false,
+      warning: false,
+      message: null,
+      usedNanos: 0,
+      allowanceNanos: 0,
+      usedFraction: 0,
+      resetAt: null,
+      rolling: { enabled: false, limited: false, hours: 24, usedNanos: 0, capNanos: 0 },
+      byFeature: [],
+      creditBalanceNanos: 25_000_000_000,
+      creditsRollOver: true,
+      canManage: true,
+      packs: [{ code: 'credits_10', label: '$10', cents: 1000, creditNanos: 10_000_000_000, priceConfigured: true }],
+      history: { usage: [], credits: [] },
+    });
+  });
+  afterEach(() => {
+    delete document.documentElement.dataset.appShell;
+  });
+
+  it('shows the plan and seats with no prices, payment buttons, invoices, or links', async () => {
+    const { container } = renderBilling();
+    expect(await screen.findByText('Work Verification')).toBeInTheDocument();
+    expect(await screen.findByText('Token usage')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Manage plan and payment method/ })).toBeNull();
+    expect(screen.queryByText(/Switch to|Buy /)).toBeNull();
+    expect(screen.queryByText('Invoices / Receipts')).toBeNull();
+    expect(screen.queryByText(/Auto-recharge/i)).toBeNull();
+    expect(screen.getAllByTestId('app-shell-billing-note').length).toBeGreaterThan(0);
+    expect(container.textContent).not.toMatch(/\$|stripe|checkout|USD/i);
+    expect(container.querySelector('a[href*="stripe"]')).toBeNull();
   });
 });

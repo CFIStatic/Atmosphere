@@ -1,3 +1,4 @@
+import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../lib/appShell';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -1277,7 +1278,11 @@ export function JobAskPanel({
                   <p className="leading-relaxed text-ink-800">{askFailure.message}</p>
                   {askFailure.code === 'ai_budget_limited' ? (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {askFailure.canManage ? (
+                      {isInAppShell() ? (
+                        <p className="text-[11px] text-ink-500" data-testid="ask-budget-app-note">
+                          {APP_SHELL_BILLING_NOTE}
+                        </p>
+                      ) : askFailure.canManage ? (
                         <>
                           <Link
                             to="/settings?section=billing"
