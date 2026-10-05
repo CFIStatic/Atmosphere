@@ -4,6 +4,9 @@
  * Retrieval runs first. When nothing supports an answer, reply "Not found"
  * and say what was searched (clips, transcripts, notes, documents) — never
  * the empty-job Field Capture boilerplate when clips already exist.
+ *
+ * Applied deterministically after the model answers so live unanswerable turns
+ * always lead with exactly "Not found." even when the model soft-denies.
  */
 import type { AskLookupCatalog } from './askLookup.js';
 import { clipsInScope } from './askLookup.js';
@@ -19,18 +22,34 @@ export type SearchMeta = {
   transcriptChunkCount?: number;
 };
 
+/** Classic hedges / abstentions. */
 const HEDGE =
-  /\b(i don't know|i do not know|not sure|nothing (?:in|on) (?:the |this )?file|not (?:in|on) (?:the |this )?file|no (?:information|mention|record)|does not (?:show|mention|say)|can't find|cannot find|not found)\b/i;
+  /\b(i don't know|i do not know|not sure|nothing (?:in|on) (?:the |this )?file|not (?:in|on) (?:the |this )?file|no (?:information|mention|record)|does not (?:show|mention|say)|doesn't (?:show|mention|say)|can't find|cannot find|not found)\b/i;
+
+/**
+ * Clear denials of file contents — the model answered "no / empty / not on
+ * this job" without the honest Not found lead-in.
+ */
+const DENIAL =
+  /\b(?:there(?:'s| is) no|no,\s+there(?:'s| is)|no\b[^.!?\n]{0,60}\b(?:on (?:this|the) (?:job|file)|on file|in (?:the |this )?file)|(?:file|job|transcript) (?:doesn't|does not|never|has no|have no)\b|(?:claim(?:\s*#| number)?|quote|estimate|tarp|punch)\b[^.!?\n]{0,40}\b(?:empty|blank|missing|not (?:on|in))|(?:is empty|are blank|are empty)|not (?:in|on) (?:the |this )?(?:file|job|transcript|video))\b/i;
 
 const EMPTY_JOB_BOILERPLATE =
   /no work description yet\.?\s*field capture can still film/i;
 
 export function looksLikeNotFound(answer: string): boolean {
-  return HEDGE.test(String(answer ?? ''));
+  const text = String(answer ?? '');
+  if (!text.trim()) return true;
+  if (HEDGE.test(text)) return true;
+  if (DENIAL.test(text)) return true;
+  return false;
 }
 
 export function hasEmptyJobBoilerplate(answer: string): boolean {
   return EMPTY_JOB_BOILERPLATE.test(String(answer ?? ''));
+}
+
+export function answerHasJobCitation(answer: string): boolean {
+  return /⟦(?:quotes|sources):/i.test(String(answer ?? ''));
 }
 
 export function catalogSearchCounts(catalog: AskLookupCatalog): {
@@ -112,21 +131,42 @@ export function formatHonestNotFound(input: {
   ].join(' ');
 }
 
+export type ApplyHonestNotFoundOptions = {
+  /**
+   * True when the answer has no job citation chips (⟦quotes:⟧ / ⟦sources:⟧).
+   * Soft denials and ungrounded absences then get the Not found. lead-in.
+   */
+  noGroundedClaim?: boolean;
+};
+
 /**
- * If the model hedged / abstained, or echoed empty-job boilerplate on a job
- * that already has clips, rewrite into an honest not-found that names the search.
+ * If the model hedged / denied / abstained, or echoed empty-job boilerplate on
+ * a job that already has clips, rewrite into an honest not-found that names
+ * the search. Always leads with exactly "Not found."
  */
 export function applyHonestNotFound(
   answer: string,
   catalog: AskLookupCatalog,
   question: string,
+  opts?: ApplyHonestNotFoundOptions,
 ): string {
   const cleaned = stripEmptyJobBoilerplate(answer, catalog);
   const clips = clipsInScope(catalog);
+  const denied = looksLikeNotFound(cleaned);
+  const ungroundedDenial = Boolean(opts?.noGroundedClaim) && denied;
   const shouldRewrite =
-    looksLikeNotFound(cleaned) ||
+    denied ||
+    ungroundedDenial ||
     (clips.length > 0 && (hasEmptyJobBoilerplate(answer) || !cleaned.trim()));
-  if (!shouldRewrite) return cleaned;
+  if (!shouldRewrite) {
+    // Already honest — ensure exact lead-in if it opens with a soft "not found".
+    if (/^\s*not found\b/i.test(cleaned) && !/^Not found\./.test(cleaned.trim())) {
+      const trailers = answer.match(/\n⟦[^⟧]*⟧/g)?.join('') ?? '';
+      const body = formatHonestNotFound({ question, catalog, answer: cleaned });
+      return `${body}${trailers}`;
+    }
+    return cleaned;
+  }
   if (/⟦artifact⟧[\s\S]*?\S[\s\S]*?⟦\/artifact⟧/.test(answer)) return cleaned;
   const trailers = answer.match(/\n⟦[^⟧]*⟧/g)?.join('') ?? '';
   const body = formatHonestNotFound({ question, catalog, answer: cleaned });

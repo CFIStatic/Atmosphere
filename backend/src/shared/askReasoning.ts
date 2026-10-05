@@ -1231,8 +1231,12 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
-  answer = ensureClaimCitations(answer, retrievedChunks).answer;
-  answer = applyHonestNotFound(answer, input.catalog, input.question);
+  const cited = ensureClaimCitations(answer, retrievedChunks);
+  answer = cited.answer;
+  const hasCite = /⟦(?:quotes|sources):/i.test(answer);
+  answer = applyHonestNotFound(answer, input.catalog, input.question, {
+    noGroundedClaim: !hasCite || cited.claimsUncited > 0,
+  });
   answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {
