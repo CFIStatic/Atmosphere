@@ -169,6 +169,26 @@ const HEDGE =
  * Greetings and ordinary prose are left alone. Checked on the model text, before
  * the server adds citation chips.
  */
+/** Money, safety, dispute, and hard-date asks always escalate off Fast when thin. */
+export function needsCriticalEscalation(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (/\b(?:dispute|disputed|denied|denial|carrier|liability|coverage fight)\b/i.test(q)) return true;
+  if (/\b(?:\$|dollar|dollars|price|cost|amount|invoice|payment|paid|owe|deductible|settlement|approved amount)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:unsafe|safety|hazard|emergency|gas leak|structural|collapse|asbestos|mold remediation)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:deadline|due (?:date|by)|must (?:be|finish)|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d))\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:when is|what(?:'s| is) the date)\b/i.test(q) && /\b(?:due|deadline|inspection|closing)\b/i.test(q)) {
+    return true;
+  }
+  return false;
+}
+
 export function fastAnswerNeedsDeepFallback(
   question: string,
   prose: string,
@@ -176,8 +196,9 @@ export function fastAnswerNeedsDeepFallback(
 ): boolean {
   const text = prose.replace(/⟦[^⟧]*⟧/g, '').trim();
   if (!text) return true;
-  // Money / safety / dispute / date always escalate even if Fast hedged lightly.
-  if (needsDeepEvidence(question) && (HEDGE.test(text) || text.length < 40)) return true;
+  // Money / safety / dispute / date escalate when Fast hedged or answered thinly —
+  // not every deep-evidence question (quotes can be short and still grounded).
+  if (needsCriticalEscalation(question) && (HEDGE.test(text) || text.length < 40)) return true;
   const wantsEvidence = /\b(say|said|quote|transcript|what did|when did|who )\b/i.test(question);
   if (!wantsEvidence && !traceHasHit) return false;
   if (HEDGE.test(text) && (traceHasHit || wantsEvidence)) return true;
