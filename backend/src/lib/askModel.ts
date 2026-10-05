@@ -66,6 +66,8 @@ export const ANTHROPIC_REASONING_MAX_TOKENS = 16_000;
 export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 const RETIRED_GEMINI_ANALYSIS = /^(?:gemini-2\.5-pro|gemini-2\.0-pro|gemini-1\.5-pro|gemini-pro)(?:-|$)/i;
+/** Fast / interactive Gemini pins we supersede when Railway still names 2.5 flash. */
+const SUPERSEDED_GEMINI_FAST = /^(?:gemini-2\.5-flash(?:-lite)?|gemini-2\.0-flash(?:-lite)?)(?:-|$)/i;
 
 export type AskCompletionMode = 'interactive' | 'analysis' | 'reasoning';
 
@@ -144,7 +146,18 @@ export function isRetiredGeminiAnalysisModel(model: string): boolean {
  */
 export function resolveGeminiAskModel(model: string, mode: AskCompletionMode = 'analysis'): string {
   const id = model.trim();
-  if ((mode === 'analysis' || mode === 'reasoning') && isRetiredGeminiAnalysisModel(id)) {
+  const deep = mode === 'analysis' || mode === 'reasoning';
+  if (!id) {
+    return deep ? GEMINI_ANALYSIS_MODEL_DEFAULT : 'gemini-3.5-flash-lite';
+  }
+  if (deep && isRetiredGeminiAnalysisModel(id)) {
+    return GEMINI_ANALYSIS_MODEL_DEFAULT;
+  }
+  // 2.5 flash family is limited to prior users; move interactive/fast calls to 3.x.
+  if (!deep && SUPERSEDED_GEMINI_FAST.test(id)) {
+    return /lite/i.test(id) ? 'gemini-3.5-flash-lite' : 'gemini-3.8-flash';
+  }
+  if (deep && SUPERSEDED_GEMINI_FAST.test(id)) {
     return GEMINI_ANALYSIS_MODEL_DEFAULT;
   }
   return id;
@@ -206,7 +219,7 @@ export function anthropicReasoningRequest(model: string): {
  * Sonnet-class model for simple Ask turns. Same Anthropic key as Opus.
  * Override with ASK_FAST_ANTHROPIC_MODEL (a Haiku id is fine when that key serves it).
  */
-export const ASK_FAST_ANTHROPIC_DEFAULT = 'claude-sonnet-5';
+export const ASK_FAST_ANTHROPIC_DEFAULT = 'claude-sonnet-5-5';
 
 export function askFastAnthropicModel(): string {
   const configured = (process.env.ASK_FAST_ANTHROPIC_MODEL ?? '').trim();
@@ -216,7 +229,8 @@ export function askFastAnthropicModel(): string {
 
 /** Gemini Flash for a fast Ask turn when Anthropic is unset. */
 export function askFastGeminiModel(): string {
-  return (process.env.ASK_FAST_MODEL ?? process.env.GOOGLE_MODEL_FAST ?? 'gemini-2.5-flash').trim();
+  const configured = (process.env.ASK_FAST_MODEL ?? process.env.GOOGLE_MODEL_FAST ?? '').trim();
+  return resolveGeminiAskModel(configured || 'gemini-3.8-flash', 'interactive');
 }
 
 /** Fast Ask turns do not spend the output budget on thinking. */
@@ -229,18 +243,20 @@ export function anthropicFastRequest(): { max_tokens: number } {
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */
 export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string {
   if (mode === 'analysis' || mode === 'reasoning') {
-    return (
+    const configured = (
       process.env.ASK_ANALYSIS_MODEL ??
       process.env.VERIFICATION_PRIMARY_MODEL ??
       GEMINI_ANALYSIS_MODEL_DEFAULT
     ).trim();
+    return resolveGeminiAskModel(configured, mode);
   }
-  return (
+  const configured = (
     process.env.ASK_MODEL ??
     process.env.ASK_FAST_MODEL ??
     process.env.GOOGLE_MODEL_FAST ??
-    'gemini-2.5-flash-lite'
+    'gemini-3.5-flash-lite'
   ).trim();
+  return resolveGeminiAskModel(configured, mode);
 }
 
 function geminiThinkingLevel(mode: AskCompletionMode): string {
@@ -344,7 +360,8 @@ export function buildGeminiGenerationConfig(input: {
   // Flash-Lite / non-thinking ids reject thinkingConfig; only attach when useful.
   if (/^gemini-3/i.test(input.model)) {
     // Gemini 3 reasoning is tuned for the default temperature. Don't send 0.
-    if (level !== 'none' && level !== 'off') {
+    // Lite variants reject thinkingConfig entirely.
+    if (!/lite/i.test(input.model) && level !== 'none' && level !== 'off' && level !== 'minimal') {
       generationConfig.thinkingConfig = { thinkingLevel: gemini3ThinkingLevel(level) };
     }
   } else {

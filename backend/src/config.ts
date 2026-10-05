@@ -207,7 +207,7 @@ export const config = {
       // putting the flagship on it would multiply the pipeline's whole cost
       // for no visible gain. Narration and the day comparison stay on the
       // stronger model — they write records people act on.
-      liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5-20251001',
+      liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5',
       // Per-org, per-day ceiling on live observations. At the default cadence
       // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
       // day — genuinely heavy use — while capping the worst case (a camera

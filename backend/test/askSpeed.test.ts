@@ -34,20 +34,22 @@ const catalog: AskLookupCatalog = {
   history: [],
 };
 
-test('simple lookups, quotes, greetings, and follow-ups stay on the fast model', () => {
+test('only trivial chat stays on the fast model; job questions go deep', () => {
   assert.equal(routeAskQuestion({ question: 'Hey', catalog }).route, 'fast');
   assert.equal(routeAskQuestion({ question: 'Thanks', catalog }).reason, 'thanks');
+  // Follow-ups and lookups used to ride the fast model. They now use deep so
+  // Chat answers like someone who knows the whole file.
   assert.equal(
     routeAskQuestion({
       question: 'and on Sep 21?',
       resolved: 'What did El Presidente say on Sep 21?',
       catalog,
-    }).reason,
-    'follow_up',
+    }).route,
+    'deep',
   );
-  assert.equal(routeAskQuestion({ question: 'What did El Presidente say on Sep 21?', catalog }).reason, 'quote');
-  assert.equal(routeAskQuestion({ question: 'What was said on Sep 21?', catalog }).reason, 'quote');
-  assert.equal(routeAskQuestion({ question: 'who opened this job', catalog }).reason, 'lookup');
+  assert.equal(routeAskQuestion({ question: 'What did El Presidente say on Sep 21?', catalog }).route, 'deep');
+  assert.equal(routeAskQuestion({ question: 'What was said on Sep 21?', catalog }).route, 'deep');
+  assert.equal(routeAskQuestion({ question: 'who opened this job', catalog }).route, 'deep');
 });
 
 test('drafts, comparisons, overviews, and other jobs stay on the deep model', () => {
@@ -289,7 +291,7 @@ function anthropicText(text: string, model: string): string {
   ].join('');
 }
 
-test('a fast model that is not grounded falls back to the deep model', async () => {
+test('job questions use the deep model directly (no weak fast hop)', async () => {
   const prev = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = 'sk-ant-test-fast-fallback';
   delete process.env.GEMINI_API_KEY;
@@ -327,9 +329,10 @@ test('a fast model that is not grounded falls back to the deep model', async () 
       anthropicApiKey: 'sk-ant-test-fast-fallback',
       fetchFn,
     });
-    assert.deepEqual(models, ['claude-sonnet-5', 'claude-opus-5']);
+    // Job questions route straight to deep (no fast hop).
+    assert.deepEqual(models, ['claude-opus-5-5']);
     assert.match(result.answer, /tarp came off/i);
-    assert.equal(result.model, 'claude-opus-5');
+    assert.equal(result.model, 'claude-opus-5-5');
   } finally {
     globalThis.fetch = originalFetch;
     if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;

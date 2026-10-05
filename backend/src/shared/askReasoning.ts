@@ -114,7 +114,7 @@ import {
   webSearchModelPayload,
 } from './askWebSearch.js';
 
-const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
+const LOOKUP_SYSTEM = `You are a sharp project manager who knows every detail of this job — every clip, transcript, note, document, CRM field, room, and timeline event. The job context in this request already includes that file. You also have tools for deeper lookups. Use tools when a fact is missing from the context; otherwise answer from what you already have.
 
 Rules:
 1. The user message already includes the job context (project, address, client, clips, redacted transcripts, history, people) and earlier turns of this chat. Use that context for a broad question such as what the job is about. Call a tool when you need a cited spoken moment, one person's clips, or a detail the context does not already settle. Do not guess.
@@ -860,6 +860,8 @@ export async function answerFromAskLookup(input: {
   /** Rolling summary and durable notes for turns older than the verbatim window. */
   memory?: LongThreadMemory | null;
   extra?: string | null;
+  /** Non-clip job file record (docs, CRM, notes, scope). */
+  jobFileRecord?: string | null;
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
@@ -911,6 +913,7 @@ export async function answerFromAskLookup(input: {
     catalog: input.catalog,
     history: input.history,
     extra: [memoryBlock, input.extra?.trim(), evidenceBlock].filter(Boolean).join('\n\n'),
+    jobFileRecord: input.jobFileRecord ?? null,
   };
   const fullUser = buildLookupUserPrompt(promptInput);
   const parts = splitLookupPrompt(promptInput);

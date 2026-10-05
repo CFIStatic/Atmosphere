@@ -1,8 +1,8 @@
 /**
  * Cheap routing for one Ask turn. No model call.
  *
- * Fast: greetings, thanks, follow-ups, and single-fact lookups or quotes.
- * Deep: drafts, comparisons, other-jobs, overviews, and multi-step questions.
+ * Fast: only trivial chat (greetings, thanks, ack, restate, clarify).
+ * Deep: every job question — lookups, quotes, overviews, drafts, comparisons.
  * Anything uncertain stays on the deep model.
  */
 import { asksAboutOtherJobs, type AskLookupCatalog } from './askLookup.js';
@@ -65,31 +65,14 @@ export function routeAskQuestion(input: {
   const catalog = input.catalog;
   if (catalog) {
     const chat = classifyChatTurn(resolved, input.history, catalog);
+    // Trivial chat only. Job opinions, recall, lookups, and quotes need the deep
+    // model with the full file — answering like someone who knows every detail.
     if (chat === 'greeting' || chat === 'thanks' || chat === 'ack' || chat === 'restate' || chat === 'clarify') {
       return { route: 'fast', reason: chat };
     }
-    if (chat === 'opinion' || chat === 'recall') return { route: 'fast', reason: chat };
     if (chat === 'correction') return { route: 'deep', reason: 'correction' };
   } else if (GREETING.test(asked)) {
     return { route: 'fast', reason: 'greeting' };
-  }
-
-  const followUp =
-    Boolean(input.resolved) && input.resolved!.trim().toLowerCase() !== asked.toLowerCase();
-  if (followUp) return { route: 'fast', reason: 'follow_up' };
-
-  if (/\b(say|said|quote|transcript|mention)\b/i.test(resolved)) return { route: 'fast', reason: 'quote' };
-
-  if (
-    /^(who|what|when|where|which|did|does|is|was|show|find)\b/i.test(resolved) &&
-    wordCount(resolved) <= 18 &&
-    !/\b(compare|draft|write|why)\b/i.test(resolved)
-  ) {
-    return { route: 'fast', reason: 'lookup' };
-  }
-
-  if (wordCount(resolved) <= 8 && !/\b(draft|write|compare|why|summar)\b/i.test(resolved)) {
-    return { route: 'fast', reason: 'short' };
   }
 
   return { route: 'deep', reason: 'default' };

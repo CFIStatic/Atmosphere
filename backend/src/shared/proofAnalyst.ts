@@ -484,7 +484,7 @@ export function formatCollectionRecord(
   clips: CollectionClip[],
   options?: { transcriptCap?: number },
 ): string {
-  const cap = options?.transcriptCap ?? 2000;
+  const cap = options?.transcriptCap ?? 12_000;
   return clips
     .map((clip) => {
       const lines = [clipLabel(clip)];
