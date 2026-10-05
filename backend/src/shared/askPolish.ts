@@ -246,8 +246,26 @@ export function isJobContentsQuestion(question: string): boolean {
   const q = question.trim();
   if (!q) return false;
   if (isJobOverview(q)) return false;
+  // Content-of-a-clip asks ("what was said in the office recording") are not inventory.
   if (
-    /\b(?:what(?:\s+kind\s+of)?|which|how many|list|show(?:\s+me)?)\b[\s\S]{0,48}\b(?:videos?|clips?|recordings?|footage)\b/i.test(q)
+    /\b(?:said|say|says|talk(?:ed|ing)?|mention(?:ed)?|discuss(?:ed)?)\b/i.test(q) &&
+    /\b(?:recording|clip|video|footage)\b/i.test(q) &&
+    !/\b(?:how many|list|what kind|do we have|are there|on (?:this |the )?(?:job|file|project))\b/i.test(q)
+  ) {
+    return false;
+  }
+  if (/\b(?:in|from|during)\s+(?:the\s+)?(?:\w+\s+){0,3}(?:recording|clip|video|footage)\b/i.test(q)) {
+    return false;
+  }
+  // Inventory: "what kind of videos", "how many clips", "list/show the videos".
+  if (/\b(?:what\s+kind\s+of|how many|list|show(?:\s+me)?)\b[\s\S]{0,48}\b(?:videos?|clips?|recordings?|footage)\b/i.test(q)) {
+    return true;
+  }
+  // "what/which videos … on this job / do we have" — require inventory framing, not "what … recording".
+  if (
+    /\b(?:what|which)\b[\s\S]{0,40}\b(?:videos?|clips?|recordings?|footage)\b[\s\S]{0,48}\b(?:do we have|are (?:there|on)|on (?:this |the )?(?:job|file|project)|here)\b/i.test(
+      q,
+    )
   ) {
     return true;
   }
@@ -669,10 +687,6 @@ function missingLine(question: string, trace: AskLookupTraceStep[], catalog: Ask
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
   // Inventory of the job's own videos/people/rooms: the catalog is the answer.
   if (isJobContentsQuestion(question) && (catalogClips(catalog).length || (catalog.people ?? []).length)) {
-    return composeJobContents(question, catalog);
-  }
-  // A question about videos/clips when the file has them — never "nothing matches".
-  if (/\b(?:videos?|clips?|recordings?|footage)\b/i.test(question) && catalogClips(catalog).length) {
     return composeJobContents(question, catalog);
   }
   const context = fileContext(trace, catalog);

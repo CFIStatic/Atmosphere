@@ -79,6 +79,13 @@ test('video inventory questions are recognized and routed deep', () => {
     assert.equal(routeAskQuestion({ question: q, catalog: tiffany }).reason, 'job_contents', q);
   }
   assert.equal(isJobContentsQuestion('is there a purple dumpster on this job'), false);
+  for (const q of [
+    'what was said in the office recording',
+    'what did El Presidente say about the tarp',
+    'what does the video say about the tarp',
+  ]) {
+    assert.equal(isJobContentsQuestion(q), false, q);
+  }
 });
 
 test('video inventory plan loads clips instead of searching for "kind"', () => {
