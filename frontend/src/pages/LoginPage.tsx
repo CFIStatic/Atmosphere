@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
+import { isInAppShell, WEBSITE_SIGNUP_URL } from '../lib/appShell';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -302,12 +303,25 @@ export function LoginPage() {
 
                 <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
                   Don&apos;t have an account?{' '}
-                  <Link
-                    to={createAccountHref}
-                    className="font-semibold text-brand-600 transition hover:text-brand-700"
-                  >
-                    Create an account
-                  </Link>
+                  {isInAppShell() ? (
+                    // iPhone/Android app: sign-up happens on the website, in Safari.
+                    <a
+                      href={WEBSITE_SIGNUP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="create-account-website"
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
+                      Create an account
+                    </a>
+                  ) : (
+                    <Link
+                      to={createAccountHref}
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
+                      Create an account
+                    </Link>
+                  )}
                 </div>
           </div>
 

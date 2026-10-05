@@ -54,6 +54,14 @@ export function isInAppShell(): boolean {
 export const APP_SHELL_BILLING_NOTE = 'Plans and billing are managed on atmosphereteam.com.';
 export const APP_SHELL_SEATS_NOTE = 'Manage seats on atmosphereteam.com.';
 
+/**
+ * Sign-up and plans live on the corporate website, outside the app. In the
+ * app, "Create an account" opens this page in Safari / the system browser:
+ * Capacitor hands any top-level or target=_blank navigation to a host outside
+ * server.allowNavigation (atmosphereteam.com is not listed) to the OS.
+ */
+export const WEBSITE_SIGNUP_URL = 'https://atmosphereteam.com/signup';
+
 /** Purchase prompts the server adds to allowance and seat messages. */
 const PURCHASE_SENTENCES = [
   /\s*Upgrade the plan or buy credits to continue\.?/gi,
