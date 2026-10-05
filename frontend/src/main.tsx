@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { initAppShell } from './lib/appShell';
 import { initFieldEmbed } from './lib/fieldEmbed';
 import { OFFICE_HTML_BUILD } from './lib/officeHtmlBuild';
 import { initPreferences } from './lib/preferences';
@@ -18,6 +19,7 @@ void OFFICE_HTML_BUILD;
 initPreferences();
 initPlatform();
 initFieldEmbed();
+initAppShell();
 initOfficeSentry();
 // Stock recovery emails land on `/#access_token=…&type=recovery`. Move them
 // onto /reset-password before the router sends `/` to the dashboard.

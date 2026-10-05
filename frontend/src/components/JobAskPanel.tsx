@@ -1376,7 +1376,7 @@ export function JobAskPanel({
             jobId={jobId}
             placeholder="Ask what you forgot…"
             disabled={asking}
-            className="min-h-[2.5rem] w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-h-[2.5rem] w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
           {inFlight ? (
             <button
