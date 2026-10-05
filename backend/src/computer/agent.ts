@@ -20,6 +20,12 @@ import {
   type GateDecision,
 } from './gate.js';
 import { verifyApprovalFields } from './projection.js';
+import {
+  ALREADY_SENT_APPROVAL_MESSAGE,
+  actionFingerprint,
+  findConsumedMatchingApproval,
+  isSendLikeApproval,
+} from './sendIdempotency.js';
 import { autoSignIn, findSavedSignIn, savedSignIns, trustedSites, type SavedSignIn } from './autoSignIn.js';
 import { mfaPauseFromSignals } from './mfaPause.js';
 import { isAskWebSearchConfigured, searchAskWeb, sanitizeAskWebQuery } from '../shared/askWebSearch.js';
@@ -482,10 +488,30 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           instructions: task.instructions,
           onPage: await driver.readFormFields(),
         });
+        const kind = kindForApproval(buttonLabel);
+        if (isSendLikeApproval(buttonLabel, kind)) {
+          const fingerprint = actionFingerprint({
+            kind,
+            origin: originOf(url),
+            buttonLabel,
+            fields,
+          });
+          const prior = findConsumedMatchingApproval(
+            await store.listApprovalsForTask(task.id, 40),
+            fingerprint,
+          );
+          if (prior) {
+            await audit('approval_blocked_duplicate_send', {
+              priorApprovalId: prior.id,
+              kind,
+              label: buttonLabel,
+            });
+            return { text: ALREADY_SENT_APPROVAL_MESSAGE, isError: false };
+          }
+        }
         const shot = await driver.screenshot('jpeg');
         const { token, tokenHash } = newApprovalToken();
         const expiresAt = run.now() + settings.approvalTtlMs;
-        const kind = kindForApproval(buttonLabel);
         const approval = await store.insertApproval({
           org_id: task.org_id,
           task_id: task.id,

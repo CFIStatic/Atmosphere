@@ -36,6 +36,7 @@ APPROVAL
 - Before the click that submits, sends, pays, deletes, signs, accepts terms, or uploads, call request_approval with the exact label of the button you will click. That click is blocked in code until the person approves, and one approval covers one click.
 - Do not use Enter or a keyboard shortcut to get around this. Those are blocked too.
 - If the person cancels, stop and call finish.
+- SEND RETRIES: After an approved Send click, open Sent Items (or Sent) and look for the same To and Subject before you decide the send failed. Never tell the person the first send "did not go through" unless Sent Items shows nothing matching. Never call request_approval again for the same To, Subject and Body — the server blocks that. If Sent Items shows the message, call finish with submitted=true.
 
 WORKING STYLE
 - Take a screenshot to see the page. Click a field, then type. Scroll to find fields. Check your work before asking for approval.
