@@ -9,6 +9,7 @@ import {
   jobIdentifiers,
   jobSummaryForEmail,
   looksLikeComputerTask,
+  isReadOnlyMailboxIntent,
   matchSavedLogin,
   parseComputerCommand,
   planComputerTask,
@@ -432,4 +433,25 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   if (missing.ok) return;
   assert.equal(missing.needsClarification, true);
   assert.match(missing.summary, /could not find the adjuster/i);
+});
+
+test('item 9: read-only mailbox intent does not compose email', () => {
+  const q = 'tell me the subject and sender of my most recent email';
+  assert.equal(isReadOnlyMailboxIntent(q), true);
+  assert.equal(looksLikeComputerTask(q), true);
+  const cmd = parseComputerCommand(q);
+  assert.equal(cmd.kind, 'email_read');
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.equal(plan.kind, 'email_read');
+  assert.match(plan.instructions, /read only|Inbox/i);
+  assert.match(plan.instructions, /Do not compose/i);
+  assert.match(plan.instructions, /Do not call request_approval for Send/);
+  assert.doesNotMatch(plan.instructions, /Then call request_approval/);
+});
+
+test('item 9: send/email still composes', () => {
+  assert.equal(isReadOnlyMailboxIntent('email the homeowner a status update'), false);
+  assert.equal(parseComputerCommand('email the homeowner a status update').kind, 'email');
 });

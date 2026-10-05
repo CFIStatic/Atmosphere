@@ -34,7 +34,7 @@ export const KNOWN_COMPUTER_SITES: ReadonlyArray<{
   { aliases: ['servicetitan', 'service titan'], host: 'go.servicetitan.com', url: 'https://go.servicetitan.com', kind: 'crm' },
 ];
 
-export type ComputerCommandKind = 'email' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'generic';
+export type ComputerCommandKind = 'email' | 'email_read' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'generic';
 
 export interface ParsedComputerCommand {
   kind: ComputerCommandKind;
@@ -62,6 +62,31 @@ const WEB_SURFACE =
 
 const EMAIL_VERB = /\b(email|e-?mail|send|message|compose)\b/i;
 const EMAIL_NOUN = /\b(email|e-?mail|message|note)\b/i;
+
+/** Read the inbox / one message — never compose or send. */
+export function isReadOnlyMailboxIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\b(email|e-?mail|inbox|outlook|gmail|mailbox|message)\b/.test(q)) return false;
+  if (/\b(send|compose|draft|write|reply|forward|new email)\b/.test(q)) return false;
+  return (
+    /\b(most recent|latest|last|newest)\b/.test(q) ||
+    /\b(subject|sender|from|who sent|what does .* say)\b/.test(q) ||
+    /\b(read|check|look\s*up|find|show|tell me|what(?:'| i)?s)\b/.test(q)
+  );
+}
+
+/** CRM lookup without writing notes / changing status. */
+export function isReadOnlyCrmLookup(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q) && !KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))) {
+    return false;
+  }
+  if (/\b(update|add|write|put|post|enter|save|change|delete|upload|submit)\b/.test(q) && /\bnotes?\b/.test(q)) {
+    return false;
+  }
+  return /\b(look\s*up|find|check|show|tell me|what(?:'| i)?s|status|read)\b/.test(q);
+}
+
 const SUMMARY = /\b(summar(?:y|ies|ize|ise)|how\s+things\s+are\s+going|status\s+update|update\s+on|progress\s+update|what'?s\s+going\s+on)\b/i;
 const OUTSTANDING =
   /\b(outstanding|incomplete|missing|pending|still\s+need(?:s|ed)?|not\s+(?:yet\s+)?(?:done|complete|signed|uploaded)|overdue|what'?s\s+(?:left|open|outstanding)|paperwork|documents?\s+needed|checklist)\b/i;
@@ -75,6 +100,7 @@ export function looksLikeComputerTask(question: string): boolean {
   const q = String(question ?? '').trim().toLowerCase();
   if (!q) return false;
   if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
+  if (isReadOnlyMailboxIntent(q)) return true;
   if (/^(did|does|do|has|have|was|were|is|are|when|why|who|how|can you tell|explain)\b/.test(q) && !OUTSTANDING.test(q) && !/\bwhat'?s\s+(?:outstanding|left|open)\b/.test(q)) {
     // Allow "what is outstanding in AccuLynx" / "what's left in JobNimbus".
     if (!(/\bwhat\b/.test(q) && (OUTSTANDING.test(q) || KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))))) {
@@ -189,16 +215,25 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     else if (/\b(text|sms|text\s+message)\b/i.test(q)) messageChannel = 'sms';
     else if (EMAIL_VERB.test(q) || /\bemail\b/i.test(q) || known?.kind === 'email') messageChannel = 'email';
   }
+  const readMailbox = isReadOnlyMailboxIntent(q);
   const isEmail =
-    (EMAIL_VERB.test(q) && (EMAIL_NOUN.test(q) || Boolean(emailRecipient(q)) || Boolean(role))) ||
-    (Boolean(known && known.kind === 'email') && EMAIL_VERB.test(q));
-  const isCrm = Boolean(known?.kind === 'crm') && (wantsOutstanding || /\b(crm|paperwork|status|documents?)\b/i.test(q) || /\bwhat\b/i.test(q));
+    !readMailbox &&
+    ((EMAIL_VERB.test(q) && (EMAIL_NOUN.test(q) || Boolean(emailRecipient(q)) || Boolean(role))) ||
+      (Boolean(known && known.kind === 'email') && EMAIL_VERB.test(q)));
+  const isCrm =
+    Boolean(known?.kind === 'crm') &&
+    (wantsOutstanding ||
+      isReadOnlyCrmLookup(q) ||
+      /\b(crm|paperwork|status|documents?)\b/i.test(q) ||
+      /\bwhat\b/i.test(q));
   const isXactEstimate =
     wantsEstimate &&
     (Boolean(known && (known.aliases.includes('xactimate') || known.aliases.includes('xactware') || known.host.includes('xactware'))) ||
       /\b(xactimate|xactware)\b/i.test(q));
   return {
-    kind: isEmail && !isAdjusterStatus
+    kind: readMailbox
+      ? 'email_read'
+      : isEmail && !isAdjusterStatus
       ? 'email'
       : isXactEstimate
         ? 'xactimate_estimate'
@@ -257,7 +292,7 @@ export function matchSavedLogin(logins: ComputerLoginRow[], command: ParsedCompu
     const byLabel = logins.find((l) => l.label.toLowerCase() === mention || l.label.toLowerCase().includes(mention));
     if (byLabel) return { login: byLabel, via: 'label' };
   }
-  if (command.kind === 'email') {
+  if (command.kind === 'email' || command.kind === 'email_read') {
     for (const pref of KNOWN_COMPUTER_SITES.filter((s) => s.kind === 'email')) {
       const hit = byHost(pref.host) ?? logins.find((l) => pref.aliases.some((a) => l.label.toLowerCase().includes(a)));
       if (hit) return { login: hit, via: 'alias' };
@@ -748,6 +783,38 @@ export function planComputerTask(input: {
   const matched = matchSavedLogin(input.logins, command);
   const namedSite = Boolean(command.known || command.siteMention);
   const ids = jobIdentifiers(input.file, input.address);
+
+  // ---- Read-only mailbox (never compose / send) ----
+  if (command.kind === 'email_read') {
+    if (!matched) {
+      return {
+        ok: false,
+        offerLogins: true,
+        summary:
+          "I don't have a saved Outlook or Gmail login yet. Open Logins in the sidebar, add it and sign in, then ask me again. I'll open the inbox and report back — nothing will be sent.",
+      };
+    }
+    const host = matched.login.host;
+    const label = matched.login.label || host;
+    const instructions = [
+      `Open ${label} (${host}) and go to the Inbox (not Compose / New mail).`,
+      `Task (read only): ${command.question.trim()}`,
+      'Find the message that answers the question (usually the most recent).',
+      'Report the Subject and Sender (From) exactly as shown. Include the received time when visible.',
+      `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
+      'Do not compose, reply, forward, or click Send. Do not call request_approval for Send.',
+      'If the inbox UI is unclear, call look_up_how_to, then continue. If still stuck, call ask_clarification.',
+      'End with finish: title like "Inbox check", fields = Subject and Sender (and Received when known), submitted=false.',
+    ].join('\n');
+    return {
+      ok: true,
+      kind: 'email_read',
+      instructions,
+      startUrl: matched.login.url,
+      matchedLogin: matched,
+      lead: `Opening ${label} to read the inbox. Nothing will be sent.`,
+    };
+  }
 
   // ---- Email ----
   if (command.kind === 'email') {
