@@ -1096,10 +1096,17 @@ export async function executeAskTool(
             };
           }
           if ('smsPendingApproval' in plan && plan.smsPendingApproval) {
+            const draft = [
+              plan.lead,
+              '',
+              `To: ${plan.to}`,
+              '',
+              plan.body,
+            ].join('\n');
             return {
               ok: true,
               tool: name,
-              summary: plan.lead,
+              summary: draft,
               data: {
                 channel: 'sms',
                 to: plan.to,
@@ -1109,8 +1116,7 @@ export async function executeAskTool(
               },
               needsConfirmation: {
                 action: 'send_job_sms',
-                detail:
-                  `Approve sending this text to ${plan.to} via Twilio? Reply "approve send text" (or call send_job_sms with confirm=true and this exact body). Nothing was sent yet.`,
+                detail: `Approve sending this text to ${plan.to}? Nothing was sent yet.`,
               },
               ui: { section: 'computer', path: 'computer-task:sms-approval' },
             };
@@ -1195,7 +1201,8 @@ export function formatActionsTrailer(results: AskToolResult[]): string {
   for (const r of results) {
     // The Computer card renders its own "not set up" / "not allowed" state.
     if (!r.ok && r.tool !== 'start_computer_task') continue;
-    const label = r.summary.replace(/[|,⟦⟧]/g, ' ').slice(0, 80);
+    const maxLabel = r.ui?.path === 'computer-task:sms-approval' ? 4000 : 80;
+    const label = r.summary.replace(/[|,⟦⟧]/g, ' ').slice(0, maxLabel);
     const section = r.ui?.section ?? '';
     const path = r.ui?.path ?? '';
     parts.push(`${r.tool}|${label}|${section}|${path}`);

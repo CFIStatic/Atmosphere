@@ -621,11 +621,17 @@ function formatXactimateScopeForChat(lines: XactimateScopeLine[]): string {
   if (!lines.length) {
     return 'I do not have rooms, measurements, or scope on this job file yet to seed the estimate.';
   }
+  // Markdown list so Chat renders one line item per line (not a run-on paragraph).
   const body = lines
-    .map((l) => `• ${l.label}${l.detail ? ` — ${l.detail}` : ''} (${l.source})`)
+    .map((l) => {
+      const detail = l.detail.replace(/\s*\(Suggested standard item[^)]*\)\s*/gi, '').trim();
+      const text = detail && !detail.toLowerCase().startsWith(l.label.toLowerCase()) ? `${l.label}: ${detail}` : l.label;
+      return `- ${text}`;
+    })
     .join('\n');
-  return `Draft line items I will enter in Xactimate (from the job file and standard practice; no prices):\n${body}`;
+  return `Here is the draft list I will enter in Xactimate (no prices):\n\n${body}`;
 }
+
 
 
 /** Saved Logins for sketch / measurement providers (DocuSketch, CompanyCam, Hover, …). */
@@ -777,7 +783,7 @@ export function planComputerTask(input: {
         offerLogins: false,
         needsClarification: true,
         summary:
-          "I could not find the adjuster on this job file (brief facts, access roster, or carrier documents). Who is the adjuster, and how should I reach them — XactAnalysis, email, or text?",
+          "I could not find the adjuster on this job file. Who is the adjuster, and how should I reach them: XactAnalysis, email, or text?",
       };
     }
 
@@ -810,7 +816,7 @@ export function planComputerTask(input: {
         ok: false,
         offerLogins: false,
         needsClarification: true,
-        summary: `I found the adjuster on file (${found}, from ${adjuster.source}). How should I reach them — XactAnalysis, email, or text?`,
+        summary: `I found the adjuster on file (${found}). How should I reach them: XactAnalysis, email, or text?`,
       };
     }
 
@@ -837,13 +843,8 @@ export function planComputerTask(input: {
           ok: false,
           offerLogins: false,
           needsClarification: true,
-          summary: [
-            `I can draft a text to ${adjuster.name || 'the adjuster'} at ${to}, but Twilio is not configured on this server yet (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER).`,
-            'Once those are set, ask me again and I will check with you before anything is sent.',
-            '',
-            'Draft text (not sent):',
-            statusBody,
-          ].join('\n'),
+          summary:
+            'Texting is not connected on this account yet. Ask me to email the adjuster or message them in XactAnalysis instead.',
         };
       }
       return {
@@ -853,13 +854,7 @@ export function planComputerTask(input: {
         to,
         body: statusBody,
         adjusterName: adjuster.name,
-        lead: [
-          `Draft text to ${adjuster.name || 'the adjuster'} at ${to} (from ${adjuster.source}):`,
-          '',
-          statusBody,
-          '',
-          'Nothing was sent. Approve this text and I will send it via Twilio, or tell me what to change.',
-        ].join('\n'),
+        lead: `Draft text to ${adjuster.name || 'the adjuster'} at ${to}. I will check with you before anything is sent.`,
       };
     }
 
@@ -886,7 +881,7 @@ export function planComputerTask(input: {
       const host = mailLogin.login.host;
       const label = mailLogin.login.label || host;
       const subject = input.file?.job?.claimNumber
-        ? `Status update request — claim ${input.file.job.claimNumber}`
+        ? `Status update request: claim ${input.file.job.claimNumber}`
         : 'Status update request';
       const instructions = [
         `Open ${label} (${host}) and compose a new email to the adjuster.`,

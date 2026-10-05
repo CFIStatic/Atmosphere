@@ -52,10 +52,11 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
     return (
       <div className="rounded-xl border border-line bg-paper-50 p-3" data-testid="computer-sms-approval">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Text message</p>
-        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Waiting for your approval</p>
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Waiting for approval</p>
         <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700">
-          {summary || 'Approve this text in Chat before it is sent via Twilio. Nothing was sent yet.'}
+          {summary || 'Approve this text before it is sent. Nothing was sent yet.'}
         </p>
+        <p className="mt-2 text-xs text-ink-500">Reply Approve in Chat to send, or Cancel to discard.</p>
       </div>
     );
   }

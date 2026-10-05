@@ -253,8 +253,12 @@ test('parse + plan: build estimate in Xactimate enters line items inside Xactima
   assert.match(plan.instructions, /request_approval/);
   assert.match(plan.instructions, /Save|Finalize/i);
   assert.doesNotMatch(plan.instructions, /9999|Lockbox/);
+  assert.match(plan.lead, /Here is the draft list I will enter in Xactimate/);
+  assert.match(plan.lead, /^- /m);
   assert.match(plan.lead, /sketch/i);
-  assert.match(plan.lead, /before sending the sketch|before saving/i);
+  assert.match(plan.lead, /before sending the sketch/i);
+  assert.match(plan.lead, /before saving or finalizing/i);
+  assert.doesNotMatch(plan.lead, /•.*•/s);
 });
 
 test('planComputerTask: Xactimate estimate without Login offers Logins', () => {
@@ -350,8 +354,9 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   });
   assert.equal(smsOff.ok, false);
   if (smsOff.ok) return;
-  assert.match(smsOff.summary, /Twilio is not configured|TWILIO_/i);
-  assert.match(smsOff.summary, /Draft text \(not sent\)/);
+  assert.match(smsOff.summary, /Texting is not connected/i);
+  assert.match(smsOff.summary, /XactAnalysis|email/i);
+  assert.doesNotMatch(smsOff.summary, /TWILIO_|Draft text/i);
 
   process.env.TWILIO_ACCOUNT_SID = 'ACtest';
   process.env.TWILIO_AUTH_TOKEN = 'token';
@@ -364,9 +369,10 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   assert.equal(smsOn.ok, true);
   if (!smsOn.ok) return;
   assert.ok('smsPendingApproval' in smsOn && smsOn.smsPendingApproval);
-  assert.match(smsOn.to, /\+15550100/);
-  assert.match(smsOn.lead, /Nothing was sent/);
-  assert.match(smsOn.lead, /Approve this text/);
+  assert.match(smsOn.to, /\+15550100001/);
+  assert.match(smsOn.lead, /Draft text to/);
+  assert.match(smsOn.lead, /check with you before anything is sent/i);
+  assert.doesNotMatch(smsOn.lead, /from job file|Twilio is not/i);
   if (prevSid === undefined) delete process.env.TWILIO_ACCOUNT_SID;
   else process.env.TWILIO_ACCOUNT_SID = prevSid;
   if (prevTok === undefined) delete process.env.TWILIO_AUTH_TOKEN;
