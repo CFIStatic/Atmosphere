@@ -718,17 +718,18 @@ test('the Computer capability answer matches what Computer does', async () => {
   const { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } = await import('../src/shared/askComputerCapability.js');
   const ready = computerCapabilityAnswer({ access: 'org', configured: true });
   assert.match(ready, /no fixed list/i);
-  assert.match(ready, /sign in yourself in the live view/);
-  assert.match(ready, /never type passwords or verification codes/);
-  assert.match(ready, /remembered for your organization/);
-  assert.match(ready, /ahead of time from Logins/);
+  assert.match(ready, /Sign in once from Logins in the sidebar/);
+  assert.match(ready, /never sees the password/i);
+  assert.match(ready, /code or to approve a number/);
   assert.match(ready, /before anything is submitted, sent, paid, signed or deleted/);
+  assert.match(ready, /Xactimate|adjuster|CRM/i);
   assert.match(computerCapabilityAnswer({ access: 'org', configured: false }), /isn't set up/);
-  assert.doesNotMatch(computerCapabilityAnswer({ access: 'viewer', configured: true }), /live view/);
-  for (const q of ['what websites are you able to login too', 'can you log into my accounts?', 'can you use a browser?', 'what sites can you sign in to']) {
+  assert.doesNotMatch(computerCapabilityAnswer({ access: 'viewer', configured: true }), /Logins in the sidebar/);
+  // "can you use a browser?" is a Computer *task* cue ("use the browser"), not a capability ask.
+  for (const q of ['what websites are you able to login too', 'can you log into my accounts?', 'what sites can you sign in to', 'what can you do with Computer?']) {
     assert.equal(looksLikeComputerCapabilityAsk(q), true, q);
   }
-  for (const q of ['can you search the web for tile prices', 'fill out the permit form on example.gov', 'what is the lockbox code', '?']) {
+  for (const q of ['can you search the web for tile prices', 'fill out the permit form on example.gov', 'what is the lockbox code', 'can you use a browser?', '?']) {
     assert.equal(looksLikeComputerCapabilityAsk(q), false, q);
   }
 });
