@@ -793,18 +793,18 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     });
     assert.ok(anthropicBodies.length >= 2, `anthropic calls ${anthropicBodies.length}`);
     const first = anthropicBodies[0]!;
-    assert.equal(first.model, 'claude-sonnet-5');
-    assert.equal(first.thinking, undefined);
-    assert.equal(first.output_config, undefined);
+    assert.equal(first.model, 'claude-opus-5-5');
+    assert.equal((first.thinking as { type?: string } | undefined)?.type, 'adaptive');
+    assert.equal((first.output_config as { effort?: string } | undefined)?.effort, 'high');
     assert.equal(JSON.stringify(first).includes('budget_tokens'), false);
-    assert.equal(Number(first.max_tokens), 4096);
+    assert.ok(Number(first.max_tokens) >= 16_000);
     const cachedSystem = first.system as Array<{ text?: string; cache_control?: { type?: string; ttl?: string } }>;
     assert.ok(Array.isArray(cachedSystem));
     assert.equal(cachedSystem[0]?.cache_control?.type, 'ephemeral');
     assert.equal(cachedSystem[1]?.cache_control?.type, 'ephemeral');
     assert.match(cachedSystem.map((block) => block.text ?? '').join('\n'), /Job context/);
-    assert.match(cachedSystem[0]?.text ?? '', /Start with the answer/);
-    assert.doesNotMatch(cachedSystem[0]?.text ?? '', /Use them before you write/);
+    assert.match(cachedSystem[0]?.text ?? '', /The first sentence is the answer/);
+    assert.match(cachedSystem[0]?.text ?? '', /Use tools when a fact is missing/);
     assert.doesNotMatch(cachedSystem.map((block) => block.text ?? '').join('\n'), /Question:/);
     const second = anthropicBodies[1]!;
     const messages = second.messages as Array<{ role: string; content: unknown }>;
@@ -828,8 +828,8 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
       fetchFn,
     });
     const deep = anthropicBodies[0]!;
-    assert.match(String((deep.system as Array<{ text?: string }>)[0]?.text ?? ''), /Use them before you write/);
-    assert.equal(deep.model, 'claude-opus-5');
+    assert.match(String((deep.system as Array<{ text?: string }>)[0]?.text ?? ''), /Write a real document from the job context/);
+    assert.equal(deep.model, 'claude-opus-5-5');
     assert.equal((deep.thinking as { type?: string } | undefined)?.type, 'adaptive');
     assert.equal((deep.output_config as { effort?: string } | undefined)?.effort, 'high');
     assert.ok(Number(deep.max_tokens) >= 16_000);

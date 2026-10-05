@@ -1292,11 +1292,15 @@ export async function answerFromJobFile(input: {
     : '';
 
   if (input.lookup) {
+    // Clips already live in the lookup catalog. Pass every other job-file
+    // section so Chat answers like someone who knows the whole file.
+    const jobFileRecord = formatJobFileRecord({ ...input.file, clips: [] }).trim();
     const looked = await answerFromAskLookup({
       question: input.question,
       catalog: input.lookup,
       history: modelHistory,
       memory: promptMemory,
+      jobFileRecord,
       extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,

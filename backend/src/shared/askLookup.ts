@@ -1134,9 +1134,9 @@ export function clipIndex(catalog: AskLookupCatalog): string {
 /** Redacted transcript, findings, and summary for one clip. Safe to put in a prompt or a stored answer. */
 export function clipAskPreview(clip: AskLookupClip): { transcript: string; findings: string; summary: string } {
   return {
-    transcript: redactClipTranscriptForAsk(clip).slice(0, 900),
-    findings: findingsText(clip.findings, clip).slice(0, 400),
-    summary: redactedClipSummary(clip).slice(0, 400),
+    transcript: redactClipTranscriptForAsk(clip).slice(0, 12_000),
+    findings: findingsText(clip.findings, clip).slice(0, 1_500),
+    summary: redactedClipSummary(clip).slice(0, 1_200),
   };
 }
 
@@ -1187,7 +1187,7 @@ export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null |
  * every clip's date, title, and summary, then as many redacted transcripts
  * as fit, in catalog order so the cached prefix does not change per question.
  */
-export const ASK_CONTEXT_BUDGET = 14_000;
+export const ASK_CONTEXT_BUDGET = 120_000;
 
 function rawTranscriptLine(clip: AskLookupClip, preview: string): string {
   if (!preview) return '  Raw transcript (authoritative): none';
@@ -1220,7 +1220,7 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
   if (trim(catalog.jobDescription)) lines.push(`Description: ${trim(catalog.jobDescription)}`);
   const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && trim(person.name));
   lines.push(people.length ? `People: ${people.map((person) => person.name).join(', ')}` : 'People: none listed');
-  const history = (catalog.history ?? []).slice(0, 12);
+  const history = (catalog.history ?? []).slice(0, 40);
   lines.push(
     history.length
       ? `Job history:\n${history
@@ -1257,6 +1257,11 @@ export type LookupPromptInput = {
   /** When a short follow-up was rewritten from the thread. */
   resolved?: string | null;
   extra?: string | null;
+  /**
+   * Non-clip job file sections (CRM, notes, scope, documents, crew, tasks).
+   * Clips stay in formatAskJobContext; this fills the rest of the file.
+   */
+  jobFileRecord?: string | null;
 };
 
 function lookupPromptSections(input: LookupPromptInput): {
@@ -1289,7 +1294,7 @@ function lookupPromptSections(input: LookupPromptInput): {
       : '';
   return {
     scope,
-    context: `Job context:\n${formatAskJobContext(input.catalog)}`,
+    context: `Job context:\n${formatAskJobContext(input.catalog)}${trim(input.jobFileRecord) ? `\n\n${trim(input.jobFileRecord)}` : ''}`,
     extra: input.extra?.trim() ? input.extra.trim() : '',
     turns: turns ? `Earlier turns in this chat (questions, answers, and the clips they cited):\n${turns}` : '',
     follow,

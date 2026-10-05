@@ -5,6 +5,7 @@
  */
 
 import { resolveAnthropicModel } from '../lib/anthropicModel.js';
+import { resolveGeminiAskModel } from '../lib/askModel.js';
 
 function num(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -46,7 +47,10 @@ export const verificationConfig = {
     | 'google'
     | 'anthropic'
     | 'openai',
-  primaryModel: process.env.VERIFICATION_PRIMARY_MODEL ?? 'gemini-2.5-pro',
+  primaryModel: resolveGeminiAskModel(
+    process.env.VERIFICATION_PRIMARY_MODEL ?? 'gemini-3.1-pro-preview',
+    'analysis',
+  ),
   escalationProvider: (process.env.VERIFICATION_ESCALATION_PROVIDER ?? 'anthropic') as
     | 'google'
     | 'anthropic'

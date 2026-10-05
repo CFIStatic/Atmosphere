@@ -1,6 +1,6 @@
 /**
  * Claude computer use through the existing Anthropic provider and key.
- * COMPUTER_AGENT_MODEL picks the model (default claude-sonnet-5) and is
+ * COMPUTER_AGENT_MODEL picks the model (default claude-sonnet-5-5) and is
  * separate from every Chat model setting.
  *
  * The SDK in this repo predates computer_toolset_20260801, so the request is

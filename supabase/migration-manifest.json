@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 197,
+    "migrationCount": 198,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -211,7 +211,8 @@
     "20261004150100_computer_tasks.sql",
     "20261004180000_computer_logins.sql",
     "20261004200000_computer_login_credentials.sql",
-    "20261005120000_ask_communication_styles.sql"
+    "20261005120000_ask_communication_styles.sql",
+    "20261005130000_rate_card_claude_5_5_gemini_3.sql"
   ],
   "migrations": [
     {
@@ -6400,6 +6401,16 @@
         "rls|public.ask_communication_styles",
         "table|public.ask_communication_styles"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005130000_rate_card_claude_5_5_gemini_3",
+      "file": "20261005130000_rate_card_claude_5_5_gemini_3.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
