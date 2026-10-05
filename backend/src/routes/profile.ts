@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { updateProfileSchema, uploadAvatarSchema } from '../lib/validation.js';
 import { displayLabelForServiceRole, normalizeServiceRoleInput } from '../shared/serviceRole.js';
 import { HttpError } from '../lib/errors.js';
+import { deleteCommunicationStyle, loadCommunicationStyle } from '../shared/askCommunicationStyle.js';
 import {
   AVATAR_BUCKET,
   AVATAR_MAX_BYTES,
@@ -313,6 +314,47 @@ profileRouter.delete('/avatar', async (req: Request, res: Response, next: NextFu
     if (error) throw new HttpError(500, error.message, 'avatar_update_failed');
 
     res.json({ profile: serializeProfile(data, req.user!.email ?? null) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+/**
+ * DELETE /api/profile/communication-style
+ * Wipe this person's quiet Chat communication-style profile (self-service reset).
+ * The profile is also removed when the account is deleted.
+ */
+profileRouter.delete('/communication-style', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new HttpError(401, 'Sign in required.', 'unauthorized');
+    const admin = unscopedAdminOrNull();
+    const client = admin ?? createUserClient(req.accessToken!);
+    await deleteCommunicationStyle(client, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/profile/communication-style
+ * Returns whether a style profile exists and its sample count — never the
+ * trait vector or prompt summary (those stay out of customer-facing UI).
+ */
+profileRouter.get('/communication-style', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new HttpError(401, 'Sign in required.', 'unauthorized');
+    const admin = unscopedAdminOrNull();
+    const client = admin ?? createUserClient(req.accessToken!);
+    const row = await loadCommunicationStyle(client, userId);
+    res.json({
+      present: Boolean(row && row.sampleCount > 0 && row.promptSummary),
+      sampleCount: row?.sampleCount ?? 0,
+      updatedAt: row?.updatedAt ?? null,
+    });
   } catch (err) {
     next(err);
   }

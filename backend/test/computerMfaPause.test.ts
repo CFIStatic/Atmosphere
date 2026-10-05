@@ -104,7 +104,12 @@ test('number-matching page pauses with Approve N in the Chat card before the mod
   const view = await loadTaskView(ORG, task.id, USER);
   // After resume the card is done; check the audit / that we never invented another number.
   assert.ok(store.audit.some((e) => e.event === 'needs_you' && e.detail.reason === 'number_match'));
-  assert.doesNotMatch(JSON.stringify(store.audit), /\b48\b|\b49\b/);
+  // Check the pause message and audit detail only — not the whole audit JSON,
+  // whose timestamps (e.g. :48 / :49 seconds) would flake this assertion.
+  assert.doesNotMatch(paused!.message, /\b48\b|\b49\b/);
+  assert.ok(
+    store.audit.every((e) => !/\b48\b|\b49\b/.test(JSON.stringify(e.detail ?? {}))),
+  );
   assert.equal(view.status, 'succeeded');
 });
 

@@ -68,6 +68,10 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import {
+  loadCommunicationStyle,
+  recordCommunicationStyleTurn,
+} from '../shared/askCommunicationStyle.js';
 import { chatUploadShouldAnswer, sessionAnswerIsPrivate } from '../documents/answer.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
 import { excludeOfficeOnlyRows, listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
@@ -3569,6 +3573,12 @@ async function runProofAskTurn(input: {
       threadId && owner && priorCount === 0
         ? modelAskThreadTitle({ question: scrubStoredAskText(input.question, memoryClips) }).catch(() => null)
         : Promise.resolve(null);
+    const styleRow =
+      userId && askAccess === 'org'
+        ? await loadCommunicationStyle(writeDb ?? supabase, userId).catch(() => null)
+        : null;
+    const styleSummary = styleRow?.promptSummary ?? null;
+
     const result = mentionPrep?.directAnswer
       ? {
           answer: mentionPrep.directAnswer,
@@ -3618,6 +3628,7 @@ async function runProofAskTurn(input: {
         address: siteAddress,
         jobTitle: file.job?.title ?? null,
       },
+      styleSummary,
     });
     if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
@@ -3712,6 +3723,19 @@ async function runProofAskTurn(input: {
         sourceId: stored.id,
         mentions: mentionPrep.mentions,
       });
+    }
+
+    // Quiet style learning — after the turn is stored, never on the hot path.
+    if (userId && askAccess === 'org' && stored?.id) {
+      const previousQuestion = [...priorPairs].reverse().find((pair) => pair.question)?.question ?? null;
+      void recordCommunicationStyleTurn(writeDb ?? supabase, {
+        userId,
+        question: storedQuestion,
+        previousQuestion,
+        at: String(stored.created_at ?? new Date().toISOString()),
+        timeZone: input.timeZone ?? null,
+        channel: 'chat',
+      }).catch(() => null);
     }
 
     if (threadId && owner) {
