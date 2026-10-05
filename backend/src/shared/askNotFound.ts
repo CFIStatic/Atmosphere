@@ -74,6 +74,9 @@ export function applyHonestNotFound(
   question: string,
 ): string {
   if (!looksLikeNotFound(answer)) return answer;
+  // Task drafts (scope note, punch list, email, …) already lead with an honest
+  // gap line and wrap a real artifact. Rewriting would drop the document.
+  if (/⟦artifact⟧[\s\S]*?\S[\s\S]*?⟦\/artifact⟧/.test(answer)) return answer;
   // Keep quote/source trailers if present.
   const trailers = answer.match(/\n⟦[^⟧]*⟧/g)?.join('') ?? '';
   const body = formatHonestNotFound({ question, catalog, answer });

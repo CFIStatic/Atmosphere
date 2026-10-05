@@ -250,7 +250,9 @@ export async function buildRetrievalAskContext(input: {
         input.jobFileRecord?.trim() ? `\n\n${input.jobFileRecord.trim().slice(0, ASK_CONTEXT_BUDGET)}` : ''
       }`
     : '';
-  const stable = [summary, evidenceBlock, analysisBlock, stuffed].filter(Boolean).join('\n\n');
+  // Keep the historical "Job context:" marker so prompt-cache tests and ops greps still match.
+  const body = [summary, evidenceBlock, analysisBlock, stuffed].filter(Boolean).join('\n\n');
+  const stable = body ? `Job context:\n${body}` : '';
   return {
     summary,
     evidence: evidenceBlock,

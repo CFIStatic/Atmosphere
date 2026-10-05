@@ -632,8 +632,9 @@ test('a thread of 50 turns over a week still recalls an early decision', async (
     '',
     `Ask: ${said}`,
   ].join('\n');
-  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
-  fs.writeFileSync('/opt/cursor/artifacts/ask-long-memory-excerpt.txt', excerpt);
+  const artDir = process.env.ASK_EVAL_ARTIFACTS_DIR || '/tmp/ask-eval-artifacts';
+  fs.mkdirSync(artDir, { recursive: true });
+  fs.writeFileSync(`${artDir}/ask-long-memory-excerpt.txt`, excerpt);
 });
 
 type RubricRow = {
@@ -796,8 +797,9 @@ test('Ask rubric scores answer-first, grounded, no dead ends, and carried contex
       contextCarried: row.contextCarried,
     })),
   };
-  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
-  fs.writeFileSync('/opt/cursor/artifacts/ask-rubric-scores.json', `${JSON.stringify(report, null, 2)}\n`);
+  const artDir = process.env.ASK_EVAL_ARTIFACTS_DIR || '/tmp/ask-eval-artifacts';
+  fs.mkdirSync(artDir, { recursive: true });
+  fs.writeFileSync(`${artDir}/ask-rubric-scores.json`, `${JSON.stringify(report, null, 2)}\n`);
 
   const conversation = (title: string, pairsIn: Array<[string, string]>) =>
     [`## ${title}`, '', ...pairsIn.flatMap(([q, a]) => [`**User:** ${q}`, '', `**Ask:** ${a}`, ''])].join('\n');
@@ -824,7 +826,7 @@ test('Ask rubric scores answer-first, grounded, no dead ends, and carried contex
       ['Last week you said something about the tabletop. What did we decide?', visible(recall.answer)],
     ]),
   ].join('\n');
-  fs.writeFileSync('/opt/cursor/artifacts/ask-sample-conversations.md', samples);
+  fs.writeFileSync(`${process.env.ASK_EVAL_ARTIFACTS_DIR || '/tmp/ask-eval-artifacts'}/ask-sample-conversations.md`, samples);
 
   const failed = rows.filter((row) => !(row.answerFirst && row.grounded && row.noDeadEnd && row.contextCarried));
   assert.equal(failed.length, 0, JSON.stringify(failed.map((row) => ({

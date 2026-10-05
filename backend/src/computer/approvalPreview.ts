@@ -20,7 +20,8 @@ export function approvalPreviewIssues(approval: Pick<
   if (!(approval.button_label ?? '').trim()) issues.push('missing_button_label');
   if (!(approval.summary ?? '').trim()) issues.push('missing_summary');
   if (!(approval.screenshot_jpeg_b64 ?? '').trim()) issues.push('missing_screenshot');
-  if (!Array.isArray(approval.fields) || approval.fields.length === 0) issues.push('missing_fields');
+  // Empty fields[] is valid for button-only clicks (e.g. Submit with nothing to fill).
+  if (!Array.isArray(approval.fields)) issues.push('missing_fields');
   return issues;
 }
 
