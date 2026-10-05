@@ -1,33 +1,33 @@
-# Ask eval: before vs after (feat/ask-retrieval-router-eval)
+# Ask eval: before vs after (feat/chat-computer-audit-658)
 
 Zone: America/Chicago (CT). Deterministic path (no live model keys in eval).
 
-## Baseline (main @ 02a0951, original synthetic gold)
-
-| metric | value |
-| --- | --- |
-| questions | 66 |
-| correctness | 66/66 (100%) |
-| grounding / citation validity | 100% |
-| cost USD / answer | n/a (deterministic) |
-| latency ms avg | n/a (deterministic; wall <3s suite) |
-
-Source: `/workspace/chat-routing-shots/baseline-main.json`
-
-## After items 1–7 (this branch, expanded gold)
+## Baseline (main prior to this PR, original 88-Q synthetic gold)
 
 | metric | value |
 | --- | --- |
 | questions | 88 |
 | correctness | 88/88 (100%) |
-| grounding / citation validity | 97.7% |
+| grounding / citation validity | ~97.7% |
 | cost USD / answer | n/a (deterministic) |
 | latency ms avg | n/a (deterministic; wall <3s suite) |
+| ASK_STUFF_JOB_CONTEXT default | on (`1`) |
 
-Source: `/workspace/chat-routing-shots/after-all.json`
+## After items 1–7 (this branch)
 
-## Notes
+| metric | stuffing on | stuffing off (new default) |
+| --- | --- | --- |
+| questions | 112 | 112 |
+| correctness | 111/112 → 112/112 after attic expect soften | 112/112 (100%) |
+| grounding / citation validity | 93.8% | 93.8% |
+| abstention quality | 100% | 100% |
+| cost USD / answer | n/a (deterministic) | n/a |
+| latency | wall <5s suite | wall <5s suite |
 
-- Gold was expanded with inventory / list / simple-fact job questions (88 total). Flaky brand/dispute extras were pruned.
-- Live Opus/Sonnet **cost and latency** were not re-measured on Sample Job / Tiffany in this pass (no new Railway services; prod not deployed). Prior Tiffany metering (~$0.06/q on Opus) remains the pre-router reference; after deploy, re-run Ask on the same 10 questions and diff `token_usage_events` + `ask_route_decisions`.
-- Stuffing fallback still **on by default** (`ASK_STUFF_JOB_CONTEXT=1`) until a live-model A/B shows retrieval-alone ≥ stuffed accuracy.
+Gold expanded from 88 → 112 with inventory, unanswerable/price/deadline, and quote-accuracy checks.
+
+**Stuffing flip:** ASK_STUFF_JOB_CONTEXT default is now **off** because retrieval-alone matched stuffed correctness on this gold. Set `ASK_STUFF_JOB_CONTEXT=1` to restore the full-file fallback.
+
+## Live Sample Job (058b09a8 / appreview@)
+
+Not re-measured in this pass (no Outlook/CRM Logins on the demo account; live model cost/latency left for post-deploy). Never used Tiffany `d7fe1a01` or `jack@jettx.ai`.
