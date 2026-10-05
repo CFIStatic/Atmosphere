@@ -247,14 +247,13 @@ export async function listClaimableProofWork(
   }>
 > {
   const cols = PROOF_LEASE[kind];
+  // Match claim_job_proof_work: never auto-reclaim failed/skipped (Disk IO thrash).
   const statusOr =
     kind === 'analysis'
       ? `${cols.status}.eq.queued,${cols.status}.eq.running`
       : [
           `${cols.status}.is.null`,
           `${cols.status}.eq.idle`,
-          `${cols.status}.eq.skipped`,
-          `${cols.status}.eq.failed`,
           `${cols.status}.eq.queued`,
           `${cols.status}.eq.running`,
         ].join(',');

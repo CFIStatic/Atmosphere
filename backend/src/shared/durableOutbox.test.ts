@@ -210,4 +210,36 @@ describe('DurableOutboxWorker', () => {
     assert.equal(ran, 0);
     assert.equal(store.rows.get('job-1')?.leaseOwner, 'other');
   });
+
+  it('backs off empty-queue polls and resets on poke', async () => {
+    const store = new MemoryOutbox();
+    const worker = new DurableOutboxWorker<Job>({
+      store,
+      owner: 'idle-worker',
+      pollIntervalMs: 1_000,
+      maxIdlePollMs: 8_000,
+      delaysMs: [],
+      sleep: async () => undefined,
+      now: () => store.nowMs,
+      run: async () => undefined,
+    });
+
+    // Patch arm by observing nextDelayMs via public idleStreak after ticks.
+    assert.equal(await worker.tick(), 0);
+    assert.equal(worker.idleStreak, 1);
+    assert.equal(await worker.tick(), 0);
+    assert.equal(worker.idleStreak, 2);
+    assert.equal(await worker.tick(), 0);
+    assert.equal(worker.idleStreak, 3);
+
+    store.seed('job-busy');
+    assert.equal(await worker.tick(), 1);
+    assert.equal(worker.idleStreak, 0);
+
+    assert.equal(await worker.tick(), 0);
+    assert.equal(worker.idleStreak, 1);
+    worker.poke();
+    assert.equal(worker.idleStreak, 0);
+  });
+
 });
