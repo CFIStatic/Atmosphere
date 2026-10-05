@@ -61,7 +61,8 @@ export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided, 
 - Never reverse-image-search, identify children, or identify private job-site people from photos/video.
 - Never put web text in quotation marks and never attribute it to a speaker. Quotation marks are only for an exact transcript substring, followed by the clip name and timestamp.
 - Do not write markdown links, bare URLs, or a Web results heading. The app attaches sources separately from the answer. Never invent a URL.
-- Do not write ⟦web: …⟧, [[web: …]], or [web: …]. Skip web commentary when you did not use the web, or when the user only asked whether you can search.`;
+- Do not write ⟦web: …⟧, [[web: …]], or [web: …]. Skip web commentary when you did not use the web, or when the user only asked whether you can search.
+- Write the answer yourself from the results: lead with it in 1–3 short plain sentences (a schedule or a set of scores may be a short "-" list, one item per line). Never paste or stitch together result text. No markdown headings (#), no "[...]", and no page labels such as "Team Logo", "Watch Replay" or "Final" strings copied from a site.`;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -1411,6 +1412,20 @@ export function scrubWebDerivedAskAnswer(answer: string): string {
 }
 
 /**
+ * Page furniture that scraped result text carries: heading markers, "[...]"
+ * elisions, and labels such as "Team Logo" or "Watch Replay" glued onto the
+ * words around them. Removed before the model (or anyone) sees a snippet.
+ */
+export function cleanWebScrapeText(text: string): string {
+  return String(text ?? '')
+    .replace(/\[\s*(?:\.\s*){3}\]|\[\s*…\s*\]/g, ' ')
+    .replace(/(^|\s)#{1,6}(?=\s|$)/g, '$1')
+    .replace(/(^|\s)#{2,6}(?=[A-Za-z])/g, '$1')
+    .replace(/\bTeam Logo(?:[A-Z]{2,}(?=[\d\s,.;:]|$))?/g, ' ')
+    .replace(/\b(?:Watch Replay|Skip to (?:main )?content|Advertisement|Show more|Load more|Read more)\b/gi, ' ');
+}
+
+/**
  * Untrusted web prose. Control markers, markdown links, bare URLs, and HTML
  * are removed. Clickable web links are built separately from result URLs.
  */
@@ -1433,6 +1448,7 @@ function plainWebText(text: string, limit?: number): string {
   value = value.replace(/<[^>]*>/g, ' ');
   value = value.replace(/[<>]/g, '');
   value = value.replace(/[“”"]/g, '');
+  value = cleanWebScrapeText(value);
   value = value.replace(/\s+/g, ' ').trim();
   return limit ? value.slice(0, limit) : value;
 }
@@ -1518,10 +1534,6 @@ export function stripExternalAskLinks(text: string): string {
   return value;
 }
 
-function plainWebSnippet(snippet: string): string {
-  return plainWebText(snippet, 280);
-}
-
 /**
  * Drop a model-written Web results section and every external link.
  * Clickable web URLs are returned on the response as webSources, not parsed out of this text.
@@ -1536,9 +1548,18 @@ function plainWebAnswer(text: string): string {
 }
 
 /**
- * Job evidence stays in front. Public questions use Tavily's answer as plain
- * text. Links are not written here; callers attach webSources from the hits.
- * Web text is never wrapped in quotation marks.
+ * Said when the web search found pages but nothing wrote an answer from them.
+ * A raw result snippet is page text ("Team LogoCOLTS0-2 … Watch Replay"),
+ * never an answer, so it is not pasted in; the sources still show below.
+ */
+export const ASK_WEB_NO_SUMMARY_ANSWER =
+  "I found a few web pages for that but couldn't pull a clean answer out of them. The sources are below.";
+
+/**
+ * Job evidence stays in front. Public questions use the search provider's
+ * written answer (Tavily) as plain text. A raw result snippet is never used as
+ * the answer. Links are not written here; callers attach webSources from the
+ * hits. Web text is never wrapped in quotation marks.
  */
 export function composeAskWebAnswer(input: {
   question: string;
@@ -1548,8 +1569,9 @@ export function composeAskWebAnswer(input: {
 }): string {
   const job = trim(input.jobAnswer);
   const jobUseful = Boolean(job) && !/does not have that|nothing is on this job file/i.test(job);
-  const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
-  const prose = asksAboutJobFile(input.question) && jobUseful ? job : webLead || job;
+  const webLead = plainWebAnswer(input.webAnswer ?? '');
+  const noSummary = !webLead && input.hits.length ? ASK_WEB_NO_SUMMARY_ANSWER : '';
+  const prose = asksAboutJobFile(input.question) && jobUseful ? job : webLead || noSummary || job;
   return ensureWebResultsSection(prose);
 }
 
@@ -1563,7 +1585,7 @@ export function composedAnswerIsWebProse(input: {
   const job = trim(input.jobAnswer);
   const jobUseful = Boolean(job) && !/does not have that|nothing is on this job file/i.test(job);
   if (asksAboutJobFile(input.question) && jobUseful) return false;
-  const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
+  const webLead = plainWebAnswer(input.webAnswer ?? '') || (input.hits.length ? ASK_WEB_NO_SUMMARY_ANSWER : '');
   return Boolean(trim(webLead));
 }
 

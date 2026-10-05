@@ -27,3 +27,14 @@ describe('app shell detection', () => {
     expect(document.documentElement.dataset.appShell).toBe('ios');
   });
 });
+
+describe('app shell document flag', () => {
+  it('is only true once the app shell marked the page', async () => {
+    const { isAppShellDocument } = await import('./appShell');
+    delete document.documentElement.dataset.appShell;
+    expect(isAppShellDocument()).toBe(false);
+    document.documentElement.dataset.appShell = 'ios';
+    expect(isAppShellDocument()).toBe(true);
+    delete document.documentElement.dataset.appShell;
+  });
+});
