@@ -319,6 +319,7 @@ test('Supabase store pins every write to the caller and soft-deletes a reference
       'delete:voice_enrollment_requests',
       'delete:device_credentials',
       'delete:feature_usage_sessions',
+      'delete:ask_communication_styles',
       'update:terms_acceptances',
       'delete:profiles',
       'update:profiles',

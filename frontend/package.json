@@ -1,7 +1,7 @@
 {
   "name": "atmosphere-frontend",
   "version": "1.0.0",
-  "description": "Atmosphere frontend — login/signup + org onboarding UI",
+  "description": "Atmosphere frontend \u2014 login/signup + org onboarding UI",
   "private": true,
   "type": "module",
   "scripts": {
@@ -63,5 +63,8 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^6.4.3",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "undici": "7.30.0"
   }
 }

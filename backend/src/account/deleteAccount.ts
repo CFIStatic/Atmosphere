@@ -4,7 +4,7 @@
  * Default policy — the product owner can change it:
  * - The person's login (Supabase auth user), personal profile, and org
  *   memberships are removed. Their saved voiceprint and voice enrollment
- *   requests, device sign-in credentials, usage-time analytics, and profile
+ *   requests, device sign-in credentials, usage-time analytics, Chat communication-style profile, and profile
  *   photo go with them. Terms acceptances keep the version and time but
  *   lose the IP address and user agent.
  * - Jobs, files, and videos belong to the company and stay with it.
@@ -206,6 +206,7 @@ export function supabaseAccountDeletionStore(admin: SupabaseClient): AccountDele
       await admin.from('voice_enrollment_requests').delete().eq('requester_user_id', userId);
       await admin.from('device_credentials').delete().eq('user_id', userId);
       await admin.from('feature_usage_sessions').delete().eq('user_id', userId);
+      await admin.from('ask_communication_styles').delete().eq('user_id', userId);
       // Keep which terms version was accepted and when; drop the IP and device.
       await admin
         .from('terms_acceptances')

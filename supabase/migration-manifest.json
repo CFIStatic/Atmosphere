@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 193,
+    "migrationCount": 197,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -210,7 +210,8 @@
     "20261004150000_token_usage_feature_computer.sql",
     "20261004150100_computer_tasks.sql",
     "20261004180000_computer_logins.sql",
-    "20261004200000_computer_login_credentials.sql"
+    "20261004200000_computer_login_credentials.sql",
+    "20261005120000_ask_communication_styles.sql"
   ],
   "migrations": [
     {
@@ -6374,6 +6375,30 @@
         "policy|public.computer_login_credentials.computer_login_credentials_no_user_access",
         "rls|public.computer_login_credentials",
         "table|public.computer_login_credentials"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005120000_ask_communication_styles",
+      "file": "20261005120000_ask_communication_styles.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_communication_styles.created_at",
+        "column|public.ask_communication_styles.last_signal_at",
+        "column|public.ask_communication_styles.prompt_summary",
+        "column|public.ask_communication_styles.sample_count",
+        "column|public.ask_communication_styles.traits",
+        "column|public.ask_communication_styles.updated_at",
+        "column|public.ask_communication_styles.user_id",
+        "index|public.ask_communication_styles.ask_communication_styles_pkey",
+        "index|public.ask_communication_styles.ask_communication_styles_updated_idx",
+        "policy|public.ask_communication_styles.ask_communication_styles_delete",
+        "policy|public.ask_communication_styles.ask_communication_styles_select",
+        "rls|public.ask_communication_styles",
+        "table|public.ask_communication_styles"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
