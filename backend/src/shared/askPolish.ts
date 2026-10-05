@@ -5,7 +5,7 @@
  * (summary, scope note, comparison, issues, punch list) becomes a finished
  * note the chat can copy. Visible prose never carries ids, UTC, or filler.
  */
-import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
+import { cleanMentionTitle, prettyDuration, prettyMentionStamp } from './mentions.js';
 import { answerRoomQuestion } from './roomIntelligence.js';
 import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
 import { composeTopicSpeech, topicQuotes } from './askEvidenceAnswer.js';
@@ -116,11 +116,15 @@ function dataOf(step: AskLookupTraceStep): Record<string, unknown> {
   return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
 }
 
-function oneLine(value: string): string {
+function oneLine(value: string, limit = 220): string {
   const clean = value.replace(/\s+/g, ' ').trim();
-  if (clean.length <= 160) return clean;
+  if (clean.length <= limit) return clean;
   const sentence = clean.split(/(?<=\.)\s/)[0] ?? clean;
-  return sentence.length <= 180 ? sentence : `${clean.slice(0, 157).trim()}…`;
+  if (sentence.length <= limit + 40) return sentence;
+  const cut = clean.slice(0, limit);
+  const atWord = cut.lastIndexOf(' ');
+  const body = (atWord > limit * 0.55 ? cut.slice(0, atWord) : cut).replace(/[.,;:]+$/, '').trim();
+  return `${body}…`;
 }
 
 function clipFact(row: Record<string, unknown>): ClipFact | null {
@@ -227,9 +231,138 @@ function jobName(catalog: AskLookupCatalog): string {
 
 /** A broad "what is this job" question, not a search for one missing fact. */
 export function isJobOverview(question: string): boolean {
-  return /\b(?:what was this (?:job|file|project) about|what(?:'s| is| was) this (?:job|file) about|summar(?:y|ize|ise) this (?:job|file|project)|what was this about|tell me about this (?:job|file|project)|overview of this (?:job|file))\b/i.test(
+  return /\b(?:what was this (?:job|file|project) about|what(?:'s| is| was) this (?:job|file|project) about|summar(?:y|ize|ise) this (?:job|file|project)|what was this about|tell me about this (?:job|file|project)|overview of this (?:job|file))\b/i.test(
     question,
   );
+}
+
+/**
+ * Inventory of what this job file already holds: videos/clips, people, rooms,
+ * filming days, or status. These must be answered from the catalog — never by
+ * a failed transcript keyword search that says "nothing matches" and then
+ * dumps truncated blurbs.
+ */
+export function isJobContentsQuestion(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (isJobOverview(q)) return false;
+  // Content-of-a-clip asks ("what was said in the office recording") are not inventory.
+  if (
+    /\b(?:said|say|says|talk(?:ed|ing)?|mention(?:ed)?|discuss(?:ed)?)\b/i.test(q) &&
+    /\b(?:recording|clip|video|footage)\b/i.test(q) &&
+    !/\b(?:how many|list|what kind|do we have|are there|on (?:this |the )?(?:job|file|project))\b/i.test(q)
+  ) {
+    return false;
+  }
+  if (/\b(?:in|from|during)\s+(?:the\s+)?(?:\w+\s+){0,3}(?:recording|clip|video|footage)\b/i.test(q)) {
+    return false;
+  }
+  // Inventory: "what kind of videos", "how many clips", "list/show the videos".
+  if (/\b(?:what\s+kind\s+of|how many|list|show(?:\s+me)?)\b[\s\S]{0,48}\b(?:videos?|clips?|recordings?|footage)\b/i.test(q)) {
+    return true;
+  }
+  // "what/which videos … on this job / do we have" — require inventory framing, not "what … recording".
+  if (
+    /\b(?:what|which)\b[\s\S]{0,40}\b(?:videos?|clips?|recordings?|footage)\b[\s\S]{0,48}\b(?:do we have|are (?:there|on)|on (?:this |the )?(?:job|file|project)|here)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:videos?|clips?|recordings?|footage)\b[\s\S]{0,40}\b(?:on (?:this |the )?(?:job|file|project)|do we have|are (?:there|on file|here))\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:who(?:'s| is| are)?|which (?:people|crew|workers?))\b[\s\S]{0,48}\b(?:on (?:this |the )?(?:job|file|project)|filmed|recorded)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:what|which|how many)\b[\s\S]{0,24}\brooms?\b/i.test(q) &&
+    /\b(?:job|file|project|house|home|site|property)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (/\b(?:what(?:'s| is)|whats)\b[\s\S]{0,24}\bstatus\b/i.test(q) && /\b(?:job|file|project)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:when|what days?|which days?)\b[\s\S]{0,48}\b(?:filmed|recorded|shot|videos?|clips?)\b/i.test(q)) {
+    return true;
+  }
+  if (
+    /\bwhat(?:'s| is| do we have|s)\b[\s\S]{0,36}\bon (?:this |the )?(?:job|file|project)\b/i.test(q) &&
+    /\b(?:videos?|clips?|files?|notes?|people|crew|rooms?)\b/i.test(q)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function clipLengthLabel(clip: AskLookupClip): string {
+  return prettyDuration(clip.durationSeconds) || '';
+}
+
+/**
+ * Clean inventory of the job's own contents. Lead with the count, then one
+ * bullet per item — date, length when known, and what it shows. No "nothing
+ * matches", no semicolon run-ons, no mid-word truncation.
+ */
+export function composeJobContents(question: string, catalog: AskLookupCatalog): string {
+  const q = question.toLowerCase();
+  const clips = catalogClips(catalog)
+    .slice()
+    .sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')) || a.title.localeCompare(b.title));
+
+  if (/\b(?:who|people|crew|workers?)\b/i.test(q)) {
+    const people = (catalog.people ?? [])
+      .filter((person) => person.onThisJob !== false && person.name)
+      .map((person) => person.name.trim())
+      .filter(Boolean);
+    const unique = [...new Set(people)];
+    if (!unique.length) return 'No one is listed on this job file yet.';
+    const lead = unique.length === 1 ? 'There is **1 person** on this job:' : `There are **${unique.length} people** on this job:`;
+    return [lead, ...unique.map((name) => `- ${name}`)].join('\n');
+  }
+
+  if (/\b(?:when|what days?|which days?)\b/i.test(q) && /\b(?:filmed|recorded|shot|videos?|clips?)\b/i.test(q)) {
+    const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate ?? null, catalog.timeZone)).filter((d) => d && d !== 'Undated'))];
+    if (!dates.length) {
+      return clips.length
+        ? `There are **${clips.length} videos** on this job, but none have a filming date on file.`
+        : 'There are no videos on this job file yet.';
+    }
+    if (dates.length === 1) return `Video on this job was filmed on **${dates[0]}**.`;
+    if (dates.length === 2) return `Videos on this job were filmed on **${dates[0]}** and **${dates[1]}**.`;
+    return `Videos on this job were filmed on **${dates.slice(0, -1).join('**, **')}**, and **${dates.at(-1)}**.`;
+  }
+
+  if (/\brooms?\b/i.test(q)) {
+    const roomAnswer = answerRoomQuestion(question, roomClipsFromCatalog(catalog));
+    if (roomAnswer) return roomAnswer;
+  }
+
+  if (!clips.length) return 'There are no videos on this job file yet.';
+  const lead =
+    clips.length === 1 ? 'There is **1 video** on this job:' : `There are **${clips.length} videos** on this job:`;
+  const lines = clips.map((clip) => {
+    const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+    const length = clipLengthLabel(clip);
+    const whenBit = length ? `${when}, ${length}` : when;
+    const seen = visitSeen({
+      title: cleanMentionTitle(clip.title) || 'Clip',
+      workDate: clip.workDate ?? null,
+      summary: oneLine(clipAskPreview(clip).summary, 280),
+      cite: clip.proofId,
+    });
+    return `- **${whenBit}.** ${seen.replace(/\.$/, '')}.`;
+  });
+  return [lead, ...lines].join('\n');
 }
 
 function catalogClips(catalog: AskLookupCatalog): AskLookupClip[] {
@@ -283,7 +416,7 @@ export function composeJobOverview(catalog: AskLookupCatalog): string {
     const seen = visitSeen({
       title: cleanMentionTitle(clip.title) || 'Clip',
       workDate: clip.workDate ?? null,
-      summary: oneLine(preview.summary),
+      summary: oneLine(preview.summary, 280),
       cite: clip.proofId,
     });
     const speech = clearestLine(preview.transcript);
@@ -533,24 +666,32 @@ function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): st
   const described = catalogClips(catalog)
     .map((clip) => {
       const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+      const length = clipLengthLabel(clip);
+      const whenBit = length ? `${when}, ${length}` : when;
       const seen = visitSeen({
         title: cleanMentionTitle(clip.title) || '',
         workDate: clip.workDate ?? null,
-        summary: oneLine(clipAskPreview(clip).summary),
+        summary: oneLine(clipAskPreview(clip).summary, 280),
         cite: clip.proofId,
       });
-      return seen && seen !== 'a recorded visit' ? `${when}: ${seen}` : when;
+      return seen && seen !== 'a recorded visit' ? `${whenBit}: ${seen}` : whenBit;
     })
     .filter(Boolean)
-    .slice(0, 4);
-  if (described.length) return `On file: ${described.join('; ')}.`;
+    .slice(0, 8);
+  if (described.length) return `On file:\n${described.map((row) => `- ${row}`).join('\n')}`;
   return 'Nothing else is recorded on this file.';
 }
 
 function missingLine(question: string, trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   if (/\bpermit\b/i.test(question)) return 'This file does not include a permit number.';
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
-  return `Nothing on this file matches that.\n\n${fileContext(trace, catalog)}`;
+  // Inventory of the job's own videos/people/rooms: the catalog is the answer.
+  if (isJobContentsQuestion(question) && (catalogClips(catalog).length || (catalog.people ?? []).length)) {
+    return composeJobContents(question, catalog);
+  }
+  const context = fileContext(trace, catalog);
+  // Prefer bullets over a semicolon dump when listing what is on file after a miss.
+  return `Nothing on this file matches that.\n\n${context}`;
 }
 
 type DatedMoment = SpeechMomentPick & { speaker: string; title: string; workDate: string | null };
@@ -711,6 +852,9 @@ function composeQuestion(
 ): string {
   const person = personBlock(trace);
   if (person?.offJob) return person.offJob;
+  // Inventory of this job's videos/people/rooms — answer from the catalog,
+  // never from a failed transcript keyword search.
+  if (isJobContentsQuestion(question)) return composeJobContents(question, catalog);
   // A topic ("what was said about LedgerPro cloud") is answered from the
   // transcript chunks that mention it, never from the day's longest lines.
   // Only when the catalog carries the clips; a bare trace falls through.
@@ -1149,6 +1293,9 @@ export function composeGroundedAsk(
   if (roomAnswer) return polishAskProse(roomAnswer, voice);
   if (isJobOverview(question)) {
     return polishAskProse(composeJobOverview(catalog), voice);
+  }
+  if (isJobContentsQuestion(question)) {
+    return polishAskProse(composeJobContents(question, catalog), voice);
   }
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);

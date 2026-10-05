@@ -21,6 +21,8 @@ import {
 } from './gate.js';
 import { verifyApprovalFields } from './projection.js';
 import { autoSignIn, findSavedSignIn, savedSignIns, trustedSites, type SavedSignIn } from './autoSignIn.js';
+import { mfaPauseFromSignals } from './mfaPause.js';
+import { isAskWebSearchConfigured, searchAskWeb, sanitizeAskWebQuery } from '../shared/askWebSearch.js';
 import { siteOf } from './sites.js';
 import { COMPUTER_CUSTOM_TOOLS, COMPUTER_SYSTEM_PROMPT, COMPUTER_TOOLSET, taskPrompt } from './prompt.js';
 import { encodeTaskResult, resultFromFinish, type ComputerTaskResult } from './result.js';
@@ -419,8 +421,14 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
       case 'already_signed_in':
         return `${result.message} Take a screenshot and continue.`;
       case 'two_factor':
-        await pauseForPerson('two_factor', `${result.message} Enter it in the live view, then press Resume.`);
+        await pauseForPerson('two_factor', result.message.includes('live view') ? result.message : `${result.message} Enter it in the live view, then press Resume.`);
         return 'The person entered the code and pressed Resume. Take a screenshot and continue.';
+      case 'number_match': {
+        const signals = await driver.pageSignals().catch(() => null);
+        const pause = signals ? mfaPauseFromSignals(signals) : null;
+        await pauseForPerson('number_match', pause?.message ?? result.message);
+        return 'The person approved on their phone and pressed Resume. Take a screenshot and continue.';
+      }
       case 'captcha':
         captchaAckUrl = await driver.currentUrl();
         await pauseForPerson('captcha', `${result.message} Computer never solves captchas. Please complete it in the live view, then press Resume.`);
@@ -541,7 +549,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         };
       }
       case 'needs_you': {
-        const reason = (['login', 'two_factor', 'captcha', 'other'].includes(input.reason) ? input.reason : 'other') as NeedsYouReason;
+        const reason = (['login', 'two_factor', 'number_match', 'captcha', 'clarification', 'other'].includes(input.reason) ? input.reason : 'other') as NeedsYouReason;
         const message = clip(input.message, 400) || 'Please take over in the live view, then press Resume.';
         if (reason === 'login' && saved.length) {
           // A sign-in page for a site with a saved password: the server signs in first.
@@ -563,6 +571,46 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           return { text: `No saved sign-in for that site (saved: ${known}). Use needs_you with reason "login" instead.`, isError: true };
         }
         return { text: await useSavedSignIn(entry), isError: false };
+      }
+      case 'look_up_how_to': {
+        const query = clip(input.query, 200);
+        if (!query) return { text: 'Say what to look up (site and goal).', isError: true };
+        if (!isAskWebSearchConfigured()) {
+          return {
+            text: 'Public web look-up is not available right now. Try the page again, or call ask_clarification with one clear question for the person.',
+            isError: false,
+          };
+        }
+        const safe = sanitizeAskWebQuery(query) || query;
+        await audit('look_up_how_to', { host: hostOf(await driver.currentUrl()) ?? undefined });
+        try {
+          const hits = await searchAskWeb(safe, { limit: 3 });
+          if (!hits.length) {
+            return {
+              text: 'No useful how-to results. Try a different query, or call ask_clarification.',
+              isError: false,
+            };
+          }
+          const notes = hits
+            .slice(0, 3)
+            .map((h, i) => `${i + 1}. ${clip(h.title, 80)} — ${clip(h.snippet, 220)}`)
+            .join('\n');
+          return {
+            text: `How-to notes (act on the live page; do not open these URLs unless the task named them):\n${notes}`,
+            isError: false,
+          };
+        } catch {
+          return { text: 'Look-up failed. Call ask_clarification if you still need help.', isError: false };
+        }
+      }
+      case 'ask_clarification': {
+        const question = clip(input.question, 400);
+        if (!question) return { text: 'Ask one clear question.', isError: true };
+        await pauseForPerson('clarification', question);
+        return {
+          text: 'The person answered (or pressed Resume). Read any new instruction in Chat context from the status, take a screenshot, and continue. If still unclear, ask again once.',
+          isError: false,
+        };
       }
       case 'finish': {
         const result = resultFromFinish(input);
@@ -613,12 +661,31 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         return { status: 'failed', error: 'Stopped: this task reached its spending cap. Nothing more was done.' };
       }
 
-      // Captchas and one-time-code pages pause before the model acts on them.
+      // Captchas and MFA pages pause before the model acts on them.
       const signals = await driver.pageSignals().catch(() => null);
       if (signals?.hasCaptcha && captchaAckUrl !== signals.url) {
         captchaAckUrl = signals.url;
         await pauseForPerson('captcha', 'This page has a captcha. Computer never solves captchas. Please complete it in the live view, then press Resume.');
         messages.push({ role: 'user', content: [textBlock('The person handled the captcha and pressed Resume.'), await screenshotBlock()] });
+        pruneScreenshots(messages, settings.keepScreenshots);
+        continue;
+      }
+      const mfa = signals ? mfaPauseFromSignals(signals) : null;
+      if (mfa && captchaAckUrl !== signals!.url) {
+        // Reuse captchaAckUrl as "already paused for this URL" so we do not loop.
+        captchaAckUrl = signals!.url;
+        await pauseForPerson(mfa.reason, mfa.message);
+        messages.push({
+          role: 'user',
+          content: [
+            textBlock(
+              mfa.reason === 'number_match'
+                ? 'The person approved on their phone and pressed Resume.'
+                : 'The person entered the code and pressed Resume.',
+            ),
+            await screenshotBlock(),
+          ],
+        });
         pruneScreenshots(messages, settings.keepScreenshots);
         continue;
       }

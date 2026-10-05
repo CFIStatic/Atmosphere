@@ -166,6 +166,7 @@ The record may contain any mix of: job identity, brief facts (any labels), scope
 Rules:
 1. Answer questions about this job, its videos, people, findings, or records only from the record given. Do not invent job facts, prices, or coverage decisions. Web search never replaces or overrides that evidence.
 2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job and WEB SEARCH RESULTS are provided, answer from those results for any public topic. Never invent what happened on this job from the web, and never quote web text as a speaker.
+2b. Inventory questions ("what videos do we have", "how many clips", "who is on this job", "what rooms", "what days were filmed"): lead with the count from the record, then one clean bullet per item with the date, length when known, and what it shows. Never open with "nothing matches" or "this job file does not have that" when those videos or people are on the record, and never dump truncated blurbs on one semicolon-joined line.
 3. LAYERED DEFAULT for broad asks: the first sentence is the answer, then a few short sentences or, only for parallel facts, a tight bullet list. Do not dump every quote or document excerpt on the first pass, and do not end with an invite or a "let me know" line.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
 5. Cite job-file sources via ⟦sources: …⟧. Do not write markdown links, bare URLs, or a Web results heading — the app attaches web sources separately. Never "(Source: …)" parentheticals or raw URL dumps in the job sentences.
@@ -1146,7 +1147,7 @@ export async function answerFromJobFile(input: {
   const computer = toolResults.find((r) => r.tool === 'start_computer_task');
   if (computer) {
     const lead = computer.ok
-      ? COMPUTER_LEAD
+      ? computer.summary || COMPUTER_LEAD
       : computer.ui?.path === 'computer-task:not-set-up'
         ? "I can't work in a browser for you yet."
         : computer.summary;

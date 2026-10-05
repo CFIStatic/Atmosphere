@@ -77,6 +77,18 @@ export interface PageSignals {
   hasCaptcha: boolean;
   /** Visible text asks for a verification code / 2-step code. */
   mentionsVerificationCode: boolean;
+  /**
+   * Number-matching MFA (e.g. Microsoft Authenticator "Approve 47"): the
+   * number shown on the page for the person to approve on their phone.
+   * Null when none is clearly displayed. Never invent one.
+   */
+  approvalNumber: string | null;
+  /**
+   * A one-time code that is visibly written on this page (e.g. an email the
+   * agent opened). Null when the code only arrives on the person's phone.
+   * Never invent one.
+   */
+  visibleOtpCode: string | null;
 }
 
 /** PNG for the model; JPEG (smaller) for the approval card. */
@@ -152,7 +164,7 @@ export const OPEN_TASK_STATUSES: readonly ComputerTaskStatus[] = ['queued', ...A
 export const CONSEQUENTIAL_KINDS = ['submit', 'send', 'pay', 'delete', 'sign', 'accept_terms', 'upload'] as const;
 export type ConsequentialKind = (typeof CONSEQUENTIAL_KINDS)[number];
 
-export type NeedsYouReason = 'login' | 'two_factor' | 'captcha' | 'other';
+export type NeedsYouReason = 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'other';
 
 /** One allowlisted job value the agent may type, with where it came from. */
 export interface ProjectedJobField {

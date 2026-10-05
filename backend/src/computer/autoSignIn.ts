@@ -17,6 +17,7 @@ export type AutoSignInOutcome =
   | 'signed_in'
   | 'already_signed_in'
   | 'two_factor'
+  | 'number_match'
   | 'captcha'
   | 'failed'
   | 'incomplete'
@@ -156,6 +157,9 @@ export async function autoSignIn(input: {
   if (signals?.hasCaptcha) {
     outcome = 'captcha';
     message = `${name} showed a captcha after the saved sign-in.`;
+  } else if (signals?.approvalNumber) {
+    outcome = 'number_match';
+    message = `The saved password worked. Approve ${signals.approvalNumber} on your phone.`;
   } else if (signals?.hasOneTimeCodeField || signals?.mentionsVerificationCode) {
     outcome = 'two_factor';
     message = `The saved password worked. ${name} is asking for a verification code.`;
