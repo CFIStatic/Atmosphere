@@ -6,7 +6,7 @@
  * Anything uncertain stays on the deep model.
  */
 import { asksAboutOtherJobs, type AskLookupCatalog } from './askLookup.js';
-import { classifyAskIntent, classifyChatTurn, isJobOverview } from './askPolish.js';
+import { classifyAskIntent, classifyChatTurn, isJobContentsQuestion, isJobOverview } from './askPolish.js';
 
 export type AskModelRoute = 'fast' | 'deep';
 
@@ -56,6 +56,9 @@ export function routeAskQuestion(input: {
   if (asksAboutOtherJobs(asked) || asksAboutOtherJobs(resolved)) return { route: 'deep', reason: 'other_jobs' };
   if (isJobOverview(resolved) || isJobOverview(asked) || isFileNarrative(resolved) || isFileNarrative(asked)) {
     return { route: 'deep', reason: 'overview' };
+  }
+  if (isJobContentsQuestion(resolved) || isJobContentsQuestion(asked)) {
+    return { route: 'deep', reason: 'job_contents' };
   }
   if (isMultiStep(resolved) || isMultiStep(asked)) return { route: 'deep', reason: 'multi_step' };
 
