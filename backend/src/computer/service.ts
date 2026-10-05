@@ -12,6 +12,13 @@ import type { ComputerAuditRow, ComputerApprovalRow, ComputerTaskRow } from './s
 import { approvalPreviewIssues, isExactApprovalPreview } from './approvalPreview.js';
 import { assertComputerAiAllowed, computerStore, kickComputerWorker } from './worker.js';
 import { OPEN_TASK_STATUSES } from './types.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { hostOfUrl, siteOf } from './sites.js';
+import {
+  anonymizeSuccessfulRun,
+  recordOrgOutcome,
+  upsertSharedPlaybook,
+} from './sitePlaybooks.js';
 
 export class ComputerServiceError extends Error {
   constructor(
@@ -324,5 +331,54 @@ export async function decideApproval(orgId: string, approvalId: string, userId: 
     decidedBy: userId,
     decidedAt: new Date().toISOString(),
   });
+  // Cross-org learning: record Approve/edit/reject signals; on approve, merge an
+  // anonymized site playbook (never field values / PII / job data).
+  void learnFromApprovalDecision({
+    orgId,
+    task,
+    approval,
+    outcome: decision === 'approve' ? 'approve' : 'reject',
+  }).catch(() => undefined);
   return { ok: true };
+}
+
+async function learnFromApprovalDecision(input: {
+  orgId: string;
+  task: ComputerTaskRow;
+  approval: ComputerApprovalRow;
+  outcome: 'approve' | 'reject' | 'edit';
+}): Promise<void> {
+  const admin = createAdminClient();
+  if (!admin) return;
+  const host = hostOfUrl(input.approval.page_url) || hostOfUrl(input.task.current_url) || hostOfUrl(input.task.start_url);
+  if (!host) return;
+  const site = siteOf(host);
+  const taskType = String(input.approval.action_kind || 'general');
+  let playbookId: string | null = null;
+  if (input.outcome === 'approve') {
+    const { playbook } = anonymizeSuccessfulRun({
+      startUrl: input.task.start_url,
+      currentUrl: input.approval.page_url || input.task.current_url,
+      screens: [String(input.approval.button_label || 'action').slice(0, 80)],
+      selectors: [],
+      workingPath: [input.approval.page_url || input.task.current_url || ''].filter(Boolean),
+      // Explicitly discard any typed field values from the approval card.
+      typedFieldValues: input.approval.fields,
+    });
+    const saved = await upsertSharedPlaybook(admin, {
+      site,
+      taskType,
+      playbook,
+      outcome: 'approve',
+    });
+    playbookId = saved.id;
+  }
+  await recordOrgOutcome(admin, {
+    orgId: input.orgId,
+    taskId: input.task.id,
+    site,
+    taskType,
+    outcome: input.outcome,
+    playbookId,
+  });
 }
