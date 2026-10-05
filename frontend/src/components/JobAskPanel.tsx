@@ -41,6 +41,7 @@ import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
 import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
+import { isAppShellDocument } from '../lib/appShell';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -857,6 +858,27 @@ export function JobAskPanel({
     el.scrollTop = el.scrollHeight;
   }, [turns, asking]);
 
+  // Phone app only: when the keyboard opens or closes the thread changes
+  // height. Keep the newest message in view, as a native chat does, if the
+  // reader was already at the bottom. Browsers keep their current behavior.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !isAppShellDocument() || typeof ResizeObserver === 'undefined') return;
+    let atBottom = true;
+    const onScroll = () => {
+      atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    };
+    const observer = new ResizeObserver(() => {
+      if (atBottom) el.scrollTop = el.scrollHeight;
+    });
+    el.addEventListener('scroll', onScroll, { passive: true });
+    observer.observe(el);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      observer.disconnect();
+    };
+  }, []);
+
   const dossier = useMemo(
     () =>
       buildJobFileDossier({
@@ -1110,6 +1132,7 @@ export function JobAskPanel({
     >
       <div
         ref={scrollerRef}
+        data-ask-scroller=""
         className={
           fill
             ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4'
@@ -1157,8 +1180,10 @@ export function JobAskPanel({
               <li
                 key={turn.id}
                 className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2.5'}
+                data-ask-role={turn.role}
               >
                 <div
+                  data-ask-bubble={turn.role}
                   className={
                     turn.role === 'user'
                       ? 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
@@ -1293,7 +1318,7 @@ export function JobAskPanel({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-line px-5 py-3">
+      <div className="shrink-0 border-t border-line px-5 py-3" data-ask-composer="">
         {pending.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5" data-testid="ask-composer-attachments">
             {pending.map((file) => (
@@ -1320,6 +1345,7 @@ export function JobAskPanel({
         <form
           onSubmit={onSubmit}
           className="relative flex items-end gap-2"
+          data-ask-composer-row=""
           onDragOver={(event: DragEvent) => {
             event.preventDefault();
             setDragging(true);
@@ -1355,6 +1381,7 @@ export function JobAskPanel({
           <button
             type="button"
             aria-label="Attach a document"
+            data-ask-attach=""
             onClick={() => fileRef.current?.click()}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line bg-paper-0 text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
           >
@@ -1382,6 +1409,7 @@ export function JobAskPanel({
             <button
               type="button"
               data-testid="ask-stop"
+              data-ask-send=""
               aria-label="Stop"
               onClick={stopAsk}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-900 text-white transition hover:bg-ink-800"
@@ -1393,6 +1421,7 @@ export function JobAskPanel({
               type="submit"
               disabled={!draft.trim()}
               aria-label="Ask this job"
+              data-ask-send=""
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-white transition hover:bg-brand-500 disabled:opacity-35"
             >
               <SendIcon />
