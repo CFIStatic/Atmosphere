@@ -5,8 +5,9 @@
  * transcript/analysis chunks for the question (OpenAI embeddings when the
  * key is set, else lexical/local RRF from askTranscriptIndex).
  *
- * Stuffing the full file stays available behind ASK_STUFF_JOB_CONTEXT=1.
- * Default is off after eval showed retrieval-alone ≥ stuffed accuracy (112-Q gold).
+ * Stuffing the full file stays available behind ASK_STUFF_JOB_CONTEXT=1
+ * (default on). Eval showed retrieval-alone equal on synthetic gold, but a
+ * multi-turn chat regression kept the stuffed fallback as the default.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -26,9 +27,9 @@ import {
 import { redactedClipSummary } from './askLookup.js';
 import { resolveAskJobSummary } from './askJobCache.js';
 
-/** When "1", append the stuffed job card after the retrieval block. Default off. */
+/** When "1" (default), append the stuffed job card after the retrieval block. */
 export function askStuffJobContextEnabled(): boolean {
-  return (process.env.ASK_STUFF_JOB_CONTEXT ?? '0').trim() === '1';
+  return (process.env.ASK_STUFF_JOB_CONTEXT ?? '1').trim() !== '0';
 }
 
 export const ASK_RETRIEVAL_TOP_K = 12;

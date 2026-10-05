@@ -43,8 +43,8 @@ test('current clip Ask passes the release gate on the synthetic gold', async () 
   assert.equal(report.metrics.summaryContradictions, 0);
   assert.equal(report.webSearch, 'disabled');
   // Expanded gold (retrieval/router/citations). Style checks ("?" / "thanks") included.
-  assert.equal(report.metrics.questions, 88);
-  assert.equal(report.metrics.correct, 88);
+  assert.equal(report.metrics.questions, 112);
+  assert.equal(report.metrics.correct, 112);
   const md = reportMarkdown(report);
   assert.match(md, new RegExp(`correctness \\| ${report.metrics.correct}/${report.metrics.questions}`));
   assert.match(md, /Web search: disabled \(no live results\)/);

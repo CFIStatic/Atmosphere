@@ -24,9 +24,9 @@ function catalog(): AskLookupCatalog {
   } as AskLookupCatalog;
 }
 
-test('item 6: stuffing default is off after equal-or-better eval', () => {
+test('item 6: stuffing default stays on despite equal retrieval-alone eval', () => {
   delete process.env.ASK_STUFF_JOB_CONTEXT;
-  assert.equal(askStuffJobContextEnabled(), false);
+  assert.equal(askStuffJobContextEnabled(), true);
 });
 
 test('item 6: with stuffing off, context uses summary + top chunks, not the stuffed full file', async () => {
