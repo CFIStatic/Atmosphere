@@ -124,3 +124,7 @@ already works on any site, and keeps one place where actions are checked.
   - `backend/test/computer*.test.ts`
   - `frontend/src/components/computer/ComputerTaskCard.test.tsx`
   - `supabase/tests/08_computer_tasks.sh`
+
+## Materials list and Home Depot order
+
+See [hd-materials-order.md](./hd-materials-order.md). Screenshots: `docs/screens/hd-order/`.

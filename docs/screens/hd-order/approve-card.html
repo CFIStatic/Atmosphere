@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Approve card — Home Depot order</title>
+<style>
+  body { font-family: "Segoe UI", system-ui, sans-serif; background: #f4f1ea; margin: 0; padding: 32px; color: #1c1917; }
+  .card { max-width: 640px; margin: 0 auto; background: #fff8eb; border: 1px solid #d4a01766; border-radius: 16px; padding: 16px 18px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #a16207; margin: 0; }
+  h1 { font-size: 15px; margin: 4px 0 8px; }
+  .summary { font-size: 14px; color: #44403c; margin: 0 0 8px; }
+  .order-note { font-size: 12px; font-weight: 600; color: #44403c; margin: 0 0 12px; }
+  .shot { display: block; width: 100%; max-height: 160px; object-fit: cover; border-radius: 12px; border: 1px solid #e7e0d6; background: #fff; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e7e0d6; border-radius: 12px; overflow: hidden; font-size: 13px; }
+  td { padding: 8px 10px; border-top: 1px solid #e7e0d6; vertical-align: top; }
+  tr:first-child td { border-top: 0; }
+  .label { color: #78716c; width: 28%; }
+  .value { font-weight: 600; width: 42%; word-break: break-word; }
+  .src-ok { color: #15803d; font-size: 12px; }
+  .src-warn { color: #b91c1c; font-size: 12px; font-weight: 700; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  button { border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 700; border: 1px solid #e7e0d6; background: #fff; cursor: default; }
+  .approve { background: #f5c518; border-color: #f5c518; }
+  .foot { margin-top: 10px; font-size: 11px; color: #78716c; }
+  a { color: #0f766e; }
+</style>
+</head>
+<body>
+  <div class="card" data-testid="computer-approval-card">
+    <p class="eyebrow">Needs your approval · Place order / pay</p>
+    <h1>Click “Place Order” on www.homedepot.com?</h1>
+    <p class="summary">Home Depot cart for 5 materials · estimated $3,842.00 · deliver to job address · 1 low-confidence match to confirm. Nothing is purchased until you press Approve.</p>
+    <p class="order-note" data-testid="computer-approval-order-note">Checkout uses the card already saved on this account. Atmosphere never handles raw card numbers. Nothing is purchased until you press Approve.</p>
+    <div class="shot" role="img" aria-label="Checkout review screenshot placeholder" style="height:140px;display:flex;align-items:center;justify-content:center;color:#78716c;font-size:13px;">Checkout review · cart ready (demo screenshot)</div>
+    <table aria-label="Filled fields">
+      <tr data-testid="computer-approval-field"><td class="label">Job material</td><td class="value">architectural shingles (Weathered Wood)</td><td class="src-ok">✓ Job file materials list</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Matched product</td><td class="value">Duration Architectural Shingles Weathered Wood · SKU 555666777 · <a href="https://www.homedepot.com/p/Duration-555666777">homedepot.com/p/…</a></td><td class="src-ok">✓ Home Depot public search</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Quantity</td><td class="value">28 squares</td><td class="src-ok">✓ Job file evidence</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Unit price</td><td class="value">$120.00</td><td class="src-ok">✓ Home Depot listing</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Job material</td><td class="value">synthetic underlayment</td><td class="src-ok">✓ Job file materials list</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Matched product</td><td class="value">Choose on site — low confidence</td><td class="src-warn">⚠ Needs your choice</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Cart total</td><td class="value">$3,842.00</td><td class="src-ok">✓ Sum of matched lines</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Fulfillment</td><td class="value">Delivery to 1 Sample Way (Sample Job 058b09a8)</td><td class="src-ok">✓ Job address</td></tr>
+      <tr data-testid="computer-approval-field"><td class="label">Payment</td><td class="value">Use the card already saved on the Home Depot account. Atmosphere never handles raw card numbers.</td><td class="src-ok">✓ Account on file</td></tr>
+    </table>
+    <div class="actions">
+      <button class="approve" type="button">Approve “Place Order”</button>
+      <button type="button">Take control</button>
+      <button type="button">Cancel</button>
+    </div>
+    <p class="foot">One approval covers one irreversible click. Nothing is submitted until you approve. Your name and time are logged. Double Approve is blocked by order fingerprint.</p>
+  </div>
+</body>
+</html>

@@ -26,6 +26,12 @@ import {
   findConsumedMatchingApproval,
   isSendLikeApproval,
 } from './sendIdempotency.js';
+import {
+  ALREADY_ORDERED_APPROVAL_MESSAGE,
+  findConsumedMatchingOrderApproval,
+  isPlaceOrderLikeApproval,
+  orderActionFingerprint,
+} from './supplyOrder.js';
 import { autoSignIn, findSavedSignIn, savedSignIns, trustedSites, type SavedSignIn } from './autoSignIn.js';
 import { mfaPauseFromSignals } from './mfaPause.js';
 import { isAskWebSearchConfigured, searchAskWeb, sanitizeAskWebQuery } from '../shared/askWebSearch.js';
@@ -507,6 +513,26 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
               label: buttonLabel,
             });
             return { text: ALREADY_SENT_APPROVAL_MESSAGE, isError: false };
+          }
+        }
+        if (isPlaceOrderLikeApproval(buttonLabel, kind)) {
+          const fingerprint = orderActionFingerprint({
+            kind,
+            origin: originOf(url),
+            buttonLabel,
+            fields,
+          });
+          const prior = findConsumedMatchingOrderApproval(
+            await store.listApprovalsForTask(task.id, 40),
+            fingerprint,
+          );
+          if (prior) {
+            await audit('approval_blocked_duplicate_order', {
+              priorApprovalId: prior.id,
+              kind,
+              label: buttonLabel,
+            });
+            return { text: ALREADY_ORDERED_APPROVAL_MESSAGE, isError: false };
           }
         }
         const shot = await driver.screenshot('jpeg');

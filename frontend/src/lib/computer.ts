@@ -92,6 +92,7 @@ export function computerTaskRef(path: string | null | undefined):
   | { kind: 'not_set_up' }
   | { kind: 'need_login' }
   | { kind: 'draft_preview' }
+  | { kind: 'materials_list' }
   | { kind: 'sms_approval' }
   | { kind: 'error' }
   | null {
@@ -103,6 +104,7 @@ export function computerTaskRef(path: string | null | undefined):
   if (rest === 'not-set-up') return { kind: 'not_set_up' };
   if (rest === 'need-login' || rest === 'logins') return { kind: 'need_login' };
   if (rest === 'draft-preview') return { kind: 'draft_preview' };
+  if (rest === 'materials-list') return { kind: 'materials_list' };
   if (rest === 'sms-approval') return { kind: 'sms_approval' };
   if (/^[0-9a-f-]{36}$/i.test(rest)) return { kind: 'task', id: rest };
   return { kind: 'error' };
@@ -121,7 +123,7 @@ export const COMPUTER_STATUS_LABEL: Record<ComputerTaskStatus, string> = {
 export const COMPUTER_ACTION_LABEL: Record<ComputerActionKind, string> = {
   submit: 'Submit',
   send: 'Send',
-  pay: 'Pay',
+  pay: 'Place order / pay',
   delete: 'Delete',
   sign: 'Sign',
   accept_terms: 'Accept terms',

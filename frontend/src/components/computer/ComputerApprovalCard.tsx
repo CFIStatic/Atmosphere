@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { COMPUTER_ACTION_LABEL, type ComputerTaskApproval } from '../../lib/computer';
 
 function hostOf(url: string | null): string | null {
@@ -21,10 +22,38 @@ function isMailBodyField(label: string): boolean {
   return /^(to|subject|body|message)\b/i.test(label.trim());
 }
 
+function isOrderPriorityField(label: string): boolean {
+  return /^(job material|matched product|quantity|unit price|cart total|fulfillment|delivery|stock|payment|substitution)\b/i.test(
+    label.trim(),
+  );
+}
+
+function linkify(value: string): ReactNode {
+  const parts = value.split(/(https?:\/\/[^\s]+)/g);
+  if (parts.length === 1) return value;
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noreferrer"
+        className="break-all text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-600"
+      >
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
+}
+
 /**
  * The one place a person lets Computer submit, send, pay, delete, sign,
  * accept terms or upload. Shows the page as it is now and every filled
  * field with its value and where that value came from (checked in code).
+ * For Home Depot (and later supply) carts, order lines and totals are listed
+ * first. Nothing is purchased without Approve.
  */
 export function ComputerApprovalCard({
   approval,
@@ -43,16 +72,29 @@ export function ComputerApprovalCard({
   const fields = approval.fields.filter((f) => !isCosmeticApprovalField(f.label, f.value));
   const unverified = fields.filter((f) => !f.verified).length;
   const mailFields = fields.filter((f) => isMailBodyField(f.label));
-  const otherFields = fields.filter((f) => !isMailBodyField(f.label));
-  const ordered = [...mailFields, ...otherFields];
+  const orderFields = fields.filter((f) => isOrderPriorityField(f.label));
+  const otherFields = fields.filter((f) => !isMailBodyField(f.label) && !isOrderPriorityField(f.label));
+  const ordered =
+    approval.actionKind === 'pay' || orderFields.length >= 2
+      ? [...orderFields, ...mailFields, ...otherFields]
+      : [...mailFields, ...orderFields, ...otherFields];
+  const isOrder = approval.actionKind === 'pay' || /place\s+(?:your\s+)?order/i.test(approval.buttonLabel);
   return (
     <div className="space-y-3 rounded-xl border border-caution-600/40 bg-caution-50 p-3" data-testid="computer-approval-card">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wide text-caution-600">
           Needs your approval · {COMPUTER_ACTION_LABEL[approval.actionKind]}
         </p>
-        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Click “{approval.buttonLabel}”{host ? ` on ${host}` : ''}?</p>
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">
+          Click “{approval.buttonLabel}”{host ? ` on ${host}` : ''}?
+        </p>
         <p className="mt-1 text-sm text-ink-700">{approval.summary}</p>
+        {isOrder ? (
+          <p className="mt-1 text-[12px] font-medium text-ink-700" data-testid="computer-approval-order-note">
+            Checkout uses the card already saved on this account. Atmosphere never handles raw card numbers. Nothing is
+            purchased until you press Approve.
+          </p>
+        ) : null}
       </div>
       {approval.screenshot ? (
         <img
@@ -71,7 +113,7 @@ export function ComputerApprovalCard({
               data-testid="computer-approval-field"
             >
               <span className="text-[12px] text-ink-600 sm:text-[13px]">{f.label}</span>
-              <span className="break-words font-medium text-ink-900">{f.value}</span>
+              <span className="break-words font-medium text-ink-900">{linkify(f.value)}</span>
               <span className={`text-[12px] ${f.verified ? 'text-success-600' : 'font-semibold text-danger-600'}`}>
                 {f.verified ? '✓ ' : '⚠ '}
                 {f.source}
@@ -84,7 +126,8 @@ export function ComputerApprovalCard({
       )}
       {unverified ? (
         <p className="text-[12px] font-medium text-danger-600">
-          {unverified === 1 ? '1 value' : `${unverified} values`} did not come from this job or your message. Check before approving, or take control and fix it.
+          {unverified === 1 ? '1 value' : `${unverified} values`} did not come from this job or your message. Check before
+          approving, or take control and fix it.
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -113,7 +156,10 @@ export function ComputerApprovalCard({
           Cancel
         </button>
       </div>
-      <p className="text-[11px] text-ink-500">One approval covers one irreversible click. Nothing is submitted until you approve. Your name and time are logged.</p>
+      <p className="text-[11px] text-ink-500">
+        One approval covers one irreversible click. Nothing is submitted until you approve. Your name and time are
+        logged.
+      </p>
     </div>
   );
 }

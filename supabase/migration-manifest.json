@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 203,
+    "migrationCount": 204,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -219,7 +219,8 @@
     "20261005160000_ask_job_context_cache.sql",
     "20261005180000_ask_org_company_memory.sql",
     "20261005190000_ask_route_skipped.sql",
-    "20261005210000_computer_site_playbooks.sql"
+    "20261005210000_computer_site_playbooks.sql",
+    "20261005220000_computer_supply_orders.sql"
   ],
   "migrations": [
     {
