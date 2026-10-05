@@ -99,7 +99,7 @@ import {
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { ensureClaimCitations } from './askClaimCitations.js';
-import { applyHonestNotFound } from './askNotFound.js';
+import { answerHasJobCitation, applyHonestNotFound } from './askNotFound.js';
 import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import { buildRetrievalAskContext, rememberAskSearchMeta } from './askRetrievalContext.js';
 import {
@@ -1263,7 +1263,8 @@ export async function answerFromAskLookup(input: {
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
   const cited = ensureClaimCitations(answer, retrievedChunks);
   answer = cited.answer;
-  const hasCite = /⟦(?:quotes|sources):/i.test(answer);
+  // Use the shared helper so placeholder ⟦sources: videos⟧ does not count as grounded.
+  const hasCite = answerHasJobCitation(answer);
   answer = applyHonestNotFound(answer, input.catalog, input.question, {
     // Only force Not found. when nothing on the answer is grounded to the file.
     noGroundedClaim: !hasCite,
