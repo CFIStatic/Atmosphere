@@ -168,7 +168,10 @@ export function parseMomentSource(raw: string): {
 }
 
 function cleanTrailerText(value: string, cap: number): string {
-  return value.replace(/[|⟧⟦]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cap);
+  const clean = value.replace(/[|⟧⟦]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (clean.length <= cap) return clean;
+  const cut = clean.slice(0, cap).replace(/\s+\S*$/, '').trim();
+  return cut || clean.slice(0, cap).trim();
 }
 
 export function formatQuoteTrailer(quotes: AskMomentQuote[]): string {

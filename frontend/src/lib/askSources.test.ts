@@ -4,6 +4,8 @@ import {
   extractAskSources,
   mapAskSourceFragment,
   parseLegacySourceBlob,
+  stableClipCitationLabel,
+  truncateAtWord,
 } from './askSources';
 
 describe('askSources', () => {
@@ -173,3 +175,31 @@ describe('document quotes', () => {
   });
 });
 
+
+  it('item 3: stable clip labels never truncate mid-word or lowercase titles', () => {
+    expect(truncateAtWord('Tear Off North Slope Ridge Cap', 18)).toBe('Tear Off North');
+    expect(stableClipCitationLabel({ title: 'Tear Off North Slope', atSeconds: 14 })).toBe(
+      'Tear Off North Slope · 0:14',
+    );
+    expect(stableClipCitationLabel({ workDate: '2026-09-17', clipNumber: 2 })).toBe('Sep 17 · Clip 2');
+    expect(stableClipCitationLabel({ title: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', workDate: '2026-09-17' })).toBe(
+      'Sep 17 clip',
+    );
+    const slugLabel = askSourceLabel(
+      'video/00000000-0000-4000-8000-0000000000a2/00000000-0000-4000-8000-0000000000b1/kitchen-walkthrough@12' as never,
+    );
+    expect(slugLabel).toBe('Kitchen Walkthrough · 0:12');
+    expect(slugLabel).not.toMatch(/kitchen walkthrough/);
+  });
+
+  it('item 3: source chips prefer quote clip titles and keep seek time', () => {
+    const job = '00000000-0000-4000-8000-0000000000a2';
+    const proof = '00000000-0000-4000-8000-0000000000b1';
+    const cite = `video/${job}/${proof}/ignored-slug@9`;
+    const { sources } = extractAskSources(
+      `Said it.\n\n⟦sources: ${cite}⟧\n⟦quotes: ${cite}|Speaker 1|Hello there.|clip=South Slope Tear-Off⟧`,
+    );
+    expect(sources[0]?.label).toBe('South Slope Tear-Off · 0:09');
+    expect(sources[0]?.atSeconds).toBe(9);
+    expect(sources[0]?.proofId).toBe(proof);
+  });

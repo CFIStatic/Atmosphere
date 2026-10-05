@@ -148,7 +148,14 @@ function parseVideoMoment(id: string): { base: string; jobId?: string; proofId?:
 function unslug(slug: string): string {
   const text = slug.replace(/-/g, ' ').trim();
   if (!text) return '';
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  return text
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      if (/^[A-Z0-9]+$/.test(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
 }
 
 export function mapAskSourceFragment(raw: string): AskSourceId | null {
@@ -245,6 +252,48 @@ function parseTrailerIds(raw: string): AskSourceId[] {
   return ids;
 }
 
+
+/** Truncate at a word boundary — never mid-phrase. */
+export function truncateAtWord(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max).replace(/\s+\S*$/, '').trim();
+  return cut || clean.slice(0, max).trim();
+}
+
+function looksLikeUuid(text: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text.trim());
+}
+
+/**
+ * One stable short clip label everywhere: date + clip number, or a generated
+ * title. Never lowercase variants, never truncated mid-phrase.
+ */
+export function stableClipCitationLabel(input: {
+  title?: string | null;
+  workDate?: string | null;
+  clipNumber?: number | null;
+  atSeconds?: number | null;
+  maxLen?: number;
+}): string {
+  const max = input.maxLen ?? 40;
+  let base = '';
+  const title = String(input.title ?? '').replace(/\s+/g, ' ').trim();
+  if (title && !looksLikeUuid(title)) {
+    base = truncateAtWord(title, max);
+  } else if (input.workDate) {
+    const date = clipLabel(String(input.workDate).slice(0, 10)).replace(/ clip$/, '');
+    const n = input.clipNumber;
+    base = n != null && n > 0 ? `${date} · Clip ${n}` : `${date} clip`;
+  } else {
+    base = 'Clip';
+  }
+  if (input.atSeconds != null && Number.isFinite(input.atSeconds)) {
+    return `${base} · ${formatClock(input.atSeconds)}`;
+  }
+  return base;
+}
+
 function clipLabel(isoDate: string): string {
   const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return `${isoDate} clip`;
@@ -254,13 +303,19 @@ function clipLabel(isoDate: string): string {
   return `${month} ${day} clip`;
 }
 
-export function askSourceLabel(id: AskSourceId): string {
-  if (id.startsWith('clip:')) return clipLabel(id.slice(5));
+export function askSourceLabel(id: AskSourceId, opts?: { title?: string | null; clipNumber?: number | null }): string {
+  if (id.startsWith('clip:')) {
+    return stableClipCitationLabel({ workDate: id.slice(5), title: opts?.title, clipNumber: opts?.clipNumber });
+  }
   if (id.startsWith('job/')) return unslug(id.split('/')[2] ?? '') || 'Job';
   if (id.startsWith('video/')) {
     const moment = parseVideoMoment(id);
-    const label = unslug(moment?.slug ?? id.split('/')[3]?.split('@')[0] ?? '') || 'Video';
-    return moment?.atSeconds != null ? `${label} · ${formatClock(moment.atSeconds)}` : label;
+    const fromSlug = unslug(moment?.slug ?? id.split('/')[3]?.split('@')[0] ?? '');
+    return stableClipCitationLabel({
+      title: opts?.title || fromSlug || null,
+      clipNumber: opts?.clipNumber,
+      atSeconds: moment?.atSeconds ?? null,
+    });
   }
   switch (id) {
     case 'access':
@@ -302,8 +357,8 @@ export function askSourceLabel(id: AskSourceId): string {
   }
 }
 
-export function askSourceChip(id: AskSourceId): AskSourceChip {
-  const label = askSourceLabel(id);
+export function askSourceChip(id: AskSourceId, opts?: { title?: string | null; clipNumber?: number | null }): AskSourceChip {
+  const label = askSourceLabel(id, opts);
   if (id.startsWith('clip:')) {
     return { id, label, section: 'videos', workDate: id.slice(5) };
   }
@@ -543,5 +598,15 @@ export function extractAskSources(answer: string): {
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 
-  return { body: text, sources: ids.map(askSourceChip), webSources, actions, quotes, followUps };
+  const titleByProof = new Map<string, string>();
+  for (const quote of quotes) {
+    if (quote.proofId && quote.clipTitle) titleByProof.set(quote.proofId, quote.clipTitle);
+  }
+  const sources = ids.map((id) => {
+    if (!id.startsWith('video/')) return askSourceChip(id);
+    const moment = parseVideoMoment(id);
+    const title = moment?.proofId ? titleByProof.get(moment.proofId) : undefined;
+    return askSourceChip(id, title ? { title } : undefined);
+  });
+  return { body: text, sources, webSources, actions, quotes, followUps };
 }

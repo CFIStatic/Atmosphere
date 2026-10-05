@@ -225,7 +225,10 @@ function parseQuotes(raw: string): AskMomentQuote[] {
 }
 
 function trailerText(value: string, cap: number): string {
-  return value.replace(/[|⟧⟦]/g, ' ').replace(/;;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cap);
+  const clean = value.replace(/[|⟧⟦]/g, ' ').replace(/;;/g, ' ').replace(/\s+/g, ' ').trim();
+  if (clean.length <= cap) return clean;
+  const cut = clean.slice(0, cap).replace(/\s+\S*$/, '').trim();
+  return cut || clean.slice(0, cap).trim();
 }
 
 /** An uploaded-document excerpt (doc:<id>#<location>) has no speaker. */

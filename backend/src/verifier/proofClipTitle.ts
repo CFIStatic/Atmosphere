@@ -297,3 +297,44 @@ export async function setProofCustomTitle(
     title: customTitle ?? aiTitle,
   };
 }
+
+/** Stable short citation label: title, or date + clip number. Never mid-word cut. */
+export function stableClipCitationLabel(input: {
+  title?: string | null;
+  workDate?: string | null;
+  clipNumber?: number | null;
+  atSeconds?: number | null;
+  maxLen?: number;
+}): string {
+  const max = input.maxLen ?? 40;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const formatDate = (iso: string): string => {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso;
+    return `${months[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}`;
+  };
+  const formatClock = (seconds: number): string => {
+    const s = Math.max(0, Math.round(seconds));
+    const h = Math.floor(s / 3600);
+    const min = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    if (h) return `${h}:${String(min).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${min}:${String(r).padStart(2, '0')}`;
+  };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let base = '';
+  const title = String(input.title ?? '').replace(/\s+/g, ' ').trim();
+  if (title && !uuid.test(title)) {
+    base = title.length <= max ? title : title.slice(0, max).replace(/\s+\S*$/, '').trim() || title.slice(0, max);
+  } else if (input.workDate) {
+    const date = formatDate(String(input.workDate).slice(0, 10));
+    const n = input.clipNumber;
+    base = n != null && n > 0 ? `${date} · Clip ${n}` : `${date} clip`;
+  } else {
+    base = 'Clip';
+  }
+  if (input.atSeconds != null && Number.isFinite(input.atSeconds)) {
+    return `${base} · ${formatClock(input.atSeconds)}`;
+  }
+  return base;
+}
