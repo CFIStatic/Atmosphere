@@ -179,11 +179,44 @@ test('planComputerTask: named site without a Login offers Logins', () => {
   assert.match(plan.summary, /Logins/);
 });
 
-test('planComputerTask: email without Outlook/Gmail offers Logins', () => {
-  const plan = planComputerTask({ question: 'email Pat a summary', logins: [PORTAL] });
+test('planComputerTask: email without Outlook/Gmail returns exact draft preview + Logins', () => {
+  const plan = planComputerTask({ question: 'email Pat a summary', logins: [PORTAL], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.ok('emailDraftPreview' in plan && plan.emailDraftPreview);
+  if (!('emailDraftPreview' in plan)) return;
+  assert.equal(plan.offerLogins, true);
+  assert.match(plan.summary, /Exact draft/);
+  assert.match(plan.summary, /Subject:/);
+  assert.match(plan.summary, /Logins/);
+  assert.match(plan.subject, /Update|summary/i);
+});
+
+test('planComputerTask: unnamed CRM notes asks which CRM (no blank browser)', () => {
+  const plan = planComputerTask({
+    question: 'update the CRM notes with a short status',
+    logins: [OUTLOOK],
+    file: FILE,
+  });
   assert.equal(plan.ok, false);
   if (plan.ok) return;
-  assert.match(plan.summary, /Outlook or Gmail/);
+  assert.equal(plan.offerLogins, true);
+  assert.equal(plan.needsClarification, true);
+  assert.match(plan.summary, /Which CRM/i);
+  assert.doesNotMatch(plan.summary, /Opening a browser/i);
+});
+
+test('planComputerTask: CRM notes with AccuLynx login drafts note and requires approval', () => {
+  const plan = planComputerTask({
+    question: 'update the AccuLynx CRM notes',
+    logins: [ACCULYNX],
+    file: FILE,
+  });
+  assert.equal(plan.ok, true);
+  if (!plan.ok || !('instructions' in plan)) return;
+  assert.match(plan.instructions, /request_approval/);
+  assert.match(plan.instructions, /notes/i);
+  assert.ok(plan.startUrl);
 });
 
 test('jobIdentifiers and summary never include secrets', () => {

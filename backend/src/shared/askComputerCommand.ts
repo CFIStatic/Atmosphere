@@ -154,6 +154,23 @@ function emailRecipient(text: string): string | null {
   return to ? to[1] : null;
 }
 
+
+/** "Update the CRM notes" without naming AccuLynx/JobNimbus/etc. */
+export function isCrmNotesIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q)) return false;
+  if (!/\bnotes?\b/.test(q)) return false;
+  return /\b(update|add|write|put|post|enter|save)\b/.test(q);
+}
+
+/** Bare "CRM" with no known product alias and no host. */
+export function isUnnamedCrmIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q)) return false;
+  if (KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))) return false;
+  return true;
+}
+
 export function parseComputerCommand(question: string): ParsedComputerCommand {
   const q = String(question ?? '').trim();
   const known = findKnown(q);
@@ -469,6 +486,22 @@ export interface ComputerTaskSmsPending {
   adjusterName: string | null;
 }
 
+/**
+ * Exact email draft shown in Chat when no Outlook/Gmail Login exists yet.
+ * Nothing is sent; the person adds a Login, then asks again so Computer can Approve Send.
+ */
+export interface ComputerTaskEmailDraftPending {
+  ok: true;
+  kind: 'email';
+  emailDraftPreview: true;
+  offerLogins: true;
+  to: string | null;
+  subject: string;
+  body: string;
+  lead: string;
+  summary: string;
+}
+
 export interface ComputerTaskBlocked {
   ok: false;
   summary: string;
@@ -710,7 +743,7 @@ export function planComputerTask(input: {
   signerName?: string | null;
   /** Their company name for the closing, when known. */
   companyName?: string | null;
-}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending {
+}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending | ComputerTaskEmailDraftPending {
   const command = parseComputerCommand(input.question);
   const matched = matchSavedLogin(input.logins, command);
   const namedSite = Boolean(command.known || command.siteMention);
@@ -719,11 +752,35 @@ export function planComputerTask(input: {
   // ---- Email ----
   if (command.kind === 'email') {
     if (!matched) {
+      const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
+      const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
+      const toName = person?.name ? `${person.name} <${to}>` : to;
+      const summary = jobSummaryForEmail(input.file, input.address);
+      const subject = input.file?.job?.title
+        ? `Update: ${String(input.file.job.title).trim()}`
+        : command.wantsSummary
+          ? 'Job status update'
+          : 'Update';
+      const body = summary || '(Add the message body once you confirm what to send.)';
+      const draftLines = [
+        'Exact draft (nothing was sent):',
+        `To: ${toName || '(need recipient email)'}`,
+        `Subject: ${subject}`,
+        '',
+        body,
+        '',
+        'Open Logins in the sidebar, add Outlook or Gmail and save the password, then ask me again. I will open the mailbox, fill this draft, and check with you before Send.',
+      ];
       return {
-        ok: false,
+        ok: true,
+        kind: 'email',
+        emailDraftPreview: true,
         offerLogins: true,
-        summary:
-          "I can send that from Outlook or Gmail once Computer is signed in. Open Logins in the sidebar, add Outlook or Gmail, and save the password (or sign in once). Then ask me again.",
+        to: to ?? null,
+        subject,
+        body,
+        lead: 'I drafted the email in Chat. Add an Outlook or Gmail login, then ask again so I can open the browser and get your Approve before Send.',
+        summary: draftLines.join('\n'),
       };
     }
     const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
@@ -1077,6 +1134,52 @@ export function planComputerTask(input: {
     };
   }
 
+  // ---- CRM notes (before read-only crm_status) ----
+  if (isCrmNotesIntent(command.question)) {
+    if (!matched) {
+      const note = jobSummaryForEmail(input.file, input.address);
+      return {
+        ok: false,
+        offerLogins: true,
+        needsClarification: true,
+        summary: [
+          command.known?.kind === 'crm'
+            ? `I don't have a saved login for ${command.known.aliases[0]} yet. Open Logins in the sidebar, add it, then ask me again.`
+            : 'Which CRM should I open (AccuLynx, JobNimbus, ServiceTitan, Salesforce, or another site under Logins)?',
+          'I will not start a blank browser until a CRM Login is ready.',
+          note ? `Exact note draft I would enter once you Approve:\n---\n${note}\n---` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      };
+    }
+    const host = matched.login.host;
+    const label = matched.login.label || host;
+    const note = jobSummaryForEmail(input.file, input.address);
+    const instructions = [
+      `Open ${label} (${host}) and find THIS job's record using these identifiers:`,
+      ...(ids.length ? ids.map((l) => `• ${l}`) : ['• (use the job title / address from the job file)']),
+      '',
+      'Open the notes / activity / comments field for this job.',
+      'Draft this exact note (tidy line breaks only; do not invent facts):',
+      '---',
+      note || command.question.trim(),
+      '---',
+      `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
+      'Call request_approval with the exact Save / Update / Post button label before clicking it. Never save the note without approval.',
+      'If you cannot find the record or the notes field, call ask_clarification with one clear question.',
+      'End with finish after an approved save, or without saving if they decline.',
+    ].join('\n');
+    return {
+      ok: true,
+      kind: 'crm_status',
+      instructions,
+      startUrl: matched.login.url,
+      matchedLogin: matched,
+      lead: `Opening ${label} to draft the CRM note. I will check with you before anything is saved.`,
+    };
+  }
+
   // ---- CRM outstanding / paperwork ----
   if (command.kind === 'crm_status') {
     const crmName = command.known?.aliases[0] ?? command.siteMention ?? 'that CRM';
@@ -1136,6 +1239,33 @@ export function planComputerTask(input: {
     };
   }
 
+  // ---- Unnamed CRM notes: ask which CRM; never open a blank browser ----
+  if (
+    (command.kind === 'generic' || command.kind === 'website') &&
+    isCrmNotesIntent(command.question) &&
+    !matched
+  ) {
+    const named = Boolean(command.known?.kind === 'crm' || (command.siteMention && !isUnnamedCrmIntent(command.question)));
+    if (!named || isUnnamedCrmIntent(command.question)) {
+      const note = jobSummaryForEmail(input.file, input.address);
+      return {
+        ok: false,
+        offerLogins: true,
+        needsClarification: true,
+        summary: [
+          'Which CRM should I open (AccuLynx, JobNimbus, ServiceTitan, Salesforce, or another site under Logins)?',
+          'I will not start a blank browser until I know which one.',
+          note
+            ? `Exact note draft I would enter once you pick a CRM and Approve:\n---\n${note}\n---`
+            : null,
+          'Add that CRM under Logins if it is not there yet, then ask me again.',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      };
+    }
+  }
+
   // ---- Generic website / fill ----
   const parts = [command.question.trim()];
   if (matched) {
@@ -1166,6 +1296,17 @@ export function planComputerTask(input: {
         ? command.siteMention
         : `https://${command.siteMention}`
       : null);
+
+  // Never open an empty-URL browser for CRM-notes-shaped asks.
+  if (isCrmNotesIntent(command.question) && !startUrl) {
+    return {
+      ok: false,
+      offerLogins: true,
+      needsClarification: true,
+      summary:
+        'Which CRM should I open? Add it under Logins (AccuLynx, JobNimbus, ServiceTitan, Salesforce, …), then ask me again. I will not start a blank browser.',
+    };
+  }
 
   return {
     ok: true,

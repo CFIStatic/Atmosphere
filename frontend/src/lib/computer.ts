@@ -90,13 +90,19 @@ export function computerTaskIsActive(status: ComputerTaskStatus): boolean {
 export function computerTaskRef(path: string | null | undefined):
   | { kind: 'task'; id: string }
   | { kind: 'not_set_up' }
+  | { kind: 'need_login' }
+  | { kind: 'draft_preview' }
   | { kind: 'sms_approval' }
   | { kind: 'error' }
   | null {
   const raw = String(path ?? '').trim();
+  // Ask offerLogins returns bare `logins` (not computer-task:…).
+  if (raw === 'logins') return { kind: 'need_login' };
   if (!raw.startsWith('computer-task:')) return null;
   const rest = raw.slice('computer-task:'.length);
   if (rest === 'not-set-up') return { kind: 'not_set_up' };
+  if (rest === 'need-login' || rest === 'logins') return { kind: 'need_login' };
+  if (rest === 'draft-preview') return { kind: 'draft_preview' };
   if (rest === 'sms-approval') return { kind: 'sms_approval' };
   if (/^[0-9a-f-]{36}$/i.test(rest)) return { kind: 'task', id: rest };
   return { kind: 'error' };

@@ -98,6 +98,39 @@ describe('ComputerTaskCard', () => {
     expect(computerTask).not.toHaveBeenCalled();
   });
 
+  it('shows Logins card for bare path logins (not NotSetUp)', () => {
+    render(<ComputerTaskCard path="logins" summary="Add Outlook under Logins." />);
+    expect(screen.queryByTestId('computer-not-set-up')).toBeNull();
+    expect(screen.getByTestId('computer-need-login')).toHaveTextContent('Sign in under Logins');
+    expect(screen.getByTestId('computer-need-login')).toHaveTextContent('Add Outlook under Logins.');
+    expect(computerTask).not.toHaveBeenCalled();
+  });
+
+  it('shows Logins card for computer-task:need-login', () => {
+    render(<ComputerTaskCard path="computer-task:need-login" summary="Need a CRM login." />);
+    expect(screen.queryByTestId('computer-not-set-up')).toBeNull();
+    expect(screen.getByTestId('computer-need-login')).toHaveTextContent('Need a CRM login.');
+  });
+
+  it('shows exact draft preview without calling the API', () => {
+    render(
+      <ComputerTaskCard
+        path="computer-task:draft-preview"
+        summary={"To: a@b.com\nSubject: Update\n\nBody text"}
+      />,
+    );
+    expect(screen.queryByTestId('computer-not-set-up')).toBeNull();
+    expect(screen.getByTestId('computer-draft-preview')).toHaveTextContent('Exact draft');
+    expect(screen.getByTestId('computer-draft-preview')).toHaveTextContent('To: a@b.com');
+    expect(computerTask).not.toHaveBeenCalled();
+  });
+
+  it('renders nothing for an unknown path instead of NotSetUp', () => {
+    const { container } = render(<ComputerTaskCard path="something-else" summary="x" />);
+    expect(screen.queryByTestId('computer-not-set-up')).toBeNull();
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('shows a running task with Watch, Take control and Stop', async () => {
     computerTask.mockResolvedValue({ task: task() });
     render(<ComputerTaskCard path={`computer-task:${ID}`} />);

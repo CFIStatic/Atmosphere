@@ -1104,8 +1104,28 @@ export async function executeAskTool(
               summary: plan.summary,
               ui: {
                 section: plan.offerLogins ? 'logins' : 'computer',
-                path: plan.offerLogins ? 'logins' : plan.needsClarification ? 'computer-task:need-detail' : 'computer-task:error',
+                path: plan.offerLogins
+                  ? 'logins'
+                  : plan.needsClarification
+                    ? 'computer-task:need-detail'
+                    : 'computer-task:error',
               },
+            };
+          }
+          if ('emailDraftPreview' in plan && plan.emailDraftPreview) {
+            return {
+              ok: true,
+              tool: name,
+              summary: plan.summary,
+              data: {
+                channel: 'email',
+                draftPreview: true,
+                to: plan.to,
+                subject: plan.subject,
+                body: plan.body,
+                offerLogins: true,
+              },
+              ui: { section: 'logins', path: 'computer-task:draft-preview' },
             };
           }
           if ('smsPendingApproval' in plan && plan.smsPendingApproval) {

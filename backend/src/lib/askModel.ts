@@ -150,6 +150,11 @@ export function resolveGeminiAskModel(model: string, mode: AskCompletionMode = '
   if (!id) {
     return deep ? GEMINI_ANALYSIS_MODEL_DEFAULT : 'gemini-3.5-flash-lite';
   }
+  // Analysis/vision must not stay pinned to Anthropic ids (e.g. VERIFICATION_PRIMARY_MODEL
+  // or ASK_ANALYSIS_MODEL accidentally set to claude-opus-*). Remap to Gemini 3.1 Pro.
+  if (deep && /^claude-/i.test(id)) {
+    return GEMINI_ANALYSIS_MODEL_DEFAULT;
+  }
   if (deep && isRetiredGeminiAnalysisModel(id)) {
     return GEMINI_ANALYSIS_MODEL_DEFAULT;
   }
@@ -389,6 +394,15 @@ function anthropicSystem(system: string, stable?: string | null): string | Retur
   return asAnthropicSystem(anthropicCachedSystem(system, prefix));
 }
 
+/** Visible reply text from an Anthropic messages response (skips thinking blocks). */
+export function anthropicVisibleText(content: Array<{ type: string; text?: string }>): string {
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('\n')
+    .trim();
+}
+
 async function completeWithAnthropic(input: {
   apiKey: string;
   system: string;
@@ -411,52 +425,91 @@ async function completeWithAnthropic(input: {
         ...(shaped.output_config ? { output_config: shaped.output_config } : {}),
       }
     : {};
-  if (input.onToken) {
-    const stream = anthropicClientForKey(input.apiKey).messages.stream(
+
+  const runOnce = async (
+    user: string,
+    tokens: number,
+    streamTokens: boolean,
+  ): Promise<{
+    text: string;
+    model: string;
+    usage: MeasuredUsage | null;
+    stopReason: string | null;
+    blockTypes: string[];
+  }> => {
+    if (streamTokens && input.onToken) {
+      const stream = anthropicClientForKey(input.apiKey).messages.stream(
+        {
+          model,
+          max_tokens: tokens,
+          system,
+          messages: [{ role: 'user', content: user }],
+          ...extra,
+        },
+        input.signal ? { signal: input.signal } : undefined,
+      );
+      let text = '';
+      stream.on('text', (delta: string) => {
+        if (!delta) return;
+        text += delta;
+        input.onToken?.(delta);
+      });
+      const response = await stream.finalMessage();
+      const blockTypes = (response.content ?? []).map((b: { type: string }) => b.type);
+      text =
+        text.trim() ||
+        anthropicVisibleText(response.content as Array<{ type: string; text?: string }>);
+      return {
+        text,
+        model: response.model,
+        usage: tryExtractUsage(response.usage, response.model ?? null),
+        stopReason: (response as { stop_reason?: string | null }).stop_reason ?? null,
+        blockTypes,
+      };
+    }
+    const response = await anthropicClientForKey(input.apiKey).messages.create(
       {
         model,
-        max_tokens: maxTokens,
+        max_tokens: tokens,
         system,
-        messages: [{ role: 'user', content: input.user }],
+        messages: [{ role: 'user', content: user }],
         ...extra,
       },
       input.signal ? { signal: input.signal } : undefined,
     );
-    let text = '';
-    stream.on('text', (delta: string) => {
-      if (!delta) return;
-      text += delta;
-      input.onToken?.(delta);
-    });
-    const response = await stream.finalMessage();
-    text = text.trim() ||
-      response.content
-        .filter((block: { type: string }) => block.type === 'text')
-        .map((block: { type: string; text?: string }) => block.text ?? '')
-        .join('\n')
-        .trim();
-    if (!text) throw new Error('Anthropic Ask returned an empty reply');
-    return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
-  }
+    const blockTypes = (response.content ?? []).map((b: { type: string }) => b.type);
+    const text = anthropicVisibleText(response.content as Array<{ type: string; text?: string }>);
+    return {
+      text,
+      model: response.model,
+      usage: tryExtractUsage(response.usage, response.model ?? null),
+      stopReason: (response as { stop_reason?: string | null }).stop_reason ?? null,
+      blockTypes,
+    };
+  };
 
-  const response = await anthropicClientForKey(input.apiKey).messages.create(
-    {
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: input.user }],
-      ...extra,
-    },
-    input.signal ? { signal: input.signal } : undefined,
-  );
-  const text = response.content
-    .filter((block: { type: string }) => block.type === 'text')
-    .map((block: { type: string; text?: string }) => block.text ?? '')
-    .join('\n')
-    .trim();
-  if (!text) throw new Error('Anthropic Ask returned an empty reply');
-  return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
+  let result = await runOnce(input.user, maxTokens, Boolean(input.onToken));
+  if (!result.text) {
+    logger.warn(
+      `ask_anthropic_empty_reply stop_reason=${result.stopReason ?? 'null'} blocks=${result.blockTypes.join(',') || 'none'} model=${result.model}`,
+      { stopReason: result.stopReason, blockTypes: result.blockTypes, model: result.model },
+    );
+    const retryUser = `${input.user}\n\nRespond with the answer as visible text.`;
+    const retryTokens = Math.min(Math.max(maxTokens + 1024, maxTokens), 32_000);
+    result = await runOnce(retryUser, retryTokens, false);
+  }
+  if (!result.text) {
+    throw new Error('Anthropic Ask returned an empty reply');
+  }
+  return { text: result.text, model: result.model, usage: result.usage };
 }
+
+export async function completeAnthropicAsk(
+  input: Parameters<typeof completeWithAnthropic>[0],
+): Promise<AskModelResult> {
+  return completeWithAnthropic(input);
+}
+
 
 function visibleGeminiText(part: { text?: string; thought?: boolean }): string {
   if (part.thought) return '';

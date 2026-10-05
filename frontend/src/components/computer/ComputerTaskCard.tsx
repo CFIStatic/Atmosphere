@@ -47,7 +47,33 @@ export function ComputerNotSetUpCard() {
  */
 export function ComputerTaskCard({ path, summary }: { path?: string; summary?: string }) {
   const ref = computerTaskRef(path);
-  if (!ref || ref.kind === 'not_set_up') return <ComputerNotSetUpCard />;
+  // Unknown / missing path is not "Computer isn't set up" — that is only the
+  // explicit not-set-up sentinel when Browserbase is unconfigured.
+  if (!ref) return null;
+  if (ref.kind === 'not_set_up') return <ComputerNotSetUpCard />;
+  if (ref.kind === 'need_login') {
+    return (
+      <div data-testid="computer-need-login" className="rounded-xl border border-line bg-paper-50 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Logins</p>
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Sign in under Logins</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700">
+          {summary || 'Open Logins in the sidebar, add this site, then ask again.'}
+        </p>
+      </div>
+    );
+  }
+  if (ref.kind === 'draft_preview') {
+    return (
+      <div data-testid="computer-draft-preview" className="rounded-xl border border-line bg-paper-50 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Exact draft</p>
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Review before Computer can send</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700">
+          {summary || 'Draft is ready. Add a Login under Logins, then ask again to open the browser and Approve Send.'}
+        </p>
+        <p className="mt-2 text-xs text-ink-500">Nothing was sent. Computer needs a saved Outlook or Gmail login first.</p>
+      </div>
+    );
+  }
   if (ref.kind === 'sms_approval') {
     return (
       <div className="rounded-xl border border-line bg-paper-50 p-3" data-testid="computer-sms-approval">
