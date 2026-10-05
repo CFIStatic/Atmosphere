@@ -23,7 +23,7 @@ const PNG_1PX =
 const JPEG_1PX =
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
 
-export type MockPageId = 'login' | 'two_factor' | 'form' | 'done';
+export type MockPageId = 'login' | 'two_factor' | 'number_match' | 'form' | 'done';
 
 interface MockElement {
   id: string;
@@ -58,6 +58,13 @@ const PAGES: Record<MockPageId, { url: string; elements: MockElement[]; text: st
     elements: [
       { id: 'code', rect: [300, 220, 300, 40], tag: 'input', type: 'text', label: 'Verification code', field: true, otp: true },
       { id: 'verify', rect: [300, 280, 160, 44], tag: 'button', type: 'submit', label: 'Verify', action: 'verify' },
+    ],
+  },
+  number_match: {
+    url: 'https://portal.example-carrier.test/approve',
+    text: 'Approve sign in. Open your authenticator app and approve 47 when asked. Are you trying to sign in?',
+    elements: [
+      { id: 'num', rect: [300, 220, 120, 80], tag: 'h1', type: null, label: '47' },
     ],
   },
   form: {
@@ -99,7 +106,7 @@ export class MockSite {
    * password stays on the sign-in page; twoFactor sends a right one to the
    * code page. Without it, Sign in always goes to the code page.
    */
-  account: { username: string; password: string; twoFactor?: boolean } | null;
+  account: { username: string; password: string; twoFactor?: boolean; numberMatch?: boolean } | null;
   /** Sign-ins the site saw (password redacted to its length). */
   readonly signInAttempts: Array<{ username: string; passwordLength: number; ok: boolean }> = [];
 
@@ -185,7 +192,7 @@ export class MockSite {
         }
         const ok = this.values.email === this.account.username && this.values.password === this.account.password;
         this.signInAttempts.push({ username: this.values.email ?? '', passwordLength: (this.values.password ?? '').length, ok });
-        if (ok) this.page = this.account.twoFactor ? 'two_factor' : 'form';
+        if (ok) this.page = this.account.numberMatch ? 'number_match' : this.account.twoFactor ? 'two_factor' : 'form';
         break;
       }
       case 'verify':
@@ -295,12 +302,17 @@ export class MockDriver implements ComputerDriver {
 
   async pageSignals(): Promise<PageSignals> {
     const els = this.site.elements();
+    const numberMatch = this.site.page === 'number_match';
+    const text = PAGES[this.site.page]?.text ?? '';
+    const approval = numberMatch ? (text.match(/\b(\d{2,3})\b/)?.[1] ?? '47') : null;
     return {
       url: this.site.url,
       hasPasswordField: els.some((e) => e.password),
       hasOneTimeCodeField: els.some((e) => e.otp),
       hasCaptcha: this.site.captcha,
       mentionsVerificationCode: this.site.page === 'two_factor',
+      approvalNumber: approval,
+      visibleOtpCode: null,
     };
   }
 

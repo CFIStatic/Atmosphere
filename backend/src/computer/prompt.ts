@@ -21,9 +21,16 @@ WHAT YOU MAY TYPE
 - When you call request_approval, list every field you filled, with its value and source: the job field key (for example "job.claimNumber") or "user message".
 
 SIGN-IN, TWO-FACTOR, CAPTCHA
-- Never type passwords, one-time codes, or security answers. When a page needs a sign-in, a verification code, or a captcha, call needs_you and wait. The person does it in the live view, and their login is remembered for next time.
-- If the site is listed in <saved_sign_ins>, call sign_in_saved with its host instead when you reach its sign-in page. The server types the saved username and password itself; you never see them. If it reports a code, captcha or problem, the person is asked to take over.
+- Never type passwords, one-time codes, security answers, or MFA approval numbers. When a page needs a sign-in, a verification code, a number-matching prompt, or a captcha, call needs_you (or wait if the server already paused) and let the person finish it. Never invent a code or number.
+- If the site is listed in <saved_sign_ins>, call sign_in_saved with its host instead when you reach its sign-in page. The server types the saved username and password itself; you never see them. If it reports a code, number to approve, captcha or problem, the person is asked to take over.
 - Never try to solve, bypass, or click through a captcha.
+
+WHEN YOU ARE STUCK (learn → act → ask)
+- Sign in with sign_in_saved when the site is listed, then carry out the objective.
+- If the UI is unfamiliar or the next step is unclear, call look_up_how_to with a short query that names the site and the goal (for example "outlook.com compose new email"). Read the result, then act on the live page. Do not browse random how-to sites in this browser unless the task named them.
+- If you still cannot tell what to do, call ask_clarification with ONE clear question for the person, then wait. Do not guess.
+- Repeat learn → act → ask until the task is done or the person cancels.
+- Approval gates still apply: request_approval before submit/send/pay/sign/delete/upload.
 
 APPROVAL
 - Before the click that submits, sends, pays, deletes, signs, accepts terms, or uploads, call request_approval with the exact label of the button you will click. That click is blocked in code until the person approves, and one approval covers one click.
@@ -33,11 +40,12 @@ APPROVAL
 WORKING STYLE
 - Take a screenshot to see the page. Click a field, then type. Scroll to find fields. Check your work before asking for approval.
 - Be efficient: you have a limited number of steps.
+- Writing quality: every note, email body, CRM status line, Flag, ask_clarification question, and finish report must read like a careful office admin wrote it. Plain English. Lead with the answer. Short prose. No slang, no emoji, no raw page scrape text, no internal error codes, no tool or field-key jargon.
 - End with finish. Report it as data, not a paragraph:
-  - title: two to four words for what happened, e.g. "Form filled", "Draft saved", "Claim submitted".
-  - fields: every field you filled, each with the label shown on the page and the exact value you typed or picked.
+  - title: two to four words for what happened, e.g. "Form filled", "Draft saved", "CRM status".
+  - fields: every field you filled or every status item you found, each with a short plain label and value.
   - submitted: true only if an approved submit/send/pay click went through.
-  - notes: at most one short, plain sentence the person should know, e.g. "No customer details on this job, so test values were used." or "Policy number was left blank because this job does not have one." Leave it out when there is nothing to add. Write it for the person: no talk of tools, job fields, keys, prompts or instructions.`;
+  - notes: at most a few short, plain sentences the person should know (for CRM status, include every Flag line here). Example: "Certificate of completion is not signed. Estimate has been uploaded." Leave notes out when there is nothing to add. Write for the person: no talk of tools, job fields, keys, prompts or instructions.`;
 
 export const COMPUTER_CUSTOM_TOOLS = [
   {
@@ -79,11 +87,11 @@ export const COMPUTER_CUSTOM_TOOLS = [
   {
     name: 'needs_you',
     description:
-      'Pause and ask the person to take over in the live view: to sign in, enter a verification code, complete a captcha, or anything else only they can do.',
+      'Pause and ask the person to take over in the live view: to sign in, enter a verification code, approve a number on their phone, complete a captcha, or anything else only they can do. Prefer ask_clarification for questions that are not live-view steps.',
     input_schema: {
       type: 'object',
       properties: {
-        reason: { type: 'string', enum: ['login', 'two_factor', 'captcha', 'other'] },
+        reason: { type: 'string', enum: ['login', 'two_factor', 'number_match', 'captcha', 'clarification', 'other'] },
         message: { type: 'string', description: 'Short, plain instruction for the person.' },
       },
       required: ['reason', 'message'],
@@ -97,6 +105,30 @@ export const COMPUTER_CUSTOM_TOOLS = [
       type: 'object',
       properties: { site: { type: 'string', description: 'The host from <saved_sign_ins>, e.g. "portal.example.com".' } },
       required: ['site'],
+    },
+  },
+  {
+    name: 'look_up_how_to',
+    description:
+      'Search the public web for how to do the next step on this site (for example "gmail.com attach a file"). Use when the UI is unfamiliar. Returns short how-to notes; then act on the live page. Do not put job secrets in the query.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Short query naming the site and the goal, no personal or job secrets.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'ask_clarification',
+    description:
+      'Ask the person one clear question in Chat when you still cannot tell what to do after trying look_up_how_to (or when a choice only they can make is required). Pauses until they answer and press Resume.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'One short, plain, professional question for the person. No slang or emoji.' },
+      },
+      required: ['question'],
     },
   },
   {
@@ -118,7 +150,7 @@ export const COMPUTER_CUSTOM_TOOLS = [
         submitted: { type: 'boolean', description: 'True only if an approved submit/send/pay click went through.' },
         notes: {
           type: 'string',
-          description: 'Optional. One short plain sentence for the person, e.g. "No customer details on this job, so test values were used."',
+          description: 'Optional. Short plain professional sentences for the person (and Flag lines when reporting CRM status). No slang, emoji, or scrape junk.',
         },
       },
       required: ['title', 'fields', 'submitted'],

@@ -6,6 +6,9 @@
  */
 
 import { ComputerServiceError, startComputerTask } from '../computer/service.js';
+import { computerStore } from '../computer/worker.js';
+import { looksLikeComputerTask, planComputerTask } from './askComputerCommand.js';
+import { sendSms } from './smsProvider.js';
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
@@ -57,7 +60,7 @@ export type AskToolResult = {
   data?: unknown;
   /** UI navigation hints (section / clip seek / path). */
   ui?: {
-    section?: 'access' | 'scope' | 'videos' | 'evidence' | 'parties' | 'setup' | 'brief' | 'computer';
+    section?: 'access' | 'scope' | 'videos' | 'evidence' | 'parties' | 'setup' | 'brief' | 'computer' | 'logins';
     path?: string;
     workDate?: string;
     seekSeconds?: number;
@@ -83,7 +86,8 @@ export type AskToolName =
   | 'draft_progress_share_copy'
   | 'draft_field_invite_copy'
   | 'propose_revoke_access'
-  | 'start_computer_task';
+  | 'start_computer_task'
+  | 'send_job_sms';
 
 type ToolDef = {
   name: AskToolName;
@@ -257,9 +261,16 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: 'start_computer_task',
     description:
-      'Office only. Open a browser and do a task on any website for this job (for example, fill out a claim or permit form). ' +
-      'The agent only types allowlisted job fields and what the person wrote, stops for sign-in / 2FA / captcha, ' +
-      'and never submits, sends, pays, deletes, signs, accepts terms, or uploads without the person approving that click.',
+      'Office only. Open a browser and DO work on a website for this job when the person used an action verb: ' +
+      'email/send/message someone (including "the homeowner"), fill/update/change/add/submit on a named site, ' +
+      '"use Outlook/Gmail/Xactimate", check outstanding paperwork in AccuLynx / JobNimbus / Salesforce / ServiceTitan, or build the estimate inside Xactimate Online for this job (sketch provider first), or message the adjuster via XactAnalysis / email / text for a status update. ' +
+      'Prefer this over draft_* tools whenever they want something sent or changed on a live site. ' +
+      'draft_progress_share_copy / draft_field_invite_copy stay for drafting copy without sending. ' +
+      'Pulls people and identifiers from the job file first (homeowner email, claim #, address, insured name). ' +
+      'Uses a saved Login when one matches; the server types passwords (the AI never sees them). ' +
+      'Stops for sign-in / 2FA / number-matching / captcha, looks up how-to steps on the public web when stuck, ' +
+      'asks the person a clear question when still unclear, and never submits, sends, pays, deletes, signs, ' +
+      'accepts terms, or uploads without the person approving that click.',
     audience: 'org',
     input_schema: {
       type: 'object',
@@ -270,21 +281,30 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
       required: ['instructions'],
     },
   },
+  {
+    name: 'send_job_sms',
+    description:
+      'Office only. Send a text about this job via Twilio AFTER the person clearly approved the exact draft in Chat. ' +
+      'Pass confirm=true only when they approved that exact body. Never send without confirm=true. ' +
+      'Use after a text-the-adjuster draft that asked for approval.',
+    audience: 'org',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Phone number to text (E.164 or US 10-digit).' },
+        body: { type: 'string', description: 'Exact approved message body.' },
+        confirm: {
+          type: 'boolean',
+          description: 'True only after the person approved sending this exact text.',
+        },
+      },
+      required: ['to', 'body', 'confirm'],
+    },
+  },
 ];
 
-/** "Fill out the claim form on the Acme portal", "go to example.gov and complete …". */
-export function looksLikeComputerTask(question: string): boolean {
-  const q = trim(question).toLowerCase();
-  if (!q) return false;
-  if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
-  // Questions about what happened are not instructions to act.
-  if (/^(did|does|do|has|have|was|were|is|are|when|why|who|what|where|how|can you tell|explain)\b/.test(q)) return false;
-  const verbs =
-    /\b(fill (?:it |this |that |the [\w-]+ )?(?:out|in)|fill out|complete|submit|enter|file|update|register|apply|request|book|schedule|upload|put (?:it|this|the [\w-]+) (?:on|in|into))\b/;
-  const surface =
-    /\b(website|web ?site|web form|online form|portal|browser|online)\b|\.(?:com|gov|org|net|us|io)\b|https?:\/\//;
-  return verbs.test(q) && surface.test(q);
-}
+export { looksLikeComputerTask } from './askComputerCommand.js';
+
 
 export function askToolsForAccess(access: AskAccessRole): ToolDef[] {
   return ASK_TOOL_DEFINITIONS.filter((t) => {
@@ -344,6 +364,15 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   }
   if (/revoke|remove access|cut off access/.test(q)) {
     add('propose_revoke_access');
+  }
+  // Approve / send a drafted adjuster text (Twilio) — only after an explicit approve.
+  if (
+    allow.has('send_job_sms') &&
+    /\b(approve|send|yes)\b/.test(q) &&
+    /\b(text|sms|message)\b/.test(q) &&
+    !looksLikeComputerTask(question)
+  ) {
+    return ['send_job_sms'];
   }
   // A browser task is the whole turn: no other tool runs beside it.
   if (allow.has('start_computer_task') && looksLikeComputerTask(question)) {
@@ -445,7 +474,7 @@ async function loadAccessRoster(ctx: AskToolContext): Promise<JobAccessPerson[]>
   });
 }
 
-const ASK_MUTATING_TOOLS = new Set<AskToolName>(['update_job_fields', 'propose_revoke_access', 'start_computer_task']);
+const ASK_MUTATING_TOOLS = new Set<AskToolName>(['update_job_fields', 'propose_revoke_access', 'start_computer_task', 'send_job_sms']);
 
 /** Writes run first, one at a time. Reads in one turn run together. */
 export function partitionAskTools(names: AskToolName[]): { sequential: AskToolName[]; parallel: AskToolName[] } {
@@ -983,6 +1012,47 @@ export async function executeAskTool(
         };
       }
 
+
+      case 'send_job_sms': {
+        if (ctx.access !== 'org' || !ctx.userId) {
+          return { ok: false, tool: name, summary: 'Sending texts is only available to signed-in office users.' };
+        }
+        const to = trim(input.to);
+        const body = trim(input.body);
+        const confirm = input.confirm === true || input.confirm === 'true';
+        if (!to || !body) {
+          return { ok: false, tool: name, summary: 'Need a phone number and the exact message body.' };
+        }
+        if (!confirm) {
+          return {
+            ok: false,
+            tool: name,
+            summary: [
+              'Draft only — nothing was sent. Approve this text first:',
+              '',
+              `To: ${to}`,
+              body,
+              '',
+              'Reply to approve, then I will send it via Twilio.',
+            ].join('\n'),
+            data: { to, body, channel: 'sms' },
+            needsConfirmation: {
+              action: 'send_job_sms',
+              detail: `Approve sending this text to ${to} via Twilio?`,
+            },
+          };
+        }
+        const result = await sendSms({ to, body, orgId: ctx.orgId, jobId: ctx.jobId });
+        if (!result.ok) {
+          return { ok: false, tool: name, summary: result.message, data: { reason: result.reason } };
+        }
+        return {
+          ok: true,
+          tool: name,
+          summary: `Text sent to ${to} via Twilio.`,
+          data: { to, provider: result.provider, id: result.id },
+        };
+      }
       case 'start_computer_task': {
         if (ctx.access !== 'org' || !ctx.userId) {
           return { ok: false, tool: name, summary: 'Computer is only available to signed-in office users.' };
@@ -992,20 +1062,87 @@ export async function executeAskTool(
           return { ok: false, tool: name, summary: 'Say what to do on the website.', ui: { section: 'computer', path: 'computer-task:error' } };
         }
         try {
+          const store = computerStore();
+          const logins = store ? await store.listLogins(ctx.orgId) : [];
+          let accessPeople: Array<{ kind?: string | null; name?: string | null; email?: string | null; displayName?: string | null }> = [];
+          try {
+            if (ctx.jobId) {
+              accessPeople = (await loadAccessRoster(ctx)).map((p) => ({
+                kind: p.kind,
+                name: p.name,
+                email: p.email,
+                displayName: p.displayName,
+              }));
+            }
+          } catch {
+            accessPeople = [];
+          }
+          const plan = planComputerTask({
+            question: instructions,
+            logins,
+            file: ctx.file,
+            address: ctx.address ?? null,
+            accessPeople,
+          });
+          if (!plan.ok) {
+            return {
+              ok: false,
+              tool: name,
+              summary: plan.summary,
+              ui: {
+                section: plan.offerLogins ? 'logins' : 'computer',
+                path: plan.offerLogins ? 'logins' : plan.needsClarification ? 'computer-task:need-detail' : 'computer-task:error',
+              },
+            };
+          }
+          if ('smsPendingApproval' in plan && plan.smsPendingApproval) {
+            return {
+              ok: true,
+              tool: name,
+              summary: plan.lead,
+              data: {
+                channel: 'sms',
+                to: plan.to,
+                body: plan.body,
+                adjusterName: plan.adjusterName,
+                provider: 'twilio',
+              },
+              needsConfirmation: {
+                action: 'send_job_sms',
+                detail:
+                  `Approve sending this text to ${plan.to} via Twilio? Reply "approve send text" (or call send_job_sms with confirm=true and this exact body). Nothing was sent yet.`,
+              },
+              ui: { section: 'computer', path: 'computer-task:sms-approval' },
+            };
+          }
+          if (!('instructions' in plan)) {
+            return {
+              ok: false,
+              tool: name,
+              summary: 'Could not plan that computer task.',
+              ui: { section: 'computer', path: 'computer-task:error' },
+            };
+          }
           const task = await startComputerTask({
             orgId: ctx.orgId,
             userId: ctx.userId,
             jobId: ctx.jobId || null,
-            instructions,
-            startUrl: trim(input.start_url) || null,
+            instructions: plan.instructions,
+            startUrl: trim(input.start_url) || plan.startUrl,
             file: ctx.file,
             address: ctx.address ?? null,
           });
           return {
             ok: true,
             tool: name,
-            summary: 'Started a browser task. It asks before anything is submitted.',
-            data: { taskId: task.id, status: task.status, jobFields: task.job_projection.length },
+            summary: plan.lead,
+            data: {
+              taskId: task.id,
+              status: task.status,
+              jobFields: task.job_projection.length,
+              loginHost: plan.matchedLogin?.login.host ?? null,
+              kind: plan.kind,
+            },
             ui: { section: 'computer', path: `computer-task:${task.id}` },
           };
         } catch (err) {

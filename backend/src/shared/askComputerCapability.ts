@@ -28,7 +28,9 @@ export function computerCapabilityAnswer(input: { access: 'org' | 'viewer'; conf
     return "Computer isn't set up for this account yet, so I can't sign in to or work on websites for you right now. I can still answer from this job file and search the public web.";
   }
   return [
-    "There's no fixed list. With Computer I can open a browser and work on almost any website for this job, like a claim portal or a permit form, and I stop and check with you before anything is submitted, sent, paid, signed or deleted.",
-    "When a site needs a login, I pause and you sign in yourself in the live view. I never type passwords or verification codes. That sign-in is remembered for your organization, so next time it's already done, and you can sign in to a site ahead of time from Logins in the sidebar.",
+    "There's no fixed list. With Computer I can open a browser and work on almost any website for this job — claim portals, permit sites, Outlook, Gmail, AccuLynx, JobNimbus, Salesforce — and I stop and check with you before anything is submitted, sent, paid, signed or deleted.",
+    "Sign in once from Logins in the sidebar (a Global Admin can save the username and password encrypted). I use that saved login to sign back in on my own; Atmosphere's AI never sees the password. If the site asks for a code or to approve a number on your phone, I tell you what to do in Chat and wait.",
+    "Ask me to email someone a status update, fill a form, check what's outstanding in your CRM for this job, build the estimate inside Xactimate Online (sketch first), or message the adjuster in XactAnalysis or by email. I pull people, claim details, rooms, and measurements from the job file first, work in the live site, report back in plain professional English, and flag anything that needs attention.",
+    "If I get stuck on an unfamiliar screen I look up how to do that step on the public web, try again, and ask you a clear question if I still need help.",
   ].join('\n\n');
 }

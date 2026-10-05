@@ -51,7 +51,7 @@ export interface ComputerTaskView {
   statusDetail: string | null;
   instructions: string;
   startUrl: string | null;
-  needsYou: { reason: 'login' | 'two_factor' | 'captcha' | 'other'; message: string; since: string } | null;
+  needsYou: { reason: 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'other'; message: string; since: string } | null;
   humanControl: boolean;
   youHaveControl: boolean;
   stepCount: number;
@@ -90,12 +90,14 @@ export function computerTaskIsActive(status: ComputerTaskStatus): boolean {
 export function computerTaskRef(path: string | null | undefined):
   | { kind: 'task'; id: string }
   | { kind: 'not_set_up' }
+  | { kind: 'sms_approval' }
   | { kind: 'error' }
   | null {
   const raw = String(path ?? '').trim();
   if (!raw.startsWith('computer-task:')) return null;
   const rest = raw.slice('computer-task:'.length);
   if (rest === 'not-set-up') return { kind: 'not_set_up' };
+  if (rest === 'sms-approval') return { kind: 'sms_approval' };
   if (/^[0-9a-f-]{36}$/i.test(rest)) return { kind: 'task', id: rest };
   return { kind: 'error' };
 }
@@ -123,7 +125,9 @@ export const COMPUTER_ACTION_LABEL: Record<ComputerActionKind, string> = {
 export const NEEDS_YOU_TITLE: Record<NonNullable<ComputerTaskView['needsYou']>['reason'], string> = {
   login: 'Sign in to continue',
   two_factor: 'Enter the verification code',
+  number_match: 'Approve on your phone',
   captcha: 'Complete the captcha',
+  clarification: 'Quick question',
   other: 'Your turn',
 };
 
@@ -165,7 +169,9 @@ const HIDDEN_EVENTS = new Set([
 const NEEDS_YOU_STEP: Record<string, string> = {
   login: 'Paused for you to sign in',
   two_factor: 'Paused for you to enter a code',
+  number_match: 'Paused for you to approve on your phone',
   captcha: 'Paused for you to complete a captcha',
+  clarification: 'Asked you a question',
   other: 'Paused for you',
 };
 
@@ -203,6 +209,7 @@ export function computerEventLabel(event: ComputerTaskEvent): string {
     const outcome = String(d.outcome ?? '');
     if (outcome === 'signed_in' || outcome === 'already_signed_in') return `Signed in to ${host} with the saved login`;
     if (outcome === 'two_factor') return `Signed in to ${host} with the saved login; it asked for a code`;
+    if (outcome === 'number_match') return `Signed in to ${host}; approve the number on your phone`;
     if (outcome === 'captcha') return `Used the saved login for ${host}; it showed a captcha`;
     if (outcome === 'failed') return `The saved login for ${host} didn’t work`;
     return `Tried the saved login for ${host}`;
@@ -271,7 +278,9 @@ function hostOf(url: string | null): string | null {
 const NEEDS_YOU_SHORT: Record<NonNullable<ComputerTaskView['needsYou']>['reason'], string> = {
   login: 'sign-in needed',
   two_factor: 'code needed',
+  number_match: 'approve on phone',
   captcha: 'captcha needed',
+  clarification: 'question for you',
   other: 'paused',
 };
 

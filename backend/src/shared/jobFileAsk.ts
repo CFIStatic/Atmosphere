@@ -1140,7 +1140,7 @@ export async function answerFromJobFile(input: {
   const computer = toolResults.find((r) => r.tool === 'start_computer_task');
   if (computer) {
     const lead = computer.ok
-      ? COMPUTER_LEAD
+      ? computer.summary || COMPUTER_LEAD
       : computer.ui?.path === 'computer-task:not-set-up'
         ? "I can't work in a browser for you yet."
         : computer.summary;
