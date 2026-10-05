@@ -22,6 +22,7 @@ import { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } from './askC
 import { computerStatus } from '../computer/service.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
+import type { OrgMemoryFact } from './askOrgMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
@@ -973,6 +974,8 @@ export async function answerFromJobFile(input: {
   history?: JobFileAskTurn[];
   /** Summary of older turns and durable notes. Recent history stays verbatim. */
   memory?: LongThreadMemory | null;
+  /** Company-wide org memory (already access-filtered). */
+  orgMemory?: OrgMemoryFact[] | null;
   apiKey?: string | null;
   onToken?: (text: string) => void;
   /** Lookup status while tools run ("Looking through clips…"). */
@@ -1296,6 +1299,7 @@ export async function answerFromJobFile(input: {
     // section so Chat answers like someone who knows the whole file.
     const jobFileRecord = formatJobFileRecord({ ...input.file, clips: [] }).trim();
     const looked = await answerFromAskLookup({
+      orgMemory: input.orgMemory ?? null,
       question: input.question,
       catalog: input.lookup,
       history: modelHistory,

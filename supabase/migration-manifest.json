@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 198,
+    "migrationCount": 203,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -216,7 +216,8 @@
     "20261005130000_rate_card_claude_5_5_gemini_3.sql",
     "20261005140000_ask_retrieval_embeddings.sql",
     "20261005150000_ask_route_decisions.sql",
-    "20261005160000_ask_job_context_cache.sql"
+    "20261005160000_ask_job_context_cache.sql",
+    "20261005180000_ask_org_company_memory.sql"
   ],
   "migrations": [
     {
@@ -6515,6 +6516,38 @@
         "policy|public.ask_job_context_cache.ask_job_context_cache_select",
         "rls|public.ask_job_context_cache",
         "table|public.ask_job_context_cache"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005180000_ask_org_company_memory",
+      "file": "20261005180000_ask_org_company_memory.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_org_memory_facts.confidence",
+        "column|public.ask_org_memory_facts.created_at",
+        "column|public.ask_org_memory_facts.created_by",
+        "column|public.ask_org_memory_facts.detail",
+        "column|public.ask_org_memory_facts.id",
+        "column|public.ask_org_memory_facts.kind",
+        "column|public.ask_org_memory_facts.label",
+        "column|public.ask_org_memory_facts.org_id",
+        "column|public.ask_org_memory_facts.restricted",
+        "column|public.ask_org_memory_facts.source_job_ids",
+        "column|public.ask_org_memory_facts.source_question_id",
+        "column|public.ask_org_memory_facts.updated_at",
+        "function|private.user_can_access_job",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_org_kind_idx",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_org_updated_idx",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_pkey",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_insert",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_select",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_update",
+        "rls|public.ask_org_memory_facts",
+        "table|public.ask_org_memory_facts"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

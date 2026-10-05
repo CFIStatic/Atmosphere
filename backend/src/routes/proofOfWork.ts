@@ -47,6 +47,11 @@ import {
   type DurableJobNote,
   type StoredAskPair,
 } from '../shared/askMemory.js';
+import {
+  extractOrgMemoryCandidates,
+  loadOrgMemoryFacts,
+  rememberOrgMemoryFacts,
+} from '../shared/askOrgMemory.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { FAILURE_LEASE_BACKOFF_MS, leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
@@ -3495,6 +3500,20 @@ async function runProofAskTurn(input: {
       now: new Date().toISOString(),
     };
 
+    const orgAdmin = unscopedAdminOrNull();
+    const accessibleJobIds =
+      askAccess === 'org' && jobId ? new Set<string>([jobId]) : new Set<string>();
+    // Office Ask on a job: treat current job as accessible; restricted facts that
+    // cite other jobs are dropped unless those ids are also in the set (fail closed).
+    const orgMemory =
+      askAccess === 'org'
+        ? await loadOrgMemoryFacts(orgAdmin, {
+            orgId,
+            accessibleJobIds,
+            limit: 40,
+          }).catch(() => [])
+        : [];
+
     const sessionDocuments =
       askAccess === 'org' ? await loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : [];
     const aboutUpload = chatUploadShouldAnswer(input.question, sessionDocuments);
@@ -3615,6 +3634,7 @@ async function runProofAskTurn(input: {
         }),
         now: longMemory.now,
       },
+      orgMemory,
       apiKey,
       onToken,
       onStatus: input.onStatus,
@@ -3664,6 +3684,17 @@ async function runProofAskTurn(input: {
     if (result.webDerivedAnswer) storedAnswer = scrubWebDerivedAskAnswer(storedAnswer);
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
+    if (askAccess === 'org' && orgAdmin) {
+      const learned = extractOrgMemoryCandidates({
+        orgId,
+        jobId,
+        question: storedQuestion,
+        answer: storedAnswer,
+        restrictedJob: false,
+      });
+      void rememberOrgMemoryFacts(orgAdmin, learned, userId ?? null);
+    }
+
     if (input.signal?.aborted) {
       if (clock.routeReason === 'pending') clock.noteRoute('grounded', 'stopped');
       logAskTurnTiming(clock.snapshot());
