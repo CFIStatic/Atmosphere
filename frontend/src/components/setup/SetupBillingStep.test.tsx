@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getBillingOnboarding = vi.fn();
 const startOnboardingCheckout = vi.fn();
@@ -152,5 +152,29 @@ describe('SetupBillingStep', () => {
   it('preselects a plan from the signup URL', async () => {
     renderBilling('/signup?step=2&plan=scale');
     expect(await screen.findByRole('radio', { name: /Scale/i })).toBeChecked();
+  });
+});
+
+describe('SetupBillingStep in the iPhone app', () => {
+  beforeEach(() => {
+    document.documentElement.dataset.appShell = 'ios';
+    getBillingOnboarding.mockReset().mockResolvedValue(unpaid);
+    startOnboardingCheckout.mockReset();
+  });
+  afterEach(() => {
+    delete document.documentElement.dataset.appShell;
+  });
+
+  it('shows a plain note and Check again instead of plans, prices, or Stripe', async () => {
+    const { container } = renderBilling();
+    expect(await screen.findByTestId('app-shell-plan-note')).toHaveTextContent(
+      'Plans and billing are managed on atmosphereteam.com.',
+    );
+    expect(screen.queryByRole('button', { name: 'Continue to Stripe' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/\$|stripe|per month|checkout/i);
+    expect(container.querySelector('a')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(startOnboardingCheckout).not.toHaveBeenCalled();
   });
 });

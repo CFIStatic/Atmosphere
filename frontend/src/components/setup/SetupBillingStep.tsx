@@ -11,6 +11,7 @@ import {
 } from '../../lib/atmospherePlans';
 import { SetupStepCard } from './SetupWizardShell';
 import { SpinnerIcon, CheckIcon } from '../icons';
+import { isInAppShell } from '../../lib/appShell';
 
 export function SetupBillingStep({
   redirectTo,
@@ -36,6 +37,23 @@ export function SetupBillingStep({
     parseAtmosphereBillingInterval(searchParams.get('interval')),
   );
   const autoEnteredRef = useRef(false);
+  // iPhone/Android app: no plans, prices, or Stripe (App Store 3.1.1).
+  const inApp = isInAppShell();
+  const [checking, setChecking] = useState(false);
+
+  async function checkAgain() {
+    setChecking(true);
+    setError(null);
+    try {
+      const next = await refresh();
+      if (!next.required || next.complete) onComplete();
+      else setNotice(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load billing status.');
+    } finally {
+      setChecking(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     const next = await api.getBillingOnboarding();
@@ -153,6 +171,39 @@ export function SetupBillingStep({
             className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
+          </button>
+        </div>
+      </SetupStepCard>
+    );
+  }
+
+  if (inApp) {
+    return (
+      <SetupStepCard step={2} title="Plan" subtitle="This workspace needs a plan before your team can record.">
+        {error && (
+          <div
+            role="alert"
+            className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
+          >
+            {error}
+          </div>
+        )}
+        <div
+          data-testid="app-shell-plan-note"
+          className="mt-6 rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-sm text-ink-700"
+        >
+          Plans and billing are managed on atmosphereteam.com. When the plan is set up there, come back
+          here and check again.
+        </div>
+        <div className="mt-7 flex justify-end">
+          <button
+            type="button"
+            disabled={checking}
+            onClick={() => void checkAgain()}
+            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {checking ? <SpinnerIcon className="animate-spin" width={18} height={18} /> : null}
+            Check again
           </button>
         </div>
       </SetupStepCard>

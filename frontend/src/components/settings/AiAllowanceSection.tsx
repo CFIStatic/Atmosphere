@@ -1,13 +1,26 @@
 import { useState } from 'react';
 import { api, type AiAllowance } from '../../lib/api';
 import { ATMOSPHERE_SELF_SERVE_PLANS } from '../../lib/atmospherePlans';
-import { formatUsd } from '../../lib/money';
+import { APP_SHELL_BILLING_NOTE, appShellSafeBillingText, isInAppShell } from '../../lib/appShell';
 
 function day(iso: string | null | undefined) {
   return iso
     ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     : '—';
 }
+
+/**
+ * Credit history rows by kind. Customers never see allowance or credit dollar
+ * amounts (internal Analytics shows those), and ledger notes can carry a pack
+ * price, so rows show what happened and when, not the note or the amount.
+ */
+const CREDIT_KIND_LABEL: Record<string, string> = {
+  purchase: 'Credits purchased',
+  admin_grant: 'Credits added by Atmosphere',
+  refund: 'Credits refunded',
+  adjustment: 'Credit adjustment',
+  consume: 'Credits used',
+};
 
 export function AiAllowanceSection({
   allowance,
@@ -26,6 +39,9 @@ export function AiAllowanceSection({
   const [confirmedPlan, setConfirmedPlan] = useState<string | null>(null);
   const activePlanCode = confirmedPlan ?? currentPlanCode;
   const billingInterval = allowance.billingInterval === 'year' ? 'year' : 'month';
+  // iPhone/Android app: no plan, credit, or payment buttons (App Store 3.1.1).
+  const inApp = isInAppShell();
+  const message = allowance.message ? appShellSafeBillingText(allowance.message, inApp) : null;
 
   async function buy(packCode: string) {
     setBusy(packCode);
@@ -74,35 +90,30 @@ export function AiAllowanceSection({
           {planNotice}
         </p>
       ) : null}
-      {allowance.message && allowance.state === 'warning' ? (
+      {message && allowance.state === 'warning' ? (
         <p
           role="status"
           data-testid="ai-allowance-warning"
           className="mt-4 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-700"
         >
-          {allowance.message}
+          {message}
         </p>
       ) : null}
-      {allowance.message && allowance.state !== 'warning' ? (
+      {message && allowance.state !== 'warning' ? (
         <p
           role="status"
           data-testid="ai-allowance-status"
           className="mt-4 rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-sm text-ink-700"
         >
-          {allowance.message}
+          {message}
         </p>
       ) : null}
 
-      <dl className="mt-5 space-y-3 border-t border-line pt-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-500">Credit balance</dt>
-          <dd className="font-medium tabular-nums text-ink-900" data-testid="ai-credit-balance">
-            {formatUsd(allowance.creditBalanceNanos)}
-          </dd>
-        </div>
-      </dl>
-
-      {allowance.canManage ? (
+      {inApp ? (
+        <p data-testid="app-shell-billing-note" className="mt-5 border-t border-line pt-4 text-sm text-ink-600">
+          {APP_SHELL_BILLING_NOTE}
+        </p>
+      ) : allowance.canManage ? (
         <div className="mt-6 space-y-5 border-t border-line pt-5">
           <div>
             <h4 className="text-sm font-semibold text-ink-900">Change plan</h4>
@@ -146,26 +157,23 @@ export function AiAllowanceSection({
         <p className="mt-5 text-xs text-ink-500">An owner can change the plan or buy credits.</p>
       )}
 
-      <div className="mt-6 border-t border-line pt-5">
-        <div>
+      {inApp ? null : (
+        <div className="mt-6 border-t border-line pt-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-500">Credits</h4>
           {allowance.history.credits.length === 0 ? (
             <p className="mt-2 text-sm text-ink-500">No credit purchases yet.</p>
           ) : (
-            <ul className="mt-2 space-y-1.5 text-sm">
+            <ul className="mt-2 space-y-1.5 text-sm" data-testid="ai-credit-history">
               {allowance.history.credits.map((row) => (
                 <li key={row.id} className="flex justify-between gap-3">
-                  <span className="text-ink-700">
-                    {row.note || row.kind}
-                    <span className="ml-2 text-xs text-ink-400">{day(row.at)}</span>
-                  </span>
-                  <span className="tabular-nums text-ink-900">{formatUsd(row.deltaNanos)}</span>
+                  <span className="text-ink-700">{CREDIT_KIND_LABEL[row.kind] ?? 'Credits'}</span>
+                  <span className="text-xs text-ink-400">{day(row.at)}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
-      </div>
+      )}
     </section>
   );
 }

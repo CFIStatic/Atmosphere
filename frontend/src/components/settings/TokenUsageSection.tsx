@@ -9,7 +9,7 @@ import {
   type TokenUsageRange,
   type TokenUsageReport,
 } from '../../lib/api';
-import { formatDailyUsd, formatSpendUsd, formatTokens, formatUsdCompact } from '../../lib/money';
+import { formatTokens } from '../../lib/money';
 import { TokenUsageChart } from './TokenUsageChart';
 import {
   TOKEN_FEATURE_TRACK,
@@ -17,7 +17,6 @@ import {
   formatAnalysisMinutes,
   mergeAskIntoChat,
   sharePct,
-  tokenSpendCaption,
 } from './tokenUsageModel';
 
 const RANGES: { id: TokenUsageRange; label: string }[] = [
@@ -77,7 +76,7 @@ export function TokenUsageSection() {
           <div>
             <h3 className="text-base font-semibold text-ink-900">Token usage</h3>
             <p className="mt-0.5 text-xs text-ink-500">
-              Model calls for the signed-in organization. Spend is dollars (USD), not a token count.
+              AI model calls for the signed-in organization.
             </p>
           </div>
           <div
@@ -112,9 +111,9 @@ export function TokenUsageSection() {
             hint={`${totals.events.toLocaleString()} metered calls`}
           />
           <Kpi
-            label="Billed AI usage"
-            value={formatSpendUsd(totals.priceNanos)}
-            hint={tokenSpendCaption(report)}
+            label="Metered calls"
+            value={totals.events.toLocaleString()}
+            hint="Video analysis, chat, and web search"
           />
           <Kpi
             label="Input / output"
@@ -190,10 +189,10 @@ export function TokenUsageSection() {
                   <Meter
                     key={feature}
                     label={TOKEN_FEATURE_LABELS[feature]}
-                    value={`${amount} · ${formatUsdCompact(row?.priceNanos ?? 0)}`}
+                    value={amount}
                     pct={
                       feature === 'web_search'
-                        ? sharePct(row?.priceNanos ?? 0, totals.priceNanos)
+                        ? sharePct(searches, Math.max(totals.events, 1))
                         : sharePct(row?.totalTokens ?? 0, featureMax)
                     }
                     track={TOKEN_FEATURE_TRACK[feature]}
@@ -208,9 +207,8 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">By employee</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Every seat on this organization. Spend is USD billed to this organization for the selected
-          period — not provider cost, and not another company. Unattributed rows are usage we could
-          not tie to an uploader, job owner, or signed-in teammate.
+          Every seat on this organization for the selected period. Unattributed rows are usage we
+          could not tie to an uploader, job owner, or signed-in teammate.
         </p>
         {employees.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -224,8 +222,7 @@ export function TokenUsageSection() {
                   <th className="py-2 pr-3 font-semibold">Person</th>
                   <th className="px-3 py-2 text-right font-semibold">Video</th>
                   <th className="px-3 py-2 text-right font-semibold">Chat</th>
-                  <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
+                  <th className="py-2 pl-3 text-right font-semibold">Tokens</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,9 +242,8 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">Usage by job</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Job costing view for this window: analysis minutes are the length of film that finished AI
-          analysis (proof duration), not a tokens-to-minutes estimate. Spend is this organization’s
-          USD for the same window.
+          Analysis minutes are the length of film that finished AI analysis (proof duration), not a
+          tokens-to-minutes estimate.
         </p>
         {(report.byJob ?? []).length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -262,8 +258,7 @@ export function TokenUsageSection() {
                   <th className="px-3 py-2 text-right font-semibold">Analysis min</th>
                   <th className="px-3 py-2 text-right font-semibold">Video</th>
                   <th className="px-3 py-2 text-right font-semibold">Chat</th>
-                  <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
+                  <th className="py-2 pl-3 text-right font-semibold">Tokens</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,11 +289,8 @@ export function TokenUsageSection() {
                   <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-sm">
                     Calls
                   </th>
-                  <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-sm">
-                    Tokens
-                  </th>
                   <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pl-3 text-right font-semibold backdrop-blur-sm">
-                    USD
+                    Tokens
                   </th>
                 </tr>
               </thead>
@@ -317,11 +309,8 @@ export function TokenUsageSection() {
                     >
                       {row.calls.toLocaleString('en-US')}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink-800">
-                      {formatTokens(row.totalTokens)}
-                    </td>
                     <td className="whitespace-nowrap py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-                      {formatDailyUsd(row.priceNanos)}
+                      {formatTokens(row.totalTokens)}
                     </td>
                   </tr>
                 ))}
@@ -390,11 +379,8 @@ function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
         {feature('video_analysis')}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('chat')}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
-        {formatTokens(row.totalTokens)}
-      </td>
       <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-        {formatSpendUsd(row.priceNanos)}
+        {formatTokens(row.totalTokens)}
       </td>
     </tr>
   );
@@ -416,11 +402,8 @@ function EmployeeRow({ row, totalTokens }: { row: TokenEmployeeBreakdown; totalT
         {feature('video_analysis')}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('chat')}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
-        {formatTokens(row.totalTokens)}
-      </td>
       <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-        {formatSpendUsd(row.priceNanos)}
+        {formatTokens(row.totalTokens)}
       </td>
     </tr>
   );

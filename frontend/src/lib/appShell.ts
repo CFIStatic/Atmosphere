@@ -28,3 +28,48 @@ export function initAppShell(): void {
     /* no DOM — nothing to mark */
   }
 }
+
+/**
+ * True inside the iPhone/Android app: the document is marked by
+ * initAppShell, the user agent carries the app marker (this also covers the
+ * console inside Field Capture's Dashboard frame), or Capacitor reports a
+ * native platform. False in every browser.
+ */
+export function isInAppShell(): boolean {
+  try {
+    if (typeof document !== 'undefined' && document.documentElement.dataset.appShell) return true;
+    if (typeof navigator !== 'undefined' && isAppShellUserAgent(navigator.userAgent || '')) return true;
+    const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    return Boolean(cap?.isNativePlatform?.());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * App Store rule 3.1.1: the app never sells anything or points at a way to
+ * buy. In the app, plan, credit, seat, and payment screens show this line
+ * instead: no link and no price.
+ */
+export const APP_SHELL_BILLING_NOTE = 'Plans and billing are managed on atmosphereteam.com.';
+export const APP_SHELL_SEATS_NOTE = 'Manage seats on atmosphereteam.com.';
+
+/** Purchase prompts the server adds to allowance and seat messages. */
+const PURCHASE_SENTENCES = [
+  /\s*Upgrade the plan or buy credits to continue\.?/gi,
+  /\s*An owner can upgrade the plan or buy credits\.?/gi,
+  /,?\s*then pauses unless you buy credits\.?/gi,
+  /\s*Add \d+ extra Field Capture seats? at \$[\d,.]+\/mo to continue\.?/gi,
+];
+
+/**
+ * In the app, drop "upgrade / buy credits / add a seat at $X" sentences from
+ * a server message. Browsers get the message unchanged.
+ */
+export function appShellSafeBillingText(message: string, inApp = isInAppShell()): string {
+  if (!inApp || !message) return message;
+  let out = message;
+  for (const pattern of PURCHASE_SENTENCES) out = out.replace(pattern, (m) => (m.startsWith(',') ? '.' : ''));
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  return out || APP_SHELL_BILLING_NOTE;
+}

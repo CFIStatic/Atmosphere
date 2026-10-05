@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { isBillingExemptOrg, loadOrgCreatorEmail } from './billingExempt.js';
 import { paymentRequired } from './errors.js';
+import { APP_SHELL_SEAT_MESSAGE } from './appShell.js';
 import {
   extraSeatsNeeded,
   fcSeatLimitError,
@@ -91,6 +92,11 @@ export async function ensureFieldCaptureSeatForInvite(
     actingUserEmail?: string | null;
     customerEmail?: string | null;
     orgName?: string | null;
+    /**
+     * Request came from the iPhone/Android app. Never add a paid seat or
+     * open Checkout from there; say where seats are managed instead.
+     */
+    fromAppShell?: boolean;
   },
 ): Promise<FieldCaptureSeatUsage> {
   const seats = await loadFieldCaptureSeatUsage(supabase, orgId, {
@@ -118,6 +124,10 @@ export async function ensureFieldCaptureSeatForInvite(
   if (decision.action === 'grant_comped') {
     await persistExtraFcSeats(supabase, orgId, billing.extra + decision.addQuantity);
     return loadFieldCaptureSeatUsage(supabase, orgId, { actingUserEmail: opts.actingUserEmail });
+  }
+
+  if (opts.fromAppShell) {
+    throw paymentRequired(APP_SHELL_SEAT_MESSAGE, 'fc_seat_limit_app');
   }
 
   if (config.billing.paymentProvider !== 'stripe' || !isStripeConfigured()) {
