@@ -141,3 +141,17 @@ test('the app loads plugins the web bridge calls by name', () => {
   assert.match(bridge, /addListener\('App', 'pause'/);
   assert.match(bridge, /'Geolocation',\s*'watchPosition'/);
 });
+
+test('iPhone sizing: dark native background, no page scroll/bounce, keyboard resizes the web view', () => {
+  assert.equal(config.backgroundColor, '#141311');
+  assert.equal(config.ios.backgroundColor, '#141311');
+  assert.equal(config.ios.contentInset, 'never');
+  assert.equal(config.ios.scrollEnabled, false);
+  assert.equal(config.plugins.Keyboard.resize, 'native');
+  assert.equal(config.plugins.Keyboard.resizeOnFullScreen, true);
+  const pkg = JSON.parse(read('package.json'));
+  for (const dep of ['@capacitor/keyboard', '@capacitor/status-bar']) assert.ok(pkg.dependencies[dep], dep);
+  const spm = read('ios/App/CapApp-SPM/Package.swift');
+  assert.match(spm, /CapacitorKeyboard/);
+  assert.match(spm, /CapacitorStatusBar/);
+});

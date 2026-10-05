@@ -43,6 +43,8 @@ the app (`server.allowNavigation`); any other link, and anything opened with
 | Location | `@capacitor/geolocation`. `fieldcapture/js/native-bridge.js` answers `navigator.geolocation` from the plugin inside the app, so there is one iOS prompt (`NSLocationWhenInUseUsageDescription`) instead of a web prompt on each launch. |
 | Screen stays on while filming | `@capacitor-community/keep-awake`, switched on/off by the bridge on `fieldcapture:recording-start` / `-stop` (events from `app.js`). |
 | Phone locks / app closed / a call takes the mic | The bridge sends `fieldcapture:finish-now`; `app.js` finishes the day exactly as the Finish button does (stop → save on the phone → file in the background) and the door says why it stopped. `SceneDelegate` asks iOS for its short background time so that save can finish. |
+| Keyboard | `@capacitor/keyboard` with `resize: "native"`: the keyboard shrinks the web view instead of sliding the page up under the status bar. The website (`fieldcapture/index.html`, app-shell script) hides the iOS accessory bar (`setAccessoryBarVisible`) and hides the Field Capture / Dashboard bar while the keyboard is up. |
+| Status bar and edges | The web view runs under the status bar (`ios.contentInset: "never"`); the website pads with `env(safe-area-inset-*)`. `@capacitor/status-bar` lets the website match status bar text to its light/dark theme. `ios.scrollEnabled: false` stops the page itself from bouncing (inner lists still scroll) and the native background is dark (`#141311`), so there are no white flashes. |
 | Account deletion (5.1.1(v)) | Account menu → **Delete account** (website and app), `DELETE /api/auth/account`. |
 
 The bridge only acts when `window.Capacitor.isNativePlatform()` is true, so the

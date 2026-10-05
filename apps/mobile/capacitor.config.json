@@ -2,7 +2,7 @@
   "appId": "com.atmosphere.fieldcapture",
   "appName": "Field Capture",
   "webDir": "www",
-  "backgroundColor": "#FBFAF7",
+  "backgroundColor": "#141311",
   "appendUserAgent": "AtmosphereFieldCapture",
   "loggingBehavior": "none",
   "server": {
@@ -15,9 +15,20 @@
   },
   "ios": {
     "contentInset": "never",
-    "allowsLinkPreview": false
+    "allowsLinkPreview": false,
+    "backgroundColor": "#141311",
+    "scrollEnabled": false
   },
   "android": {
     "allowMixedContent": false
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true
+    }
   }
 }
