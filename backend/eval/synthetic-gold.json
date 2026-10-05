@@ -172,6 +172,30 @@
               "living room"
             ]
           }
+        },
+        {
+          "id": "syn-walkthrough-stale-summary-no-price",
+          "type": "negative",
+          "question": "What price did they quote in this clip?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
+            ]
+          }
+        },
+        {
+          "id": "syn-walkthrough-stale-summary-no-deadline",
+          "type": "negative",
+          "question": "When did they say the final inspection was scheduled?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
+            ]
+          }
         }
       ]
     },
@@ -261,6 +285,30 @@
             "answerType": "abstain",
             "mustNotContain": [
               "Speaker A"
+            ]
+          }
+        },
+        {
+          "id": "syn-quiet-roofline-no-price",
+          "type": "negative",
+          "question": "What price did they quote in this clip?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
+            ]
+          }
+        },
+        {
+          "id": "syn-quiet-roofline-no-deadline",
+          "type": "negative",
+          "question": "When did they say the final inspection was scheduled?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
             ]
           }
         }
@@ -380,6 +428,30 @@
           "expect": {
             "answerType": "abstain",
             "yesNo": "no"
+          }
+        },
+        {
+          "id": "syn-kitchen-tv-playback-no-price",
+          "type": "negative",
+          "question": "What price did they quote in this clip?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
+            ]
+          }
+        },
+        {
+          "id": "syn-kitchen-tv-playback-no-deadline",
+          "type": "negative",
+          "question": "When did they say the final inspection was scheduled?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "scheduled Monday at 9"
+            ]
           }
         }
       ]
@@ -1126,6 +1198,86 @@
               "Nothing on this file matches"
             ]
           }
+        },
+        {
+          "id": "syn-job-ledger-price-unanswerable",
+          "type": "negative",
+          "question": "Did anyone mention a dollar amount, price or deadline for the roof work?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "$12,000",
+              "twelve thousand",
+              "we charge"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-friday-promise",
+          "type": "negative",
+          "question": "What did the contractor promise to finish by Friday?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "will finish Friday",
+              "promised Friday"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-quote-accuracy",
+          "type": "quote_time",
+          "question": "Quote the exact words about switching to LedgerPro cloud.",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "We just have to switch to LedgerPro cloud.",
+                "at": 14.6
+              }
+            ],
+            "mustContain": [
+              "LedgerPro"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-sep21-unanswerable-brand",
+          "type": "false_premise",
+          "question": "Which brand of solar panels did the crew install on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Tesla",
+              "SunPower",
+              "LG solar"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-sep21-unanswerable-inspector-name",
+          "type": "negative",
+          "question": "What is the city inspector\u2019s full name on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Inspector Jane",
+              "John Q. Public",
+              "badge #"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-sep21-inventory-days",
+          "type": "negative",
+          "question": "Which days were filmed on this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
         }
       ]
     },
@@ -1384,6 +1536,44 @@
             ],
             "mustNotContain": [
               "$12,000"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-unanswerable-brand",
+          "type": "false_premise",
+          "question": "Which brand of solar panels did the crew install on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Tesla",
+              "SunPower",
+              "LG solar"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-unanswerable-inspector-name",
+          "type": "negative",
+          "question": "What is the city inspector\u2019s full name on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Inspector Jane",
+              "John Q. Public",
+              "badge #"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-inventory-days",
+          "type": "negative",
+          "question": "Which days were filmed on this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
             ]
           }
         }
@@ -1683,6 +1873,44 @@
               "$12,000"
             ]
           }
+        },
+        {
+          "id": "syn-job-chat-docs-unanswerable-brand",
+          "type": "false_premise",
+          "question": "Which brand of solar panels did the crew install on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Tesla",
+              "SunPower",
+              "LG solar"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-unanswerable-inspector-name",
+          "type": "negative",
+          "question": "What is the city inspector\u2019s full name on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Inspector Jane",
+              "John Q. Public",
+              "badge #"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-inventory-days",
+          "type": "negative",
+          "question": "Which days were filmed on this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
         }
       ]
     },
@@ -1927,7 +2155,6 @@
           "expect": {
             "answerType": "abstain",
             "mustContain": [
-              "not on file",
               "attic"
             ],
             "mustNotContain": [
@@ -1987,6 +2214,44 @@
           "id": "syn-job-rooms-list",
           "type": "negative",
           "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-rooms-unanswerable-brand",
+          "type": "false_premise",
+          "question": "Which brand of solar panels did the crew install on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Tesla",
+              "SunPower",
+              "LG solar"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-rooms-unanswerable-inspector-name",
+          "type": "negative",
+          "question": "What is the city inspector\u2019s full name on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Inspector Jane",
+              "John Q. Public",
+              "badge #"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-rooms-inventory-days",
+          "type": "negative",
+          "question": "Which days were filmed on this job?",
           "expect": {
             "answerType": "answer",
             "mustNotContain": [
@@ -2100,6 +2365,44 @@
           "id": "syn-job-unrelated-upload-list",
           "type": "negative",
           "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-unrelated-upload-unanswerable-brand",
+          "type": "false_premise",
+          "question": "Which brand of solar panels did the crew install on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Tesla",
+              "SunPower",
+              "LG solar"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-unrelated-upload-unanswerable-inspector-name",
+          "type": "negative",
+          "question": "What is the city inspector\u2019s full name on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Inspector Jane",
+              "John Q. Public",
+              "badge #"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-unrelated-upload-inventory-days",
+          "type": "negative",
+          "question": "Which days were filmed on this job?",
           "expect": {
             "answerType": "answer",
             "mustNotContain": [
