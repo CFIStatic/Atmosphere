@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
-import { UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
+import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
 import type { ServiceRoleSlug } from '../../lib/serviceRole';
+import { APP_SHELL_SEATS_NOTE, isInAppShell } from '../../lib/appShell';
 
 /**
  * Adding somebody to the team.
@@ -45,6 +46,10 @@ export function InvitePanel() {
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seats, setSeats] = useState<{ used: number; allowed: number } | null>(null);
+  // iPhone/Android app: an invite past the seats would add a paid seat or open
+  // Stripe. The app never does either (App Store 3.1.1), so it stops here.
+  const inApp = isInAppShell();
+  const seatsFull = Boolean(seats && seats.used >= seats.allowed);
 
   async function load() {
     try {
@@ -85,7 +90,12 @@ export function InvitePanel() {
   async function invite(event: FormEvent) {
     event.preventDefault();
     if (actionsLocked) {
-      setError('Choose a plan to upload, record, share, or invite.');
+      setError(planRequiredMessage());
+      return;
+    }
+    if (inApp && seatsFull && role !== 'global_admin') {
+      setOutcome(null);
+      setError(`Every Field Capture seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;
     }
     setBusy(true);
@@ -108,7 +118,7 @@ export function InvitePanel() {
       setServiceRoleCustom('');
       await load();
     } catch (err) {
-      if (err instanceof ApiError && err.checkoutUrl) {
+      if (!inApp && err instanceof ApiError && err.checkoutUrl) {
         window.location.href = err.checkoutUrl;
         return;
       }
@@ -202,6 +212,9 @@ export function InvitePanel() {
         {seats
           ? ` Field Capture accounts: ${seats.used} of ${seats.allowed} in use.`
           : ' Work Verification includes 3 Field Capture accounts.'}
+        {inApp && seatsFull ? (
+          <span data-testid="app-shell-seats-note"> {APP_SHELL_SEATS_NOTE}</span>
+        ) : null}
       </p>
 
       {outcome && <p className="mt-2 text-xs text-success-600">{outcome}</p>}

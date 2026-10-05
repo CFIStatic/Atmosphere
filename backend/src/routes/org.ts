@@ -21,6 +21,7 @@ import { HttpError } from '../lib/errors.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 import { ensureFieldCaptureSeatForInvite } from '../lib/fieldCaptureInviteSeats.js';
+import { isAppShellRequest } from '../lib/appShell.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 
@@ -659,6 +660,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         actingUserEmail: req.user!.email,
         customerEmail: req.user!.email,
         orgName: name,
+        fromAppShell: isAppShellRequest(req),
       });
     }
 

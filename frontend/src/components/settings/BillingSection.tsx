@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, type AiAllowance, type BillingInvoice, type BillingInvoiceLine, type WorkspaceBilling } from '../../lib/api';
+import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../../lib/appShell';
 import { formatCents } from '../../lib/money';
 import { PlanPrice } from '../billing/AtmospherePlanPicker';
 import { AlertIcon, SpinnerIcon } from '../icons';
@@ -111,8 +112,11 @@ export function BillingSection() {
   const status = planStatus(sub, workspace.billingExempt);
   const renewsLabel = sub.cancelAtPeriodEnd ? 'Ends' : 'Renews';
   const complimentary = status === 'comped' || Boolean(workspace.billingExempt);
+  // iPhone/Android app (App Store 3.1.1): plan name, status, dates, and seat
+  // counts only. No prices, payment portal, auto-recharge, or invoices.
+  const inApp = isInAppShell();
   const showStripePortal =
-    workspace.canManage && workspace.paymentProvider === 'stripe' && !complimentary;
+    !inApp && workspace.canManage && workspace.paymentProvider === 'stripe' && !complimentary;
 
   return (
     <div className="space-y-6">
@@ -121,12 +125,12 @@ export function BillingSection() {
           {error}
         </p>
       )}
-      {checkout === 'success' && (
+      {!inApp && checkout === 'success' && (
         <p role="status" className="rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-700">
           Payment received. Stripe will confirm the subscription in a few seconds.
         </p>
       )}
-      {checkout === 'cancelled' && (
+      {!inApp && checkout === 'cancelled' && (
         <p role="status" className="rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-sm text-ink-600">
           Checkout cancelled. Nothing was charged.
         </p>
@@ -141,7 +145,7 @@ export function BillingSection() {
         />
       ) : null}
 
-      {allowance && !complimentary ? <AutoRechargeSection /> : null}
+      {allowance && !complimentary && !inApp ? <AutoRechargeSection /> : null}
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>
@@ -165,10 +169,10 @@ export function BillingSection() {
               <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-ink-900">
                 Complimentary
               </p>
-            ) : (
+            ) : inApp ? null : (
               <PlanPrice monthlyCents={sub.baseMonthlyFeeCents} className="mt-2" />
             )}
-            {!complimentary ? (
+            {!complimentary && !inApp ? (
               <p className="mt-2 text-xs text-ink-500">
                 Includes seats and usage.
               </p>
@@ -204,7 +208,11 @@ export function BillingSection() {
           </p>
         ) : null}
 
-        {showStripePortal ? (
+        {inApp ? (
+          <p data-testid="app-shell-billing-note" className="mt-5 text-sm text-ink-600">
+            {APP_SHELL_BILLING_NOTE}
+          </p>
+        ) : showStripePortal ? (
           <div className="mt-5 space-y-2">
             <button
               type="button"
@@ -250,33 +258,35 @@ export function BillingSection() {
         )}
       </section>
 
-      <section className="rounded-xl glass-card p-5 sm:p-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-ink-900">Invoices / Receipts</h3>
-            <p className="mt-0.5 text-xs text-ink-500">
-              Atmosphere invoices for this account, newest first. Email receipts go to the billing email on file.
-            </p>
-          </div>
-          <Logo to={null} size="md" className="shrink-0" />
-        </header>
+      {inApp ? null : (
+        <section className="rounded-xl glass-card p-5 sm:p-6">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-ink-900">Invoices / Receipts</h3>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Atmosphere invoices for this account, newest first. Email receipts go to the billing email on file.
+              </p>
+            </div>
+            <Logo to={null} size="md" className="shrink-0" />
+          </header>
 
-        {invoices === null ? (
-          <p className="mt-4 text-sm text-ink-600">Loading…</p>
-        ) : invoices.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-            {complimentary || invoicesComplimentary
-              ? 'No Stripe invoices — complimentary billing'
-              : 'No invoices yet.'}
-          </p>
-        ) : (
-          <div className="mt-4 space-y-5">
-            {invoices.map((invoice) => (
-              <InvoiceReceiptCard key={invoice.id} invoice={invoice} />
-            ))}
-          </div>
-        )}
-      </section>
+          {invoices === null ? (
+            <p className="mt-4 text-sm text-ink-600">Loading…</p>
+          ) : invoices.length === 0 ? (
+            <p className="mt-4 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
+              {complimentary || invoicesComplimentary
+                ? 'No Stripe invoices — complimentary billing'
+                : 'No invoices yet.'}
+            </p>
+          ) : (
+            <div className="mt-4 space-y-5">
+              {invoices.map((invoice) => (
+                <InvoiceReceiptCard key={invoice.id} invoice={invoice} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <TokenUsageSection />
     </div>

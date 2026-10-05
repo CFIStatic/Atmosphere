@@ -46,6 +46,24 @@
      before the shared job opens — existing sessions skip straight to the job. */
   var REQUIRE_ACCOUNT = params.get('account') === '1';
   var ACCESS_KEY = 'atm.field.accessToken';
+  /* iPhone / Android app only: "Create an account" never opens a sign-up
+     screen inside the app. Accounts, companies, and plans are created on the
+     corporate website in Safari / the system browser. Capacitor hands any
+     link to a host outside server.allowNavigation (atmosphereteam.com is not
+     listed) to the OS, so target=_blank leaves the app. Browsers unchanged. */
+  var IN_APP_SHELL = (function () {
+    var cap = window.Capacitor;
+    return (
+      /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
+      Boolean(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform())
+    );
+  })();
+  var WEBSITE_SIGNUP_URL = 'https://atmosphereteam.com/signup';
+  function pointSignupToWebsite(link) {
+    link.href = WEBSITE_SIGNUP_URL;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  }
   var REFRESH_KEY = 'atm.field.refreshToken';
 
   /* iPhone / Android app only (Capacitor shell, apps/mobile): a force-quit
@@ -1456,6 +1474,10 @@
         });
         return;
       }
+      if (IN_APP_SHELL) {
+        pointSignupToWebsite(link);
+        return;
+      }
       if (!Core.resolveOfficeHref) return;
       var qs = new URLSearchParams();
       if (INVITE_EMAIL) qs.set('email', INVITE_EMAIL);
@@ -2616,7 +2638,9 @@
       forgot.href = Core.resolveOfficeHref('/forgot-password');
     }
     var signup = document.getElementById('signup-link');
-    if (signup && Core.resolveOfficeHref) {
+    if (signup && IN_APP_SHELL && !(TOKEN || REQUIRE_ACCOUNT)) {
+      pointSignupToWebsite(signup);
+    } else if (signup && Core.resolveOfficeHref) {
       signup.href = Core.resolveOfficeHref('/signup');
     }
 

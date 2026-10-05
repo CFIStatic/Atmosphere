@@ -31,6 +31,7 @@ import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 import { CURRENT_TERMS_VERSION } from '../lib/terms';
+import { isInAppShell } from '../lib/appShell';
 import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
 import { ServiceRolePicker } from '../components/shared/ServiceRolePicker';
 import type { ServiceRoleSlug } from '../lib/serviceRole';
@@ -43,6 +44,8 @@ export function SignupPage() {
   const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  // iPhone/Android app: no plan picker or prices (App Store 3.1.1).
+  const inApp = isInAppShell();
   const queueRedirect = usePendingAuthRedirect();
   const navigate = useNavigate();
   const platformHome = PLATFORM_HOME[getPlatform()];
@@ -538,7 +541,20 @@ export function SignupPage() {
         />
       )}
 
-      {step === 2 && !isInviteeAccount && !membership && (
+      {step === 2 && !isInviteeAccount && !membership && inApp && (
+        <SetupStepCard
+          step={2}
+          intent={orgIntent}
+          title="Plan"
+          subtitle="Plans and billing are managed on atmosphereteam.com."
+        >
+          <div className="mt-7 flex justify-end">
+            <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>
+          </div>
+        </SetupStepCard>
+      )}
+
+      {step === 2 && !isInviteeAccount && !membership && !inApp && (
         <SetupStepCard
           step={2}
           intent={orgIntent}

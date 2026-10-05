@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
-import { UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
+import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
 
 /**
  * Invite someone to the job file by email.
@@ -73,7 +73,7 @@ export function ShareJobProgressPanel({
   async function create(event: FormEvent) {
     event.preventDefault();
     if (actionsLocked) {
-      setError('Choose a plan to upload, record, share, or invite.');
+      setError(planRequiredMessage());
       return;
     }
     const to = email.trim().toLowerCase();

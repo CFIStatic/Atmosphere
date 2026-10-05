@@ -140,13 +140,10 @@ describe('TokenUsageSection', () => {
 
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
     expect(screen.getByText('288k')).toBeInTheDocument();
-    expect(screen.getByText('$18.40')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /This billing period, Aug 1, 2026 to Sep 1, 2026 UTC · USD · this organization/,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Billed AI usage')).toBeInTheDocument();
+    // Customers never see AI allowance or usage dollar amounts.
+    expect(screen.queryByText('Billed AI usage')).not.toBeInTheDocument();
+    expect(screen.getByText('Metered calls')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\$\d|USD/);
     expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
@@ -164,14 +161,14 @@ describe('TokenUsageSection', () => {
     expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
     // Ask is shown as Chat in the usage displays: one meter, chat + ask summed.
     expect(screen.queryByText('Ask')).not.toBeInTheDocument();
-    expect(screen.getByText('108k · $6.40')).toBeInTheDocument();
+    expect(screen.getByText('108k')).toBeInTheDocument();
     expect(screen.getAllByText('Video analysis').length).toBeGreaterThan(0);
     expect(screen.queryByText('claude-sonnet')).not.toBeInTheDocument();
     expect(screen.queryByText('gemini-3.6-flash')).not.toBeInTheDocument();
-    expect(screen.getByText('$12.20')).toBeInTheDocument();
+    expect(screen.queryByText('$12.20')).not.toBeInTheDocument();
   });
 
-  it('shows precise spend and does not treat attributed video as System', async () => {
+  it('shows no spend and does not treat attributed video as System', async () => {
     getTokenUsage.mockResolvedValue({
       ...report,
       totals: totals({
@@ -201,11 +198,9 @@ describe('TokenUsageSection', () => {
     render(<TokenUsageSection />);
     expect(await screen.findByText('Jack Cyganiak')).toBeInTheDocument();
     expect(screen.getByText(/uploader, job owner, or signed-in teammate/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/USD billed to this organization for the selected period/i),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText('$12.80').length).toBeGreaterThan(0);
-    expect(screen.queryByText('$1.28')).not.toBeInTheDocument();
+    expect(screen.queryByText(/USD billed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('$12.80')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\$\d/);
     expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
   });
 
@@ -328,12 +323,11 @@ describe('Daily usage', () => {
     expect(october).toHaveTextContent('El Presidente · Chat, Other');
     expect(october).toHaveTextContent('13');
     expect(october).toHaveTextContent('19k');
-    expect(october).toHaveTextContent('$0.08');
-    expect(october).not.toHaveTextContent('$0.00');
+    expect(october).not.toHaveTextContent('$');
 
     const september = screen.getByText('Sep 30, 2026').closest('tr');
     expect(september).toHaveTextContent('El Presidente · Chat');
-    expect(september).toHaveTextContent('<$0.01');
+    expect(september).not.toHaveTextContent('$');
     expect(september).toHaveTextContent('6.3k');
   });
 });

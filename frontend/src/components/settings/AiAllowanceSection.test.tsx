@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, type AiAllowance } from '../../lib/api';
 import { AiAllowanceSection } from './AiAllowanceSection';
 
@@ -124,5 +124,52 @@ describe('AI credits card', () => {
     expect(screen.getByTestId('upgrade-plan-starter')).toBeEnabled();
     expect(screen.getByTestId('upgrade-plan-scale')).toHaveTextContent('Scale');
     checkout.mockRestore();
+  });
+});
+
+describe('AI credits card: no dollar balances, and no purchases in the app', () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.appShell;
+  });
+
+  const withMoney = () =>
+    allowance({
+      canManage: true,
+      creditBalanceNanos: 25_000_000_000,
+      packs: [{ code: 'credits_10', label: '$10', cents: 1000, creditNanos: 10_000_000_000, priceConfigured: true }],
+      history: {
+        usage: [],
+        credits: [
+          { id: 'c1', at: '2026-10-01T00:00:00.000Z', kind: 'purchase', note: 'AI credits $50 auto-recharge (5000 cents)', deltaNanos: 50_000_000_000 },
+        ],
+      },
+    });
+
+  it('browser: keeps Buy credits but never shows the credit balance or credit dollar amounts', () => {
+    const { container } = render(<AiAllowanceSection allowance={withMoney()} onError={() => {}} />);
+    expect(screen.queryByTestId('ai-credit-balance')).toBeNull();
+    expect(screen.getByTestId('buy-credits-credits_10')).toBeInTheDocument();
+    const history = screen.getByTestId('ai-credit-history');
+    expect(history.textContent).toContain('Credits purchased');
+    expect(history.textContent).not.toMatch(/\$/);
+    expect(container.textContent).not.toMatch(/\$25|\$50/);
+  });
+
+  it('app: no plan or credit buttons, no dollar amounts, a plain note instead', () => {
+    document.documentElement.dataset.appShell = 'ios';
+    const { container } = render(
+      <AiAllowanceSection
+        allowance={{ ...withMoney(), state: 'limited', message: 'AI is paused. Upgrade the plan or buy credits to continue.' }}
+        onError={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/Switch to/)).toBeNull();
+    expect(screen.queryByText(/Buy/)).toBeNull();
+    expect(screen.queryByTestId('ai-credit-history')).toBeNull();
+    expect(screen.getByTestId('app-shell-billing-note')).toHaveTextContent(
+      'Plans and billing are managed on atmosphereteam.com.',
+    );
+    expect(container.textContent).not.toMatch(/\$|upgrade|buy credits|stripe|checkout/i);
+    expect(container.querySelector('a')).toBeNull();
   });
 });

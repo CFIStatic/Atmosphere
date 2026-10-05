@@ -18,6 +18,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { api } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
+import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
+import { isInAppShell } from './lib/appShell';
 import { FirstRunPage } from './pages/FirstRunPage';
 import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
 import { isUnpaidEvaluationLocation } from './lib/unpaidEvaluation';
@@ -348,7 +350,8 @@ export default function App() {
           <TermsGate>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          {/* iPhone/Android app: sign-up and plans happen on atmosphereteam.com, never in the app. */}
+          <Route path="/signup" element={isInAppShell() ? <AppShellSignupBlockedPage /> : <SignupPage />} />
           {/* First run, value before payment: first job and first evidence, then plan. */}
           <Route
             path="/welcome"

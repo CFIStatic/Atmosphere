@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { initialSetupStep, setupWizardCopy } from './setupWizard';
 
 describe('setupWizardCopy', () => {
@@ -104,5 +104,23 @@ describe('initialSetupStep', () => {
         inviteeAccount: true,
       }),
     ).toBe(1);
+  });
+});
+
+describe('setupWizardCopy in the iPhone/Android app shell', () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.appShell;
+  });
+
+  it('labels step 2 as Plan with no billing or card wording', () => {
+    document.documentElement.dataset.appShell = 'ios';
+    const copy = setupWizardCopy('create');
+    expect(copy.steps[1]?.title).toBe('Plan');
+    const text = `${copy.lede} ${copy.steps.map((s) => `${s.title} ${s.detail}`).join(' ')}`;
+    expect(text).not.toMatch(/billing|card|pay/i);
+  });
+
+  it('keeps the browser copy unchanged', () => {
+    expect(setupWizardCopy('create').steps[1]?.title).toBe('Set up billing');
   });
 });

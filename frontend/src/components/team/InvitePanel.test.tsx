@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createOrgInvite = vi.fn();
 const orgInvites = vi.fn();
@@ -91,5 +91,58 @@ describe('InvitePanel', () => {
     await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'crew@example.com');
     await userEvent.click(screen.getByRole('button', { name: /invite/i }));
     expect(createOrgInvite).not.toHaveBeenCalled();
+  });
+});
+
+describe('InvitePanel in the iPhone app', () => {
+  beforeEach(() => {
+    document.documentElement.dataset.appShell = 'ios';
+    createOrgInvite.mockReset();
+    orgInvites.mockReset().mockResolvedValue({ invites: [] });
+    getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    getBillingWorkspace.mockReset().mockResolvedValue({
+      fieldCaptureSeats: { used: 3, allowed: 3, included: 3, extra: 0, remaining: 0 },
+    });
+    vi.stubGlobal('location', { href: 'http://localhost/settings?section=organization' });
+  });
+  afterEach(() => {
+    delete document.documentElement.dataset.appShell;
+  });
+
+  it('stops an Employee invite past the seats with a plain line, no Stripe, link, or price', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <InvitePanel />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('app-shell-seats-note')).toHaveTextContent('Manage seats on atmosphereteam.com.');
+    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'fourth@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
+    expect(createOrgInvite).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Every Field Capture seat on this team is in use. Manage seats on atmosphereteam.com.',
+    );
+    expect(window.location.href).toBe('http://localhost/settings?section=organization');
+    expect(container.textContent).not.toMatch(/\$|stripe|checkout/i);
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('never follows a checkout link from the server in the app', async () => {
+    getBillingWorkspace.mockResolvedValue({
+      fieldCaptureSeats: { used: 2, allowed: 3, included: 3, extra: 0, remaining: 1 },
+    });
+    createOrgInvite.mockRejectedValue(
+      new ApiError(402, 'Finish checkout to add seats.', 'fc_seat_checkout', 'https://checkout.stripe.test/session'),
+    );
+    render(
+      <MemoryRouter>
+        <InvitePanel />
+      </MemoryRouter>,
+    );
+    await screen.findByText(/Field Capture accounts: 2 of 3 in use/);
+    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'third@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
+    expect(createOrgInvite).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe('http://localhost/settings?section=organization');
   });
 });
