@@ -109,6 +109,18 @@ export const EN = {
   'settings.signOut.description':
     'Ends the session on this device. Sign in again with your email and password to continue.',
 
+  'settings.deleteAccount.title': 'Delete account',
+  'settings.deleteAccount.description':
+    'Permanently removes your login, your profile, and your place on the team. Jobs, files, and videos you added belong to your company and stay with it.',
+  'settings.deleteAccount.button': 'Delete account',
+  'settings.deleteAccount.confirmTitle': 'Delete your Atmosphere account?',
+  'settings.deleteAccount.confirmBody':
+    'This cannot be undone. You will be signed out everywhere and will not be able to sign in with this email again unless you create a new account.',
+  'settings.deleteAccount.confirm': 'Delete my account',
+  'settings.deleteAccount.cancel': 'Cancel',
+  'settings.deleteAccount.deleting': 'Deleting…',
+  'settings.deleteAccount.error': 'Your account could not be deleted right now. Try again in a moment.',
+
   'settings.linked.title': 'Linked accounts',
   'settings.linked.description':
     'Everyone whose login is linked to this office account can work in the same workspace.',

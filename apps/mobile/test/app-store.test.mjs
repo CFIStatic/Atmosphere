@@ -79,6 +79,11 @@ test('PrivacyInfo.xcprivacy declares collected data and required-reason APIs, no
     'NSPrivacyCollectedDataTypeAudioData',
     'NSPrivacyCollectedDataTypePhotosorVideos',
     'NSPrivacyCollectedDataTypeOtherUserContent',
+    // Match the App Store Connect App Privacy answers (appstore/app-privacy.md).
+    'NSPrivacyCollectedDataTypeProductInteraction',
+    'NSPrivacyCollectedDataTypeSensitiveInfo',
+    'NSPrivacyCollectedDataTypePurchaseHistory',
+    'NSPrivacyCollectedDataTypeOtherDataTypes',
   ]) {
     assert.ok(types.includes(t), t);
   }
@@ -86,6 +91,13 @@ test('PrivacyInfo.xcprivacy declares collected data and required-reason APIs, no
     assert.equal(d.NSPrivacyCollectedDataTypeTracking, false);
     assert.equal(d.NSPrivacyCollectedDataTypeLinked, true);
   }
+  const interaction = manifest.NSPrivacyCollectedDataTypes.find(
+    (d) => d.NSPrivacyCollectedDataType === 'NSPrivacyCollectedDataTypeProductInteraction',
+  );
+  assert.deepEqual(interaction.NSPrivacyCollectedDataTypePurposes, [
+    'NSPrivacyCollectedDataTypePurposeAnalytics',
+    'NSPrivacyCollectedDataTypePurposeAppFunctionality',
+  ]);
   const apis = manifest.NSPrivacyAccessedAPITypes.map((a) => a.NSPrivacyAccessedAPIType);
   assert.ok(apis.includes('NSPrivacyAccessedAPICategoryUserDefaults'));
 });

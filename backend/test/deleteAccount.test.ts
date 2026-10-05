@@ -315,7 +315,11 @@ test('Supabase store pins every write to the caller and soft-deletes a reference
     [
       'delete:org_members',
       'delete:voiceprints',
+      'delete:voice_enrollment_requests',
+      'delete:voice_enrollment_requests',
       'delete:device_credentials',
+      'delete:feature_usage_sessions',
+      'update:terms_acceptances',
       'delete:profiles',
       'update:profiles',
     ],
@@ -323,10 +327,12 @@ test('Supabase store pins every write to the caller and soft-deletes a reference
   for (const write of writes) {
     assert.equal(write.filters.length, 1, `${write.table} must have exactly one filter`);
     const [column, value] = write.filters[0]!;
-    assert.ok(['user_id', 'id'].includes(column));
+    assert.ok(['user_id', 'id', 'subject_user_id', 'requester_user_id'].includes(column));
     assert.equal(value, ME);
   }
-  const scrub = writes.find((e) => e.op === 'update')!;
+  const terms = writes.find((e) => e.table === 'terms_acceptances')!;
+  assert.deepEqual(terms.values, { ip: null, user_agent: null });
+  const scrub = writes.find((e) => e.op === 'update' && e.table === 'profiles')!;
   assert.equal(scrub.values.email, null);
   assert.equal(scrub.values.full_name, null);
   assert.equal(scrub.values.avatar_url, null);

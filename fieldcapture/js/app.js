@@ -2807,47 +2807,96 @@
      * that still has other people in it is asked to hand over admin first.
      */
     var deletingAccount = false;
+    var deleteDialog = document.getElementById('fc-delete-dialog');
+    var deleteConfirmBtn = document.getElementById('fc-delete-confirm');
+    var deleteCancelBtn = document.getElementById('fc-delete-cancel');
+    var deletePendingNote = document.getElementById('fc-delete-pending');
+    var deleteErrorNote = document.getElementById('fc-delete-error');
+
+    function closeDeleteDialog() {
+      if (deletingAccount || !deleteDialog) return;
+      deleteDialog.hidden = true;
+    }
+
+    // Account deleted (here or from Settings in the office frame): drop the
+    // stored session and go back to the sign-in screen with a short note.
+    function finishAccountDeleted(message) {
+      deletingAccount = false;
+      if (deleteDialog) deleteDialog.hidden = true;
+      writeStoredSession(null, null);
+      state.account = false;
+      state.owner = '';
+      state.jobs = [];
+      state.activeJobId = null;
+      showJobAdd(false);
+      if (frame) frame.setAttribute('src', 'about:blank');
+      showLoginError('');
+      bootBlocked();
+      showBlockedMsg(message || 'Your account was deleted. Jobs, files, and videos stay with the company.');
+    }
+
     function deleteFieldAccount() {
       closeFieldAccountMenu();
-      if (deletingAccount || !Core.deleteAccount) return;
+      if (deletingAccount || !Core.deleteAccount || !deleteDialog) return;
       var waiting = filmQueue ? filmQueue.pending() : [];
-      var warning =
-        'Delete your Atmosphere account?\n\n' +
-        'This removes your login, your profile, and your place on the team. It cannot be undone.\n\n' +
-        'Jobs, files, and videos you filmed belong to your company and stay with it.';
-      if (waiting.length) {
-        warning +=
-          '\n\n' +
-          (waiting.length === 1 ? '1 day' : waiting.length + ' days') +
-          ' still on this phone will not be sent to the office.';
+      if (deletePendingNote) {
+        deletePendingNote.hidden = !waiting.length;
+        deletePendingNote.textContent = waiting.length
+          ? (waiting.length === 1 ? '1 day' : waiting.length + ' days') +
+            ' still on this phone will not be sent to the office.'
+          : '';
       }
-      if (!window.confirm(warning)) return;
+      if (deleteErrorNote) {
+        deleteErrorNote.hidden = true;
+        deleteErrorNote.textContent = '';
+      }
+      if (deleteConfirmBtn) {
+        deleteConfirmBtn.disabled = false;
+        deleteConfirmBtn.textContent = 'Delete my account';
+      }
+      deleteDialog.hidden = false;
+      if (deleteCancelBtn) deleteCancelBtn.focus();
+    }
+
+    function confirmDeleteFieldAccount() {
+      if (deletingAccount) return;
       deletingAccount = true;
+      if (deleteConfirmBtn) {
+        deleteConfirmBtn.disabled = true;
+        deleteConfirmBtn.textContent = 'Deleting…';
+      }
+      if (deleteCancelBtn) deleteCancelBtn.disabled = true;
       withSession(function (accessToken) {
         return Core.deleteAccount(API_BASE, accessToken);
       })
         .then(function (result) {
-          deletingAccount = false;
-          writeStoredSession(null, null);
-          state.account = false;
-          state.owner = '';
-          state.jobs = [];
-          state.activeJobId = null;
-          showJobAdd(false);
-          if (frame) frame.setAttribute('src', 'about:blank');
-          showLoginError('');
-          bootBlocked();
-          showBlockedMsg(
-            (result && result.message) ||
-              'Your account was deleted. Jobs, files, and videos stay with the company.',
-          );
+          if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+          finishAccountDeleted(result && result.message);
         })
         .catch(function (err) {
           deletingAccount = false;
-          window.alert(
-            (err && err.message) || 'Your account could not be deleted right now. Try again in a moment.',
-          );
+          if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+          if (deleteConfirmBtn) {
+            deleteConfirmBtn.disabled = false;
+            deleteConfirmBtn.textContent = 'Delete my account';
+          }
+          if (deleteErrorNote) {
+            deleteErrorNote.hidden = false;
+            deleteErrorNote.textContent =
+              (err && err.message) || 'Your account could not be deleted right now. Try again in a moment.';
+          }
         });
+    }
+
+    if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', confirmDeleteFieldAccount);
+    if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', closeDeleteDialog);
+    if (deleteDialog) {
+      deleteDialog.addEventListener('click', function (event) {
+        if (event.target === deleteDialog) closeDeleteDialog();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !deleteDialog.hidden) closeDeleteDialog();
+      });
     }
 
     var whoBtn = document.getElementById('who-btn');
@@ -2916,7 +2965,12 @@
         applyOfficeTheme(data.preference);
         return;
       }
+      if (data.atmosphere === 'account-deleted') {
+        finishAccountDeleted();
+        return;
+      }
       if (data.atmosphere === 'sign-out') {
+        if (!state.account) return;
         signOutFieldAccount();
       }
     });

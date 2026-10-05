@@ -3,8 +3,10 @@
  *
  * Default policy — the product owner can change it:
  * - The person's login (Supabase auth user), personal profile, and org
- *   memberships are removed. Their saved voiceprint, device sign-in
- *   credentials, and profile photo go with them.
+ *   memberships are removed. Their saved voiceprint and voice enrollment
+ *   requests, device sign-in credentials, usage-time analytics, and profile
+ *   photo go with them. Terms acceptances keep the version and time but
+ *   lose the IP address and user agent.
  * - Jobs, files, and videos belong to the company and stay with it.
  * - If the person is the only active admin of an org that still has other
  *   active members, deletion is blocked until someone else is made an admin.
@@ -200,7 +202,15 @@ export function supabaseAccountDeletionStore(admin: SupabaseClient): AccountDele
     async deletePersonalRows(userId) {
       // Best-effort: these tables may not exist on every deployment.
       await admin.from('voiceprints').delete().eq('user_id', userId);
+      await admin.from('voice_enrollment_requests').delete().eq('subject_user_id', userId);
+      await admin.from('voice_enrollment_requests').delete().eq('requester_user_id', userId);
       await admin.from('device_credentials').delete().eq('user_id', userId);
+      await admin.from('feature_usage_sessions').delete().eq('user_id', userId);
+      // Keep which terms version was accepted and when; drop the IP and device.
+      await admin
+        .from('terms_acceptances')
+        .update({ ip: null, user_agent: null })
+        .eq('user_id', userId);
       // Profile photos live under `<userId>/` in the avatars bucket.
       try {
         const listed = await admin.storage.from(AVATAR_BUCKET).list(userId);

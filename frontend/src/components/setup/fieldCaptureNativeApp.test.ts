@@ -282,16 +282,30 @@ describe('Field Capture Delete account', () => {
     expect(fieldApp).toContain("menuDelete.addEventListener('click', deleteFieldAccount)");
   });
 
-  it('confirms, calls DELETE /api/auth/account with the session, and signs out locally', () => {
-    const start = fieldApp.indexOf('function deleteFieldAccount()');
+  it('confirms in an in-page dialog, calls DELETE /api/auth/account, and signs out locally', () => {
+    const dom = new JSDOM(fieldHtml);
+    const dialog = dom.window.document.getElementById('fc-delete-dialog')!;
+    expect(dialog.hasAttribute('hidden')).toBe(true);
+    expect(dialog.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(dialog.textContent).toContain('It cannot be undone.');
+    expect(dialog.textContent).toContain('stay with it');
+    expect(dom.window.document.getElementById('fc-delete-confirm')!.textContent).toBe('Delete my account');
+    expect(dom.window.document.getElementById('fc-delete-cancel')!.textContent).toBe('Cancel');
+
+    const start = fieldApp.indexOf('var deleteDialog = ');
     const body = fieldApp.slice(start, fieldApp.indexOf('var whoBtn', start));
-    expect(body).toContain('window.confirm(warning)');
-    expect(body).toContain('It cannot be undone.');
-    expect(body).toContain('stay with it');
+    expect(body).not.toContain('window.confirm');
+    expect(body).toContain('deleteDialog.hidden = false;');
     expect(body).toContain('Core.deleteAccount(API_BASE, accessToken)');
-    expect(body.indexOf('writeStoredSession(null, null)')).toBeGreaterThan(body.indexOf('.then('));
-    expect(body.indexOf('showBlockedMsg(')).toBeGreaterThan(body.indexOf('bootBlocked()'));
-    expect(body).toContain('window.alert(');
+    expect(body.indexOf('finishAccountDeleted(result')).toBeGreaterThan(body.indexOf('.then('));
+    const finish = body.slice(body.indexOf('function finishAccountDeleted'), body.indexOf('function deleteFieldAccount'));
+    expect(finish).toContain('writeStoredSession(null, null)');
+    expect(finish.indexOf('showBlockedMsg(')).toBeGreaterThan(finish.indexOf('bootBlocked()'));
+    expect(body).toContain('deleteErrorNote.textContent');
+  });
+
+  it('signs Field Capture out when Settings in the office frame deletes the account', () => {
+    expect(fieldApp).toMatch(/data\.atmosphere === 'account-deleted'\) \{\s*finishAccountDeleted\(\);/);
   });
 
   it('Core.deleteAccount sends DELETE with the bearer token and surfaces last_admin', async () => {

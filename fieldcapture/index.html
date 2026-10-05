@@ -305,6 +305,27 @@
   }
   .who-menu button.danger { color: var(--fail); border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 7px 7px; }
   .who-menu button.delete-account { color: var(--fail); font-size: 12px; font-weight: 500; opacity: 0.85; }
+  .fc-confirm-backdrop {
+    position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px));
+    background: rgba(0,0,0,.45);
+  }
+  .fc-confirm-backdrop[hidden] { display: none; }
+  .fc-confirm {
+    width: 100%; max-width: 360px; padding: 20px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 60px -20px rgba(0,0,0,.5);
+  }
+  .fc-confirm h2 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
+  .fc-confirm p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+  .fc-confirm p.fc-confirm-warn { color: var(--fail); font-weight: 600; }
+  .fc-confirm p.fc-confirm-error { color: var(--fail); }
+  .fc-confirm-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .fc-confirm-actions button {
+    width: 100%; min-height: 44px; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 650; cursor: pointer;
+  }
+  .fc-confirm-actions .fc-confirm-delete { background: var(--fail); color: #fff; border: 0; }
+  .fc-confirm-actions .fc-confirm-delete:disabled { opacity: .6; }
+  .fc-confirm-actions .fc-confirm-cancel { background: none; color: var(--ink); border: 1px solid var(--line); }
   .theme-toggle {
     display: inline-flex; align-items: center; justify-content: flex-start;
     color: var(--ink);
@@ -1059,6 +1080,20 @@
         </a>
         <button type="button" role="menuitem" id="fc-menu-signout" class="danger">Sign out</button>
         <button type="button" role="menuitem" id="fc-menu-delete" class="delete-account" hidden>Delete account</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="fc-confirm-backdrop" id="fc-delete-dialog" hidden>
+    <div class="fc-confirm" role="alertdialog" aria-modal="true" aria-labelledby="fc-delete-title" aria-describedby="fc-delete-body">
+      <h2 id="fc-delete-title">Delete your Atmosphere account?</h2>
+      <p id="fc-delete-body">This removes your login, your profile, and your place on the team. It cannot be undone.</p>
+      <p>Jobs, files, and videos you filmed belong to your company and stay with it.</p>
+      <p class="fc-confirm-warn" id="fc-delete-pending" hidden></p>
+      <p class="fc-confirm-error" id="fc-delete-error" role="alert" hidden></p>
+      <div class="fc-confirm-actions">
+        <button type="button" class="fc-confirm-delete" id="fc-delete-confirm">Delete my account</button>
+        <button type="button" class="fc-confirm-cancel" id="fc-delete-cancel">Cancel</button>
       </div>
     </div>
   </div>
