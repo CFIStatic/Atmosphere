@@ -29,6 +29,8 @@ export type EvalMetrics = {
   correctness: number;
   relevance: number;
   grounding: number;
+  /** Share of expected quotes that appear as citeable clip@time evidence (alias of grounding for reports). */
+  citationValidity: number;
   timestampAccuracy: number | null;
   unsupportedClaimRate: number;
   abstentionQuality: number | null;
@@ -39,6 +41,9 @@ export type EvalMetrics = {
   speakerLabelFailures: number;
   /** Answers that passed the scorer. Printed with the question total so a percent is not the only figure. */
   correct: number;
+  /** Optional live-model cost / latency (null on deterministic runs). */
+  costUsdPerAnswer: number | null;
+  latencyMsAvg: number | null;
 };
 
 export type EvalReport = {
@@ -118,6 +123,7 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
     correctness: mean(all.map((a) => (a.correct ? 1 : 0))),
     relevance: mean(all.map((a) => (a.relevant ? 1 : 0))),
     grounding: mean(all.map((a) => a.grounding)),
+    citationValidity: mean(all.map((a) => a.grounding)),
     timestampAccuracy: timed.length ? mean(timed) : null,
     unsupportedClaimRate: mean(all.map((a) => (a.unsupportedClaims.length ? 1 : 0))),
     abstentionQuality: abstainQs.length || all.length ? mean(all.map((a) => (a.abstentionCorrect ? 1 : 0))) : null,
@@ -125,6 +131,8 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
     criticalAssertions,
     summaryContradictions,
     speakerLabelFailures,
+    costUsdPerAnswer: null,
+    latencyMsAvg: null,
   };
   const byType: EvalReport['byType'] = {};
   for (const a of all) {
@@ -198,7 +206,7 @@ export function reportMarkdown(report: EvalReport, opts?: { redact?: boolean }):
     `| questions | ${m.questions} |`,
     `| correctness | ${m.correct}/${m.questions} (${pct(m.correctness)}) |`,
     `| relevance | ${pct(m.relevance)} |`,
-    `| grounding | ${pct(m.grounding)} |`,
+    `| grounding / citation validity | ${pct(m.grounding)} |`,
     `| timestamp accuracy | ${pct(m.timestampAccuracy)} |`,
     `| unsupported-claim rate | ${pct(m.unsupportedClaimRate)} |`,
     `| abstention quality | ${pct(m.abstentionQuality)} |`,

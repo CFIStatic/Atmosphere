@@ -85,3 +85,10 @@ The committed synthetic job mirrors the real regressions with made-up lines: a t
 The gate workflow is at `eval/ci/ask-eval.yml`. Copy it to `.github/workflows/ask-eval.yml` to turn it on. The PR's push token could not write workflow files.
 
 To make it block deploys, apply `eval/ci/deploy-ask-eval-gate.patch` (`git apply backend/eval/ci/deploy-ask-eval-gate.patch` from the repo root). It adds an `ask-eval-gate` job to Deploy Work Verification that the backend deploy `needs`, so nothing deploys unless the gate passes. You can also mark the **Ask eval gate** check as required on `main` in branch protection. For the private run, add the `EVAL_GOLD_URL` secret (plus `EVAL_GOLD_TOKEN` if needed). To score the model path too, add the `EVAL_WITH_MODEL=1` variable and the `ANTHROPIC_API_KEY` secret.
+
+## Retrieval / router regression (2026-10)
+
+`synthetic-gold.json` was expanded to ~96 questions (inventory, not-found, simple
+facts, quotes, multi-hop) so retrieval and cheap-router changes can be scored
+without private gold. Deterministic runs stay keyless. Compare reports under
+`/workspace/chat-routing-shots/` (`baseline-main.json` vs post-change).
