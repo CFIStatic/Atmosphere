@@ -38,6 +38,7 @@ import {
   classifyAskIntent,
   classifyChatTurn,
   composeGroundedAsk,
+  isJobContentsQuestion,
   isJobOverview,
   localStamp,
   resolveAskQuestion,
@@ -1344,7 +1345,7 @@ export function planAskLookup(
       .map((clip) => ({ name: 'get_clip' as const, input: { proofId: clip.proofId } }));
   }
   if (chat) return [];
-  if (isJobOverview(resolved)) {
+  if (isJobOverview(resolved) || isJobContentsQuestion(resolved)) {
     const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [
       { name: 'read_job_history', input: {} },
     ];
