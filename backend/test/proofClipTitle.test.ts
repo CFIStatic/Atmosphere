@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  backfillProofClipTitles,
   deriveProofClipTitle,
+  isPlaceholderClipTitle,
   proofClipListLabel,
   proofTitleWritePatch,
   persistProofClipTitleIfEmpty,
@@ -248,4 +250,95 @@ test('setProofCustomTitle: writes custom_title; empty clears back to AI', async 
   assert.equal(cleared.customTitle, null);
   assert.equal(cleared.title, 'Laptop Open On A Table');
   assert.equal(stored.custom_title, null);
+});
+
+test('item 4: UUID titles are placeholders and get overwritten on persist', async () => {
+  assert.equal(isPlaceholderClipTitle('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'), true);
+  assert.equal(isPlaceholderClipTitle('Kitchen Walkthrough'), false);
+  const store: { title?: string } = { title: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
+  const admin = {
+    from() {
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                maybeSingle: async () => ({ data: { title: store.title }, error: null }),
+              };
+            },
+          };
+        },
+        update(patch: { title: string }) {
+          return {
+            eq: async () => {
+              store.title = patch.title;
+              return { error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+  assert.equal(isPlaceholderClipTitle(store.title), true);
+  const wrote = await persistProofClipTitleIfEmpty(admin as any, 'p1', {
+    summary: 'Crew removing damaged shingles on the south elevation.',
+  });
+  assert.ok(wrote);
+  assert.equal(isPlaceholderClipTitle(store.title), false);
+});
+
+test('item 4: backfillProofClipTitles dry-run counts would-write', async () => {
+  const rows = [
+    {
+      id: '1',
+      title: null,
+      custom_title: null,
+      phase: 'after',
+      ai_summary: 'South slope tear-off in progress.',
+      narration_text: null,
+      narration: null,
+      actions: [],
+      labels: [],
+      ai_findings: {},
+    },
+    {
+      id: '2',
+      title: 'Already Named',
+      custom_title: null,
+      phase: 'after',
+      ai_summary: 'Ignored',
+      narration_text: null,
+      narration: null,
+      actions: [],
+      labels: [],
+      ai_findings: {},
+    },
+  ];
+  const admin = {
+    from() {
+      const api: any = {
+        select() {
+          return api;
+        },
+        order() {
+          return api;
+        },
+        limit() {
+          return api;
+        },
+        eq() {
+          return api;
+        },
+        then(resolve: (v: unknown) => void) {
+          resolve({ data: rows, error: null });
+        },
+      };
+      return api;
+    },
+  };
+  const dry = await backfillProofClipTitles(admin as any, { apply: false });
+  assert.equal(dry.scanned, 2);
+  assert.equal(dry.wouldWrite, 1);
+  assert.equal(dry.written, 0);
+  assert.equal(dry.dryRun, true);
 });
