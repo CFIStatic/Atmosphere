@@ -17,6 +17,7 @@
     "backfill:summaries": "tsx src/scripts/backfillStaleSummaries.ts",
     "backfill:transcript-chunks": "tsx src/scripts/backfillTranscriptChunks.ts",
     "backfill:ask-embeddings": "tsx src/scripts/backfillAskEmbeddings.ts",
+    "site-digest": "tsx src/scripts/runSiteDigest.ts",
     "backfill:rooms": "tsx src/scripts/backfillClipRooms.ts",
     "backfill:clip-titles": "tsx src/scripts/backfillProofClipTitles.ts",
     "lint": "eslint .",
