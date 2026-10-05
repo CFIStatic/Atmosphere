@@ -1,13 +1,12 @@
 /**
- * Retrieval-first Ask context.
+ * Hybrid Ask context: retrieval block + stuffed job card.
  *
- * Default: a short always-loaded job summary + structured facts + top-k
- * transcript/analysis chunks for the question (OpenAI embeddings when the
- * key is set, else lexical/local RRF from askTranscriptIndex).
- *
- * Stuffing the full file stays available behind ASK_STUFF_JOB_CONTEXT=1
- * (default on). Eval showed retrieval-alone equal on synthetic gold, but a
- * multi-turn chat regression kept the stuffed fallback as the default.
+ * Always loads a short job summary + structured facts + top-k
+ * transcript/analysis chunks (OpenAI embeddings when the key is set, else
+ * lexical/local RRF). ASK_STUFF_JOB_CONTEXT defaults to on (append the full
+ * job card). Set =0 for retrieval-only — synthetic gold matched, but multi-turn
+ * chat lost day labels, so keep stuffing on until live Sample Job eval proves
+ * retrieval-only equal or better.
  */
 import { createHash } from 'node:crypto';
 import {
