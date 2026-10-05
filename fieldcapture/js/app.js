@@ -48,6 +48,32 @@
   var ACCESS_KEY = 'atm.field.accessToken';
   var REFRESH_KEY = 'atm.field.refreshToken';
 
+  /* iPhone / Android app only (Capacitor shell, apps/mobile): a force-quit
+     ends the sign-in. sessionStorage lives as long as the app's web view, so
+     it survives backgrounding, locking the phone and reloads, and is empty
+     again on a cold launch. On a cold launch nothing signs back in on its own:
+     the office cookie is not adopted (and is logged out below), so the crew
+     signs in again. Day films waiting in IndexedDB and job drafts are kept;
+     they file once the same person signs back in. Browsers never run this. */
+  var APP_LAUNCHED_KEY = 'atm.app.launched';
+  var COLD_APP_START = (function () {
+    var cap = window.Capacitor;
+    var native =
+      /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
+      Boolean(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+    if (!native) return false;
+    try {
+      if (sessionStorage.getItem(APP_LAUNCHED_KEY) === '1') return false;
+      sessionStorage.setItem(APP_LAUNCHED_KEY, '1');
+      sessionStorage.removeItem(ACCESS_KEY);
+      sessionStorage.removeItem(REFRESH_KEY);
+      sessionStorage.setItem('atm.field.noPlatformAdopt', '1');
+    } catch (e) {
+      return false;
+    }
+    return true;
+  })();
+
   function $(sel) {
     return document.querySelector(sel);
   }
@@ -2886,6 +2912,7 @@
     }, 15000);
   })();
 
+  function startApp() {
   if (LIVE) {
     readStoredSession();
     if (state.accessToken) {
@@ -2905,7 +2932,7 @@
     /* Preview the connect → Today motion without a live session. */
     show('s-home');
     playElevate();
-  } else if (Core.loadShareJob) {
+  } else if (Core.loadShareJob && !COLD_APP_START) {
     /* Token already left the URL after /exchange. A refresh still has the cookie. */
     Core.loadShareJob('', API_BASE)
       .then(function (payload) {
@@ -2916,5 +2943,23 @@
       });
   } else {
     bootAccount();
+  }
+  }
+
+  if (COLD_APP_START && Core.signOutPlatform) {
+    /* App cold start: close the office session (its httpOnly cookie outlives
+       the app) before the sign-in screen, so a password sign-in is never
+       undone by a late logout. Offline or slow: go on after 3s; the cookie is
+       still not adopted. */
+    var started = false;
+    var go = function () {
+      if (started) return;
+      started = true;
+      startApp();
+    };
+    Core.signOutPlatform(API_BASE, null).then(go, go);
+    window.setTimeout(go, 3000);
+  } else {
+    startApp();
   }
 })();
