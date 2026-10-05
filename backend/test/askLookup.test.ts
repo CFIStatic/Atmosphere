@@ -665,8 +665,12 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     ASK_ANALYSIS_MODEL: process.env.ASK_ANALYSIS_MODEL,
     ASK_ANALYSIS_THINKING_LEVEL: process.env.ASK_ANALYSIS_THINKING_LEVEL,
     ASK_REASONING_TIMEOUT_MS: process.env.ASK_REASONING_TIMEOUT_MS,
+    ASK_ROUTE_CLASSIFIER: process.env.ASK_ROUTE_CLASSIFIER,
+    ASK_EMBEDDINGS: process.env.ASK_EMBEDDINGS,
   };
   delete process.env.GOOGLE_API_KEY;
+  process.env.ASK_ROUTE_CLASSIFIER = '0';
+  process.env.ASK_EMBEDDINGS = '0';
   process.env.ANTHROPIC_API_KEY = 'sk-ant-test-shape-key';
   process.env.GEMINI_API_KEY = 'test-gemini';
   process.env.ANTHROPIC_MODEL = 'claude-opus-5';

@@ -1,1608 +1,2114 @@
 {
- "version": 1,
- "name": "synthetic-v1",
- "clips": [
-  {
-   "id": "syn-walkthrough-stale-summary",
-   "categories": [
-    "synthetic",
-    "walkthrough",
-    "multiple_voices"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 44,
-    "dictation": "Handheld walkthrough of a furnished living room: recessed can lights, a wall clock with a printed maker's name on the dial, wicker chairs, a window with a roman shade.",
-    "actions": [
-     {
-      "atSeconds": 1,
-      "description": "Camera holds on the ceiling can light."
-     },
-     {
-      "atSeconds": 12,
-      "description": "Pan across the wall clock."
-     },
-     {
-      "atSeconds": 30,
-      "description": "Camera drops to the wicker chairs by the window."
-     }
-    ],
-    "transcript": "[0:00] We are starting in the living room.\n[0:11] That clock has been here forever.\n[0:30] Watch the chairs.\n[0:35] The shade sticks halfway.\n[0:38] Okay, next room.",
-    "conversationSummary": "The only speech captured in the entire recording is a single fragment, \"We are starting in the living room.\"",
-    "conversationStale": false
-   },
-   "questions": [
+  "version": 1,
+  "name": "synthetic-v1-retrieval-router",
+  "clips": [
     {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines are in the transcript?",
-     "expect": {
-      "answerType": "answer",
-      "count": 5
-     }
-    },
-    {
-     "id": "q2",
-     "type": "quote_time",
-     "question": "What was said about the shade and when?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "The shade sticks halfway.",
-        "at": 35
-       }
-      ]
-     }
-    },
-    {
-     "id": "q3",
-     "type": "temporal_order",
-     "question": "List everything that was said, in order, with timestamps.",
-     "expect": {
-      "answerType": "answer",
-      "order": [
-       "starting in the living room",
-       "clock has been here forever",
-       "next room"
-      ]
-     }
-    },
-    {
-     "id": "q4",
-     "type": "negative",
-     "question": "Did anyone mention insurance?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q5",
-     "type": "false_premise",
-     "question": "At what timestamp does the worker install the new ceiling fan, and what brand is it?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "installed the",
-       "installs the"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "false_premise",
-     "question": "What brand is the wall clock?",
-     "expect": {
-      "answerType": "abstain"
-     }
-    },
-    {
-     "id": "q7",
-     "type": "speaker_source",
-     "question": "Who said \"Watch the chairs\"?",
-     "expect": {
-      "answerType": "answer",
-      "mustNotContain": [
-       "Speaker A",
-       "Speaker B",
-       "homeowner said"
-      ]
-     }
-    },
-    {
-     "id": "q8",
-     "type": "transcript_count",
-     "question": "how many spoken lines are in this clip",
-     "expect": {
-      "answerType": "answer",
-      "count": 5,
-      "quotes": [
-       {
-        "text": "We are starting in the living room.",
-        "at": 0
-       },
-       {
-        "text": "That clock has been here forever.",
-        "at": 11
-       },
-       {
-        "text": "Watch the chairs.",
-        "at": 30
-       },
-       {
-        "text": "The shade sticks halfway.",
-        "at": 35
-       },
-       {
-        "text": "Okay, next room.",
-        "at": 38
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-quiet-roofline",
-   "categories": [
-    "synthetic",
-    "quiet",
-    "no_work"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 24,
-    "dictation": "Slow pan along a roofline from the driveway; no people visible; wind noise only.",
-    "actions": [
-     {
-      "atSeconds": 0,
-      "description": "Camera pans along the gutter line."
-     },
-     {
-      "atSeconds": 12,
-      "description": "Camera holds on the ridge."
-     }
-    ],
-    "transcript": ""
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines are in the transcript?",
-     "expect": {
-      "answerType": "answer",
-      "count": 0
-     }
-    },
-    {
-     "id": "q2",
-     "type": "negative",
-     "question": "What did the crew say about the gutters?",
-     "expect": {
-      "answerType": "abstain"
-     }
-    },
-    {
-     "id": "q3",
-     "type": "false_premise",
-     "question": "When did they agree on the price for the roof?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "agreed to"
-      ]
-     }
-    },
-    {
-     "id": "q4",
-     "type": "negative",
-     "question": "Is anyone visible on the roof?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q5",
-     "type": "false_premise",
-     "question": "Did they finish replacing the shingles?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no",
-      "critical": [
-       "finished replacing",
-       "replaced the"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "speaker_source",
-     "question": "Who is talking in this clip?",
-     "expect": {
-      "answerType": "abstain",
-      "mustNotContain": [
-       "Speaker A"
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-kitchen-tv-playback",
-   "categories": [
-    "synthetic",
-    "media_playback",
-    "damage_closeup"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 30,
-    "dictation": "Walkthrough of a kitchen with a swollen sink-base cabinet floor; a TV in the next room is playing a home-shopping show.",
-    "actions": [
-     {
-      "atSeconds": 0,
-      "description": "Close-up of the swollen cabinet floor under the sink."
-     },
-     {
-      "atSeconds": 10,
-      "description": "Camera pans to the living room; the TV is playing a home-shopping show with a presenter talking."
-     },
-     {
-      "atSeconds": 20,
-      "description": "Back to the cabinet; the tech points at the supply line."
-     }
-    ],
-    "mediaWindows": [
-     {
-      "startSeconds": 10,
-      "endSeconds": 20,
-      "device": "tv",
-      "evidence": "the TV is playing a home-shopping show with a presenter talking."
-     }
-    ],
-    "transcript": "[0:02] The floor is swollen right here.\n[0:12] Only four hundred dollars today, call now.\n[0:15] That price will not last.\n[0:22] The supply line is leaking at the nut."
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines are in the transcript?",
-     "expect": {
-      "answerType": "answer",
-      "count": 4,
-      "mustContain": [
-       "media"
-      ]
-     }
-    },
-    {
-     "id": "q2",
-     "type": "speaker_source",
-     "question": "Did anyone on site mention a price?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no",
-      "mustContain": [
-       "media"
+      "id": "syn-walkthrough-stale-summary",
+      "categories": [
+        "synthetic",
+        "walkthrough",
+        "multiple_voices"
       ],
-      "critical": [
-       "the crew quoted",
-       "they quoted"
-      ]
-     }
-    },
-    {
-     "id": "q3",
-     "type": "quote_time",
-     "question": "What was said about the supply line and when?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "The supply line is leaking at the nut.",
-        "at": 22
-       }
-      ]
-     }
-    },
-    {
-     "id": "q4",
-     "type": "temporal_order",
-     "question": "Give me every line with timestamps.",
-     "expect": {
-      "answerType": "answer",
-      "order": [
-       "floor is swollen",
-       "four hundred dollars",
-       "supply line"
-      ]
-     }
-    },
-    {
-     "id": "q5",
-     "type": "false_premise",
-     "question": "When did the tech replace the supply line?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "replaced the supply",
-       "replaced the line"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "negative",
-     "question": "Did anyone mention mold?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-table-closeup-office-talk",
-   "categories": [
-    "synthetic",
-    "damage_closeup",
-    "multiple_voices"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 34,
-    "dictation": "Close survey of a whitewashed wood tabletop with a long dark scratch and a small chip near the left edge; a wall-mounted TV (screen black/off) behind.",
-    "actions": [
-     {
-      "atSeconds": 2,
-      "description": "Low raking pass shows a long dark scratch and a chip near the left edge."
-     },
-     {
-      "atSeconds": 25,
-      "description": "Camera tilts up to the wall-mounted TV (screen off/black)."
-     }
-    ],
-    "transcript": "[0:00] It is all on paper here.\n[0:03] You keep it in spreadsheets.\n[0:05] You have it on a table.\n[0:13] Well, we need to get that.\n[0:15] We need to switch to BooksApp online.\n[0:17] That is the main thing.\n[0:20] Do you think it will be in there?",
-    "conversationSummary": "Only one audible spoken line."
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "quote_time",
-     "question": "What was said about BooksApp and when?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "We need to switch to BooksApp online.",
-        "at": 15
-       }
-      ],
-      "mustNotContain": [
-       "It is all on paper here"
-      ]
-     }
-    },
-    {
-     "id": "q2",
-     "type": "transcript_count",
-     "question": "How many things were said in this clip?",
-     "expect": {
-      "answerType": "answer",
-      "count": 7
-     }
-    },
-    {
-     "id": "q3",
-     "type": "negative",
-     "question": "Is the TV on?",
-     "expect": {
-      "answerType": "answer",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q4",
-     "type": "false_premise",
-     "question": "Did they agree on a price for the table repair?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no",
-      "critical": [
-       "agreed to"
-      ]
-     }
-    },
-    {
-     "id": "q5",
-     "type": "false_premise",
-     "question": "When was the scratch repaired?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "repaired the scratch",
-       "fixed the scratch"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "temporal_order",
-     "question": "Was spreadsheets mentioned before BooksApp? Give the times.",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "You keep it in spreadsheets.",
-        "at": 3
-       },
-       {
-        "text": "We need to switch to BooksApp online.",
-        "at": 15
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-occluded-start",
-   "categories": [
-    "synthetic",
-    "occlusion",
-    "no_work"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 32,
-    "dictation": "Clip opens with about four seconds of black frames (lens covered). From 5s a fixed webcam view of a person seated at a desk in a small office.",
-    "actions": [
-     {
-      "atSeconds": 0,
-      "description": "Black frames; lens covered."
-     },
-     {
-      "atSeconds": 5,
-      "description": "Image resolves to a person seated at a desk."
-     }
-    ],
-    "transcript": "[0:06] Can you hear me okay?"
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines are in the transcript?",
-     "expect": {
-      "answerType": "answer",
-      "count": 1
-     }
-    },
-    {
-     "id": "q2",
-     "type": "quote_time",
-     "question": "What was said and when?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "Can you hear me okay?",
-        "at": 6
-       }
-      ]
-     }
-    },
-    {
-     "id": "q3",
-     "type": "false_premise",
-     "question": "What damage is shown in the first four seconds?",
-     "expect": {
-      "answerType": "abstain"
-     }
-    },
-    {
-     "id": "q4",
-     "type": "negative",
-     "question": "Did anyone talk about the roof?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q5",
-     "type": "false_premise",
-     "question": "When did the crew finish installing the drywall?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "finished installing",
-       "installed the drywall"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "speaker_source",
-     "question": "Who said \"Can you hear me okay?\"",
-     "expect": {
-      "answerType": "answer",
-      "mustNotContain": [
-       "Speaker A",
-       "the homeowner said",
-       "the crew said"
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-parked-vehicle",
-   "categories": [
-    "synthetic",
-    "no_work",
-    "quiet"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 20,
-    "dictation": "Filmed from inside a parked vehicle: steering wheel, instrument cluster, then a residential street through the side window. No work activity.",
-    "actions": [
-     {
-      "atSeconds": 0,
-      "description": "Steering wheel and instrument cluster."
-     },
-     {
-      "atSeconds": 9,
-      "description": "Pan out the side window to a residential street."
-     }
-    ],
-    "transcript": "[0:03] Okay."
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines were spoken?",
-     "expect": {
-      "answerType": "answer",
-      "count": 1
-     }
-    },
-    {
-     "id": "q2",
-     "type": "false_premise",
-     "question": "What work was completed in this clip?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "was completed",
-       "finished the"
-      ]
-     }
-    },
-    {
-     "id": "q3",
-     "type": "negative",
-     "question": "Did anyone promise to come back tomorrow?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no",
-      "critical": [
-       "promised to come back",
-       "will come back"
-      ]
-     }
-    },
-    {
-     "id": "q4",
-     "type": "false_premise",
-     "question": "How much did the homeowner agree to pay?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "agreed to pay"
-      ]
-     }
-    },
-    {
-     "id": "q5",
-     "type": "quote_time",
-     "question": "When does the camera look out the side window?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": [
-       "0:09"
-      ]
-     }
-    },
-    {
-     "id": "q6",
-     "type": "speaker_source",
-     "question": "Who said okay?",
-     "expect": {
-      "answerType": "answer",
-      "mustNotContain": [
-       "Speaker A"
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-laptop-podcast",
-   "categories": [
-    "synthetic",
-    "media_playback",
-    "multiple_voices",
-    "no_work"
-   ],
-   "consent": {
-    "status": "synthetic"
-   },
-   "record": {
-    "analysisState": "done",
-    "transcriptStatus": "done",
-    "durationSeconds": 60,
-    "dictation": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
-    "mediaUntimed": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
-    "actions": [
-     {
-      "atSeconds": 0,
-      "description": "Laptop screen playing a podcast video."
-     }
-    ],
-    "transcript": "[0:01] Welcome back to the show.\n[0:05] Today we talk about interest rates.\n[0:12] I think rates come down next year.\n[0:20] Stay tuned, coming up next."
-   },
-   "questions": [
-    {
-     "id": "q1",
-     "type": "transcript_count",
-     "question": "How many lines are in the transcript?",
-     "expect": {
-      "answerType": "answer",
-      "count": 4
-     }
-    },
-    {
-     "id": "q2",
-     "type": "speaker_source",
-     "question": "Is this a conversation between the crew and the homeowner?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q3",
-     "type": "quote_time",
-     "question": "What was said about interest rates and when?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "Today we talk about interest rates.",
-        "at": 5
-       }
-      ]
-     }
-    },
-    {
-     "id": "q4",
-     "type": "false_premise",
-     "question": "What price did the contractor quote?",
-     "expect": {
-      "answerType": "abstain",
-      "critical": [
-       "quoted"
-      ]
-     }
-    },
-    {
-     "id": "q5",
-     "type": "negative",
-     "question": "Did anyone mention water damage?",
-     "expect": {
-      "answerType": "abstain",
-      "yesNo": "no"
-     }
-    },
-    {
-     "id": "q6",
-     "type": "temporal_order",
-     "question": "What was said first and what was said last?",
-     "expect": {
-      "answerType": "answer",
-      "order": [
-       "Welcome back to the show",
-       "coming up next"
-      ]
-     }
-    }
-   ]
-  }
- ],
- "jobs": [
-  {
-   "id": "syn-job-ledger-sep21",
-   "consent": {
-    "status": "synthetic"
-   },
-   "timeZone": "America/Chicago",
-   "fixture": {
-    "job": {
-     "id": "00000000-0000-4000-8000-00000000a001",
-     "org_id": "00000000-0000-4000-8000-00000000a002",
-     "title": "Synthetic Kitchen Office Job"
-    },
-    "parties": [
-     {
-      "id": "00000000-0000-4000-8000-00000000a003",
-      "company": null,
-      "trade": null,
-      "contact_name": null,
-      "created_by": null
-     }
-    ],
-    "proofs": [
-     {
-      "id": "00000000-0000-4000-8000-00000000b001",
-      "party_id": "00000000-0000-4000-8000-00000000a003",
-      "job_id": "00000000-0000-4000-8000-00000000a001",
-      "org_id": "00000000-0000-4000-8000-00000000a002",
-      "work_date": "2026-09-21",
-      "phase": "after",
-      "title": "Short Handheld Phone Clip Surveys a Dining Table",
-      "ai_summary": "Handheld phone video at a dining table; two people talk about paperwork.",
-      "narration_text": null,
-      "ai_findings": {
-       "people": {
-        "count": 1,
-        "people": [
-         {
-          "id": "person-1",
-          "role": "unknown",
-          "label": "Person 1 (Seated, Unknown Role)",
-          "displayName": null,
-          "speakerLabel": null,
-          "firstSeenSec": 0,
-          "lastSeenSec": 26,
-          "matchedName": null,
-          "identitySource": null
-         }
+      "consent": {
+        "status": "synthetic"
+      },
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 44,
+        "dictation": "Handheld walkthrough of a furnished living room: recessed can lights, a wall clock with a printed maker's name on the dial, wicker chairs, a window with a roman shade.",
+        "actions": [
+          {
+            "atSeconds": 1,
+            "description": "Camera holds on the ceiling can light."
+          },
+          {
+            "atSeconds": 12,
+            "description": "Pan across the wall clock."
+          },
+          {
+            "atSeconds": 30,
+            "description": "Camera drops to the wicker chairs by the window."
+          }
         ],
-        "speakers": [],
-        "source": "llm",
-        "version": 1
-       }
+        "transcript": "[0:00] We are starting in the living room.\n[0:11] That clock has been here forever.\n[0:30] Watch the chairs.\n[0:35] The shade sticks halfway.\n[0:38] Okay, next room.",
+        "conversationSummary": "The only speech captured in the entire recording is a single fragment, \"We are starting in the living room.\"",
+        "conversationStale": false
       },
-      "transcript_text": "[0:00] The whole list is still on paper.\n[0:03] Everyone keeps it in a binder.\n[0:05] I never liked the binder.\n[0:09] They have their own system.\n[0:13] We just need something better.\n[0:14] We just have to switch to LedgerPro cloud.\n[0:16] That's the main thing.\n[0:18] Okay, I'm going to set it up now.\n[0:20] Will it fit in here?\n[0:21] I think the door sticks.\n[0:25] Watch your step.",
-      "transcript_segments": [
-       {
-        "start": 0,
-        "end": 2.9,
-        "text": "The whole list is still on paper."
-       },
-       {
-        "start": 3.1,
-        "end": 4.6,
-        "text": "Everyone keeps it in a binder."
-       },
-       {
-        "start": 5.6,
-        "end": 7.4,
-        "text": "I never liked the binder."
-       },
-       {
-        "start": 9.6,
-        "end": 11.4,
-        "text": "They have their own system."
-       },
-       {
-        "start": 13.0,
-        "end": 14.5,
-        "text": "We just need something better."
-       },
-       {
-        "start": 14.6,
-        "end": 16.5,
-        "text": "We just have to switch to LedgerPro cloud."
-       },
-       {
-        "start": 16.7,
-        "end": 18.4,
-        "text": "That's the main thing."
-       },
-       {
-        "start": 18.56,
-        "end": 19.7,
-        "text": "Okay, I'm going to set it up now."
-       },
-       {
-        "start": 20.0,
-        "end": 21.3,
-        "text": "Will it fit in here?"
-       },
-       {
-        "start": 21.4,
-        "end": 22.6,
-        "text": "I think the door sticks."
-       },
-       {
-        "start": 25.5,
-        "end": 26.3,
-        "text": "Watch your step."
-       }
-      ],
-      "transcript_words": null,
-      "device_metadata": {},
-      "captured_at": "2026-09-21 22:28:33+00",
-      "deleted_at": null
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000b002",
-      "party_id": "00000000-0000-4000-8000-00000000a003",
-      "job_id": "00000000-0000-4000-8000-00000000a001",
-      "org_id": "00000000-0000-4000-8000-00000000a002",
-      "work_date": "2026-09-21",
-      "phase": "after",
-      "title": "Close-Up of a Sleeping Dog on a Couch",
-      "ai_summary": "A dog asleep on a couch while two people talk.",
-      "narration_text": null,
-      "ai_findings": {
-       "people": {
-        "count": 1,
-        "people": [
-         {
-          "id": "person-1",
-          "role": "unknown",
-          "label": "Person 1 (Seated, Unknown Role)",
-          "displayName": null,
-          "speakerLabel": null,
-          "firstSeenSec": 0,
-          "lastSeenSec": 26,
-          "matchedName": null,
-          "identitySource": null
-         }
-        ],
-        "speakers": [],
-        "source": "llm",
-        "version": 1
-       }
-      },
-      "transcript_text": "[0:00] All her life.\n[0:10] That dog is the best.\n[0:30] He snores.\n[0:35] We adore him.\n[0:38] So good.",
-      "transcript_segments": [
-       {
-        "start": 0,
-        "end": 1.2,
-        "text": "All her life."
-       },
-       {
-        "start": 10.6,
-        "end": 12.0,
-        "text": "That dog is the best."
-       },
-       {
-        "start": 30,
-        "end": 31,
-        "text": "He snores."
-       },
-       {
-        "start": 35.1,
-        "end": 36.5,
-        "text": "We adore him."
-       },
-       {
-        "start": 38.2,
-        "end": 39,
-        "text": "So good."
-       }
-      ],
-      "transcript_words": null,
-      "device_metadata": {},
-      "captured_at": "2026-09-21 23:02:10+00",
-      "deleted_at": null
-     }
-    ]
-   },
-   "questions": [
-    {
-     "id": "a-ledgerpro-sep21",
-     "type": "quote_time",
-     "question": "What was said about LedgerPro cloud on September 21, and at what timestamps? Who committed to doing it?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       {
-        "text": "We just have to switch to LedgerPro cloud.",
-        "at": 14.6
-       },
-       {
-        "text": "Okay, I'm going to set it up now.",
-        "at": 18.56
-       }
-      ],
-      "mustContain": [
-       "unidentified speaker"
-      ],
-      "mustNotContain": [
-       "The whole list is still on paper.",
-       "Everyone keeps it in a binder.",
-       "I never liked the binder.",
-       "They have their own system.",
-       "We just need something better.",
-       "That's the main thing.",
-       "Will it fit in here?",
-       "I think the door sticks.",
-       "Watch your step.",
-       "All her life.",
-       "That dog is the best.",
-       "He snores.",
-       "We adore him.",
-       "So good."
-      ],
-      "quoteCards": true,
-      "clipTitle": "Short Handheld Phone Clip Surveys a Dining Table"
-     }
-    },
-    {
-     "id": "c-not-in-any-clip",
-     "type": "negative",
-     "question": "What was said about the roof permit, and when?",
-     "expect": {
-      "answerType": "abstain",
-      "mustNotContain": [
-       "The whole list is still on paper.",
-       "Everyone keeps it in a binder.",
-       "I never liked the binder.",
-       "They have their own system.",
-       "We just need something better.",
-       "That's the main thing.",
-       "Will it fit in here?",
-       "I think the door sticks.",
-       "Watch your step.",
-       "All her life.",
-       "That dog is the best.",
-       "He snores.",
-       "We adore him.",
-       "So good.",
-       "We just have to switch to LedgerPro cloud.",
-       "Okay, I'm going to set it up now."
+      "questions": [
+        {
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines are in the transcript?",
+          "expect": {
+            "answerType": "answer",
+            "count": 5
+          }
+        },
+        {
+          "id": "q2",
+          "type": "quote_time",
+          "question": "What was said about the shade and when?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "The shade sticks halfway.",
+                "at": 35
+              }
+            ]
+          }
+        },
+        {
+          "id": "q3",
+          "type": "temporal_order",
+          "question": "List everything that was said, in order, with timestamps.",
+          "expect": {
+            "answerType": "answer",
+            "order": [
+              "starting in the living room",
+              "clock has been here forever",
+              "next room"
+            ]
+          }
+        },
+        {
+          "id": "q4",
+          "type": "negative",
+          "question": "Did anyone mention insurance?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q5",
+          "type": "false_premise",
+          "question": "At what timestamp does the worker install the new ceiling fan, and what brand is it?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "installed the",
+              "installs the"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "false_premise",
+          "question": "What brand is the wall clock?",
+          "expect": {
+            "answerType": "abstain"
+          }
+        },
+        {
+          "id": "q7",
+          "type": "speaker_source",
+          "question": "Who said \"Watch the chairs\"?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Speaker A",
+              "Speaker B",
+              "homeowner said"
+            ]
+          }
+        },
+        {
+          "id": "q8",
+          "type": "transcript_count",
+          "question": "how many spoken lines are in this clip",
+          "expect": {
+            "answerType": "answer",
+            "count": 5,
+            "quotes": [
+              {
+                "text": "We are starting in the living room.",
+                "at": 0
+              },
+              {
+                "text": "That clock has been here forever.",
+                "at": 11
+              },
+              {
+                "text": "Watch the chairs.",
+                "at": 30
+              },
+              {
+                "text": "The shade sticks halfway.",
+                "at": 35
+              },
+              {
+                "text": "Okay, next room.",
+                "at": 38
+              }
+            ]
+          }
+        },
+        {
+          "id": "c0-not-found",
+          "type": "negative",
+          "question": "Did anyone mention a purple tarp?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "purple tarp is"
+            ]
+          }
+        },
+        {
+          "id": "c0-quote",
+          "type": "quote_time",
+          "question": "Quote the line about the living room and give the time.",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "We are starting in the living room.",
+                "at": 0
+              }
+            ],
+            "mustContain": [
+              "living room"
+            ]
+          }
+        }
       ]
-     }
     },
     {
-     "id": "style-short-question",
-     "type": "multi_hop",
-     "question": "?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["what do you want to know"],
-      "mustNotContain": ["String must contain", "does not have that", "Nothing on this file matches"]
-     }
-    },
-    {
-     "id": "style-thanks",
-     "type": "multi_hop",
-     "question": "thanks",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["Glad that helped"],
-      "mustNotContain": ["does not have that", "Let me know", "No one is listed"]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-job-kitchen-visits",
-   "consent": {
-    "status": "synthetic"
-   },
-   "timeZone": "America/Chicago",
-   "fixture": {
-    "job": {
-     "id": "00000000-0000-4000-8000-00000000c001",
-     "org_id": "00000000-0000-4000-8000-00000000c002",
-     "title": "Synthetic Kitchen Visits"
-    },
-    "parties": [],
-    "proofs": [
-     {
-      "id": "00000000-0000-4000-8000-00000000c101",
-      "job_id": "00000000-0000-4000-8000-00000000c001",
-      "org_id": "00000000-0000-4000-8000-00000000c002",
-      "work_date": "2026-09-03",
-      "phase": "before",
-      "title": "First kitchen visit",
-      "ai_summary": "First visit. Cabinets are still on order.",
-      "transcript_text": "[0:04] The cabinets are still on order.\n[0:08] The budget is twelve thousand.\n[0:14] We will measure the wall.",
-      "transcript_segments": [
-       { "start": 4, "end": 6, "text": "The cabinets are still on order.", "speaker": "SPEAKER_0" },
-       { "start": 8, "end": 11, "text": "The budget is twelve thousand.", "speaker": "SPEAKER_0" },
-       { "start": 14, "end": 16, "text": "We will measure the wall.", "speaker": "SPEAKER_0" }
+      "id": "syn-quiet-roofline",
+      "categories": [
+        "synthetic",
+        "quiet",
+        "no_work"
       ],
-      "transcript_words": null,
-      "deleted_at": null
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000c102",
-      "job_id": "00000000-0000-4000-8000-00000000c001",
-      "org_id": "00000000-0000-4000-8000-00000000c002",
-      "work_date": "2026-09-17",
-      "phase": "after",
-      "title": "Last kitchen visit",
-      "ai_summary": "Last visit. The budget moved.",
-      "transcript_text": "[0:06] Cabinets are in.\n[0:22] The budget moved to fifteen thousand.\n[0:30] The floor is next.",
-      "transcript_segments": [
-       { "start": 6, "end": 8, "text": "Cabinets are in.", "speaker": "SPEAKER_0" },
-       { "start": 22, "end": 25, "text": "The budget moved to fifteen thousand.", "speaker": "SPEAKER_0" },
-       { "start": 30, "end": 32, "text": "The floor is next.", "speaker": "SPEAKER_0" }
-      ],
-      "transcript_words": null,
-      "deleted_at": null
-     }
-    ],
-    "orgProofs": [
-     {
-      "id": "00000000-0000-4000-8000-00000000c201",
-      "job_id": "00000000-0000-4000-8000-00000000c301",
-      "org_id": "00000000-0000-4000-8000-00000000c002",
-      "job_title": "Similar kitchen job",
-      "work_date": "2026-08-12",
-      "phase": "after",
-      "title": "Similar kitchen walkthrough",
-      "ai_summary": "A similar kitchen. Their budget was lower.",
-      "transcript_text": "[0:05] Their budget was ten thousand.\n[0:11] They chose maple.",
-      "transcript_segments": [
-       { "start": 5, "end": 8, "text": "Their budget was ten thousand.", "speaker": "SPEAKER_0" },
-       { "start": 11, "end": 13, "text": "They chose maple.", "speaker": "SPEAKER_0" }
-      ],
-      "transcript_words": null,
-      "deleted_at": null
-     }
-    ]
-   },
-   "questions": [
-    {
-     "id": "mh-changed-visits",
-     "type": "multi_hop",
-     "question": "What changed between the first and last visit?",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       { "text": "The budget is twelve thousand.", "at": 8 },
-       { "text": "The budget moved to fifteen thousand.", "at": 22 }
-      ],
-      "order": ["twelve thousand", "fifteen thousand"],
-      "mustContain": ["First kitchen visit", "Last kitchen visit", "Speaker 1"],
-      "mustNotContain": ["the homeowner said", "This file does not have that"],
-      "quoteCards": true
-     }
-    },
-    {
-     "id": "mh-budget-every-time",
-     "type": "multi_hop",
-     "question": "List every time the homeowner mentioned budget across clips.",
-     "expect": {
-      "answerType": "answer",
-      "count": 2,
-      "quotes": [
-       { "text": "The budget is twelve thousand.", "at": 8 },
-       { "text": "The budget moved to fifteen thousand.", "at": 22 }
-      ],
-      "mustContain": ["Speaker 1", "First kitchen visit", "Last kitchen visit"],
-      "mustNotContain": ["the homeowner said", "2 lines", "two lines"],
-      "quoteCards": true
-     }
-    },
-    {
-     "id": "mh-similar-job",
-     "type": "multi_hop",
-     "question": "Compare this job to the last similar job.",
-     "expect": {
-      "answerType": "answer",
-      "quotes": [
-       { "text": "The budget is twelve thousand.", "at": 8 },
-       { "text": "Their budget was ten thousand.", "at": 5 }
-      ],
-      "mustContain": ["Similar kitchen walkthrough", "Speaker 1", "ten thousand"],
-      "mustNotContain": ["the homeowner said", "This file does not have that"],
-      "quoteCards": true
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-job-chat-docs",
-   "consent": { "status": "synthetic" },
-   "fixture": {
-    "job": {
-     "id": "00000000-0000-4000-8000-00000000d101",
-     "org_id": "00000000-0000-4000-8000-00000000d001",
-     "title": "Oak Street kitchen"
-    },
-    "parties": [],
-    "proofs": [
-     {
-      "id": "00000000-0000-4000-8000-00000000d301",
-      "party_id": null,
-      "job_id": "00000000-0000-4000-8000-00000000d101",
-      "org_id": "00000000-0000-4000-8000-00000000d001",
-      "work_date": "2026-09-12",
-      "phase": "during",
-      "title": "Kitchen walkthrough",
-      "ai_summary": "A walkthrough that states the lockbox code.",
-      "narration_text": null,
-      "ai_findings": {},
-      "transcript_text": "[0:04] The lockbox code is 4821.",
-      "transcript_segments": [
-       { "start": 4, "end": 6, "text": "The lockbox code is 4821." }
-      ],
-      "transcript_words": null,
-      "device_metadata": {},
-      "captured_at": "2026-09-12T15:00:00Z",
-      "deleted_at": null
-     }
-    ],
-    "documents": [
-     {
-      "id": "00000000-0000-4000-8000-00000000d201",
-      "filename": "Oak-Street-Estimate.pdf",
-      "kind": "estimate",
-      "attached": true,
-      "relevance": "related",
-      "relevanceReason": "The address 418 Oak Street matches this job.",
-      "summary": "Estimate. Total $4,280.00.",
-      "extractedText": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00",
-      "chunks": [
-       {
-        "location": "page 1",
-        "text": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00"
-       }
-      ],
-      "facts": {
-       "totals": [
-        { "label": "Total", "value": "$4,280.00", "quote": "Total: $4,280.00", "location": "page 1" }
-       ],
-       "lineItems": [
-        { "label": "Drywall repair", "value": "$2,100.00", "quote": "Drywall repair  $2,100.00", "location": "page 1" }
-       ],
-       "dates": [],
-       "addresses": [],
-       "parties": [],
-       "claimNumbers": [],
-       "rooms": []
-      }
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000d202",
-      "filename": "Floor-Plan.pdf",
-      "kind": "floor_plan",
-      "attached": true,
-      "relevance": "related",
-      "relevanceReason": "The floor plan matches this job.",
-      "summary": "Floor plan. Kitchen, Living room.",
-      "extractedText": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'",
-      "chunks": [
-       {
-        "location": "page 1",
-        "text": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'"
-       }
-      ],
-      "facts": {
-       "totals": [],
-       "lineItems": [],
-       "dates": [],
-       "addresses": [],
-       "parties": [],
-       "claimNumbers": [],
-       "rooms": [
-        { "name": "Kitchen", "dimensions": "12' x 14'", "notes": null, "quote": "Kitchen 12' x 14'", "sourceLocation": "page 1" },
-        { "name": "Living room", "dimensions": "16' x 18'", "notes": null, "quote": "Living room 16' x 18'", "sourceLocation": "page 1" }
-       ]
-      }
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000d203",
-      "filename": "Unrelated-Invoice.pdf",
-      "kind": "invoice",
-      "attached": false,
-      "relevance": "not_related",
-      "relevanceReason": "The address 900 Pine Avenue does not match this job.",
-      "summary": "Invoice for 900 Pine Avenue.",
-      "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
-      "chunks": [
-       { "location": "page 1", "text": "Invoice\n900 Pine Avenue\nTotal: $900.00" }
-      ],
-      "facts": {
-       "totals": [
-        { "label": "Total", "value": "$900.00", "quote": "Total: $900.00", "location": "page 1" }
-       ],
-       "lineItems": [],
-       "dates": [],
-       "addresses": [],
-       "parties": [],
-       "claimNumbers": [],
-       "rooms": []
-      }
-     }
-    ]
-   },
-   "questions": [
-    {
-     "id": "doc-estimate-total",
-     "type": "multi_hop",
-     "question": "What's the estimate total?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["$4,280.00", "Oak-Street-Estimate.pdf", "page 1", "Total: $4,280.00"]
-     }
-    },
-    {
-     "id": "doc-floor-plan-rooms",
-     "type": "multi_hop",
-     "question": "What rooms are on the floor plan?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["Kitchen", "Living room", "12' x 14'", "16' x 18'", "Floor-Plan.pdf"]
-     }
-    },
-    {
-     "id": "doc-irrelevant-invoice",
-     "type": "negative",
-     "question": "Is the Pine Avenue invoice related to this job?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["not related", "was not attached"],
-      "mustNotContain": ["$900.00"]
-     }
-    },
-    {
-     "id": "doc-permit-missing",
-     "type": "negative",
-     "question": "What is the permit number on the estimate?",
-     "expect": {
-      "answerType": "abstain",
-      "mustContain": ["does not show"]
-     }
-    },
-    {
-     "id": "doc-file-lockbox",
-     "type": "multi_hop",
-     "question": "What was said about the lockbox on this file?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["4821", "lockbox"],
-      "mustNotContain": ["does not show", "This document does not"]
-     }
-    },
-    {
-     "id": "doc-uploaded-estimate",
-     "type": "multi_hop",
-     "question": "What does the uploaded estimate say the total is?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["$4,280.00", "Oak-Street-Estimate.pdf", "page 1"]
-     }
-    }
-   ]
-  },
-  {
-   "id": "syn-job-rooms",
-   "consent": { "status": "synthetic" },
-   "timeZone": "America/Chicago",
-   "fixture": {
-    "job": {
-     "id": "00000000-0000-4000-8000-00000000d001",
-     "org_id": "00000000-0000-4000-8000-00000000d002",
-     "title": "Synthetic Room Job"
-    },
-    "parties": [
-     {
-      "id": "00000000-0000-4000-8000-00000000d003",
-      "company": null,
-      "trade": null,
-      "contact_name": null,
-      "created_by": null
-     }
-    ],
-    "proofs": [
-     {
-      "id": "00000000-0000-4000-8000-00000000d101",
-      "party_id": "00000000-0000-4000-8000-00000000d003",
-      "job_id": "00000000-0000-4000-8000-00000000d001",
-      "org_id": "00000000-0000-4000-8000-00000000d002",
-      "work_date": "2026-09-21",
-      "phase": "after",
-      "title": "Kitchen walkthrough",
-      "duration_seconds": 40,
-      "ai_summary": "Kitchen cabinets along the east wall.",
-      "ai_findings": {
-       "actions": [
-        {
-         "atSeconds": 12,
-         "room": "kitchen",
-         "action": "position",
-         "description": "Installs the cabinet boxes along the east wall."
-        }
-       ]
+      "consent": {
+        "status": "synthetic"
       },
-      "transcript_text": "[0:04] The east wall is open.",
-      "transcript_segments": [
-       { "start": 4, "end": 6, "text": "The east wall is open.", "speaker": "SPEAKER_0" }
-      ],
-      "transcript_words": null,
-      "deleted_at": null
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000d102",
-      "party_id": "00000000-0000-4000-8000-00000000d003",
-      "job_id": "00000000-0000-4000-8000-00000000d001",
-      "org_id": "00000000-0000-4000-8000-00000000d002",
-      "work_date": "2026-09-03",
-      "phase": "before",
-      "title": "Bathroom start",
-      "duration_seconds": 30,
-      "ai_summary": "Bathroom vanity comes out.",
-      "ai_findings": {
-       "actions": [
-        {
-         "atSeconds": 8,
-         "room": "bathroom",
-         "action": "remove",
-         "description": "Removes the old vanity."
-        }
-       ]
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 24,
+        "dictation": "Slow pan along a roofline from the driveway; no people visible; wind noise only.",
+        "actions": [
+          {
+            "atSeconds": 0,
+            "description": "Camera pans along the gutter line."
+          },
+          {
+            "atSeconds": 12,
+            "description": "Camera holds on the ridge."
+          }
+        ],
+        "transcript": ""
       },
-      "transcript_text": "[0:02] Starting in the bath.",
-      "transcript_segments": [
-       { "start": 2, "end": 4, "text": "Starting in the bath.", "speaker": "SPEAKER_0" }
-      ],
-      "transcript_words": null,
-      "deleted_at": null
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000d103",
-      "party_id": "00000000-0000-4000-8000-00000000d003",
-      "job_id": "00000000-0000-4000-8000-00000000d001",
-      "org_id": "00000000-0000-4000-8000-00000000d002",
-      "work_date": "2026-09-24",
-      "phase": "after",
-      "title": "Bathroom finish",
-      "duration_seconds": 36,
-      "ai_summary": "New vanity is set.",
-      "ai_findings": {
-       "actions": [
+      "questions": [
         {
-         "atSeconds": 20,
-         "room": "bathroom",
-         "action": "position",
-         "description": "Sets the new vanity and caulks the seam."
-        }
-       ]
-      },
-      "transcript_text": "[0:10] Vanity is in place.",
-      "transcript_segments": [
-       { "start": 10, "end": 12, "text": "Vanity is in place.", "speaker": "SPEAKER_0" }
-      ],
-      "transcript_words": null,
-      "deleted_at": null
-     },
-     {
-      "id": "00000000-0000-4000-8000-00000000d104",
-      "party_id": "00000000-0000-4000-8000-00000000d003",
-      "job_id": "00000000-0000-4000-8000-00000000d001",
-      "org_id": "00000000-0000-4000-8000-00000000d002",
-      "work_date": "2026-09-10",
-      "phase": "before",
-      "title": "Living room close-up",
-      "duration_seconds": 20,
-      "ai_summary": "A crack above the living room window.",
-      "ai_findings": {
-       "actions": [
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines are in the transcript?",
+          "expect": {
+            "answerType": "answer",
+            "count": 0
+          }
+        },
         {
-         "atSeconds": 6,
-         "room": "living room",
-         "action": "inspect",
-         "description": "Crack in the drywall above the window."
+          "id": "q2",
+          "type": "negative",
+          "question": "What did the crew say about the gutters?",
+          "expect": {
+            "answerType": "abstain"
+          }
+        },
+        {
+          "id": "q3",
+          "type": "false_premise",
+          "question": "When did they agree on the price for the roof?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "agreed to"
+            ]
+          }
+        },
+        {
+          "id": "q4",
+          "type": "negative",
+          "question": "Is anyone visible on the roof?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q5",
+          "type": "false_premise",
+          "question": "Did they finish replacing the shingles?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no",
+            "critical": [
+              "finished replacing",
+              "replaced the"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "speaker_source",
+          "question": "Who is talking in this clip?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "Speaker A"
+            ]
+          }
         }
-       ]
+      ]
+    },
+    {
+      "id": "syn-kitchen-tv-playback",
+      "categories": [
+        "synthetic",
+        "media_playback",
+        "damage_closeup"
+      ],
+      "consent": {
+        "status": "synthetic"
       },
-      "transcript_text": "[0:03] Look at the wall.",
-      "transcript_segments": [
-       { "start": 3, "end": 5, "text": "Look at the wall.", "speaker": "SPEAKER_0" }
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 30,
+        "dictation": "Walkthrough of a kitchen with a swollen sink-base cabinet floor; a TV in the next room is playing a home-shopping show.",
+        "actions": [
+          {
+            "atSeconds": 0,
+            "description": "Close-up of the swollen cabinet floor under the sink."
+          },
+          {
+            "atSeconds": 10,
+            "description": "Camera pans to the living room; the TV is playing a home-shopping show with a presenter talking."
+          },
+          {
+            "atSeconds": 20,
+            "description": "Back to the cabinet; the tech points at the supply line."
+          }
+        ],
+        "mediaWindows": [
+          {
+            "startSeconds": 10,
+            "endSeconds": 20,
+            "device": "tv",
+            "evidence": "the TV is playing a home-shopping show with a presenter talking."
+          }
+        ],
+        "transcript": "[0:02] The floor is swollen right here.\n[0:12] Only four hundred dollars today, call now.\n[0:15] That price will not last.\n[0:22] The supply line is leaking at the nut."
+      },
+      "questions": [
+        {
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines are in the transcript?",
+          "expect": {
+            "answerType": "answer",
+            "count": 4,
+            "mustContain": [
+              "media"
+            ]
+          }
+        },
+        {
+          "id": "q2",
+          "type": "speaker_source",
+          "question": "Did anyone on site mention a price?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no",
+            "mustContain": [
+              "media"
+            ],
+            "critical": [
+              "the crew quoted",
+              "they quoted"
+            ]
+          }
+        },
+        {
+          "id": "q3",
+          "type": "quote_time",
+          "question": "What was said about the supply line and when?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "The supply line is leaking at the nut.",
+                "at": 22
+              }
+            ]
+          }
+        },
+        {
+          "id": "q4",
+          "type": "temporal_order",
+          "question": "Give me every line with timestamps.",
+          "expect": {
+            "answerType": "answer",
+            "order": [
+              "floor is swollen",
+              "four hundred dollars",
+              "supply line"
+            ]
+          }
+        },
+        {
+          "id": "q5",
+          "type": "false_premise",
+          "question": "When did the tech replace the supply line?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "replaced the supply",
+              "replaced the line"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "negative",
+          "question": "Did anyone mention mold?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        }
+      ]
+    },
+    {
+      "id": "syn-table-closeup-office-talk",
+      "categories": [
+        "synthetic",
+        "damage_closeup",
+        "multiple_voices"
       ],
-      "transcript_words": null,
-      "deleted_at": null
-     }
-    ]
-   },
-   "questions": [
+      "consent": {
+        "status": "synthetic"
+      },
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 34,
+        "dictation": "Close survey of a whitewashed wood tabletop with a long dark scratch and a small chip near the left edge; a wall-mounted TV (screen black/off) behind.",
+        "actions": [
+          {
+            "atSeconds": 2,
+            "description": "Low raking pass shows a long dark scratch and a chip near the left edge."
+          },
+          {
+            "atSeconds": 25,
+            "description": "Camera tilts up to the wall-mounted TV (screen off/black)."
+          }
+        ],
+        "transcript": "[0:00] It is all on paper here.\n[0:03] You keep it in spreadsheets.\n[0:05] You have it on a table.\n[0:13] Well, we need to get that.\n[0:15] We need to switch to BooksApp online.\n[0:17] That is the main thing.\n[0:20] Do you think it will be in there?",
+        "conversationSummary": "Only one audible spoken line."
+      },
+      "questions": [
+        {
+          "id": "q1",
+          "type": "quote_time",
+          "question": "What was said about BooksApp and when?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "We need to switch to BooksApp online.",
+                "at": 15
+              }
+            ],
+            "mustNotContain": [
+              "It is all on paper here"
+            ]
+          }
+        },
+        {
+          "id": "q2",
+          "type": "transcript_count",
+          "question": "How many things were said in this clip?",
+          "expect": {
+            "answerType": "answer",
+            "count": 7
+          }
+        },
+        {
+          "id": "q3",
+          "type": "negative",
+          "question": "Is the TV on?",
+          "expect": {
+            "answerType": "answer",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q4",
+          "type": "false_premise",
+          "question": "Did they agree on a price for the table repair?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no",
+            "critical": [
+              "agreed to"
+            ]
+          }
+        },
+        {
+          "id": "q5",
+          "type": "false_premise",
+          "question": "When was the scratch repaired?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "repaired the scratch",
+              "fixed the scratch"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "temporal_order",
+          "question": "Was spreadsheets mentioned before BooksApp? Give the times.",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "You keep it in spreadsheets.",
+                "at": 3
+              },
+              {
+                "text": "We need to switch to BooksApp online.",
+                "at": 15
+              }
+            ]
+          }
+        }
+      ]
+    },
     {
-     "id": "room-kitchen-sep21",
-     "type": "room",
-     "question": "what work was completed in the kitchen on Sep 21?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": [
-       "Sep 21",
-       "kitchen",
-       "Installs the cabinet boxes along the east wall",
-       "Kitchen walkthrough",
-       "0:12"
+      "id": "syn-occluded-start",
+      "categories": [
+        "synthetic",
+        "occlusion",
+        "no_work"
       ],
-      "mustNotContain": ["This file does not have that", "room unclear", "not on file"]
-     }
+      "consent": {
+        "status": "synthetic"
+      },
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 32,
+        "dictation": "Clip opens with about four seconds of black frames (lens covered). From 5s a fixed webcam view of a person seated at a desk in a small office.",
+        "actions": [
+          {
+            "atSeconds": 0,
+            "description": "Black frames; lens covered."
+          },
+          {
+            "atSeconds": 5,
+            "description": "Image resolves to a person seated at a desk."
+          }
+        ],
+        "transcript": "[0:06] Can you hear me okay?"
+      },
+      "questions": [
+        {
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines are in the transcript?",
+          "expect": {
+            "answerType": "answer",
+            "count": 1
+          }
+        },
+        {
+          "id": "q2",
+          "type": "quote_time",
+          "question": "What was said and when?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "Can you hear me okay?",
+                "at": 6
+              }
+            ]
+          }
+        },
+        {
+          "id": "q3",
+          "type": "false_premise",
+          "question": "What damage is shown in the first four seconds?",
+          "expect": {
+            "answerType": "abstain"
+          }
+        },
+        {
+          "id": "q4",
+          "type": "negative",
+          "question": "Did anyone talk about the roof?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q5",
+          "type": "false_premise",
+          "question": "When did the crew finish installing the drywall?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "finished installing",
+              "installed the drywall"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "speaker_source",
+          "question": "Who said \"Can you hear me okay?\"",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Speaker A",
+              "the homeowner said",
+              "the crew said"
+            ]
+          }
+        }
+      ]
     },
     {
-     "id": "room-bathroom-work",
-     "type": "room",
-     "question": "what was done in the bathroom?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": [
-       "bathroom",
-       "Removes the old vanity",
-       "Sets the new vanity and caulks the seam",
-       "Bathroom start",
-       "Bathroom finish",
-       "Sep 3",
-       "Sep 24"
+      "id": "syn-parked-vehicle",
+      "categories": [
+        "synthetic",
+        "no_work",
+        "quiet"
       ],
-      "mustNotContain": ["This file does not have that", "not on file"]
-     }
+      "consent": {
+        "status": "synthetic"
+      },
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 20,
+        "dictation": "Filmed from inside a parked vehicle: steering wheel, instrument cluster, then a residential street through the side window. No work activity.",
+        "actions": [
+          {
+            "atSeconds": 0,
+            "description": "Steering wheel and instrument cluster."
+          },
+          {
+            "atSeconds": 9,
+            "description": "Pan out the side window to a residential street."
+          }
+        ],
+        "transcript": "[0:03] Okay."
+      },
+      "questions": [
+        {
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines were spoken?",
+          "expect": {
+            "answerType": "answer",
+            "count": 1
+          }
+        },
+        {
+          "id": "q2",
+          "type": "false_premise",
+          "question": "What work was completed in this clip?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "was completed",
+              "finished the"
+            ]
+          }
+        },
+        {
+          "id": "q3",
+          "type": "negative",
+          "question": "Did anyone promise to come back tomorrow?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no",
+            "critical": [
+              "promised to come back",
+              "will come back"
+            ]
+          }
+        },
+        {
+          "id": "q4",
+          "type": "false_premise",
+          "question": "How much did the homeowner agree to pay?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "agreed to pay"
+            ]
+          }
+        },
+        {
+          "id": "q5",
+          "type": "quote_time",
+          "question": "When does the camera look out the side window?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "0:09"
+            ]
+          }
+        },
+        {
+          "id": "q6",
+          "type": "speaker_source",
+          "question": "Who said okay?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "Speaker A"
+            ]
+          }
+        }
+      ]
     },
     {
-     "id": "room-bathroom-duration",
-     "type": "room",
-     "question": "how many weeks did it take to fix the bathroom?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": [
-       "Sep 3",
-       "Sep 24",
-       "about 3 weeks",
-       "does not establish completion",
-       "Bathroom start",
-       "Bathroom finish"
+      "id": "syn-laptop-podcast",
+      "categories": [
+        "synthetic",
+        "media_playback",
+        "multiple_voices",
+        "no_work"
       ],
-      "mustNotContain": ["not established", "does not show", "not on file", "This file does not have that"]
-     }
-    },
-    {
-     "id": "room-living-damage",
-     "type": "room",
-     "question": "what damage is in the living room?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": [
-       "Crack in the drywall above the window",
-       "Living room close-up",
-       "0:06",
-       "living room"
-      ],
-      "mustNotContain": ["not on file", "This file does not have that"]
-     }
-    },
-    {
-     "id": "room-attic-unknown",
-     "type": "room",
-     "question": "what damage is in the attic?",
-     "expect": {
-      "answerType": "abstain",
-      "mustContain": ["not on file", "attic"],
-      "mustNotContain": ["Crack in the drywall", "Installs the cabinet"]
-     }
-    },
-    {
-     "id": "room-uploader-not-room",
-     "type": "room",
-     "question": "who uploaded the living room clip?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["1 clip", "Sep 10"],
-      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
-     }
-    },
-    {
-     "id": "room-lockbox-not-room",
-     "type": "room",
-     "question": "where's the lockbox, by the living room?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["1 clip", "Sep 10"],
-      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
-     }
+      "consent": {
+        "status": "synthetic"
+      },
+      "record": {
+        "analysisState": "done",
+        "transcriptStatus": "done",
+        "durationSeconds": 60,
+        "dictation": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
+        "mediaUntimed": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
+        "actions": [
+          {
+            "atSeconds": 0,
+            "description": "Laptop screen playing a podcast video."
+          }
+        ],
+        "transcript": "[0:01] Welcome back to the show.\n[0:05] Today we talk about interest rates.\n[0:12] I think rates come down next year.\n[0:20] Stay tuned, coming up next."
+      },
+      "questions": [
+        {
+          "id": "q1",
+          "type": "transcript_count",
+          "question": "How many lines are in the transcript?",
+          "expect": {
+            "answerType": "answer",
+            "count": 4
+          }
+        },
+        {
+          "id": "q2",
+          "type": "speaker_source",
+          "question": "Is this a conversation between the crew and the homeowner?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q3",
+          "type": "quote_time",
+          "question": "What was said about interest rates and when?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "Today we talk about interest rates.",
+                "at": 5
+              }
+            ]
+          }
+        },
+        {
+          "id": "q4",
+          "type": "false_premise",
+          "question": "What price did the contractor quote?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "quoted"
+            ]
+          }
+        },
+        {
+          "id": "q5",
+          "type": "negative",
+          "question": "Did anyone mention water damage?",
+          "expect": {
+            "answerType": "abstain",
+            "yesNo": "no"
+          }
+        },
+        {
+          "id": "q6",
+          "type": "temporal_order",
+          "question": "What was said first and what was said last?",
+          "expect": {
+            "answerType": "answer",
+            "order": [
+              "Welcome back to the show",
+              "coming up next"
+            ]
+          }
+        }
+      ]
     }
-   ]
-  },
-  {
-   "id": "syn-job-unrelated-upload",
-   "consent": { "status": "synthetic" },
-   "fixture": {
-    "job": {
-     "id": "00000000-0000-4000-8000-00000000d301",
-     "org_id": "00000000-0000-4000-8000-00000000d302",
-     "title": "Synthetic Upload Job"
-    },
-    "parties": [],
-    "proofs": [],
-    "documents": [
-     {
-      "id": "00000000-0000-4000-8000-00000000d303",
-      "filename": "Unrelated-Invoice.pdf",
-      "kind": "invoice",
-      "attached": false,
-      "relevance": "not_related",
-      "relevanceReason": "The address 900 Pine Avenue does not match this job.",
-      "summary": "Invoice for 900 Pine Avenue.",
-      "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
-      "chunks": [
-       { "location": "page 1", "text": "Invoice\n900 Pine Avenue\nTotal: $900.00" }
-      ],
-      "facts": {
-       "totals": [
-        { "label": "Total", "value": "$900.00", "quote": "Total: $900.00", "location": "page 1" }
-       ],
-       "lineItems": [],
-       "dates": [],
-       "addresses": [],
-       "parties": [],
-       "claimNumbers": [],
-       "rooms": []
-      }
-     }
-    ]
-   },
-   "questions": [
+  ],
+  "jobs": [
     {
-     "id": "doc-unrelated-about",
-     "type": "multi_hop",
-     "question": "what is this about",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["900 Pine", "invoice", "Unrelated-Invoice.pdf"],
-      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached", "doesn't appear to be about this job"]
-     }
+      "id": "syn-job-ledger-sep21",
+      "consent": {
+        "status": "synthetic"
+      },
+      "timeZone": "America/Chicago",
+      "fixture": {
+        "job": {
+          "id": "00000000-0000-4000-8000-00000000a001",
+          "org_id": "00000000-0000-4000-8000-00000000a002",
+          "title": "Synthetic Kitchen Office Job"
+        },
+        "parties": [
+          {
+            "id": "00000000-0000-4000-8000-00000000a003",
+            "company": null,
+            "trade": null,
+            "contact_name": null,
+            "created_by": null
+          }
+        ],
+        "proofs": [
+          {
+            "id": "00000000-0000-4000-8000-00000000b001",
+            "party_id": "00000000-0000-4000-8000-00000000a003",
+            "job_id": "00000000-0000-4000-8000-00000000a001",
+            "org_id": "00000000-0000-4000-8000-00000000a002",
+            "work_date": "2026-09-21",
+            "phase": "after",
+            "title": "Short Handheld Phone Clip Surveys a Dining Table",
+            "ai_summary": "Handheld phone video at a dining table; two people talk about paperwork.",
+            "narration_text": null,
+            "ai_findings": {
+              "people": {
+                "count": 1,
+                "people": [
+                  {
+                    "id": "person-1",
+                    "role": "unknown",
+                    "label": "Person 1 (Seated, Unknown Role)",
+                    "displayName": null,
+                    "speakerLabel": null,
+                    "firstSeenSec": 0,
+                    "lastSeenSec": 26,
+                    "matchedName": null,
+                    "identitySource": null
+                  }
+                ],
+                "speakers": [],
+                "source": "llm",
+                "version": 1
+              }
+            },
+            "transcript_text": "[0:00] The whole list is still on paper.\n[0:03] Everyone keeps it in a binder.\n[0:05] I never liked the binder.\n[0:09] They have their own system.\n[0:13] We just need something better.\n[0:14] We just have to switch to LedgerPro cloud.\n[0:16] That's the main thing.\n[0:18] Okay, I'm going to set it up now.\n[0:20] Will it fit in here?\n[0:21] I think the door sticks.\n[0:25] Watch your step.",
+            "transcript_segments": [
+              {
+                "start": 0,
+                "end": 2.9,
+                "text": "The whole list is still on paper."
+              },
+              {
+                "start": 3.1,
+                "end": 4.6,
+                "text": "Everyone keeps it in a binder."
+              },
+              {
+                "start": 5.6,
+                "end": 7.4,
+                "text": "I never liked the binder."
+              },
+              {
+                "start": 9.6,
+                "end": 11.4,
+                "text": "They have their own system."
+              },
+              {
+                "start": 13.0,
+                "end": 14.5,
+                "text": "We just need something better."
+              },
+              {
+                "start": 14.6,
+                "end": 16.5,
+                "text": "We just have to switch to LedgerPro cloud."
+              },
+              {
+                "start": 16.7,
+                "end": 18.4,
+                "text": "That's the main thing."
+              },
+              {
+                "start": 18.56,
+                "end": 19.7,
+                "text": "Okay, I'm going to set it up now."
+              },
+              {
+                "start": 20.0,
+                "end": 21.3,
+                "text": "Will it fit in here?"
+              },
+              {
+                "start": 21.4,
+                "end": 22.6,
+                "text": "I think the door sticks."
+              },
+              {
+                "start": 25.5,
+                "end": 26.3,
+                "text": "Watch your step."
+              }
+            ],
+            "transcript_words": null,
+            "device_metadata": {},
+            "captured_at": "2026-09-21 22:28:33+00",
+            "deleted_at": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000b002",
+            "party_id": "00000000-0000-4000-8000-00000000a003",
+            "job_id": "00000000-0000-4000-8000-00000000a001",
+            "org_id": "00000000-0000-4000-8000-00000000a002",
+            "work_date": "2026-09-21",
+            "phase": "after",
+            "title": "Close-Up of a Sleeping Dog on a Couch",
+            "ai_summary": "A dog asleep on a couch while two people talk.",
+            "narration_text": null,
+            "ai_findings": {
+              "people": {
+                "count": 1,
+                "people": [
+                  {
+                    "id": "person-1",
+                    "role": "unknown",
+                    "label": "Person 1 (Seated, Unknown Role)",
+                    "displayName": null,
+                    "speakerLabel": null,
+                    "firstSeenSec": 0,
+                    "lastSeenSec": 26,
+                    "matchedName": null,
+                    "identitySource": null
+                  }
+                ],
+                "speakers": [],
+                "source": "llm",
+                "version": 1
+              }
+            },
+            "transcript_text": "[0:00] All her life.\n[0:10] That dog is the best.\n[0:30] He snores.\n[0:35] We adore him.\n[0:38] So good.",
+            "transcript_segments": [
+              {
+                "start": 0,
+                "end": 1.2,
+                "text": "All her life."
+              },
+              {
+                "start": 10.6,
+                "end": 12.0,
+                "text": "That dog is the best."
+              },
+              {
+                "start": 30,
+                "end": 31,
+                "text": "He snores."
+              },
+              {
+                "start": 35.1,
+                "end": 36.5,
+                "text": "We adore him."
+              },
+              {
+                "start": 38.2,
+                "end": 39,
+                "text": "So good."
+              }
+            ],
+            "transcript_words": null,
+            "device_metadata": {},
+            "captured_at": "2026-09-21 23:02:10+00",
+            "deleted_at": null
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "a-ledgerpro-sep21",
+          "type": "quote_time",
+          "question": "What was said about LedgerPro cloud on September 21, and at what timestamps? Who committed to doing it?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "We just have to switch to LedgerPro cloud.",
+                "at": 14.6
+              },
+              {
+                "text": "Okay, I'm going to set it up now.",
+                "at": 18.56
+              }
+            ],
+            "mustContain": [
+              "unidentified speaker"
+            ],
+            "mustNotContain": [
+              "The whole list is still on paper.",
+              "Everyone keeps it in a binder.",
+              "I never liked the binder.",
+              "They have their own system.",
+              "We just need something better.",
+              "That's the main thing.",
+              "Will it fit in here?",
+              "I think the door sticks.",
+              "Watch your step.",
+              "All her life.",
+              "That dog is the best.",
+              "He snores.",
+              "We adore him.",
+              "So good."
+            ],
+            "quoteCards": true,
+            "clipTitle": "Short Handheld Phone Clip Surveys a Dining Table"
+          }
+        },
+        {
+          "id": "c-not-in-any-clip",
+          "type": "negative",
+          "question": "What was said about the roof permit, and when?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "The whole list is still on paper.",
+              "Everyone keeps it in a binder.",
+              "I never liked the binder.",
+              "They have their own system.",
+              "We just need something better.",
+              "That's the main thing.",
+              "Will it fit in here?",
+              "I think the door sticks.",
+              "Watch your step.",
+              "All her life.",
+              "That dog is the best.",
+              "He snores.",
+              "We adore him.",
+              "So good.",
+              "We just have to switch to LedgerPro cloud.",
+              "Okay, I'm going to set it up now."
+            ]
+          }
+        },
+        {
+          "id": "style-short-question",
+          "type": "multi_hop",
+          "question": "?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "what do you want to know"
+            ],
+            "mustNotContain": [
+              "String must contain",
+              "does not have that",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "style-thanks",
+          "type": "multi_hop",
+          "question": "thanks",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "Glad that helped"
+            ],
+            "mustNotContain": [
+              "does not have that",
+              "Let me know",
+              "No one is listed"
+            ]
+          }
+        },
+        {
+          "id": "inv-clips",
+          "type": "negative",
+          "question": "How many videos are on this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "2"
+            ],
+            "mustNotContain": [
+              "nothing matches"
+            ]
+          }
+        },
+        {
+          "id": "inv-who",
+          "type": "speaker_source",
+          "question": "Who is on this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": []
+          }
+        },
+        {
+          "id": "unans-purple",
+          "type": "negative",
+          "question": "Is there a purple dumpster on this job?",
+          "expect": {
+            "answerType": "abstain",
+            "mustNotContain": [
+              "yes, there is a purple"
+            ]
+          }
+        },
+        {
+          "id": "status-q",
+          "type": "negative",
+          "question": "What is the status of this job?",
+          "expect": {
+            "answerType": "answer"
+          }
+        },
+        {
+          "id": "syn-job-ledger-sep21-how-many",
+          "type": "negative",
+          "question": "How many clips are on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
+            "mustContain": [
+              "2"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-ledger-sep21-list",
+          "type": "negative",
+          "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        }
+      ]
     },
     {
-     "id": "doc-unrelated-followup",
-     "type": "multi_hop",
-     "question": "What's the total on it?",
-     "expect": {
-      "answerType": "answer",
-      "mustContain": ["$900.00", "page 1", "Unrelated-Invoice.pdf"],
-      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached", "doesn't appear to be about this job"]
-     }
+      "id": "syn-job-kitchen-visits",
+      "consent": {
+        "status": "synthetic"
+      },
+      "timeZone": "America/Chicago",
+      "fixture": {
+        "job": {
+          "id": "00000000-0000-4000-8000-00000000c001",
+          "org_id": "00000000-0000-4000-8000-00000000c002",
+          "title": "Synthetic Kitchen Visits"
+        },
+        "parties": [],
+        "proofs": [
+          {
+            "id": "00000000-0000-4000-8000-00000000c101",
+            "job_id": "00000000-0000-4000-8000-00000000c001",
+            "org_id": "00000000-0000-4000-8000-00000000c002",
+            "work_date": "2026-09-03",
+            "phase": "before",
+            "title": "First kitchen visit",
+            "ai_summary": "First visit. Cabinets are still on order.",
+            "transcript_text": "[0:04] The cabinets are still on order.\n[0:08] The budget is twelve thousand.\n[0:14] We will measure the wall.",
+            "transcript_segments": [
+              {
+                "start": 4,
+                "end": 6,
+                "text": "The cabinets are still on order.",
+                "speaker": "SPEAKER_0"
+              },
+              {
+                "start": 8,
+                "end": 11,
+                "text": "The budget is twelve thousand.",
+                "speaker": "SPEAKER_0"
+              },
+              {
+                "start": 14,
+                "end": 16,
+                "text": "We will measure the wall.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000c102",
+            "job_id": "00000000-0000-4000-8000-00000000c001",
+            "org_id": "00000000-0000-4000-8000-00000000c002",
+            "work_date": "2026-09-17",
+            "phase": "after",
+            "title": "Last kitchen visit",
+            "ai_summary": "Last visit. The budget moved.",
+            "transcript_text": "[0:06] Cabinets are in.\n[0:22] The budget moved to fifteen thousand.\n[0:30] The floor is next.",
+            "transcript_segments": [
+              {
+                "start": 6,
+                "end": 8,
+                "text": "Cabinets are in.",
+                "speaker": "SPEAKER_0"
+              },
+              {
+                "start": 22,
+                "end": 25,
+                "text": "The budget moved to fifteen thousand.",
+                "speaker": "SPEAKER_0"
+              },
+              {
+                "start": 30,
+                "end": 32,
+                "text": "The floor is next.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          }
+        ],
+        "orgProofs": [
+          {
+            "id": "00000000-0000-4000-8000-00000000c201",
+            "job_id": "00000000-0000-4000-8000-00000000c301",
+            "org_id": "00000000-0000-4000-8000-00000000c002",
+            "job_title": "Similar kitchen job",
+            "work_date": "2026-08-12",
+            "phase": "after",
+            "title": "Similar kitchen walkthrough",
+            "ai_summary": "A similar kitchen. Their budget was lower.",
+            "transcript_text": "[0:05] Their budget was ten thousand.\n[0:11] They chose maple.",
+            "transcript_segments": [
+              {
+                "start": 5,
+                "end": 8,
+                "text": "Their budget was ten thousand.",
+                "speaker": "SPEAKER_0"
+              },
+              {
+                "start": 11,
+                "end": 13,
+                "text": "They chose maple.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "mh-changed-visits",
+          "type": "multi_hop",
+          "question": "What changed between the first and last visit?",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "The budget is twelve thousand.",
+                "at": 8
+              },
+              {
+                "text": "The budget moved to fifteen thousand.",
+                "at": 22
+              }
+            ],
+            "order": [
+              "twelve thousand",
+              "fifteen thousand"
+            ],
+            "mustContain": [
+              "First kitchen visit",
+              "Last kitchen visit",
+              "Speaker 1"
+            ],
+            "mustNotContain": [
+              "the homeowner said",
+              "This file does not have that"
+            ],
+            "quoteCards": true
+          }
+        },
+        {
+          "id": "mh-budget-every-time",
+          "type": "multi_hop",
+          "question": "List every time the homeowner mentioned budget across clips.",
+          "expect": {
+            "answerType": "answer",
+            "count": 2,
+            "quotes": [
+              {
+                "text": "The budget is twelve thousand.",
+                "at": 8
+              },
+              {
+                "text": "The budget moved to fifteen thousand.",
+                "at": 22
+              }
+            ],
+            "mustContain": [
+              "Speaker 1",
+              "First kitchen visit",
+              "Last kitchen visit"
+            ],
+            "mustNotContain": [
+              "the homeowner said",
+              "2 lines",
+              "two lines"
+            ],
+            "quoteCards": true
+          }
+        },
+        {
+          "id": "mh-similar-job",
+          "type": "multi_hop",
+          "question": "Compare this job to the last similar job.",
+          "expect": {
+            "answerType": "answer",
+            "quotes": [
+              {
+                "text": "The budget is twelve thousand.",
+                "at": 8
+              },
+              {
+                "text": "Their budget was ten thousand.",
+                "at": 5
+              }
+            ],
+            "mustContain": [
+              "Similar kitchen walkthrough",
+              "Speaker 1",
+              "ten thousand"
+            ],
+            "mustNotContain": [
+              "the homeowner said",
+              "This file does not have that"
+            ],
+            "quoteCards": true
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-how-many",
+          "type": "negative",
+          "question": "How many clips are on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
+            "mustContain": [
+              "2"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-list",
+          "type": "negative",
+          "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-who-filmed",
+          "type": "speaker_source",
+          "question": "Who filmed on this job?",
+          "expect": {
+            "answerType": "answer"
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-days",
+          "type": "temporal_order",
+          "question": "What days were filmed?",
+          "expect": {
+            "answerType": "answer"
+          }
+        },
+        {
+          "id": "syn-job-kitchen-visits-missing-price",
+          "type": "false_premise",
+          "question": "What was the approved settlement amount?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "$12,000",
+              "work completed"
+            ],
+            "mustNotContain": [
+              "$12,000"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "syn-job-chat-docs",
+      "consent": {
+        "status": "synthetic"
+      },
+      "fixture": {
+        "job": {
+          "id": "00000000-0000-4000-8000-00000000d101",
+          "org_id": "00000000-0000-4000-8000-00000000d001",
+          "title": "Oak Street kitchen"
+        },
+        "parties": [],
+        "proofs": [
+          {
+            "id": "00000000-0000-4000-8000-00000000d301",
+            "party_id": null,
+            "job_id": "00000000-0000-4000-8000-00000000d101",
+            "org_id": "00000000-0000-4000-8000-00000000d001",
+            "work_date": "2026-09-12",
+            "phase": "during",
+            "title": "Kitchen walkthrough",
+            "ai_summary": "A walkthrough that states the lockbox code.",
+            "narration_text": null,
+            "ai_findings": {},
+            "transcript_text": "[0:04] The lockbox code is 4821.",
+            "transcript_segments": [
+              {
+                "start": 4,
+                "end": 6,
+                "text": "The lockbox code is 4821."
+              }
+            ],
+            "transcript_words": null,
+            "device_metadata": {},
+            "captured_at": "2026-09-12T15:00:00Z",
+            "deleted_at": null
+          }
+        ],
+        "documents": [
+          {
+            "id": "00000000-0000-4000-8000-00000000d201",
+            "filename": "Oak-Street-Estimate.pdf",
+            "kind": "estimate",
+            "attached": true,
+            "relevance": "related",
+            "relevanceReason": "The address 418 Oak Street matches this job.",
+            "summary": "Estimate. Total $4,280.00.",
+            "extractedText": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00",
+            "chunks": [
+              {
+                "location": "page 1",
+                "text": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00"
+              }
+            ],
+            "facts": {
+              "totals": [
+                {
+                  "label": "Total",
+                  "value": "$4,280.00",
+                  "quote": "Total: $4,280.00",
+                  "location": "page 1"
+                }
+              ],
+              "lineItems": [
+                {
+                  "label": "Drywall repair",
+                  "value": "$2,100.00",
+                  "quote": "Drywall repair  $2,100.00",
+                  "location": "page 1"
+                }
+              ],
+              "dates": [],
+              "addresses": [],
+              "parties": [],
+              "claimNumbers": [],
+              "rooms": []
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000d202",
+            "filename": "Floor-Plan.pdf",
+            "kind": "floor_plan",
+            "attached": true,
+            "relevance": "related",
+            "relevanceReason": "The floor plan matches this job.",
+            "summary": "Floor plan. Kitchen, Living room.",
+            "extractedText": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'",
+            "chunks": [
+              {
+                "location": "page 1",
+                "text": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'"
+              }
+            ],
+            "facts": {
+              "totals": [],
+              "lineItems": [],
+              "dates": [],
+              "addresses": [],
+              "parties": [],
+              "claimNumbers": [],
+              "rooms": [
+                {
+                  "name": "Kitchen",
+                  "dimensions": "12' x 14'",
+                  "notes": null,
+                  "quote": "Kitchen 12' x 14'",
+                  "sourceLocation": "page 1"
+                },
+                {
+                  "name": "Living room",
+                  "dimensions": "16' x 18'",
+                  "notes": null,
+                  "quote": "Living room 16' x 18'",
+                  "sourceLocation": "page 1"
+                }
+              ]
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000d203",
+            "filename": "Unrelated-Invoice.pdf",
+            "kind": "invoice",
+            "attached": false,
+            "relevance": "not_related",
+            "relevanceReason": "The address 900 Pine Avenue does not match this job.",
+            "summary": "Invoice for 900 Pine Avenue.",
+            "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
+            "chunks": [
+              {
+                "location": "page 1",
+                "text": "Invoice\n900 Pine Avenue\nTotal: $900.00"
+              }
+            ],
+            "facts": {
+              "totals": [
+                {
+                  "label": "Total",
+                  "value": "$900.00",
+                  "quote": "Total: $900.00",
+                  "location": "page 1"
+                }
+              ],
+              "lineItems": [],
+              "dates": [],
+              "addresses": [],
+              "parties": [],
+              "claimNumbers": [],
+              "rooms": []
+            }
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "doc-estimate-total",
+          "type": "multi_hop",
+          "question": "What's the estimate total?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "$4,280.00",
+              "Oak-Street-Estimate.pdf",
+              "page 1",
+              "Total: $4,280.00"
+            ]
+          }
+        },
+        {
+          "id": "doc-floor-plan-rooms",
+          "type": "multi_hop",
+          "question": "What rooms are on the floor plan?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "Kitchen",
+              "Living room",
+              "12' x 14'",
+              "16' x 18'",
+              "Floor-Plan.pdf"
+            ]
+          }
+        },
+        {
+          "id": "doc-irrelevant-invoice",
+          "type": "negative",
+          "question": "Is the Pine Avenue invoice related to this job?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "not related",
+              "was not attached"
+            ],
+            "mustNotContain": [
+              "$900.00"
+            ]
+          }
+        },
+        {
+          "id": "doc-permit-missing",
+          "type": "negative",
+          "question": "What is the permit number on the estimate?",
+          "expect": {
+            "answerType": "abstain",
+            "mustContain": [
+              "does not show"
+            ]
+          }
+        },
+        {
+          "id": "doc-file-lockbox",
+          "type": "multi_hop",
+          "question": "What was said about the lockbox on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "4821",
+              "lockbox"
+            ],
+            "mustNotContain": [
+              "does not show",
+              "This document does not"
+            ]
+          }
+        },
+        {
+          "id": "doc-uploaded-estimate",
+          "type": "multi_hop",
+          "question": "What does the uploaded estimate say the total is?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "$4,280.00",
+              "Oak-Street-Estimate.pdf",
+              "page 1"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-how-many",
+          "type": "negative",
+          "question": "How many clips are on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
+            "mustContain": [
+              "1"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-list",
+          "type": "negative",
+          "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-who-filmed",
+          "type": "speaker_source",
+          "question": "Who filmed on this job?",
+          "expect": {
+            "answerType": "answer"
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-days",
+          "type": "temporal_order",
+          "question": "What days were filmed?",
+          "expect": {
+            "answerType": "answer"
+          }
+        },
+        {
+          "id": "syn-job-chat-docs-missing-price",
+          "type": "false_premise",
+          "question": "What was the approved settlement amount?",
+          "expect": {
+            "answerType": "abstain",
+            "critical": [
+              "$12,000",
+              "work completed"
+            ],
+            "mustNotContain": [
+              "$12,000"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "syn-job-rooms",
+      "consent": {
+        "status": "synthetic"
+      },
+      "timeZone": "America/Chicago",
+      "fixture": {
+        "job": {
+          "id": "00000000-0000-4000-8000-00000000d001",
+          "org_id": "00000000-0000-4000-8000-00000000d002",
+          "title": "Synthetic Room Job"
+        },
+        "parties": [
+          {
+            "id": "00000000-0000-4000-8000-00000000d003",
+            "company": null,
+            "trade": null,
+            "contact_name": null,
+            "created_by": null
+          }
+        ],
+        "proofs": [
+          {
+            "id": "00000000-0000-4000-8000-00000000d101",
+            "party_id": "00000000-0000-4000-8000-00000000d003",
+            "job_id": "00000000-0000-4000-8000-00000000d001",
+            "org_id": "00000000-0000-4000-8000-00000000d002",
+            "work_date": "2026-09-21",
+            "phase": "after",
+            "title": "Kitchen walkthrough",
+            "duration_seconds": 40,
+            "ai_summary": "Kitchen cabinets along the east wall.",
+            "ai_findings": {
+              "actions": [
+                {
+                  "atSeconds": 12,
+                  "room": "kitchen",
+                  "action": "position",
+                  "description": "Installs the cabinet boxes along the east wall."
+                }
+              ]
+            },
+            "transcript_text": "[0:04] The east wall is open.",
+            "transcript_segments": [
+              {
+                "start": 4,
+                "end": 6,
+                "text": "The east wall is open.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000d102",
+            "party_id": "00000000-0000-4000-8000-00000000d003",
+            "job_id": "00000000-0000-4000-8000-00000000d001",
+            "org_id": "00000000-0000-4000-8000-00000000d002",
+            "work_date": "2026-09-03",
+            "phase": "before",
+            "title": "Bathroom start",
+            "duration_seconds": 30,
+            "ai_summary": "Bathroom vanity comes out.",
+            "ai_findings": {
+              "actions": [
+                {
+                  "atSeconds": 8,
+                  "room": "bathroom",
+                  "action": "remove",
+                  "description": "Removes the old vanity."
+                }
+              ]
+            },
+            "transcript_text": "[0:02] Starting in the bath.",
+            "transcript_segments": [
+              {
+                "start": 2,
+                "end": 4,
+                "text": "Starting in the bath.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000d103",
+            "party_id": "00000000-0000-4000-8000-00000000d003",
+            "job_id": "00000000-0000-4000-8000-00000000d001",
+            "org_id": "00000000-0000-4000-8000-00000000d002",
+            "work_date": "2026-09-24",
+            "phase": "after",
+            "title": "Bathroom finish",
+            "duration_seconds": 36,
+            "ai_summary": "New vanity is set.",
+            "ai_findings": {
+              "actions": [
+                {
+                  "atSeconds": 20,
+                  "room": "bathroom",
+                  "action": "position",
+                  "description": "Sets the new vanity and caulks the seam."
+                }
+              ]
+            },
+            "transcript_text": "[0:10] Vanity is in place.",
+            "transcript_segments": [
+              {
+                "start": 10,
+                "end": 12,
+                "text": "Vanity is in place.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-00000000d104",
+            "party_id": "00000000-0000-4000-8000-00000000d003",
+            "job_id": "00000000-0000-4000-8000-00000000d001",
+            "org_id": "00000000-0000-4000-8000-00000000d002",
+            "work_date": "2026-09-10",
+            "phase": "before",
+            "title": "Living room close-up",
+            "duration_seconds": 20,
+            "ai_summary": "A crack above the living room window.",
+            "ai_findings": {
+              "actions": [
+                {
+                  "atSeconds": 6,
+                  "room": "living room",
+                  "action": "inspect",
+                  "description": "Crack in the drywall above the window."
+                }
+              ]
+            },
+            "transcript_text": "[0:03] Look at the wall.",
+            "transcript_segments": [
+              {
+                "start": 3,
+                "end": 5,
+                "text": "Look at the wall.",
+                "speaker": "SPEAKER_0"
+              }
+            ],
+            "transcript_words": null,
+            "deleted_at": null
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "room-kitchen-sep21",
+          "type": "room",
+          "question": "what work was completed in the kitchen on Sep 21?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "Sep 21",
+              "kitchen",
+              "Installs the cabinet boxes along the east wall",
+              "Kitchen walkthrough",
+              "0:12"
+            ],
+            "mustNotContain": [
+              "This file does not have that",
+              "room unclear",
+              "not on file"
+            ]
+          }
+        },
+        {
+          "id": "room-bathroom-work",
+          "type": "room",
+          "question": "what was done in the bathroom?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "bathroom",
+              "Removes the old vanity",
+              "Sets the new vanity and caulks the seam",
+              "Bathroom start",
+              "Bathroom finish",
+              "Sep 3",
+              "Sep 24"
+            ],
+            "mustNotContain": [
+              "This file does not have that",
+              "not on file"
+            ]
+          }
+        },
+        {
+          "id": "room-bathroom-duration",
+          "type": "room",
+          "question": "how many weeks did it take to fix the bathroom?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "Sep 3",
+              "Sep 24",
+              "about 3 weeks",
+              "does not establish completion",
+              "Bathroom start",
+              "Bathroom finish"
+            ],
+            "mustNotContain": [
+              "not established",
+              "does not show",
+              "not on file",
+              "This file does not have that"
+            ]
+          }
+        },
+        {
+          "id": "room-living-damage",
+          "type": "room",
+          "question": "what damage is in the living room?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "Crack in the drywall above the window",
+              "Living room close-up",
+              "0:06",
+              "living room"
+            ],
+            "mustNotContain": [
+              "not on file",
+              "This file does not have that"
+            ]
+          }
+        },
+        {
+          "id": "room-attic-unknown",
+          "type": "room",
+          "question": "what damage is in the attic?",
+          "expect": {
+            "answerType": "abstain",
+            "mustContain": [
+              "not on file",
+              "attic"
+            ],
+            "mustNotContain": [
+              "Crack in the drywall",
+              "Installs the cabinet"
+            ]
+          }
+        },
+        {
+          "id": "room-uploader-not-room",
+          "type": "room",
+          "question": "who uploaded the living room clip?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "1 clip",
+              "Sep 10"
+            ],
+            "mustNotContain": [
+              "Crack in the drywall above the window",
+              "Damage in the living room"
+            ]
+          }
+        },
+        {
+          "id": "room-lockbox-not-room",
+          "type": "room",
+          "question": "where's the lockbox, by the living room?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "1 clip",
+              "Sep 10"
+            ],
+            "mustNotContain": [
+              "Crack in the drywall above the window",
+              "Damage in the living room"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-rooms-how-many",
+          "type": "negative",
+          "question": "How many clips are on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
+            "mustContain": [
+              "4"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-rooms-list",
+          "type": "negative",
+          "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "syn-job-unrelated-upload",
+      "consent": {
+        "status": "synthetic"
+      },
+      "fixture": {
+        "job": {
+          "id": "00000000-0000-4000-8000-00000000d301",
+          "org_id": "00000000-0000-4000-8000-00000000d302",
+          "title": "Synthetic Upload Job"
+        },
+        "parties": [],
+        "proofs": [],
+        "documents": [
+          {
+            "id": "00000000-0000-4000-8000-00000000d303",
+            "filename": "Unrelated-Invoice.pdf",
+            "kind": "invoice",
+            "attached": false,
+            "relevance": "not_related",
+            "relevanceReason": "The address 900 Pine Avenue does not match this job.",
+            "summary": "Invoice for 900 Pine Avenue.",
+            "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
+            "chunks": [
+              {
+                "location": "page 1",
+                "text": "Invoice\n900 Pine Avenue\nTotal: $900.00"
+              }
+            ],
+            "facts": {
+              "totals": [
+                {
+                  "label": "Total",
+                  "value": "$900.00",
+                  "quote": "Total: $900.00",
+                  "location": "page 1"
+                }
+              ],
+              "lineItems": [],
+              "dates": [],
+              "addresses": [],
+              "parties": [],
+              "claimNumbers": [],
+              "rooms": []
+            }
+          }
+        ]
+      },
+      "questions": [
+        {
+          "id": "doc-unrelated-about",
+          "type": "multi_hop",
+          "question": "what is this about",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "900 Pine",
+              "invoice",
+              "Unrelated-Invoice.pdf"
+            ],
+            "mustNotContain": [
+              "Not related",
+              "Nothing on the document matches",
+              "was not attached",
+              "doesn't appear to be about this job"
+            ]
+          }
+        },
+        {
+          "id": "doc-unrelated-followup",
+          "type": "multi_hop",
+          "question": "What's the total on it?",
+          "expect": {
+            "answerType": "answer",
+            "mustContain": [
+              "$900.00",
+              "page 1",
+              "Unrelated-Invoice.pdf"
+            ],
+            "mustNotContain": [
+              "Not related",
+              "Nothing on the document matches",
+              "was not attached",
+              "doesn't appear to be about this job"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-unrelated-upload-how-many",
+          "type": "negative",
+          "question": "How many clips are on this file?",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        },
+        {
+          "id": "syn-job-unrelated-upload-list",
+          "type": "negative",
+          "question": "List the videos on this job",
+          "expect": {
+            "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ]
+          }
+        }
+      ]
     }
-   ]
-  }
- ]
+  ]
 }

@@ -1183,11 +1183,27 @@ export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null |
 }
 
 /**
- * Cap for the stable job block. Small files stay whole. Larger files keep
- * every clip's date, title, and summary, then as many redacted transcripts
- * as fit, in catalog order so the cached prefix does not change per question.
+ * Cap for the stable job block on deep / stuffed Ask turns. Small files stay
+ * whole. Larger files keep every clip's date, title, and summary, then as many
+ * redacted transcripts as fit, in catalog order so the cached prefix does not
+ * change per question on the same route.
  */
 export const ASK_CONTEXT_BUDGET = 120_000;
+
+/** Compact / fast-route job card (no full transcripts). */
+export const ASK_FAST_CONTEXT_BUDGET = 28_000;
+export const ASK_FAST_JOB_FILE_BUDGET = 8_000;
+
+export type AskJobContextOptions = {
+  budget?: number;
+  /** When false, clip cards omit raw transcripts. Default true. */
+  includeTranscripts?: boolean;
+};
+
+function trimForBudget(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  return `${text.slice(0, Math.max(0, budget - 20))}\n…(trimmed)`;
+}
 
 function rawTranscriptLine(clip: AskLookupClip, preview: string): string {
   if (!preview) return '  Raw transcript (authoritative): none';
@@ -1211,8 +1227,10 @@ function renderClipCard(clip: AskLookupClip, catalog: AskLookupCatalog, withTran
     .join('\n');
 }
 
-/** Project, address, client, people, history, and every clip's redacted transcript. */
-export function formatAskJobContext(catalog: AskLookupCatalog): string {
+/** Project, address, client, people, history, and (optionally) redacted transcripts. */
+export function formatAskJobContext(catalog: AskLookupCatalog, options?: AskJobContextOptions): string {
+  const budget = options?.budget ?? ASK_CONTEXT_BUDGET;
+  const includeTranscripts = options?.includeTranscripts !== false;
   const lines: string[] = [];
   lines.push(`Project: ${trim(catalog.jobTitle) || 'Untitled job'}`);
   if (trim(catalog.jobAddress)) lines.push(`Address: ${trim(catalog.jobAddress)}`);
@@ -1220,7 +1238,7 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
   if (trim(catalog.jobDescription)) lines.push(`Description: ${trim(catalog.jobDescription)}`);
   const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && trim(person.name));
   lines.push(people.length ? `People: ${people.map((person) => person.name).join(', ')}` : 'People: none listed');
-  const history = (catalog.history ?? []).slice(0, 40);
+  const history = (catalog.history ?? []).slice(0, includeTranscripts ? 40 : 20);
   lines.push(
     history.length
       ? `Job history:\n${history
@@ -1231,11 +1249,15 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
   const clips = clipsInScope(catalog);
   if (!clips.length) {
     lines.push('Clips: none');
-    return lines.join('\n');
+    return trimForBudget(lines.join('\n'), budget);
+  }
+  if (!includeTranscripts) {
+    const compactCards = clips.map((clip) => renderClipCard(clip, catalog, false));
+    return trimForBudget([...lines, `Clips:\n${compactCards.join('\n')}`].join('\n'), budget);
   }
   const fullCards = clips.map((clip) => renderClipCard(clip, catalog, true));
   const full = [...lines, `Clips:\n${fullCards.join('\n')}`].join('\n');
-  if (full.length <= ASK_CONTEXT_BUDGET) return full;
+  if (full.length <= budget) return full;
 
   const compactCards = clips.map((clip) => renderClipCard(clip, catalog, false));
   let packed = [...lines, `Clips:\n${compactCards.join('\n')}`].join('\n');
@@ -1244,10 +1266,10 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
     if (!transcript) continue;
     const count = transcriptLineCount(redactClipTranscriptForAsk(clip));
     const line = `\n  Raw transcript, authoritative (${clip.title}, ${count} line${count === 1 ? '' : 's'}): ${transcript}`;
-    if (packed.length + line.length > ASK_CONTEXT_BUDGET) break;
+    if (packed.length + line.length > budget) break;
     packed += line;
   }
-  return packed.slice(0, ASK_CONTEXT_BUDGET);
+  return packed.slice(0, budget);
 }
 
 export type LookupPromptInput = {
@@ -1262,6 +1284,11 @@ export type LookupPromptInput = {
    * Clips stay in formatAskJobContext; this fills the rest of the file.
    */
   jobFileRecord?: string | null;
+  contextBudget?: number;
+  includeTranscripts?: boolean;
+  jobFileBudget?: number;
+  /** When set, replaces the default stuffed job context as the stable block. */
+  stableOverride?: string | null;
 };
 
 function lookupPromptSections(input: LookupPromptInput): {
@@ -1292,9 +1319,18 @@ function lookupPromptSections(input: LookupPromptInput): {
     resolved && resolved.toLowerCase() !== input.question.trim().toLowerCase()
       ? `This follow-up refers to: ${resolved}`
       : '';
+  const jobFile = trim(input.jobFileRecord);
+  const jobFileBudget = input.jobFileBudget ?? (input.includeTranscripts === false ? ASK_FAST_JOB_FILE_BUDGET : ASK_CONTEXT_BUDGET);
+  const jobFileBlock = jobFile ? trimForBudget(jobFile, jobFileBudget) : '';
+  const context =
+    input.stableOverride?.trim() ||
+    `Job context:\n${formatAskJobContext(input.catalog, {
+      budget: input.contextBudget,
+      includeTranscripts: input.includeTranscripts,
+    })}${jobFileBlock ? `\n\n${jobFileBlock}` : ''}`;
   return {
     scope,
-    context: `Job context:\n${formatAskJobContext(input.catalog)}${trim(input.jobFileRecord) ? `\n\n${trim(input.jobFileRecord)}` : ''}`,
+    context,
     extra: input.extra?.trim() ? input.extra.trim() : '',
     turns: turns ? `Earlier turns in this chat (questions, answers, and the clips they cited):\n${turns}` : '',
     follow,

@@ -5,7 +5,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { foldThreadMemory, type StoredAskPair } from '../src/shared/askMemory.js';
-import { fastAnswerNeedsDeepFallback, routeAskQuestion } from '../src/shared/askRoute.js';
+import {
+  fastAnswerNeedsDeepFallback,
+  isSimpleFactQuestion,
+  needsDeepEvidence,
+  refineAskRouteWithClassifier,
+  routeAskQuestion,
+} from '../src/shared/askRoute.js';
 import {
   anthropicCachedSystem,
   flushGeminiContextCaches,
@@ -16,6 +22,7 @@ import {
 import { askTurnLogFields, createAskTurnClock, logAskTurnTiming } from '../src/shared/askTiming.js';
 import {
   ASK_CONTEXT_BUDGET,
+  ASK_FAST_CONTEXT_BUDGET,
   formatAskJobContext,
   splitLookupPrompt,
   type AskLookupCatalog,
@@ -34,11 +41,14 @@ const catalog: AskLookupCatalog = {
   history: [],
 };
 
-test('only trivial chat stays on the fast model; job questions go deep', () => {
+test('trivial chat and simple facts use the fast model; evidence stays deep', () => {
   assert.equal(routeAskQuestion({ question: 'Hey', catalog }).route, 'fast');
   assert.equal(routeAskQuestion({ question: 'Thanks', catalog }).reason, 'thanks');
-  // Follow-ups and lookups used to ride the fast model. They now use deep so
-  // Chat answers like someone who knows the whole file.
+  assert.equal(routeAskQuestion({ question: 'how many clips are on this file', catalog }).route, 'fast');
+  assert.equal(routeAskQuestion({ question: 'who is on this job', catalog }).route, 'fast');
+  assert.equal(routeAskQuestion({ question: 'what is the job address', catalog }).route, 'fast');
+  assert.equal(routeAskQuestion({ question: 'who opened this job', catalog }).route, 'fast');
+  // Spoken evidence and quotes stay on Opus with the full file.
   assert.equal(
     routeAskQuestion({
       question: 'and on Sep 21?',
@@ -49,7 +59,6 @@ test('only trivial chat stays on the fast model; job questions go deep', () => {
   );
   assert.equal(routeAskQuestion({ question: 'What did El Presidente say on Sep 21?', catalog }).route, 'deep');
   assert.equal(routeAskQuestion({ question: 'What was said on Sep 21?', catalog }).route, 'deep');
-  assert.equal(routeAskQuestion({ question: 'who opened this job', catalog }).route, 'deep');
 });
 
 test('drafts, comparisons, overviews, and other jobs stay on the deep model', () => {
@@ -293,14 +302,24 @@ function anthropicText(text: string, model: string): string {
 
 test('job questions use the deep model directly (no weak fast hop)', async () => {
   const prev = process.env.ANTHROPIC_API_KEY;
+  const prevEmbed = process.env.ASK_EMBEDDINGS;
   process.env.ANTHROPIC_API_KEY = 'sk-ant-test-fast-fallback';
+  process.env.ASK_EMBEDDINGS = '0';
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
   const models: string[] = [];
   const originalFetch = globalThis.fetch;
-  const fetchFn: typeof fetch = async (_input, init) => {
-    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+  const fetchFn: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string; input?: unknown };
     const model = body.model ?? '';
+    if (url.includes('/embeddings') || model.includes('embedding')) {
+      const n = Array.isArray(body.input) ? body.input.length : 1;
+      return new Response(
+        JSON.stringify({ data: Array.from({ length: n }, (_, index) => ({ index, embedding: [0.1, 0.2, 0.3] })) }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     models.push(model);
     const text = model.includes('opus') ? 'He said the tarp came off the north slope.' : 'Not sure.';
     return new Response(anthropicText(text, model), {
@@ -337,5 +356,62 @@ test('job questions use the deep model directly (no weak fast hop)', async () =>
     globalThis.fetch = originalFetch;
     if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = prev;
+    if (prevEmbed === undefined) delete process.env.ASK_EMBEDDINGS;
+    else process.env.ASK_EMBEDDINGS = prevEmbed;
   }
+});
+
+
+test('simple facts are fast; evidence and disputes stay deep', () => {
+  assert.equal(isSimpleFactQuestion('what is the claim number'), true);
+  assert.equal(isSimpleFactQuestion('list the rooms on this job'), true);
+  assert.equal(needsDeepEvidence('What did the adjuster say about the tarp?'), true);
+  assert.equal(needsDeepEvidence('draft an estimate for the kitchen'), true);
+  assert.equal(routeAskQuestion({ question: 'summarize every clip on this file', catalog }).route, 'deep');
+  assert.equal(routeAskQuestion({ question: 'why did the carrier deny the skylight', catalog }).route, 'deep');
+});
+
+test('fast turns trim transcripts out of the cached job card', () => {
+  const clip = (n: number): AskLookupClip => ({
+    jobId: 'job',
+    orgId: 'org',
+    proofId: `p${n}`,
+    title: `Clip ${n}`,
+    workDate: '2026-09-21',
+    summary: 'A short summary of the visit.',
+    transcript: 'Speaker 1: ' + ('word ' * 400),
+  });
+  const file: AskLookupCatalog = {
+    ...catalog,
+    clips: [clip(1), clip(2), clip(3)],
+  };
+  const deep = formatAskJobContext(file);
+  const fast = formatAskJobContext(file, { budget: ASK_FAST_CONTEXT_BUDGET, includeTranscripts: false });
+  assert.ok(deep.includes('Raw transcript'), 'deep keeps transcripts');
+  assert.equal(fast.includes('Raw transcript'), false, 'fast omits transcripts');
+  assert.ok(fast.length < deep.length);
+  assert.ok(fast.length <= ASK_FAST_CONTEXT_BUDGET);
+  // Prompt caching still marks system + stable as ephemeral breakpoints.
+  const blocks = anthropicCachedSystem('sys', fast);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0]?.cache_control?.type, 'ephemeral');
+  assert.equal(blocks[1]?.cache_control?.type, 'ephemeral');
+});
+
+test('unsure defaults can be refined by a Flash classifier', async () => {
+  const heuristic = routeAskQuestion({ question: 'Could you dig into the nuances of the lighting plan?', catalog });
+  assert.equal(heuristic.unsure, true);
+  const fetchFn: typeof fetch = async () =>
+    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'DEEP' }] } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  const refined = await refineAskRouteWithClassifier({
+    question: 'Could you dig into the nuances of the lighting plan?',
+    heuristic,
+    apiKey: 'test-gemini-key',
+    fetchFn,
+  });
+  assert.equal(refined.route, 'deep');
+  assert.equal(refined.reason, 'classifier_deep');
 });
