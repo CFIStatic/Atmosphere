@@ -24,7 +24,7 @@ export type SearchMeta = {
 
 /** Classic hedges / abstentions. */
 const HEDGE =
-  /\b(i don't know|i do not know|not sure|nothing (?:in|on) (?:the |this )?file|not (?:in|on) (?:the |this )?file|no (?:information|mention|record)|does not (?:show|mention|say)|doesn't (?:show|mention|say)|can't find|cannot find|not found)\b/i;
+  /\b(i don't know|i do not know|not sure|nothing (?:in|on) (?:the |this )?(?:file|transcripts?|recording|video|job)|not (?:in|on) (?:the |this )?(?:file|transcripts?|recording|video|job)|no (?:information|mention|record|one)|does not (?:show|mention|say|name)|doesn't (?:show|mention|say|name)|never mentions|can't find|cannot find|not found|no one (?:on the recording )?commits)\b/i;
 
 /**
  * Clear denials of file contents — the model answered "no / empty / not on
