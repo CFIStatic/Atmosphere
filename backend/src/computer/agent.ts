@@ -19,7 +19,7 @@ import {
   type ApprovalTicket,
   type GateDecision,
 } from './gate.js';
-import { verifyApprovalFields } from './projection.js';
+import { countUnverifiedApprovalFields, verifyApprovalFields } from './projection.js';
 import {
   ALREADY_SENT_APPROVAL_MESSAGE,
   actionFingerprint,
@@ -536,7 +536,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           kind,
           label: buttonLabel,
           fields: fields.length,
-          unverified: fields.filter((f) => !f.verified).length,
+          unverified: countUnverifiedApprovalFields(fields),
         });
         const result = await waitForPerson('approval', approval.id);
         if (result === 'took_control') {
