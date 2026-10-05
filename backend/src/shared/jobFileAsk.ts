@@ -1,3 +1,4 @@
+import { looksLikeNotFound } from './askNotFound.js';
 /**
  * Ask the whole job file — not only the videos.
  *
@@ -968,6 +969,16 @@ export function isDuplicateAskTurn(
   return sameThread && String(recent.answer ?? '').trim() === answer.trim();
 }
 
+
+/** Never attach web results to a job not-found answer. */
+export function clearWebOnNotFound<T extends { answer: string; webHits?: unknown[]; webDerivedAnswer?: boolean }>(
+  result: T,
+): T {
+  const ans = String(result.answer ?? '');
+  if (!looksLikeNotFound(ans) && !/^Not found\./i.test(ans)) return result;
+  return { ...result, webHits: [], webDerivedAnswer: false };
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -1233,7 +1244,7 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived });
     }
     if (toolOnly.length) {
       const prose =
@@ -1244,7 +1255,7 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       const answer = trailer ? `${prose}\n\n${trailer}` : prose;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits });
     }
     emit(spoken);
     return { ...empty, answer: spoken, groundedOn: spokenFromJob ? groundedOn : 0, toolResults, webHits };
@@ -1398,14 +1409,14 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived });
     }
     const toolOnly = toolResults.filter((r) => r.ok);
     const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : spoken;
     const trailer = formatActionsTrailer(toolResults);
     const answer = trailer ? `${prose}\n\n${trailer}` : prose;
     emit(answer);
-    return { ...empty, answer, groundedOn, toolResults, webHits };
+    return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits });
   }
   let answer = trimChatFiller(normalizeAskProse(completed.text), { question: input.question });
   const applied = await applyWebResults(answer, input.question, webHits, webAnswer, {
