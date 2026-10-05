@@ -369,6 +369,38 @@ html[data-field-embed] #root {
   overflow-x: hidden;
 }
 
+/* iPhone / Android app shell only (lib/appShell.ts marks html[data-app-shell]
+   from the app's user agent). Browsers never get these rules. */
+html[data-app-shell] {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+html[data-app-shell] body {
+  overscroll-behavior: none;
+}
+/* 16px fields: iOS zooms the page into anything smaller. */
+html[data-app-shell] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+html[data-app-shell] textarea,
+html[data-app-shell] select {
+  font-size: 16px !important;
+}
+/* App chrome is not text: no copy callout or selection on long press. */
+html[data-app-shell] :is(button, a, nav, header, label, [role='tab'], [role='menuitem']) {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Job file tabs share the phone's width instead of running off the edge. */
+html[data-app-shell] [data-testid='job-file-section-bar'] > div {
+  min-width: 100%;
+}
+html[data-app-shell] [data-testid='job-file-section-bar'] [role='tab'] {
+  flex: 1 1 auto;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+  font-size: 13px;
+}
+
 /* Native media controls follow the active theme via color-scheme on :root. */
 
 /* Set from Settings › Appearance, and honoured for anyone whose system already

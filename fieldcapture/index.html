@@ -40,6 +40,87 @@
   })();
 </script>
 <script>
+  /* iPhone / Android app shell (Capacitor, apps/mobile). The app appends
+     "AtmosphereFieldCapture" to the user agent. Everything below only runs
+     there, so the website in any browser is unchanged. */
+  (function () {
+    try {
+      var cap = window.Capacitor;
+      var native = /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
+        !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+      if (!native) return;
+      var root = document.documentElement;
+      var android = /Android/i.test(navigator.userAgent || '');
+      root.setAttribute('data-app-shell', android ? 'android' : 'ios');
+      /* Natural phone size: no pinch zoom and no zoom-on-focus. */
+      var vp = document.querySelector('meta[name="viewport"]');
+      if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+
+      function plugin(name) {
+        var c = window.Capacitor;
+        return c && c.Plugins ? c.Plugins[name] : null;
+      }
+      function quiet(p) { if (p && typeof p.catch === 'function') p.catch(function () {}); }
+
+      /* Keyboard up → hide the Field Capture / Dashboard bar (CSS). The
+         Keyboard plugin's events cover inputs inside the Platform iframe
+         too; focus and height changes are the fallback. */
+      var open = false;
+      function setKeyboard(on) {
+        if (on === open) return;
+        open = on;
+        /* Own attribute: FieldCaptureCore's data-keyboard only sees fields in
+           this document, not ones inside the Dashboard iframe. */
+        if (on) root.setAttribute('data-app-keyboard', 'open');
+        else root.removeAttribute('data-app-keyboard');
+      }
+      window.addEventListener('keyboardWillShow', function () { setKeyboard(true); });
+      window.addEventListener('keyboardDidShow', function () { setKeyboard(true); });
+      window.addEventListener('keyboardWillHide', function () { setKeyboard(false); });
+      window.addEventListener('keyboardDidHide', function () { setKeyboard(false); });
+      var typing = 'input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),textarea,select,[contenteditable="true"]';
+      document.addEventListener('focusin', function (e) {
+        if (e.target && e.target.matches && e.target.matches(typing)) setKeyboard(true);
+      });
+      document.addEventListener('focusout', function () {
+        setTimeout(function () {
+          var a = document.activeElement;
+          if (!(a && a.matches && a.matches(typing)) && !(a && a.tagName === 'IFRAME')) setKeyboard(false);
+        }, 60);
+      });
+      var tallest = 0;
+      function viewportHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
+      function measure() { var h = viewportHeight(); if (h > tallest) tallest = h; }
+      window.addEventListener('load', measure);
+      document.addEventListener('DOMContentLoaded', measure);
+      function onResize() {
+        var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        if (h > tallest) tallest = h;
+        if (tallest - h > 150) setKeyboard(true);
+        else if (tallest - h < 60 && document.activeElement && document.activeElement.tagName === 'IFRAME') setKeyboard(false);
+      }
+      window.addEventListener('resize', onResize);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+
+      function nativeChrome() {
+        /* No grey accessory bar (up/down/Done) above the keyboard. */
+        var kb = plugin('Keyboard');
+        if (kb && kb.setAccessoryBarVisible) { try { quiet(kb.setAccessoryBarVisible({ isVisible: false })); } catch (e) {} }
+        /* Status bar text follows the page theme (light text on dark). */
+        var sb = plugin('StatusBar');
+        if (sb && sb.setStyle) {
+          try { quiet(sb.setStyle({ style: root.getAttribute('data-theme') === 'light' ? 'LIGHT' : 'DARK' })); } catch (e) {}
+        }
+      }
+      nativeChrome();
+      document.addEventListener('DOMContentLoaded', nativeChrome);
+      if (window.MutationObserver) {
+        new MutationObserver(nativeChrome).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+      }
+    } catch (e) {}
+  })();
+</script>
+<script>
   try {
     if (/(?:^|[?&])elevate=1(?:&|$)/.test(location.search)) {
       document.documentElement.setAttribute('data-elevate-preview', '1');
@@ -236,6 +317,34 @@
   /* No back button: the app is one button and the two screens it moves
      between. There is nowhere to go back to. */
 
+  /* ---------- iPhone / Android app shell only (html[data-app-shell]) ----------
+     Set by the head script from the app's user agent; never in a browser. */
+  html[data-app-shell] { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+  /* Solid band behind the status bar on every screen but the camera. */
+  html[data-app-shell] body::after {
+    content: ''; position: fixed; left: 0; right: 0; top: 0; z-index: 1000;
+    height: env(safe-area-inset-top, 0px); background: var(--panel); pointer-events: none;
+  }
+  html[data-app-shell] body[data-screen="s-rec"]::after { display: none; }
+  /* Long place names end in "…" inside the REC pill instead of being clipped. */
+  html[data-app-shell] #site-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* Small text links get a finger-sized hit area without moving anything. */
+  html[data-app-shell] :is(#forgot-link, #signup-link, #signin-toggle) {
+    display: inline-block; padding: 12px 6px; margin: -12px -6px;
+  }
+  /* 16px fields: iOS zooms the page into anything smaller. */
+  html[data-app-shell] input:not([type=checkbox]):not([type=radio]):not([type=range]),
+  html[data-app-shell] textarea,
+  html[data-app-shell] select { font-size: 16px; }
+  /* App chrome is not text: no copy callout, no selection, on long press. */
+  html[data-app-shell] :is(button, a, label, .top, .switchbar, .recwrap, .door-actions, .stopwrap, .recbar, .who-menu) {
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
+  /* Keyboard up: the product bar (and Today's start button) step aside so
+     the field sits right on the keyboard with no empty band. */
+  html[data-app-shell][data-app-keyboard="open"] .switchbar,
+  html[data-app-shell][data-app-keyboard="open"] #s-home .recwrap { display: none !important; }
+
   /* ---------- screens ---------- */
   .screen { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: auto; }
   .screen[data-on="1"] { display: flex; }
@@ -244,8 +353,10 @@
   #s-platform { overflow: hidden; padding-top: env(safe-area-inset-top, 0px); background: var(--panel); }
   /* Login and terms have no bottom bar: keep their end clear of the home indicator. */
   #s-blocked, #s-terms { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* width 1px + min-width 100%: iOS WebKit otherwise sizes an iframe to its
+     content's width, pushing the office console past the right edge. */
   .platform-frame {
-    flex: 1; width: 100%; min-height: 0; border: 0;
+    flex: 1; width: 1px; min-width: 100%; min-height: 0; border: 0;
     background: var(--bg);
   }
   body[data-screen="s-platform"] .top { display: none; }
