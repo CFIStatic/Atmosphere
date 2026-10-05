@@ -129,7 +129,6 @@ export function buildSiteDigest(input: SiteDigestInput): SiteDigest {
   });
 
   const uniqueDone = [...new Set(done)].slice(0, 8);
-  const safety = uniqueFlags.filter((f) => f.kind === 'safety');
   const missing = uniqueFlags.filter((f) => f.kind === 'missing_work');
 
   const headline =
