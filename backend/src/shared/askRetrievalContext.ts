@@ -158,8 +158,6 @@ export async function retrieveAskEvidenceEmbedded(
   if (!allChunks.length) return base;
   const qVec = await embedText(question, { fetchFn: opts?.fetchFn });
   if (!qVec) return base;
-  // Embed only candidates not already strongly pinned, plus top lexical hits' siblings.
-  const candidateTexts = allChunks.map((c) => c.text);
   // Cap embed batch for cost: prefer chunks that lexical already likes, else first N.
   const preferKeys = new Set(base.merged.map((h) => h.key));
   const ordered = [
