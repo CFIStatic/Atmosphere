@@ -49,7 +49,19 @@ export function hasEmptyJobBoilerplate(answer: string): boolean {
 }
 
 export function answerHasJobCitation(answer: string): boolean {
-  return /⟦(?:quotes|sources):/i.test(String(answer ?? ''));
+  const text = String(answer ?? '');
+  // Real quote chips count.
+  if (/⟦quotes:[^⟧]*\S/i.test(text)) return true;
+  // Generic "⟦sources: videos⟧" is a UI placeholder, not a grounded claim.
+  const sources = text.match(/⟦sources:([^⟧]*)⟧/gi) ?? [];
+  for (const chip of sources) {
+    const body = chip.replace(/^⟦sources:/i, '').replace(/⟧$/, '').trim();
+    if (!body) continue;
+    if (/^videos?$/i.test(body)) continue;
+    // A concrete clip/path/id counts as grounded.
+    if (/\S/.test(body)) return true;
+  }
+  return false;
 }
 
 export function catalogSearchCounts(catalog: AskLookupCatalog): {

@@ -133,3 +133,11 @@ test('applyHonestNotFound keeps denial-shaped but cited answerable replies', () 
   assert.match(out, /Sep 3/);
   assert.match(out, /about 3 weeks/);
 });
+
+test('generic ⟦sources: videos⟧ does not block Not found rewrite', () => {
+  const raw =
+    "No, there's **no QuickBooks quote** on this job.\n⟦sources: videos⟧";
+  const out = applyHonestNotFound(raw, catalog, 'QuickBooks quote');
+  assert.match(out, /^Not found\./);
+  assert.match(out, /I searched .+ clip/);
+});
