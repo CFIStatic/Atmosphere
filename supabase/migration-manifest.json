@@ -218,7 +218,8 @@
     "20261005150000_ask_route_decisions.sql",
     "20261005160000_ask_job_context_cache.sql",
     "20261005180000_ask_org_company_memory.sql",
-    "20261005190000_ask_route_skipped.sql"
+    "20261005190000_ask_route_skipped.sql",
+    "20261005210000_computer_site_playbooks.sql"
   ],
   "migrations": [
     {
@@ -6560,6 +6561,27 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "alters ask_route_decisions check constraint only; no new durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005210000_computer_site_playbooks",
+      "file": "20261005210000_computer_site_playbooks.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.computer_site_playbooks",
+        "table|public.computer_playbook_outcomes",
+        "column|public.computer_site_playbooks.id",
+        "column|public.computer_site_playbooks.site",
+        "column|public.computer_site_playbooks.task_type",
+        "column|public.computer_site_playbooks.playbook",
+        "column|public.computer_playbook_outcomes.org_id",
+        "column|public.computer_playbook_outcomes.outcome",
+        "rls|public.computer_site_playbooks",
+        "rls|public.computer_playbook_outcomes"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
