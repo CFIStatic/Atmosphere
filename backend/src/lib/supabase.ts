@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { config } from '../config.js';
 
 /**
@@ -19,11 +20,24 @@ const baseAuthOptions = {
 } as const;
 
 /**
+ * supabase-js always constructs a Realtime client. On Node 20 there is no
+ * global WebSocket, so createClient throws unless we pass `ws`. Server and CLI
+ * code never subscribe to channels — this only satisfies the constructor.
+ */
+const baseClientOptions = {
+  ...baseAuthOptions,
+  realtime: {
+    // ws satisfies the Realtime constructor on Node 20 (no native WebSocket).
+    transport: WebSocket as any,
+  },
+};
+
+/**
  * A client bound to the public anon key. Suitable for signUp / signInWithPassword
  * / getUser / refreshSession — everything the login page needs.
  */
 export function createAnonClient(): SupabaseClient {
-  return createClient(config.supabase.url, config.supabase.anonKey, baseAuthOptions);
+  return createClient(config.supabase.url, config.supabase.anonKey, baseClientOptions);
 }
 
 /**
@@ -32,7 +46,7 @@ export function createAnonClient(): SupabaseClient {
  */
 export function createUserClient(accessToken: string): SupabaseClient {
   return createClient(config.supabase.url, config.supabase.anonKey, {
-    ...baseAuthOptions,
+    ...baseClientOptions,
     global: {
       headers: { Authorization: `Bearer ${accessToken}` },
     },
@@ -45,7 +59,7 @@ export function createUserClient(accessToken: string): SupabaseClient {
  */
 export function createAdminClient(): SupabaseClient | null {
   if (!config.supabase.serviceRoleKey) return null;
-  return createClient(config.supabase.url, config.supabase.serviceRoleKey, baseAuthOptions);
+  return createClient(config.supabase.url, config.supabase.serviceRoleKey, baseClientOptions);
 }
 
 /**
@@ -64,7 +78,7 @@ export const ANALYTICS_ACTOR_HEADER = 'x-analytics-user-id';
 export function createStaffReportClient(userId: string): SupabaseClient | null {
   if (!config.supabase.serviceRoleKey) return null;
   return createClient(config.supabase.url, config.supabase.serviceRoleKey, {
-    ...baseAuthOptions,
+    ...baseClientOptions,
     global: {
       headers: { [ANALYTICS_ACTOR_HEADER]: userId },
     },

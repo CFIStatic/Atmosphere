@@ -4,7 +4,6 @@
  * scripts/backfillAskEmbeddings.ts with --apply after sign-off.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createHash } from 'node:crypto';
 import {
   ASK_EMBEDDING_DIMS,
   ASK_EMBEDDING_MODEL,
@@ -12,9 +11,13 @@ import {
   embedTexts,
   openaiEmbeddingsApiKey,
 } from '../shared/askEmbeddings.js';
+import {
+  ANALYSIS_CHUNK_TABLE,
+  analysisRowsFromProof,
+} from '../shared/askChunkEmbeddings.js';
 import { TRANSCRIPT_CHUNK_TABLE } from '../shared/askTranscriptChunkStore.js';
 
-export const ANALYSIS_CHUNK_TABLE = 'ask_analysis_chunks';
+export { ANALYSIS_CHUNK_TABLE } from '../shared/askChunkEmbeddings.js';
 
 export type EmbedBackfillStats = {
   transcriptScanned: number;
@@ -26,63 +29,6 @@ export type EmbedBackfillStats = {
   analysisFailed: number;
   skippedNoKey: boolean;
 };
-
-function sha(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
-}
-
-function analysisRowsFromProof(row: Record<string, unknown>): Array<{
-  org_id: string;
-  job_id: string;
-  proof_id: string;
-  seq: number;
-  kind: 'summary' | 'findings' | 'dictation' | 'action';
-  start_sec: number | null;
-  end_sec: number | null;
-  text: string;
-  source_sha256: string;
-}> {
-  const orgId = String(row.org_id ?? '');
-  const jobId = String(row.job_id ?? '');
-  const proofId = String(row.id ?? '');
-  if (!orgId || !jobId || !proofId) return [];
-  const out: Array<{
-    org_id: string;
-    job_id: string;
-    proof_id: string;
-    seq: number;
-    kind: 'summary' | 'findings' | 'dictation' | 'action';
-    start_sec: number | null;
-    end_sec: number | null;
-    text: string;
-    source_sha256: string;
-  }> = [];
-  const push = (kind: 'summary' | 'findings' | 'dictation' | 'action', text: string, start: number | null = null) => {
-    const body = text.replace(/\s+/g, ' ').trim().slice(0, 4000);
-    if (body.length < 8) return;
-    out.push({
-      org_id: orgId,
-      job_id: jobId,
-      proof_id: proofId,
-      seq: out.filter((r) => r.kind === kind).length,
-      kind,
-      start_sec: start,
-      end_sec: null,
-      text: body,
-      source_sha256: sha(`${kind}:${body}`),
-    });
-  };
-  const summary = String(row.ai_summary ?? row.narration_text ?? '').trim();
-  if (summary) push('summary', summary);
-  const findings = row.ai_findings;
-  if (findings != null) {
-    const raw = typeof findings === 'string' ? findings : JSON.stringify(findings);
-    push('findings', raw);
-  }
-  const narration = String(row.narration_text ?? '').trim();
-  if (narration && narration !== summary) push('dictation', narration);
-  return out;
-}
 
 /**
  * Embed rows missing embeddings. `apply:false` only counts. Does not call OpenAI
