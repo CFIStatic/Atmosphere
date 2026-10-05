@@ -70,6 +70,15 @@ test('the Chat tool queues a task and returns a task card', async () => {
   const store = new MemoryComputerStore();
   setComputerProviderForTests(new MockComputerProvider());
   setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Carrier portal',
+    url: 'https://portal.example-carrier.test/',
+    host: 'portal.example-carrier.test',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
   const result = await executeAskTool('start_computer_task', { instructions: ASK }, ctx('org'));
   assert.equal(result.ok, true, result.summary);
   const [task] = [...store.tasks.values()];
@@ -100,6 +109,15 @@ test('a paused AI allowance refuses to start a task', async () => {
       throw new Error('AI is paused until the usage allowance resets.');
     },
   });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Carrier portal',
+    url: 'https://portal.example-carrier.test/',
+    host: 'portal.example-carrier.test',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
   const result = await executeAskTool('start_computer_task', { instructions: ASK }, ctx('org'));
   assert.equal(result.ok, false);
   assert.match(result.summary, /AI is paused/);
@@ -111,6 +129,15 @@ test("without Browserbase keys Computer isn't set up, and Chat shows that card",
   delete process.env.BROWSERBASE_PROJECT_ID;
   const store = new MemoryComputerStore();
   setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Carrier portal',
+    url: 'https://portal.example-carrier.test/',
+    host: 'portal.example-carrier.test',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
   const status = computerStatus();
   assert.equal(status.configured, false);
   assert.match(status.message ?? '', /Computer isn't set up/);
@@ -280,4 +307,179 @@ test('Browserbase credentials tolerate NAME=value and quotes pasted from a .env 
   assert.equal(cleanEnvSecret('BROWSERBASE_PROJECT_ID', " 'p-1' "), 'p-1');
   assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', 'bb_test_x'), 'bb_test_x');
   assert.equal(cleanEnvSecret('BROWSERBASE_API_KEY', undefined), '');
+});
+
+test('email and site-action commands route to start_computer_task', () => {
+  for (const q of [
+    'email Pat a summary of how things are going',
+    'Send an email to adjuster@carrier.test with a status update',
+    'update the claim on portal.example-carrier.test',
+    'use Outlook',
+    'add a photo on the Xactimate estimate page at identity.xactware.com',
+  ]) {
+    assert.equal(looksLikeComputerTask(q), true, q);
+    assert.deepEqual(pickAskToolsHeuristically(q, 'org'), ['start_computer_task'], q);
+  }
+  assert.ok(!looksLikeComputerTask('draft a progress share message'));
+  assert.ok(!pickAskToolsHeuristically('draft a progress share message for the homeowner', 'org').includes('start_computer_task'));
+});
+
+test('start_computer_task with a matching Login sets start URL and sign_in_saved instructions', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Outlook',
+    url: 'https://outlook.office.com/',
+    host: 'outlook.office.com',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
+  const result = await executeAskTool(
+    'start_computer_task',
+    { instructions: 'email pat@example.test a summary of how things are going' },
+    ctx('org'),
+  );
+  assert.equal(result.ok, true, result.summary);
+  const [task] = [...store.tasks.values()];
+  assert.equal(task.start_url, 'https://outlook.office.com/');
+  assert.match(task.instructions, /sign_in_saved/);
+  assert.match(task.instructions, /request_approval/);
+  assert.match(task.instructions, /Never click Send/);
+  assert.match(task.instructions, /pat@example\.test/);
+  assert.match(result.summary, /Outlook/);
+  assert.equal((result.data as { loginHost?: string }).loginHost, 'outlook.office.com');
+});
+
+test('start_computer_task without a matching Login for a named site points at Logins', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  const result = await executeAskTool(
+    'start_computer_task',
+    { instructions: 'update the estimate in Xactimate' },
+    ctx('org'),
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.summary, /Logins/);
+  assert.equal(store.tasks.size, 0);
+  assert.equal(result.ui?.path, 'logins');
+});
+
+test('email the homeowner uses job-file email; missing email asks in Chat', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Outlook',
+    url: 'https://outlook.office.com/',
+    host: 'outlook.office.com',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
+  const withEmail = ctx('org');
+  withEmail.file = {
+    job: { claimNumber: 'CLM-T-1', title: 'Test roof' },
+    facts: { Homeowner: 'Pat Test', 'Homeowner email': 'pat@example.test' },
+  };
+  const ok = await executeAskTool(
+    'start_computer_task',
+    { instructions: 'email the homeowner a status update' },
+    withEmail,
+  );
+  assert.equal(ok.ok, true, ok.summary);
+  const [task] = [...store.tasks.values()];
+  assert.match(task.instructions, /pat@example\.test/);
+  assert.match(task.instructions, /request_approval/);
+
+  store.tasks.clear();
+  const noEmail = ctx('org');
+  noEmail.file = { job: { title: 'Test roof' }, facts: { Homeowner: 'Pat Test' } };
+  const ask = await executeAskTool(
+    'start_computer_task',
+    { instructions: 'email the homeowner a status update' },
+    noEmail,
+  );
+  assert.equal(ask.ok, false);
+  assert.match(ask.summary, /email address for the homeowner/i);
+  assert.equal(store.tasks.size, 0);
+  assert.equal(ask.ui?.path, 'computer-task:need-detail');
+});
+
+test('CRM outstanding command queues a read-only status task', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'AccuLynx',
+    url: 'https://app.acculynx.com/',
+    host: 'app.acculynx.com',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
+  const c = ctx('org');
+  c.file = { job: { claimNumber: 'CLM-T-1', title: 'Test roof' }, facts: { 'Insured name': 'Pat Test' } };
+  c.address = '2 Test St';
+  assert.ok(looksLikeComputerTask("what's outstanding in AccuLynx for this job"));
+  const result = await executeAskTool(
+    'start_computer_task',
+    { instructions: "what's outstanding in AccuLynx for this job" },
+    c,
+  );
+  assert.equal(result.ok, true, result.summary);
+  const [task] = [...store.tasks.values()];
+  assert.equal(task.start_url, 'https://app.acculynx.com/');
+  assert.match(task.instructions, /Flag:/);
+  assert.match(task.instructions, /CLM-T-1/);
+  assert.match(task.instructions, /Do not change/i);
+});
+
+test('build estimate in Xactimate queues a task that enters line items inside Xactimate', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'Xactimate',
+    url: 'https://identity.xactware.com/',
+    host: 'identity.xactware.com',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
+  await store.saveLogin({
+    org_id: ORG,
+    label: 'DocuSketch',
+    url: 'https://app.docusketch.com/',
+    host: 'app.docusketch.com',
+    cookie_domains: [],
+    user_id: USER,
+    at: new Date().toISOString(),
+  });
+  const c = ctx('org');
+  c.file = {
+    job: { claimNumber: 'CLM-T-1', title: 'Hail roof' },
+    facts: { 'Roof squares': '18', Homeowner: 'Pat Test', Sketch: 'DocuSketch' },
+    scope: [{ state: 'included', title: 'R&R shingles' }],
+  };
+  assert.ok(looksLikeComputerTask('build the estimate in Xactimate for this job'));
+  const result = await executeAskTool(
+    'start_computer_task',
+    { instructions: 'build the estimate in Xactimate for this job' },
+    c,
+  );
+  assert.equal(result.ok, true, result.summary);
+  const [task] = [...store.tasks.values()];
+  assert.equal(task.start_url, 'https://app.docusketch.com/');
+  assert.match(task.instructions, /STEP 1/);
+  assert.match(task.instructions, /INSIDE Xactimate|complete working estimate/i);
+  assert.match(task.instructions, /Roof squares|18/);
+  assert.match(task.instructions, /request_approval/);
+  assert.match(result.summary, /sketch|Xactimate/i);
 });

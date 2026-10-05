@@ -23,11 +23,25 @@ export function ComputerNeedsYouCard({
       </div>
       <ol className="list-decimal space-y-0.5 pl-5 text-[13px] text-ink-700">
         <li>Take control to use the browser yourself.</li>
-        <li>{needsYou.reason === 'captcha' ? 'Complete the captcha.' : needsYou.reason === 'two_factor' ? 'Enter the code from your phone or email.' : needsYou.reason === 'login' ? 'Sign in with your own account.' : 'Do the step on the page.'}</li>
+        <li>
+          {needsYou.reason === 'captcha'
+            ? 'Complete the captcha.'
+            : needsYou.reason === 'number_match'
+              ? 'Approve that number in your authenticator app.'
+              : needsYou.reason === 'two_factor'
+                ? 'Enter the code from your phone or email.'
+                : needsYou.reason === 'login'
+                  ? 'Sign in with your own account.'
+                  : needsYou.reason === 'clarification'
+                    ? 'Answer in Chat if needed, or finish the step in the live view.'
+                    : 'Do the step on the page.'}
+        </li>
         <li>Press Resume and Computer carries on.</li>
       </ol>
       <p className="text-[11px] text-ink-500">
-        Computer never types passwords or codes and never solves captchas. Your sign-in stays saved for your company next time.
+        {needsYou.reason === 'clarification'
+          ? 'Computer stops to ask when it cannot tell the next step. It never guesses MFA codes.'
+          : 'Computer never types passwords or codes, never invents approval numbers, and never solves captchas. Your sign-in stays saved for your company next time.'}
       </p>
       <div className="flex flex-wrap gap-2">
         <button

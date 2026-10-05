@@ -259,12 +259,15 @@ export class PlaywrightDriver implements ComputerDriver {
   async pageSignals(): Promise<PageSignals> {
     const page = await this.active();
     const base = (await page.mainFrame().evaluate(`(${READ_SIGNALS})()`).catch(() => null)) as PageSignals | null;
-    const signals: PageSignals = base ?? {
+    const signals: PageSignals = {
       url: page.url(),
       hasPasswordField: false,
       hasOneTimeCodeField: false,
       hasCaptcha: false,
       mentionsVerificationCode: false,
+      approvalNumber: null,
+      visibleOtpCode: null,
+      ...(base ?? {}),
     };
     for (const frame of page.frames()) {
       if (frame === page.mainFrame()) continue;

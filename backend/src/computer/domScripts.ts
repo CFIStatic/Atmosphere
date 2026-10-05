@@ -104,11 +104,38 @@ export const READ_SIGNALS = String.raw`() => {
   const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
   const frames = Array.from(document.querySelectorAll('iframe')).filter(visible);
   const text = ((document.body && document.body.innerText) || '').slice(0, 20000);
+  const mentionsVerificationCode = /\b(verification code|security code|one-time (pass)?code|enter the code|two-step|2-step|two-factor|authenticator app)\b/i.test(text);
+  // Number-matching MFA: the page asks the person to approve a number on their phone.
+  const numberMatchTalk = /\b(approve|number matching|enter (?:this|the) number|are you trying to sign in|authenticator)\b/i.test(text);
+  let approvalNumber = null;
+  if (numberMatchTalk) {
+    const big = Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"],[class*="number"],[class*="Number"],[data-testid*="number"]'))
+      .filter(visible)
+      .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim())
+      .find((t) => /^\d{2,3}$/.test(t));
+    if (big) approvalNumber = big;
+    if (!approvalNumber) {
+      const m = text.match(/\b(?:approve|enter|number(?:\s+is)?|matching)[^\d]{0,40}\b(\d{2,3})\b/i)
+        || text.match(/\b(\d{2,3})\b[^\d]{0,40}(?:on your (?:phone|device)|in (?:your )?authenticator|to (?:sign in|continue|approve))/i);
+      if (m) approvalNumber = m[1];
+    }
+  }
+  // A code written on this page (not in an input). Prefer "code is 123456" phrasing.
+  let visibleOtpCode = null;
+  if (mentionsVerificationCode || /\b(your code|code is|verification code[:\s])/i.test(text)) {
+    const m = text.match(/\b(?:code(?:\s+is)?|verification code)[:\s]+(\d{4,8})\b/i)
+      || text.match(/\b(\d{6})\b/);
+    // Only keep a standalone 4–8 digit code when the page is clearly about codes,
+    // and it is not the same 2–3 digit approval number.
+    if (m && m[1] !== approvalNumber && (m[1].length >= 4)) visibleOtpCode = m[1];
+  }
   return {
     url: location.href,
     hasPasswordField: inputs.some((i) => i.type === 'password'),
     hasOneTimeCodeField: inputs.some((i) => (i.getAttribute('autocomplete') || '').toLowerCase() === 'one-time-code' || /\b(otp|one.?time|verification.?code|2fa|mfa)\b/i.test(i.name + ' ' + i.id + ' ' + i.placeholder)),
     hasCaptcha: frames.some((f) => CAPTCHA.test(f.src + ' ' + f.title)) || Boolean(document.querySelector('.g-recaptcha, .h-captcha, .cf-turnstile')),
-    mentionsVerificationCode: /\b(verification code|security code|one-time (pass)?code|enter the code|two-step|2-step|two-factor|authenticator app)\b/i.test(text),
+    mentionsVerificationCode,
+    approvalNumber,
+    visibleOtpCode,
   };
 }`;
