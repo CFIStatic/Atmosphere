@@ -2,7 +2,7 @@
  * Multi-step Ask over lookup tools.
  *
  * Simple factual / inventory Ask turns use a fast model with thinking off
- * (ASK_FAST_ANTHROPIC_MODEL / Sonnet 5.5, otherwise Gemini Flash) and a trimmed
+ * (Gemini Flash / ASK_FAST_MODEL by default; Anthropic Sonnet fallback; Opus on deep) and a trimmed
  * job-context card. Quotes, evidence, drafts, comparisons, and multi-step
  * questions stay on ANTHROPIC_MODEL (Opus 5.5) with adaptive thinking and the
  * full file. If the fast model fails or returns nothing grounded, the deep
@@ -660,11 +660,21 @@ export function providerLookupStep(input: {
           onToken: input.onToken,
         })
       : null;
-  let provider: 'anthropic' | 'google' | 'none' = anthropic
-    ? 'anthropic'
-    : googleVisionApiKey()
-      ? 'google'
-      : 'none';
+  // Simple / lookup (fast): prefer Gemini Flash — cheapest capable on providers we
+  // already use. Deep keeps Anthropic-first. Critical escalation stays in askRoute.
+  const googleKey = googleVisionApiKey();
+  let provider: 'anthropic' | 'google' | 'none' =
+    route === 'fast'
+      ? googleKey
+        ? 'google'
+        : anthropic
+          ? 'anthropic'
+          : 'none'
+      : anthropic
+        ? 'anthropic'
+        : googleKey
+          ? 'google'
+          : 'none';
   const deadline = input.deadlineAt ?? askLookupDeadlineAt(Date.now(), route);
   return async (state) => {
     const left = deadline - Date.now();
@@ -676,6 +686,26 @@ export function providerLookupStep(input: {
       : route === 'fast'
         ? state.user
         : `${state.user}\n\nLook up what you need before you answer.`;
+    if (provider === 'google' && googleKey) {
+      try {
+        return await geminiLookupTurn({
+          apiKey: googleKey,
+          system: state.system,
+          stable: state.stable,
+          user,
+          route,
+          fetchFn: input.fetchFn,
+          signal,
+          onToken: input.onToken,
+          onCache: input.onCache,
+        });
+      } catch (err) {
+        logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
+        // Fast: fall through to Anthropic Sonnet if Gemini fails; deep already may have used Anthropic first.
+        provider = route === 'fast' && anthropic ? 'anthropic' : 'none';
+        if (provider === 'none') return null;
+      }
+    }
     if (provider === 'anthropic' && anthropic) {
       try {
         return await anthropic({
@@ -688,26 +718,26 @@ export function providerLookupStep(input: {
       } catch (err) {
         logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_anthropic_failed', err);
         if (route === 'fast') return null;
-        provider = googleVisionApiKey() ? 'google' : 'none';
-      }
-    }
-    if (route === 'fast' && provider === 'anthropic') return null;
-    if (provider === 'google' || (route === 'fast' && googleVisionApiKey() && !anthropic)) {
-      try {
-        return await geminiLookupTurn({
-          apiKey: googleVisionApiKey(),
-          system: state.system,
-          stable: state.stable,
-          user,
-          route,
-          fetchFn: input.fetchFn,
-          signal,
-          onToken: input.onToken,
-          onCache: input.onCache,
-        });
-      } catch (err) {
-        logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
-        provider = 'none';
+        provider = googleKey ? 'google' : 'none';
+        if (provider === 'google') {
+          try {
+            return await geminiLookupTurn({
+              apiKey: googleKey,
+              system: state.system,
+              stable: state.stable,
+              user,
+              route,
+              fetchFn: input.fetchFn,
+              signal,
+              onToken: input.onToken,
+              onCache: input.onCache,
+            });
+          } catch (err2) {
+            logAskFailure('ask_lookup_gemini_failed', err2);
+            return null;
+          }
+        }
+        return null;
       }
     }
     return null;

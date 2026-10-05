@@ -325,7 +325,7 @@ export async function logAskRouteDecision(
     route: row.route,
     reason: row.reason,
     unsure: row.unsure,
-    modelHint: row.modelHint ?? (row.route === 'fast' ? 'claude-sonnet-5-5|gemini-3.8-flash' : row.route === 'skipped' ? 'deterministic' : 'claude-opus-5-5'),
+    modelHint: row.modelHint ?? (row.route === 'fast' ? 'gemini-3.8-flash|claude-sonnet-5-5' : row.route === 'skipped' ? 'deterministic' : 'claude-opus-5-5'),
   };
   recentRouteDecisions.push(entry);
   while (recentRouteDecisions.length > ROUTE_LOG_MAX) recentRouteDecisions.shift();
