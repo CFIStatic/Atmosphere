@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adjusterDraftSignOff,
+  isDraftOnlyIntent,
   jobIdentifiers,
   jobSummaryForEmail,
   looksLikeComputerTask,
@@ -454,4 +455,35 @@ test('item 9: read-only mailbox intent does not compose email', () => {
 test('item 9: send/email still composes', () => {
   assert.equal(isReadOnlyMailboxIntent('email the homeowner a status update'), false);
   assert.equal(parseComputerCommand('email the homeowner a status update').kind, 'email');
+});
+
+test('item 10: honor user subject and body exactly', () => {
+  const q =
+    'email dana.homeowner@example.test subject: "Roof schedule update" body: "We will be on site Tuesday at 9am."';
+  const cmd = parseComputerCommand(q);
+  assert.equal(cmd.userSubject, 'Roof schedule update');
+  assert.equal(cmd.userBody, 'We will be on site Tuesday at 9am.');
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.match(plan.instructions, /Subject: Roof schedule update/);
+  assert.match(plan.instructions, /We will be on site Tuesday at 9am/);
+  assert.match(plan.instructions, /Honor the Subject and Body exactly/);
+});
+
+test('item 10: draft only never requests Send approval even with Outlook', () => {
+  const q =
+    'draft an email to the homeowner, draft only, do not send. subject: "Quick note" body: "Just checking in."';
+  assert.equal(isDraftOnlyIntent(q), true);
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.ok('emailDraftPreview' in plan && plan.emailDraftPreview);
+  if (!('emailDraftPreview' in plan)) return;
+  assert.equal(plan.draftOnly, true);
+  assert.equal(plan.subject, 'Quick note');
+  assert.equal(plan.body, 'Just checking in.');
+  assert.match(plan.summary, /draft only|nothing will be sent/i);
+  assert.doesNotMatch(plan.summary, /request_approval|Approve before Send/i);
+  assert.equal('instructions' in plan, false);
 });

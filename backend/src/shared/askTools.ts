@@ -1113,6 +1113,7 @@ export async function executeAskTool(
             };
           }
           if ('emailDraftPreview' in plan && plan.emailDraftPreview) {
+            const draftOnly = Boolean('draftOnly' in plan && plan.draftOnly);
             return {
               ok: true,
               tool: name,
@@ -1120,12 +1121,16 @@ export async function executeAskTool(
               data: {
                 channel: 'email',
                 draftPreview: true,
+                draftOnly,
                 to: plan.to,
                 subject: plan.subject,
                 body: plan.body,
-                offerLogins: true,
+                offerLogins: Boolean(plan.offerLogins),
               },
-              ui: { section: 'logins', path: 'computer-task:draft-preview' },
+              ui: {
+                section: plan.offerLogins ? 'logins' : 'computer',
+                path: draftOnly ? 'computer-task:draft-only' : 'computer-task:draft-preview',
+              },
             };
           }
           if ('smsPendingApproval' in plan && plan.smsPendingApproval) {

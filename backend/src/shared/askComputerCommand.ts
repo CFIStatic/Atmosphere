@@ -51,6 +51,12 @@ export interface ParsedComputerCommand {
   wantsEstimate: boolean;
   /** How to reach the adjuster when asking for a status update. */
   messageChannel: 'xactanalysis' | 'email' | 'sms' | null;
+  /** User said draft only / don't send — never request Send approval. */
+  draftOnly: boolean;
+  /** Exact Subject line the person typed, when present. */
+  userSubject: string | null;
+  /** Exact Body the person typed, when present. */
+  userBody: string | null;
   question: string;
 }
 
@@ -68,6 +74,15 @@ export function isReadOnlyMailboxIntent(question: string): boolean {
   const q = String(question ?? '').toLowerCase();
   if (!/\b(email|e-?mail|inbox|outlook|gmail|mailbox|message)\b/.test(q)) return false;
   if (/\b(send|compose|draft|write|reply|forward|new email)\b/.test(q)) return false;
+  // Explicit compose fields mean write, not read.
+  if (/\bsubject\s*[:=]/.test(q) || /\b(?:body|saying|message)\s*[:=]/.test(q)) return false;
+  if (
+    /\bemail\b/.test(q) &&
+    /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/.test(q) &&
+    /\b(subject|body|saying)\b/.test(q)
+  ) {
+    return false;
+  }
   return (
     /\b(most recent|latest|last|newest)\b/.test(q) ||
     /\b(subject|sender|from|who sent|what does .* say)\b/.test(q) ||
@@ -197,6 +212,62 @@ export function isUnnamedCrmIntent(question: string): boolean {
   return true;
 }
 
+
+/** "draft only", "don't send", "do not send" — compose/show draft, never Send approval. */
+export function isDraftOnlyIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!q) return false;
+  if (/\bdraft\s+only\b/.test(q)) return true;
+  if (/\bdon'?t\s+send\b/.test(q) || /\bdo\s+not\s+send\b/.test(q)) return true;
+  if (/\bnever\s+send\b/.test(q)) return true;
+  if (/\bdraft\b/.test(q) && /\b(without\s+sending|no\s+send)\b/.test(q)) return true;
+  return false;
+}
+
+/**
+ * Pull exact Subject / Body the person wrote in Chat.
+ * Supports "subject: …", "subject \"…\"", "with subject …", and body after "body:" / "saying:" / quoted block.
+ */
+export function extractUserEmailSubjectBody(question: string): { subject: string | null; body: string | null } {
+  const q = String(question ?? '').trim();
+  if (!q) return { subject: null, body: null };
+
+  let subject: string | null = null;
+  const subjQuoted =
+    q.match(/\bsubject\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\bsubject\s+[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\bwith\s+subject\s+[\"“]([^\"”]+)[\"”]/i);
+  if (subjQuoted) {
+    subject = subjQuoted[1].trim();
+  } else {
+    const subjLine = q.match(/\bsubject\s*[:=]\s*([^\n]+)/i);
+    if (subjLine) {
+      subject = subjLine[1].replace(/\b(body|saying|message)\s*[:=].*$/i, '').trim().replace(/[,;.]+$/, '');
+    }
+  }
+
+  let body: string | null = null;
+  const bodyQuoted =
+    q.match(/\b(?:body|saying|message)\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\b(?:body|saying|message)\s+[\"“]([^\"”]+)[\"”]/i);
+  if (bodyQuoted) {
+    body = bodyQuoted[1].trim();
+  } else {
+    const bodyBlock = q.match(/\b(?:body|saying|message)\s*[:=]\s*([\s\S]+)$/i);
+    if (bodyBlock) {
+      body = bodyBlock[1].trim();
+      // Strip trailing draft-only instructions from the body itself
+      body = body
+        .replace(/\b(draft\s+only|don'?t\s+send|do\s+not\s+send|never\s+send)\.?\s*$/i, '')
+        .trim();
+    }
+  }
+
+  if (subject) subject = subject.slice(0, 500);
+  if (body) body = body.slice(0, 8000);
+  return { subject: subject || null, body: body || null };
+}
+
 export function parseComputerCommand(question: string): ParsedComputerCommand {
   const q = String(question ?? '').trim();
   const known = findKnown(q);
@@ -230,6 +301,8 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     wantsEstimate &&
     (Boolean(known && (known.aliases.includes('xactimate') || known.aliases.includes('xactware') || known.host.includes('xactware'))) ||
       /\b(xactimate|xactware)\b/i.test(q));
+  const draftOnly = isDraftOnlyIntent(q);
+  const userMail = extractUserEmailSubjectBody(q);
   return {
     kind: readMailbox
       ? 'email_read'
@@ -258,6 +331,9 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     wantsOutstanding,
     wantsEstimate,
     messageChannel,
+    draftOnly,
+    userSubject: userMail.subject,
+    userBody: userMail.body,
     question: q,
   };
 }
@@ -529,7 +605,10 @@ export interface ComputerTaskEmailDraftPending {
   ok: true;
   kind: 'email';
   emailDraftPreview: true;
-  offerLogins: true;
+  /** True when no mailbox Login yet — person should add one before a real Send. */
+  offerLogins: boolean;
+  /** True when the person asked for draft only / don't send — never show Send approval. */
+  draftOnly?: boolean;
   to: string | null;
   subject: string;
   body: string;
@@ -818,17 +897,51 @@ export function planComputerTask(input: {
 
   // ---- Email ----
   if (command.kind === 'email') {
+    const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
+    const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
+    const toName = person?.name && to ? `${person.name} <${to}>` : to;
+    const generatedBody = jobSummaryForEmail(input.file, input.address);
+    const subject =
+      (command.userSubject && command.userSubject.trim()) ||
+      (input.file?.job?.title ? `Update: ${String(input.file.job.title).trim()}` : null) ||
+      (command.wantsSummary ? 'Job status update' : 'Update');
+    const body =
+      (command.userBody && command.userBody.trim()) ||
+      generatedBody ||
+      '(Add the message body once you confirm what to send.)';
+    const honorNote =
+      command.userSubject || command.userBody
+        ? 'Honor the Subject and Body exactly as given below — do not rewrite, shorten, or add facts.'
+        : null;
+
+    // Draft-only: show exact draft in Chat, never open Send approval (even with a Login).
+    if (command.draftOnly) {
+      const draftLines = [
+        'Exact draft (draft only — nothing will be sent):',
+        `To: ${toName || '(need recipient email)'}`,
+        `Subject: ${subject}`,
+        '',
+        body,
+        '',
+        matched
+          ? 'I did not open Send approval. Say the word when you want me to send this for real.'
+          : 'Open Logins in the sidebar, add Outlook or Gmail, then ask me to send this when you are ready.',
+      ];
+      return {
+        ok: true,
+        kind: 'email',
+        emailDraftPreview: true,
+        offerLogins: !matched,
+        draftOnly: true,
+        to: to ?? null,
+        subject,
+        body,
+        lead: 'Draft only — nothing was sent, and no Send approval was shown.',
+        summary: draftLines.join('\n'),
+      };
+    }
+
     if (!matched) {
-      const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
-      const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
-      const toName = person?.name ? `${person.name} <${to}>` : to;
-      const summary = jobSummaryForEmail(input.file, input.address);
-      const subject = input.file?.job?.title
-        ? `Update: ${String(input.file.job.title).trim()}`
-        : command.wantsSummary
-          ? 'Job status update'
-          : 'Update';
-      const body = summary || '(Add the message body once you confirm what to send.)';
       const draftLines = [
         'Exact draft (nothing was sent):',
         `To: ${toName || '(need recipient email)'}`,
@@ -850,7 +963,6 @@ export function planComputerTask(input: {
         summary: draftLines.join('\n'),
       };
     }
-    const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
     const needsEmail = Boolean(command.recipientRole || (command.recipient && !command.recipient.includes('@')));
     if (needsEmail && (!person || !person.email)) {
       const who = command.recipientRole === 'homeowner' || command.recipientRole === 'insured' || command.recipientRole === 'customer'
@@ -865,7 +977,6 @@ export function planComputerTask(input: {
         summary: `I don't have an email address for the ${who} on this job file. What's their email? Once I have it I'll open ${matched.login.label}, draft the message, and check with you before sending.`,
       };
     }
-    const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
     if (!to) {
       return {
         ok: false,
@@ -874,22 +985,16 @@ export function planComputerTask(input: {
         summary: `Who should I email, and what's their address? I'll open ${matched.login.label} and draft it once I know.`,
       };
     }
-    const toName = person?.name ? `${person.name} <${to}>` : to;
-    const summary = jobSummaryForEmail(input.file, input.address);
-    const subject = input.file?.job?.title
-      ? `Update: ${String(input.file.job.title).trim()}`
-      : command.wantsSummary
-        ? 'Job status update'
-        : 'Update';
     const host = matched.login.host;
     const label = matched.login.label || host;
     const instructions = [
       `Open ${label} (${host}) and compose a new email.`,
       `To: ${toName}`,
       `Subject: ${subject}`,
-      'Body (use this text; you may tidy line breaks but do not invent facts):',
+      honorNote,
+      'Body (use this text exactly when the person supplied it; otherwise you may tidy line breaks but do not invent facts):',
       '---',
-      summary,
+      body,
       '---',
       person?.source ? `Recipient came from ${person.source}.` : '',
       `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
