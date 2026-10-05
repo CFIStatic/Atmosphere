@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { createAdminClient, createStaffReportClient, createUserClient } from '../lib/supabase.js';
+import { deleteCommunicationStyle } from '../shared/askCommunicationStyle.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import {
@@ -668,6 +669,28 @@ analyticsRouter.post(
         confirmRecipientCount,
       );
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/analytics/communication-style/reset
+ * Internal staff: wipe one person's quiet Chat communication-style profile.
+ * Body: { userId }. Never returns the traits.
+ */
+analyticsRouter.post(
+  '/communication-style/reset',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = z.string().uuid().parse((req.body ?? {}).userId);
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Admin client unavailable.', 'admin_unavailable');
+      const ok = await deleteCommunicationStyle(admin, userId);
+      if (!ok) throw new HttpError(500, 'Could not reset communication style.', 'style_reset_failed');
+      res.json({ ok: true, userId });
     } catch (err) {
       next(err);
     }
