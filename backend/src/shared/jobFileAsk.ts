@@ -25,6 +25,7 @@ import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
+import { stylePromptAddendum } from './askCommunicationStyle.js';
 import { mergeMeasuredUsages } from '../lib/providerUsage.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
@@ -1001,6 +1002,11 @@ export async function answerFromJobFile(input: {
   sessionDocuments?: AskDocumentView[] | null;
   /** Test hook for the upload answer completion. */
   uploadComplete?: typeof completeAskText;
+  /**
+   * Compact per-user communication-style summary (tone/length/format only).
+   * Never overrides grounding, speakers, or job-evidence rules.
+   */
+  styleSummary?: string | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1262,6 +1268,7 @@ export async function answerFromJobFile(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
     .join('\n');
 
+  const styleAddendum = stylePromptAddendum(input.styleSummary ?? '');
   const extraSystem =
     `\n\n${askClockSystemRules(input.now ?? new Date(), zone)}` +
     `\n\n${askWebCapabilityRules()}` +
@@ -1272,7 +1279,8 @@ export async function answerFromJobFile(input: {
         : '') +
     (toolResults.length
       ? `\n\nIN-PRODUCT ACTIONS: Tool results below already ran. Summarize what changed or what you found. Never claim you emailed anyone. If a tool needs confirmation, tell the user clearly and do not pretend it already happened. Append ⟦actions: …⟧ only if tools already attached it — the server appends the trailer.`
-      : '');
+      : '') +
+    (styleAddendum ? `\n\n${styleAddendum}` : '');
 
   const webBlock = webUsable
     ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
