@@ -57,7 +57,7 @@ function scripted(turns: Array<ContentBlock[] | ((req: ComputerModelRequest) => 
       seen.push(JSON.parse(JSON.stringify(req)));
       const turn = turns[seen.length - 1];
       const content = turn ? (typeof turn === 'function' ? await turn(req) : turn) : [tool('finish', { summary: 'Out of script.' })];
-      return { model: 'claude-sonnet-5', content, usage: { input_tokens: 1000, output_tokens: 100 } };
+      return { model: 'claude-sonnet-5-5', content, usage: { input_tokens: 1000, output_tokens: 100 } };
     },
   };
   return { model, seen };
@@ -141,7 +141,7 @@ test('only the allowlisted job projection reaches the agent', async () => {
   assert.doesNotMatch(first, /4321/, 'lockbox code never goes to the agent');
   assert.doesNotMatch(first, /9999|private note/, 'notes never go to the agent');
   assert.match(h.seen[0].system[0].text, /untrusted/i);
-  assert.equal(h.seen[0].model, 'claude-sonnet-5');
+  assert.equal(h.seen[0].model, 'claude-sonnet-5-5');
   assert.ok((h.seen[0].tools as Array<{ type?: string }>).some((t) => t.type === 'computer_toolset_20260801'));
 });
 
@@ -423,7 +423,7 @@ test('metering: agent tokens and browser time land on the Computer line at 10x',
   assert.equal(model.length, 2, 'one row per model call');
   for (const p of model) {
     assert.equal(p.p_feature, 'computer');
-    assert.equal(p.p_model_id, 'claude-sonnet-5');
+    assert.equal(p.p_model_id, 'claude-sonnet-5-5');
     assert.equal(p.p_input_tokens, 1000);
     assert.ok(p.p_cost_nanos > 0);
     assert.equal(p.p_price_nanos, p.p_cost_nanos * 10);

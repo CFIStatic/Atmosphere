@@ -104,12 +104,16 @@ test('a turn that spans two models is priced call by call at each model’s own 
 
 // ── Official rate card ─────────────────────────────────────────────────────
 
-test('rate card matches the official prices verified on 2026-10-02', () => {
+test('rate card matches the official prices verified on 2026-10-05', () => {
   const table = modelPriceTable();
-  const at = '2026-10-02T12:00:00Z';
+  const at = '2026-10-05T12:00:00Z';
   const expect: Record<string, [number, number, number]> = {
+    'claude-opus-5-5': [4, 20, 0.4],
+    'claude-sonnet-5-5': [2, 10, 0.2],
     'claude-opus-5': [5, 25, 0.5],
     'claude-sonnet-5': [2, 10, 0.2],
+    'gemini-3.8-flash': [0.75, 3.75, 0.075],
+    'gemini-3.1-pro-preview': [2, 12, 0.2],
     'claude-opus-4-8': [5, 25, 0.5],
     'claude-sonnet-4-6': [3, 15, 0.3],
     'claude-haiku-4-5': [1, 5, 0.1],
@@ -125,7 +129,7 @@ test('rate card matches the official prices verified on 2026-10-02', () => {
   assert.equal(ratesForModel(table, 'claude-opus-5', at)?.cacheWrite5mPerMTok, 6.25);
   assert.equal(ratesForModel(table, 'claude-opus-5', at)?.cacheWrite1hPerMTok, 10);
   assert.equal(ratesForModel(table, 'claude-sonnet-5-20260801', at)?.inputPerMTok, 2, 'dated snapshot ids resolve');
-  assert.equal(RATE_CARD_VERIFIED_AT, '2026-10-02');
+  assert.equal(RATE_CARD_VERIFIED_AT, '2026-10-05');
   assert.match(PRICE_SOURCES.anthropic, /^https:\/\/platform\.claude\.com\//);
   assert.match(PRICE_SOURCES.google, /^https:\/\/ai\.google\.dev\//);
 });
@@ -184,13 +188,18 @@ test('a model with no price is flagged loudly, recorded as unpriced, never silen
 });
 
 test('the migration rate card matches the backend rate card for every row it writes', () => {
-  const sql = readFileSync(
-    path.join(here, '../../supabase/migrations/20261003020000_provider_usage_and_rate_card.sql'),
-    'utf8',
-  );
-  const rows = [...sql.matchAll(/\(\s*'([a-z0-9.-]+)',\s*'[^']*',\s*'[a-z]+',\s*'(anthropic|google)',\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),[^)]*'(https:[^']+)',\s*'(\d{4}-\d{2}-\d{2})'\)/g)];
+  const files = [
+    '20261003020000_provider_usage_and_rate_card.sql',
+    '20261005120000_rate_card_claude_5_5_gemini_3.sql',
+  ];
+  const rowRe = /\(\s*'([a-z0-9.-]+)',\s*'[^']*',\s*'[a-z]+',\s*'(anthropic|google)',\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),[^)]*'(https:[^']+)',\s*'(\d{4}-\d{2}-\d{2})'\)/g;
+  const rows = files.flatMap((file) => {
+    const sql = readFileSync(path.join(here, '../../supabase/migrations', file), 'utf8');
+    return [...sql.matchAll(rowRe)];
+  });
   assert.ok(rows.length >= 8, `parsed ${rows.length} rate-card rows`);
   const table = modelPriceTable();
+  let newestVerified = '';
   for (const [, model, provider, inp, out, w5, w1, read, url, verified] of rows) {
     const r = ratesForModel(table, model, `${verified}T12:00:00Z`);
     assert.ok(r, `${model} is in the SQL card but not the backend card`);
@@ -201,9 +210,11 @@ test('the migration rate card matches the backend rate card for every row it wri
     assert.ok(Math.abs(base * Number(w5) - r.cacheWrite5mPerMTok) < 1e-9, `${model} 5m write`);
     assert.ok(Math.abs(base * Number(w1) - r.cacheWrite1hPerMTok) < 1e-9, `${model} 1h write`);
     assert.equal(url, provider === 'anthropic' ? PRICE_SOURCES.anthropic : PRICE_SOURCES.google);
-    assert.equal(verified, RATE_CARD_VERIFIED_AT);
+    assert.ok(verified <= RATE_CARD_VERIFIED_AT, `${model} verified ${verified} is after ${RATE_CARD_VERIFIED_AT}`);
+    if (verified > newestVerified) newestVerified = verified;
   }
-  for (const used of ['claude-opus-5', 'claude-sonnet-5', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']) {
+  assert.equal(newestVerified, RATE_CARD_VERIFIED_AT);
+  for (const used of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-5-5', 'claude-sonnet-5-5', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']) {
     assert.ok(rows.some((row) => row[1] === used), `${used} (in production use) must be in the migration`);
   }
 });

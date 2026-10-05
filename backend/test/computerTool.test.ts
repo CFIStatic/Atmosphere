@@ -77,7 +77,7 @@ test('the Chat tool queues a task and returns a task card', async () => {
   assert.equal(task.org_id, ORG);
   assert.equal(task.job_id, JOB);
   assert.equal(task.start_url, 'https://portal.example-carrier.test/');
-  assert.equal(task.model_id, 'claude-sonnet-5');
+  assert.equal(task.model_id, 'claude-sonnet-5-5');
   assert.deepEqual(
     task.job_projection.map((f) => f.key).sort(),
     ['fact.homeowner', 'job.address', 'job.claimNumber'],
