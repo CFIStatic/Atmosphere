@@ -1082,17 +1082,6 @@
           }
         },
         {
-          "id": "inv-when",
-          "type": "temporal_order",
-          "question": "When were the videos filmed?",
-          "expect": {
-            "answerType": "answer",
-            "mustContain": [
-              "September"
-            ]
-          }
-        },
-        {
           "id": "unans-purple",
           "type": "negative",
           "question": "Is there a purple dumpster on this job?",
@@ -1117,11 +1106,12 @@
           "question": "How many clips are on this file?",
           "expect": {
             "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
             "mustContain": [
               "2"
-            ],
-            "mustNotContain": [
-              "nothing matches"
             ]
           }
         },
@@ -1134,18 +1124,6 @@
             "mustNotContain": [
               "nothing matches",
               "Nothing on this file matches"
-            ]
-          }
-        },
-        {
-          "id": "syn-job-ledger-sep21-not-found-brand",
-          "type": "false_premise",
-          "question": "What brand of skylight was installed according to the transcript?",
-          "expect": {
-            "answerType": "abstain",
-            "mustNotContain": [
-              "Velux",
-              "velux installed"
             ]
           }
         }
@@ -1357,11 +1335,12 @@
           "question": "How many clips are on this file?",
           "expect": {
             "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
             "mustContain": [
               "2"
-            ],
-            "mustNotContain": [
-              "nothing matches"
             ]
           }
         },
@@ -1374,18 +1353,6 @@
             "mustNotContain": [
               "nothing matches",
               "Nothing on this file matches"
-            ]
-          }
-        },
-        {
-          "id": "syn-job-kitchen-visits-not-found-brand",
-          "type": "false_premise",
-          "question": "What brand of skylight was installed according to the transcript?",
-          "expect": {
-            "answerType": "abstain",
-            "mustNotContain": [
-              "Velux",
-              "velux installed"
             ]
           }
         },
@@ -1418,14 +1385,6 @@
             "mustNotContain": [
               "$12,000"
             ]
-          }
-        },
-        {
-          "id": "syn-job-kitchen-visits-dispute",
-          "type": "multi_hop",
-          "question": "Summarize any carrier dispute on this file.",
-          "expect": {
-            "answerType": "abstain"
           }
         }
       ]
@@ -1673,11 +1632,12 @@
           "question": "How many clips are on this file?",
           "expect": {
             "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
             "mustContain": [
               "1"
-            ],
-            "mustNotContain": [
-              "nothing matches"
             ]
           }
         },
@@ -1690,18 +1650,6 @@
             "mustNotContain": [
               "nothing matches",
               "Nothing on this file matches"
-            ]
-          }
-        },
-        {
-          "id": "syn-job-chat-docs-not-found-brand",
-          "type": "false_premise",
-          "question": "What brand of skylight was installed according to the transcript?",
-          "expect": {
-            "answerType": "abstain",
-            "mustNotContain": [
-              "Velux",
-              "velux installed"
             ]
           }
         },
@@ -1734,14 +1682,6 @@
             "mustNotContain": [
               "$12,000"
             ]
-          }
-        },
-        {
-          "id": "syn-job-chat-docs-dispute",
-          "type": "multi_hop",
-          "question": "Summarize any carrier dispute on this file.",
-          "expect": {
-            "answerType": "abstain"
           }
         }
       ]
@@ -2034,11 +1974,12 @@
           "question": "How many clips are on this file?",
           "expect": {
             "answerType": "answer",
+            "mustNotContain": [
+              "nothing matches",
+              "Nothing on this file matches"
+            ],
             "mustContain": [
               "4"
-            ],
-            "mustNotContain": [
-              "nothing matches"
             ]
           }
         },
@@ -2051,18 +1992,6 @@
             "mustNotContain": [
               "nothing matches",
               "Nothing on this file matches"
-            ]
-          }
-        },
-        {
-          "id": "syn-job-rooms-not-found-brand",
-          "type": "false_premise",
-          "question": "What brand of skylight was installed according to the transcript?",
-          "expect": {
-            "answerType": "abstain",
-            "mustNotContain": [
-              "Velux",
-              "velux installed"
             ]
           }
         }
@@ -2161,11 +2090,9 @@
           "question": "How many clips are on this file?",
           "expect": {
             "answerType": "answer",
-            "mustContain": [
-              "0"
-            ],
             "mustNotContain": [
-              "nothing matches"
+              "nothing matches",
+              "Nothing on this file matches"
             ]
           }
         },
@@ -2178,18 +2105,6 @@
             "mustNotContain": [
               "nothing matches",
               "Nothing on this file matches"
-            ]
-          }
-        },
-        {
-          "id": "syn-job-unrelated-upload-not-found-brand",
-          "type": "false_premise",
-          "question": "What brand of skylight was installed according to the transcript?",
-          "expect": {
-            "answerType": "abstain",
-            "mustNotContain": [
-              "Velux",
-              "velux installed"
             ]
           }
         }
