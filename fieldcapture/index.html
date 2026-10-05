@@ -340,6 +340,11 @@
   html[data-app-shell] :is(button, a, label, .top, .switchbar, .recwrap, .door-actions, .stopwrap, .recbar, .who-menu) {
     -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
+  /* Fields stay normal text fields (the email field sits inside its label):
+     typing, selecting, paste and Password AutoFill must work as in Safari. */
+  html[data-app-shell] :is(input, textarea, select, [contenteditable="true"]) {
+    -webkit-touch-callout: default; -webkit-user-select: text; user-select: text;
+  }
   /* Keyboard up: the product bar (and Today's start button) step aside so
      the field sits right on the keyboard with no empty band. */
   html[data-app-shell][data-app-keyboard="open"] .switchbar,
@@ -1148,7 +1153,7 @@
             <a id="forgot-link" href="/forgot-password">Forgot password?</a>
           </div>
           <div class="auth-pass">
-            <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
+            <input id="login-password" name="password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
             <button type="button" id="password-toggle" aria-label="Show password">Show</button>
           </div>
         </div>
@@ -1169,7 +1174,7 @@
           <input id="signup-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="you@company.com" />
         </label>
         <label for="signup-password">Password
-          <input id="signup-password" name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" />
+          <input id="signup-password" name="password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" />
         </label>
         <label class="tos-ack" for="signup-tos">
           <input id="signup-tos" type="checkbox" />
