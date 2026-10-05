@@ -94,6 +94,7 @@ import {
   retrievedChunksFor,
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { ensureClaimCitations } from './askClaimCitations.js';
 import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import { buildRetrievalAskContext } from './askRetrievalContext.js';
 import {
@@ -1176,6 +1177,7 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
+  answer = ensureClaimCitations(answer, retrievedChunks).answer;
   answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {
