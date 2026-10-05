@@ -215,6 +215,16 @@ export function postSignOutToFieldCapture(): void {
   }
 }
 
+/** Tell Field Capture the account is gone: drop its tokens without asking. */
+export function postAccountDeletedToFieldCapture(): void {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  try {
+    window.parent.postMessage({ atmosphere: 'account-deleted' }, parentOrigin());
+  } catch {
+    /* ignore */
+  }
+}
+
 async function adoptRefreshToken(refreshToken: string): Promise<boolean> {
   try {
     const res = await fetch('/api/auth/refresh', {

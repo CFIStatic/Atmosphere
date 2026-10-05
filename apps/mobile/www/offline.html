@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Field Capture</title>
+<style>
+  :root { --bg: #FBFAF7; --ink: #1B1A17; --muted: #6B675F; --line: #E6E2DA; --accent: #1B1A17; --on-accent: #FBFAF7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141311; --ink: #F2EFE9; --muted: #A39E94; --line: #2C2A26; --accent: #F2EFE9; --on-accent: #141311; }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;
+    padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom)); max-width: 420px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  p { margin: 0 0 24px; color: var(--muted); }
+  button { appearance: none; border: 0; border-radius: 12px; padding: 14px 18px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--on-accent); width: 100%; }
+  small { display: block; margin-top: 16px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>No connection</h1>
+  <p>Field Capture needs signal to open. Days you already filmed are safe on this phone and will finish filing once it's back.</p>
+  <button type="button" id="retry">Try again</button>
+  <small id="status" aria-live="polite"></small>
+</main>
+<script>
+  (function () {
+    var target = 'https://app.atmosphereteam.com/';
+    var status = document.getElementById('status');
+    function retry() {
+      status.textContent = 'Connecting…';
+      window.location.replace(target);
+    }
+    document.getElementById('retry').addEventListener('click', retry);
+    window.addEventListener('online', retry);
+  })();
+</script>
+</body>
+</html>

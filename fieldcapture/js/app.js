@@ -159,12 +159,14 @@
     var settings = document.getElementById('fc-menu-settings');
     var support = document.getElementById('fc-menu-support');
     var signout = document.getElementById('fc-menu-signout');
+    var deleteAccount = document.getElementById('fc-menu-delete');
     if (wrap) wrap.hidden = !on;
     if (!on) closeFieldAccountMenu();
     var accountActions = Boolean(opts && opts.account);
     if (settings) settings.hidden = !accountActions;
     if (support) support.hidden = !on;
     if (signout) signout.hidden = !accountActions;
+    if (deleteAccount) deleteAccount.hidden = !accountActions;
     if (on) refreshFieldSupportLink();
   }
 
@@ -1818,6 +1820,7 @@
       .start()
       .then(function () {
         show('s-rec');
+        announceRecording('start', { stream: stream });
         state.stopWatch = state.recorder.watchPosition(function (site) {
           state.site = site;
           $('#site-text').textContent = site.label;
@@ -1987,8 +1990,37 @@
    * door as done, and let the queue file it in the background. The crew can
    * go Home and start the next day immediately — including with no signal.
    */
-  function finishLiveDay() {
+  /**
+   * Recording lifecycle as DOM events, so a wrapper (the iPhone/Android app
+   * shell, js/native-bridge.js) can keep the screen awake while filming and
+   * finish the day when the phone locks. A normal browser has no listeners:
+   * nothing changes on the website.
+   */
+  function announceRecording(phase, detail) {
+    try {
+      document.dispatchEvent(new CustomEvent('fieldcapture:recording-' + phase, { detail: detail || {} }));
+    } catch (e) {}
+  }
+
+  /* Shown on the door when the app shell finished the day for the worker
+     (phone locked, app sent to the background, a call took the mic). */
+  var stopNote = '';
+  function setStopNote(text) {
+    var el = $('#door-stop-note');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+  }
+
+  document.addEventListener('fieldcapture:finish-now', function (ev) {
     if (!state.recorder || stopping) return;
+    var reason = ev && ev.detail && ev.detail.reason;
+    finishLiveDay(typeof reason === 'string' ? reason : '');
+  });
+
+  function finishLiveDay(note) {
+    if (!state.recorder || stopping) return;
+    stopNote = typeof note === 'string' ? note : '';
     var recorder = state.recorder;
     var rec = state.recording || null;
     stopLiveRtcPublisher(rec);
@@ -2032,6 +2064,7 @@
         });
         state.doorFilmId = entry.id;
         markJobFilmed(boundJobId);
+        announceRecording('stop', { saved: true });
         renderDoorSaved(entry);
         if (!filmQueue) return undefined;
         var settle = streamed
@@ -2047,6 +2080,7 @@
         stopping = false;
         state.recorder = null;
         state.recording = null;
+        announceRecording('stop', { saved: false });
         renderDoorNotSaved(err);
       });
   }
@@ -2119,6 +2153,8 @@
     show('s-door');
     setDoorTitle('Done.', 'warn');
     setDoorSub('');
+    setStopNote(stopNote);
+    stopNote = '';
     setDoorJob(
       entry.jobName || 'Job',
       'Filing with the office in the background — you can start the next one.',
@@ -2223,6 +2259,8 @@
   /** The recorder had nothing to save (empty film, mic missing): say so, no queue entry. */
   function renderDoorNotSaved(err) {
     state.doorFilmId = null;
+    setStopNote('');
+    stopNote = '';
     show('s-door');
     setDoorTitle('Not saved', 'fail');
     setDoorSub('Recording was not saved.');
@@ -2786,6 +2824,110 @@
       });
     }
 
+    /**
+     * App Store guideline 5.1.1(v): the person can delete their own account
+     * from inside the app. Their login, profile, and team membership go; jobs,
+     * files, and videos stay with the company. The only admin of a company
+     * that still has other people in it is asked to hand over admin first.
+     */
+    var deletingAccount = false;
+    var deleteDialog = document.getElementById('fc-delete-dialog');
+    var deleteConfirmBtn = document.getElementById('fc-delete-confirm');
+    var deleteCancelBtn = document.getElementById('fc-delete-cancel');
+    var deletePendingNote = document.getElementById('fc-delete-pending');
+    var deleteErrorNote = document.getElementById('fc-delete-error');
+
+    function closeDeleteDialog() {
+      if (deletingAccount || !deleteDialog) return;
+      deleteDialog.hidden = true;
+    }
+
+    // Account deleted (here or from Settings in the office frame): drop the
+    // stored session and go back to the sign-in screen with a short note.
+    function finishAccountDeleted(message) {
+      deletingAccount = false;
+      if (deleteDialog) deleteDialog.hidden = true;
+      writeStoredSession(null, null);
+      state.account = false;
+      state.owner = '';
+      state.jobs = [];
+      state.activeJobId = null;
+      showJobAdd(false);
+      if (frame) frame.setAttribute('src', 'about:blank');
+      showLoginError('');
+      // Nothing from the deleted login stays filled in on the sign-in form.
+      var deletedEmail = document.getElementById('login-email');
+      var deletedPassword = document.getElementById('login-password');
+      if (deletedEmail) deletedEmail.value = '';
+      if (deletedPassword) deletedPassword.value = '';
+      bootBlocked();
+      showBlockedMsg(message || 'Your account was deleted. Jobs, files, and videos stay with the company.');
+    }
+
+    function deleteFieldAccount() {
+      closeFieldAccountMenu();
+      if (deletingAccount || !Core.deleteAccount || !deleteDialog) return;
+      var waiting = filmQueue ? filmQueue.pending() : [];
+      if (deletePendingNote) {
+        deletePendingNote.hidden = !waiting.length;
+        deletePendingNote.textContent = waiting.length
+          ? (waiting.length === 1 ? '1 day' : waiting.length + ' days') +
+            ' still on this phone will not be sent to the office.'
+          : '';
+      }
+      if (deleteErrorNote) {
+        deleteErrorNote.hidden = true;
+        deleteErrorNote.textContent = '';
+      }
+      if (deleteConfirmBtn) {
+        deleteConfirmBtn.disabled = false;
+        deleteConfirmBtn.textContent = 'Delete my account';
+      }
+      deleteDialog.hidden = false;
+      if (deleteCancelBtn) deleteCancelBtn.focus();
+    }
+
+    function confirmDeleteFieldAccount() {
+      if (deletingAccount) return;
+      deletingAccount = true;
+      if (deleteConfirmBtn) {
+        deleteConfirmBtn.disabled = true;
+        deleteConfirmBtn.textContent = 'Deleting…';
+      }
+      if (deleteCancelBtn) deleteCancelBtn.disabled = true;
+      withSession(function (accessToken) {
+        return Core.deleteAccount(API_BASE, accessToken);
+      })
+        .then(function (result) {
+          if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+          finishAccountDeleted(result && result.message);
+        })
+        .catch(function (err) {
+          deletingAccount = false;
+          if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+          if (deleteConfirmBtn) {
+            deleteConfirmBtn.disabled = false;
+            deleteConfirmBtn.textContent = 'Delete my account';
+          }
+          if (deleteErrorNote) {
+            deleteErrorNote.hidden = false;
+            deleteErrorNote.textContent =
+              (err && err.message) || 'Your account could not be deleted right now. Try again in a moment.';
+          }
+        });
+    }
+
+    if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', confirmDeleteFieldAccount);
+    if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', closeDeleteDialog);
+    if (deleteDialog) {
+      deleteDialog.addEventListener('click', function (event) {
+        if (event.target === deleteDialog) closeDeleteDialog();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !deleteDialog.hidden) closeDeleteDialog();
+      });
+    }
+
     var whoBtn = document.getElementById('who-btn');
     var whoMenu = document.getElementById('who-menu');
     if (whoBtn && whoMenu) {
@@ -2825,6 +2967,10 @@
     if (menuSignout) {
       menuSignout.addEventListener('click', signOutFieldAccount);
     }
+    var menuDelete = document.getElementById('fc-menu-delete');
+    if (menuDelete) {
+      menuDelete.addEventListener('click', deleteFieldAccount);
+    }
 
     if (frame) {
       frame.addEventListener('load', function () {
@@ -2848,7 +2994,12 @@
         applyOfficeTheme(data.preference);
         return;
       }
+      if (data.atmosphere === 'account-deleted') {
+        finishAccountDeleted();
+        return;
+      }
       if (data.atmosphere === 'sign-out') {
+        if (!state.account) return;
         signOutFieldAccount();
       }
     });

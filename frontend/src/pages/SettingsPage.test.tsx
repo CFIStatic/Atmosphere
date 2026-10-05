@@ -45,6 +45,7 @@ const apiMocks = vi.hoisted(() => ({
   }),
   connectCrmCredentials: vi.fn(),
   disconnectCrmCredentials: vi.fn(),
+  deleteAccount: vi.fn(),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -245,6 +246,43 @@ describe('Settings organization', () => {
     expect(
       screen.queryByRole('button', { name: /Remove .+ from this workspace/ }),
     ).toBeNull();
+  });
+});
+
+describe('Settings Delete account', () => {
+  beforeEach(() => {
+    apiMocks.deleteAccount.mockReset();
+    authState.logout.mockReset();
+    authState.logout.mockResolvedValue(undefined);
+  });
+
+  it('asks for confirmation before deleting, and Cancel backs out', async () => {
+    renderSettings('/settings?section=security');
+    await userEvent.click(screen.getByTestId('delete-account-open'));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete your Atmosphere account?');
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('This cannot be undone.');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(apiMocks.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('deletes the account and signs out after confirming', async () => {
+    apiMocks.deleteAccount.mockResolvedValue({ ok: true, mode: 'soft', message: 'Your account was deleted.' });
+    renderSettings('/settings?section=security');
+    await userEvent.click(screen.getByTestId('delete-account-open'));
+    await userEvent.click(screen.getByTestId('delete-account-confirm-button'));
+    await waitFor(() => expect(apiMocks.deleteAccount).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(authState.logout).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows the server message when deletion is blocked', async () => {
+    const { ApiError } = await import('../lib/api');
+    apiMocks.deleteAccount.mockRejectedValue(new ApiError('You are the only admin of Jett.'));
+    renderSettings('/settings?section=security');
+    await userEvent.click(screen.getByTestId('delete-account-open'));
+    await userEvent.click(screen.getByTestId('delete-account-confirm-button'));
+    expect(await screen.findByText('You are the only admin of Jett.')).toBeInTheDocument();
+    expect(authState.logout).not.toHaveBeenCalled();
   });
 });
 

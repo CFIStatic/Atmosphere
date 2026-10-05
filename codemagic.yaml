@@ -1,0 +1,120 @@
+# Codemagic CI for the Field Capture phone app (apps/mobile — a Capacitor shell
+# around https://app.atmosphereteam.com). No secrets live in this file:
+#   - App Store Connect access comes from the Codemagic team integration named
+#     `atmosphere_asc` (Team settings → Team integrations → Developer Portal).
+#   - Signing is automatic: each build fetches (or creates) the App Store
+#     distribution certificate and provisioning profile from Apple with the
+#     Codemagic CLI, using that integration plus CERTIFICATE_PRIVATE_KEY
+#     (an RSA 2048 PEM private key, secret, in the Codemagic env var group
+#     `ios_signing`). Nothing has to be uploaded to "Code signing identities".
+# Builds start manually from the Codemagic UI (no triggering block).
+# See apps/mobile/README.md for the one-time Apple + Codemagic setup.
+
+workflows:
+  ios-testflight:
+    name: Field Capture iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: atmosphere_asc
+    environment:
+      groups:
+        - ios_signing # CERTIFICATE_PRIVATE_KEY (secret)
+      vars:
+        BUNDLE_ID: com.atmosphere.fieldcapture
+        MOBILE_DIR: apps/mobile
+        XCODE_PROJECT: apps/mobile/ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+        # Optional: the app's Apple ID (App Store Connect → App Information →
+        # Apple ID). Set it as an environment variable in the Codemagic UI to
+        # number builds after the latest TestFlight build; without it the
+        # Codemagic build counter is used.
+        # APP_STORE_APPLE_ID: set in Codemagic, not here
+      node: 22
+      xcode: latest
+    cache:
+      cache_paths:
+        - $HOME/.npm
+    scripts:
+      - name: Install Capacitor dependencies
+        script: |
+          cd "$MOBILE_DIR"
+          npm ci
+      - name: Check App Store basics (plist, privacy manifest, icons)
+        script: |
+          cd "$MOBILE_DIR"
+          npm test
+      - name: Sync Capacitor iOS project
+        script: |
+          cd "$MOBILE_DIR"
+          npx cap sync ios
+      - name: Resolve Swift packages
+        script: |
+          xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
+      - name: Set up keychain for code signing
+        script: keychain initialize
+      - name: Fetch signing files (App Store certificate + profile)
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add signing certificate to keychain
+        script: keychain add-certificates
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles --project "$XCODE_PROJECT"
+      - name: Pick build number
+        script: |
+          LATEST=""
+          if [ -n "${APP_STORE_APPLE_ID:-}" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || true)
+          fi
+          if [ -n "$LATEST" ] && [ "$LATEST" -eq "$LATEST" ] 2>/dev/null; then
+            NEXT=$((LATEST + 1))
+          else
+            NEXT=$((BUILD_NUMBER + 1))
+          fi
+          echo "Build number: $NEXT"
+          echo "FIELD_CAPTURE_BUILD_NUMBER=$NEXT" >> "$CM_ENV"
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$FIELD_CAPTURE_BUILD_NUMBER"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  android-debug-apk:
+    name: Field Capture Android (debug APK, unsigned for stores)
+    instance_type: linux_x2
+    max_build_duration: 45
+    environment:
+      node: 22
+      java: 21
+      vars:
+        MOBILE_DIR: apps/mobile
+    scripts:
+      - name: Install Capacitor dependencies
+        script: |
+          cd "$MOBILE_DIR"
+          npm ci
+      - name: Sync Capacitor Android project
+        script: |
+          cd "$MOBILE_DIR"
+          npx cap sync android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+      - name: Build debug APK
+        script: |
+          cd "$MOBILE_DIR/android"
+          ./gradlew assembleDebug
+    artifacts:
+      - apps/mobile/android/app/build/outputs/**/*.apk

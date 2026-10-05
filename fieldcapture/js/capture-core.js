@@ -1072,6 +1072,19 @@
     );
   }
 
+  /**
+   * Permanently delete the signed-in person's account (DELETE /api/auth/account).
+   * Removes their login, profile, and team membership; jobs, files, and videos
+   * stay with the company. Rejects with code `last_admin` when they are the only
+   * admin of a company that still has other people in it.
+   */
+  function deleteAccount(apiBase, accessToken) {
+    return apiJson(origin(apiBase) + '/api/auth/account', {
+      method: 'DELETE',
+      accessToken: accessToken,
+    });
+  }
+
   /** Sign out everywhere this browser is signed in: clears the Platform's session cookies too. */
   function signOutPlatform(apiBase, refreshToken) {
     return apiJson(origin(apiBase) + '/api/auth/logout', {
@@ -3742,6 +3755,7 @@
     refreshSession: refreshSession,
     adoptPlatformSession: adoptPlatformSession,
     signOutPlatform: signOutPlatform,
+    deleteAccount: deleteAccount,
     localDateISO: localDateISO,
     newClipId: newClipId,
     CLIP_ID: CLIP_ID,

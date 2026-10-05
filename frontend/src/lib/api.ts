@@ -3349,6 +3349,12 @@ export const api = {
       body: JSON.stringify({ ...credential, password }),
     }),
 
+  /** Permanently delete the signed-in person's own account (DELETE /api/auth/account). */
+  deleteAccount: () =>
+    request<{ ok: boolean; mode: 'hard' | 'soft'; message: string }>('/api/auth/account', {
+      method: 'DELETE',
+    }),
+
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ user: AuthUser }>('/api/auth/change-password', {
       method: 'POST',

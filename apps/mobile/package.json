@@ -1,0 +1,31 @@
+{
+  "name": "atmosphere-field-capture-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Field Capture iPhone/Android app: a Capacitor shell around https://app.atmosphereteam.com",
+  "scripts": {
+    "sync": "cap sync",
+    "sync:ios": "cap sync ios",
+    "sync:android": "cap sync android",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@capacitor-community/keep-awake": "8.0.1",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/geolocation": "8.2.3",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/keyboard": "8.0.6",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "plist": "3.1.1"
+  }
+}

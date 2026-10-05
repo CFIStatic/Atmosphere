@@ -22,6 +22,7 @@ import { LanguagePicker } from '../components/LanguagePicker';
 import { usePlatformSupportUrl } from '../lib/contactSupport';
 import { useT } from '../lib/i18n';
 import { usePreferences } from '../lib/preferences';
+import { postAccountDeletedToFieldCapture } from '../lib/fieldEmbed';
 import {
   BuildingIcon,
   CameraIcon,
@@ -567,6 +568,7 @@ function SecuritySection() {
     <>
       <ChangePasswordCard />
       <SignOutCard />
+      <DeleteAccountCard />
     </>
   );
 }
@@ -706,6 +708,92 @@ function SignOutCard() {
         )}
         {busy ? t('common.signingOut') : t('common.signOut')}
       </button>
+    </Card>
+  );
+}
+
+/**
+ * App Store guideline 5.1.1(v): anyone can delete their own account here, in
+ * the browser and in the iPhone app. The backend removes the login, profile,
+ * and team membership; company jobs, files, and videos stay with the company.
+ */
+function DeleteAccountCard() {
+  const t = useT();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function deleteAccount() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.deleteAccount();
+      postAccountDeletedToFieldCapture();
+      await logout().catch(() => undefined);
+      navigate('/login', { replace: true, state: { notice: result.message } });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.deleteAccount.error'));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card
+      title={t('settings.deleteAccount.title')}
+      description={t('settings.deleteAccount.description')}
+      tone="danger"
+    >
+      {!confirming ? (
+        <button
+          type="button"
+          data-testid="delete-account-open"
+          onClick={() => setConfirming(true)}
+          className="flex items-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm font-medium text-danger-700 transition hover:bg-danger-200/50"
+        >
+          {t('settings.deleteAccount.button')}
+        </button>
+      ) : (
+        <div
+          role="alertdialog"
+          aria-labelledby="delete-account-title"
+          aria-describedby="delete-account-body"
+          data-testid="delete-account-confirm"
+          className="max-w-md space-y-3 rounded-lg border border-danger-200 bg-danger-50 p-4"
+        >
+          <p id="delete-account-title" className="text-sm font-semibold text-danger-700">
+            {t('settings.deleteAccount.confirmTitle')}
+          </p>
+          <p id="delete-account-body" className="text-sm text-ink-700">
+            {t('settings.deleteAccount.confirmBody')}
+          </p>
+          <ErrorText message={error} />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              data-testid="delete-account-confirm-button"
+              onClick={deleteAccount}
+              disabled={busy}
+              className="flex items-center gap-2 rounded-lg bg-danger-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-danger-700 disabled:opacity-60"
+            >
+              {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
+              {busy ? t('settings.deleteAccount.deleting') : t('settings.deleteAccount.confirm')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                setError(null);
+              }}
+              disabled={busy}
+              className="rounded-lg border border-ink-200 px-4 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-ink-100 disabled:opacity-60"
+            >
+              {t('settings.deleteAccount.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

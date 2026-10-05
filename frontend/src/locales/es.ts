@@ -112,6 +112,18 @@ export const ES: MessageCatalog = {
   'settings.signOut.description':
     'Termina la sesión en este dispositivo. Vuelve a entrar con tu correo y contraseña.',
 
+  'settings.deleteAccount.title': 'Eliminar cuenta',
+  'settings.deleteAccount.description':
+    'Elimina para siempre tu acceso, tu perfil y tu lugar en el equipo. Los trabajos, archivos y videos que agregaste pertenecen a tu empresa y se quedan con ella.',
+  'settings.deleteAccount.button': 'Eliminar cuenta',
+  'settings.deleteAccount.confirmTitle': '¿Eliminar tu cuenta de Atmosphere?',
+  'settings.deleteAccount.confirmBody':
+    'Esto no se puede deshacer. Se cerrará tu sesión en todos los dispositivos y no podrás volver a entrar con este correo salvo que crees una cuenta nueva.',
+  'settings.deleteAccount.confirm': 'Eliminar mi cuenta',
+  'settings.deleteAccount.cancel': 'Cancelar',
+  'settings.deleteAccount.deleting': 'Eliminando…',
+  'settings.deleteAccount.error': 'No se pudo eliminar tu cuenta ahora. Inténtalo de nuevo en un momento.',
+
   'settings.linked.title': 'Cuentas vinculadas',
   'settings.linked.description':
     'Quienes tienen el acceso vinculado a esta oficina trabajan en el mismo espacio.',
