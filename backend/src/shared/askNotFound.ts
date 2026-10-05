@@ -153,10 +153,12 @@ export function applyHonestNotFound(
   const cleaned = stripEmptyJobBoilerplate(answer, catalog);
   const clips = clipsInScope(catalog);
   const denied = looksLikeNotFound(cleaned);
-  const ungroundedDenial = Boolean(opts?.noGroundedClaim) && denied;
+  // Never wipe a grounded answer that already carries job citation chips —
+  // phrases like "does not establish completion" are denial-shaped but answerable.
+  const hasCite = answerHasJobCitation(answer) || answerHasJobCitation(cleaned);
+  const ungrounded = Boolean(opts?.noGroundedClaim) || !hasCite;
   const shouldRewrite =
-    denied ||
-    ungroundedDenial ||
+    (denied && ungrounded && !hasCite) ||
     (clips.length > 0 && (hasEmptyJobBoilerplate(answer) || !cleaned.trim()));
   if (!shouldRewrite) {
     // Already honest — ensure exact lead-in if it opens with a soft "not found".

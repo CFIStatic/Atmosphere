@@ -1235,7 +1235,8 @@ export async function answerFromAskLookup(input: {
   answer = cited.answer;
   const hasCite = /⟦(?:quotes|sources):/i.test(answer);
   answer = applyHonestNotFound(answer, input.catalog, input.question, {
-    noGroundedClaim: !hasCite || cited.claimsUncited > 0,
+    // Only force Not found. when nothing on the answer is grounded to the file.
+    noGroundedClaim: !hasCite,
   });
   answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);

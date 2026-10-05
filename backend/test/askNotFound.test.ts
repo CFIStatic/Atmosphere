@@ -112,7 +112,7 @@ test('applyHonestNotFound rewrites ungrounded denials when noGroundedClaim', () 
   const compare =
     'Day 1 covers cabinets; day 2 is not on this file so a full comparison is not possible.';
   const kept = applyHonestNotFound(compare, catalog, 'compare day 1 to day 2');
-  // Without noGroundedClaim, soft "not on this file" still rewrites via DENIAL.
+  // Soft "not on this file" with no citation chips → Not found.
   assert.match(kept, /^Not found\./);
   const withCite = applyHonestNotFound(
     'Day 1 is Oct 4.\n⟦sources: video/j/p1@0⟧',
@@ -121,4 +121,15 @@ test('applyHonestNotFound rewrites ungrounded denials when noGroundedClaim', () 
     { noGroundedClaim: false },
   );
   assert.doesNotMatch(withCite, /^Not found\./);
+});
+
+test('applyHonestNotFound keeps denial-shaped but cited answerable replies', () => {
+  const bathroom =
+    'Bathroom work ran Sep 3 to Sep 24 (about 3 weeks); the file does not establish completion.\n⟦sources: video/j/p1@0⟧';
+  const out = applyHonestNotFound(bathroom, catalog, 'how many weeks did it take to fix the bathroom?', {
+    noGroundedClaim: true,
+  });
+  assert.doesNotMatch(out, /^Not found\./);
+  assert.match(out, /Sep 3/);
+  assert.match(out, /about 3 weeks/);
 });
