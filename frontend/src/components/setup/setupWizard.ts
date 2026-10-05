@@ -1,6 +1,7 @@
 import type { SignupIntent } from '../../lib/authRedirect';
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
+import { isInAppShell } from '../../lib/appShell';
 
 export type SetupWizardStep = 1 | 2;
 export type OrgSetupIntent = SignupIntent;
@@ -25,6 +26,15 @@ export const SETUP_WIZARD_STEPS = [
     step: 2 as const,
     title: 'Set up billing',
     detail: 'After your first evidence (a clip from Field Capture, or the sample): pick a plan and add a card, then invite your team.',
+  },
+] as const;
+
+const APP_SHELL_SETUP_WIZARD_STEPS = [
+  SETUP_WIZARD_STEPS[0],
+  {
+    step: 2 as const,
+    title: 'Plan',
+    detail: 'Plans are managed on atmosphereteam.com. Then invite your team.',
   },
 ] as const;
 
@@ -77,6 +87,14 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
       heading: 'Create your account',
       lede: 'Email and password. Then Field Capture opens this job — no workspace.',
       steps: CAPTURE_WIZARD_STEPS,
+    };
+  }
+  if (isInAppShell()) {
+    // iPhone/Android app: no purchase wording. Plans are handled on the website.
+    return {
+      heading: 'Create your company',
+      lede: 'You are the Global Admin. Create the workspace, name your first job, then record it in Field Capture or see sample evidence.',
+      steps: APP_SHELL_SETUP_WIZARD_STEPS,
     };
   }
   return {

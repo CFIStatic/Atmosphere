@@ -137,7 +137,7 @@ export function SetupBillingStep({
 
   if (loading || !status) {
     return (
-      <SetupStepCard step={2} title="Set up billing" subtitle="Loading your plan details…">
+      <SetupStepCard step={2} title={inApp ? 'Plan' : 'Set up billing'} subtitle="Loading your plan details…">
         <div className="mt-10 grid place-items-center text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
         </div>
