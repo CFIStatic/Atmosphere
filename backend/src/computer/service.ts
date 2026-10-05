@@ -9,13 +9,14 @@ import { computerSettings, NOT_SET_UP_MESSAGE } from './config.js';
 import { projectJobForComputer } from './projection.js';
 import { computerProvider } from './providers/index.js';
 import type { ComputerAuditRow, ComputerApprovalRow, ComputerTaskRow } from './store.js';
+import { approvalPreviewIssues, isExactApprovalPreview } from './approvalPreview.js';
 import { assertComputerAiAllowed, computerStore, kickComputerWorker } from './worker.js';
 import { OPEN_TASK_STATUSES } from './types.js';
 
 export class ComputerServiceError extends Error {
   constructor(
     message: string,
-    readonly code: 'not_set_up' | 'not_allowed' | 'bad_request' | 'ai_paused' | 'unavailable' | 'not_found' | 'conflict',
+    readonly code: 'not_set_up' | 'not_allowed' | 'bad_request' | 'ai_paused' | 'unavailable' | 'not_found' | 'conflict' | 'incomplete_preview',
   ) {
     super(message);
     this.name = 'ComputerServiceError';
@@ -305,11 +306,23 @@ export async function decideApproval(orgId: string, approvalId: string, userId: 
   if (!approval) throw new ComputerServiceError('Approval not found', 'not_found');
   const task = await store.getTask(orgId, approval.task_id);
   if (!task) throw new ComputerServiceError('Approval not found', 'not_found');
+  if (decision === 'approve' && !isExactApprovalPreview(approval)) {
+    const issues = approvalPreviewIssues(approval);
+    throw new ComputerServiceError(
+      `Approval needs an exact preview before Approve (${issues.join(', ')}).`,
+      'incomplete_preview',
+    );
+  }
   const ok = await store.decideApproval(approval.id, decision === 'approve' ? 'approved' : 'canceled', userId);
   if (!ok) throw new ComputerServiceError('This approval is no longer open.', 'conflict');
   await audit(orgId, task, userId, decision === 'approve' ? 'approved' : 'approval_canceled', {
     kind: approval.action_kind,
     label: approval.button_label,
+    pageUrl: approval.page_url,
+    fieldCount: (approval.fields ?? []).length,
+    summary: (approval.summary ?? '').slice(0, 240),
+    decidedBy: userId,
+    decidedAt: new Date().toISOString(),
   });
   return { ok: true };
 }
