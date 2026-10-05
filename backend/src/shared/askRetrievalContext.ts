@@ -24,6 +24,7 @@ import {
   type EvidenceRetrieval,
 } from './askTranscriptIndex.js';
 import { redactedClipSummary } from './askLookup.js';
+import { resolveAskJobSummary } from './askJobCache.js';
 
 /** When "1" (default), append the stuffed job card after the retrieval block. */
 export function askStuffJobContextEnabled(): boolean {
@@ -231,7 +232,8 @@ export async function buildRetrievalAskContext(input: {
   jobFileRecord?: string | null;
   fetchFn?: typeof fetch;
 }): Promise<RetrievalContextParts> {
-  const summary = `Job summary:\n${formatAskJobSummary(input.catalog)}`;
+  const cached = resolveAskJobSummary(input.catalog, input.jobFileRecord);
+  const summary = cached.summary.startsWith('Job summary:') ? cached.summary : `Job summary:\n${cached.summary}`;
   const evidence = await retrieveAskEvidenceEmbedded(input.catalog, input.question, {
     limit: ASK_RETRIEVAL_TOP_K,
     fetchFn: input.fetchFn,
