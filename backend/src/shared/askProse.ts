@@ -34,6 +34,45 @@ FORMAT (Grok Bot quality — the UI renders safe markdown):
 
 ` + ASK_SOURCE_FORMAT_RULES;
 
+/** A "heading" longer than this is a scraped paragraph, not a title. */
+const MAX_HEADING_CHARS = 64;
+
+/**
+ * Leftovers of scraped web pages that must never show in a Chat answer:
+ * "[...]" / "[…]" elision marks, heading markers in the middle of a line
+ * ("Final ### Week 3"), and site labels glued to text ("Team LogoCOLTS").
+ * Mid-line markers start a new paragraph; an over-long heading line is kept
+ * as a plain paragraph. Mirrored by the office renderer (frontend/src/lib/askProse.ts).
+ */
+export function stripScrapeJunk(input: string): string {
+  let text = String(input ?? '');
+  if (!text) return text;
+  const fences: string[] = [];
+  text = text.replace(/(```|~~~)[\s\S]*?\1/g, (block) => {
+    fences.push(block);
+    return `\uE000${fences.length - 1}\uE000`;
+  });
+  text = text
+    .replace(/[ \t]*\[\s*(?:\.\s*){3}\]|[ \t]*\[\s*…\s*\]/g, ' ')
+    .replace(/[ \t]*\bTeam Logo(?:[A-Z]{2,}(?=[\d\s,.;:]|$))?/g, ' ')
+    .replace(/[ \t]*\bWatch Replay\b/g, '')
+    // "text ### Heading" → paragraph break before the heading text.
+    .replace(/([^\s#])[ \t]+#{2,6}[ \t]+(?=\S)/g, '$1\n\n')
+    .split('\n')
+    .map((line) => {
+      const heading = line.match(/^(\s*)(#{1,6})[ \t]*(\S.*)$/);
+      if (!heading) return line.replace(/(\S)[ \t]{2,}/g, '$1 ');
+      const hashes = heading[2] ?? '';
+      const body = (heading[3] ?? '').trim();
+      // "#1 pick" / "#5" are not headings.
+      if (hashes.length === 1 && !/^\s*#\s/.test(line)) return line;
+      if (body.replace(/\s+#+\s*$/, '').length > MAX_HEADING_CHARS) return `${heading[1] ?? ''}${body}`;
+      return `${heading[1] ?? ''}${hashes} ${body}`.replace(/(\S)[ \t]{2,}/g, '$1 ');
+    })
+    .join('\n');
+  return text.replace(/\uE000(\d+)\uE000/g, (_m, n: string) => fences[Number(n)] ?? '');
+}
+
 /**
  * Light cleanup before store/return. Keeps intentional **bold** / *italic*
  * for the UI renderer; fixes list markers and strips orphan emphasis.
@@ -41,6 +80,8 @@ FORMAT (Grok Bot quality — the UI renders safe markdown):
 export function normalizeAskProse(input: string): string {
   let text = String(input ?? '');
   if (!text) return text;
+
+  text = stripScrapeJunk(text);
 
   // Promote ASCII / markdown list markers to a consistent "- " form the
   // renderer and unicode-bullet UIs both understand.
