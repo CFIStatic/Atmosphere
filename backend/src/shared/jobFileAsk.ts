@@ -1,4 +1,4 @@
-import { logAskRouteDecision } from './askRoute.js';
+import { logAskRouteDecision, needsCriticalEscalation } from './askRoute.js';
 import { looksLikeNotFound } from './askNotFound.js';
 /**
  * Ask the whole job file — not only the videos.
@@ -692,6 +692,8 @@ export function readableJobFileAnswer(question: string, file: JobFileAskContext)
  */
 export function preferJobFileGroundedFastPath(question: string, grounded: string): boolean {
   if (/does not have that|Nothing is on this job file/i.test(grounded)) return false;
+  // Money / deadline / safety / dispute must escalate — never answer from a brief field alone.
+  if (needsCriticalEscalation(question)) return false;
   // Never fast-path web / outside-knowledge / capability asks — those need searchAskWeb
   // (or a model answer about web access), not a brief-note hit from the job file.
   if (looksLikeOutsideKnowledgeAsk(question) || looksLikeExplicitWebSearchRequest(question)) return false;

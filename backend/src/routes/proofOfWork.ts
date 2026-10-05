@@ -92,6 +92,7 @@ import {
   mergeJobAskPeople,
   scrubStoredAskText,
 } from '../shared/askLookup.js';
+import { answerHasJobCitation, applyHonestNotFound } from '../shared/askNotFound.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -3686,6 +3687,10 @@ async function runProofAskTurn(input: {
     const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
     let storedAnswer = stripExternalAskLinks(scrubStoredAskText(result.answer, lookup.clips));
     if (result.webDerivedAnswer) storedAnswer = scrubWebDerivedAskAnswer(storedAnswer);
+    // Deterministic Not found. lead-in at the HTTP boundary (covers all Ask paths).
+    storedAnswer = applyHonestNotFound(storedAnswer, lookup, input.question, {
+      noGroundedClaim: !answerHasJobCitation(storedAnswer),
+    });
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
     if (askAccess === 'org' && orgAdmin) {
