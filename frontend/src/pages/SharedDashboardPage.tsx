@@ -274,8 +274,11 @@ export function SharedDashboardPage() {
   const jobId = record?.job.id ?? requestedJob ?? '';
 
   const fileBody = (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <header className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col" data-job-section={section}>
+      <header
+        className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3"
+        data-job-file-header=""
+      >
         <h1 className="min-w-0 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
           {record?.job.title ?? 'Job'}
         </h1>
@@ -462,7 +465,7 @@ function JobFileSections({
   const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4" data-job-file-sections="">
       <div className="shrink-0">
         <JobFileSectionBar tabs={tabs} active={active} onChange={onSectionChange} />
       </div>

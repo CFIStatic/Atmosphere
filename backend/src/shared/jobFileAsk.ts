@@ -24,7 +24,8 @@ import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
-import { ASK_PROSE_FORMAT_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
+import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
+import { mergeMeasuredUsages } from '../lib/providerUsage.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   formatCollectionRecord,
@@ -749,12 +750,60 @@ function webFallbackAnswer(input: {
   return { answer: webDerived ? scrubWebDerivedAskAnswer(answer) : answer, webDerived };
 }
 
-function applyWebResults(
+const WEB_SUMMARY_SYSTEM = `You answer one public question for a contractor's Chat from the WEB SEARCH RESULTS given. Write the answer yourself.
+
+${CHAT_VOICE_RULES}
+
+Rules:
+- Lead with the answer in 1–3 short plain sentences. A schedule, a set of scores or a few options may be a short "-" list, one item per line, each in your own words.
+- Use only what the results say. If they do not answer the question, say so in one sentence. Never invent games, times, prices, names or URLs.
+- Never paste or stitch together result text. No markdown headings (#), no "[...]", no page labels ("Team Logo", "Watch Replay", "Final"), no links or URLs, no quotation marks around web text. The app shows the sources separately.`;
+
+/**
+ * The job-file model declined a public question (or wrote nothing) although
+ * web results came back. Write a short answer from those results with the
+ * same Chat model, instead of pasting a raw result snippet. Null when no
+ * model is configured or it fails; the caller then uses composeAskWebAnswer.
+ */
+export async function summarizeWebResultsForAsk(input: {
+  question: string;
+  hits: AskWebHit[];
+  webAnswer: string;
+  apiKey?: string | null;
+  fetchFn?: typeof fetch;
+  now?: Date;
+  timeZone?: string;
+  complete?: typeof completeAskText;
+}): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null } | null> {
+  if (!input.hits.length && !trim(input.webAnswer)) return null;
+  const complete = input.complete ?? completeAskText;
+  if (!input.complete && !isAskModelConfigured(trim(input.apiKey) || null)) return null;
+  try {
+    const completed = await complete({
+      system: `${WEB_SUMMARY_SYSTEM}\n\n${askClockSystemRules(input.now ?? new Date(), input.timeZone || 'America/Chicago')}`,
+      user: `WEB SEARCH RESULTS (public web):\n${formatAskWebContext(input.hits, input.webAnswer)}\n\nQuestion: ${input.question}`,
+      anthropicApiKey: trim(input.apiKey) || null,
+      mode: 'interactive',
+      maxTokens: 500,
+      fetchFn: input.fetchFn,
+    });
+    const text = completed?.text ? scrubWebDerivedAskAnswer(ensureWebResultsSection(normalizeAskProse(completed.text))) : '';
+    if (!trim(text)) return null;
+    return { answer: trimChatFiller(text, { question: input.question }), model: completed?.model ?? null, usage: completed?.usage ?? null };
+  } catch {
+    return null;
+  }
+}
+
+type WebSummaryOptions = Omit<Parameters<typeof summarizeWebResultsForAsk>[0], 'question' | 'hits' | 'webAnswer'>;
+
+async function applyWebResults(
   answer: string,
   question: string,
   hits: AskWebHit[],
   webAnswer: string,
-): { answer: string; webDerived: boolean } {
+  summary?: WebSummaryOptions,
+): Promise<{ answer: string; webDerived: boolean; usage?: MeasuredUsage | null }> {
   const stripped = ensureWebResultsSection(answer);
   if (!hits.length && !trim(webAnswer)) return { answer: stripped, webDerived: false };
   const refused =
@@ -762,6 +811,9 @@ function applyWebResults(
       answer,
     );
   if (!asksAboutJobFile(question) && (refused || !trim(stripped))) {
+    // Write a clean answer from the results; never paste raw result text.
+    const written = summary ? await summarizeWebResultsForAsk({ ...summary, question, hits, webAnswer }) : null;
+    if (written) return { answer: written.answer, webDerived: true, usage: written.usage };
     return webFallbackAnswer({ question, jobAnswer: '', webAnswer, hits });
   }
   return { answer: stripped, webDerived: false };
@@ -1259,7 +1311,12 @@ export async function answerFromJobFile(input: {
       chunks: [...looked.retrievedChunks, ...documentChunks],
       question: input.question,
     }).answer;
-    const applied = applyWebResults(answer, input.question, webHits, webAnswer);
+    const applied = await applyWebResults(answer, input.question, webHits, webAnswer, {
+      apiKey: apiKey || null,
+      fetchFn: input.fetchFn,
+      now: input.now,
+      timeZone: zone,
+    });
     answer = applied.answer;
     const actions = formatActionsTrailer(toolResults);
     if (actions && !/⟦actions:/i.test(answer)) {
@@ -1269,7 +1326,7 @@ export async function answerFromJobFile(input: {
       answer,
       model: looked.model,
       groundedOn,
-      usage: looked.usage,
+      usage: applied.usage ? mergeMeasuredUsages([looked.usage, applied.usage], looked.model) : looked.usage,
       webHits,
       toolResults,
       answeredFromLookup: true,
@@ -1334,7 +1391,12 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
   let answer = trimChatFiller(normalizeAskProse(completed.text), { question: input.question });
-  const applied = applyWebResults(answer, input.question, webHits, webAnswer);
+  const applied = await applyWebResults(answer, input.question, webHits, webAnswer, {
+    apiKey: apiKey || null,
+    fetchFn: input.fetchFn,
+    now: input.now,
+    timeZone: zone,
+  });
   answer = applied.answer;
   const actions = formatActionsTrailer(toolResults);
   if (actions && !/⟦actions:/i.test(answer)) {
@@ -1344,7 +1406,7 @@ export async function answerFromJobFile(input: {
     answer,
     model: completed.model,
     groundedOn,
-    usage: completed.usage,
+    usage: applied.usage ? mergeMeasuredUsages([completed.usage, applied.usage], completed.model) : completed.usage,
     webHits,
     toolResults,
     webDerivedAnswer: applied.webDerived,

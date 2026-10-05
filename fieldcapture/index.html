@@ -102,6 +102,26 @@
       window.addEventListener('resize', onResize);
       if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
 
+      /* Keyboard up without the native web view resize (and iOS's own
+         scroll-to-the-focused-field): iOS pans the visible viewport up, which
+         slid the whole app (Dashboard frame and its Chat) under the status
+         bar and left an empty black band above the keyboard. The document
+         never scrolls here: undo any scroll, and pin .app to the visible
+         viewport (top = visualViewport.offsetTop; height = --app-height from
+         app.js). With the native resize this is a no-op. */
+      function pinViewport() {
+        if (window.scrollY || window.scrollX) { try { window.scrollTo(0, 0); } catch (e) {} }
+        var vv = window.visualViewport;
+        var top = vv ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+        root.style.setProperty('--app-vv-top', top + 'px');
+      }
+      window.addEventListener('scroll', pinViewport, { passive: true });
+      window.addEventListener('resize', pinViewport);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', pinViewport);
+        window.visualViewport.addEventListener('scroll', pinViewport);
+      }
+
       function nativeChrome() {
         /* No grey accessory bar (up/down/Done) above the keyboard. */
         var kb = plugin('Keyboard');
@@ -320,6 +340,11 @@
   /* ---------- iPhone / Android app shell only (html[data-app-shell]) ----------
      Set by the head script from the app's user agent; never in a browser. */
   html[data-app-shell] { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+  /* The app frame follows the visible viewport (see pinViewport): with the
+     keyboard up it ends right on the keyboard, so the Dashboard's Chat
+     composer sits on it. Behind the keyboard is the same dark page. */
+  html[data-app-shell] { background: var(--bg); }
+  html[data-app-shell] .app { position: fixed; left: 0; right: 0; top: var(--app-vv-top, 0px); }
   /* Solid band behind the status bar on every screen but the camera. */
   html[data-app-shell] body::after {
     content: ''; position: fixed; left: 0; right: 0; top: 0; z-index: 1000;

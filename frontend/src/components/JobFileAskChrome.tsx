@@ -198,6 +198,7 @@ export function JobFileAskChrome({
       data-testid="job-file"
       data-job-file-chrome="no-overview-back"
       data-ask-placement={askPlacement}
+      data-job-pane={pane}
       data-ask-width={askPlacement === 'split' ? askWidth : undefined}
     >
       {askPlacement === 'section' ? (
