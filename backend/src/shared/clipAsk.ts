@@ -28,7 +28,7 @@ import {
 } from './askResearch.js';
 import { activitySystemAddendum } from './mentions.js';
 import { answerRoomQuestion, isRoomQuestion, roomClipsFromLookupClips, segmentClipRooms } from './roomIntelligence.js';
-import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
+import { ASK_PROSE_FORMAT_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
 import {
   askClockSystemRules,
   askWebCapabilityRules,
@@ -1921,7 +1921,11 @@ export async function answerFromClip(input: {
     }
   }
   const shaped = ensureWebResultsSection(
-    withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
+    withUnprovenSpeakerCaveat(
+      input.question,
+      input.record,
+      trimChatFiller(normalizeAskProse(completed.text), { question: input.question }),
+    ),
   );
   // normalizeAskProse reattaches ⟦sources:…⟧ even when that marker is the whole
   // reply. The UI strips it, so a sources-only answer is empty.

@@ -29,7 +29,6 @@ import { resolveTranscriptionConfig } from '../lib/transcriptionConfig.js';
 import { recordFlatProviderCost } from '../metering/tokenUsage.js';
 import { queueSummaryRefresh } from './summaryQueue.js';
 import { staleSummaryPatch } from './summaryFreshness.js';
-import { runTranscriptSafetyScan } from '../safety/sample.js';
 import { writeTranscriptChunks } from '../shared/askTranscriptChunkStore.js';
 
 const PROOF_BUCKET = 'job-proofs';
@@ -175,9 +174,11 @@ const MAX_STORED_WORDS = 80_000;
 
 export type TranscribeProofOptions = {
   /**
-   * The transcript safety scan. Off for the timing backfill. The AI summary is
-   * rebuilt on every transcript write regardless: the write marks it stale and
-   * queues it, so a re-transcription never leaves the old summary in place.
+   * Passed as false by the timing backfill. Nothing extra runs after the
+   * transcript write any more (the transcript safety scan was removed), so this
+   * changes nothing. The AI summary is rebuilt on every transcript write
+   * regardless: the write marks it stale and queues it, so a re-transcription
+   * never leaves the old summary in place.
    */
   enrich?: boolean;
   /**
@@ -365,27 +366,6 @@ export async function transcribeProofVideo(
   await queueSummaryRefresh(admin, proofId);
 
   chargeTranscription();
-
-  if (opts?.enrich === false) return;
-
-  // Safety cues over the WHOLE transcript, in windows. A word-list match is a
-  // candidate only; the confirmation model (with stills near the moment and
-  // the clip's media tagging) decides real / joking / staged / media playback.
-  if (proof.org_id && proof.job_id && proof.party_id) {
-    void runTranscriptSafetyScan(admin, {
-      orgId: proof.org_id,
-      jobId: proof.job_id,
-      partyId: proof.party_id,
-      proofId,
-      clipId: proof.clip_id ?? null,
-      transcriptText,
-      segments,
-      lat: proof.lat == null ? null : Number(proof.lat),
-      lon: proof.lon == null ? null : Number(proof.lon),
-    }).catch((err) => {
-      console.warn('[safety] transcript scan failed:', err instanceof Error ? err.message : err);
-    });
-  }
 }
 
 async function adminForProof(proofId: string) {

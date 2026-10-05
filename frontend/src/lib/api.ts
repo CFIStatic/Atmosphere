@@ -6,6 +6,15 @@
  * `VITE_API_BASE_URL` if the backend is served from a different origin.
  */
 
+import type {
+  ComputerLiveLink,
+  ComputerLogin,
+  ComputerCredentialInput,
+  ComputerLoginsState,
+  ComputerRemoveLoginResult,
+  ComputerSignIn,
+  ComputerTaskView,
+} from './computer';
 import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
 import { progressShareApiPath } from './progressSharePath';
 import type { TermsStatus } from './terms';
@@ -3165,18 +3174,6 @@ export interface AuthResponse {
 }
 
 
-export type SafetySeverity = 'watch' | 'critical';
-export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
-export type SafetyReality = 'real' | 'joking' | 'staged' | 'media_playback' | 'unclear';
-export type SafetyDismissCategory =
-  | 'false_alarm_media'
-  | 'joking'
-  | 'staged'
-  | 'not_an_emergency'
-  | 'handled'
-  | 'duplicate'
-  | 'other';
-
 
 /* ------------------------------------------------------------------ */
 /* Trade playbooks                                                     */
@@ -3222,29 +3219,6 @@ export interface TradePlaybook {
   updatedAt: string;
   steps?: PlaybookStep[];
   sources?: PlaybookSource[];
-}
-
-export interface SafetyIncident {
-  id: string;
-  orgId: string;
-  jobId: string | null;
-  category: string;
-  severity: SafetySeverity;
-  confidence: number;
-  title: string;
-  description: string;
-  clipTimestampSeconds: number | null;
-  locationLabel: string | null;
-  recommendedAction: string;
-  status: SafetyStatus;
-  source: string;
-  createdAt: string;
-  /** Model verdict: real / joking / staged / media_playback / unclear. */
-  reality?: SafetyReality | null;
-  /** confirmed = checked real; unconfirmed = "check live view". */
-  confirmation?: 'confirmed' | 'unconfirmed' | null;
-  dismissCategory?: SafetyDismissCategory | null;
-  dismissReason?: string | null;
 }
 
 
@@ -4125,28 +4099,6 @@ export const api = {
       `/api/operations/shared/${jobId}/live/${encodeURIComponent(clipId)}`,
       { method: 'GET' },
     ),
-
-  jobSafetyIncidents: (jobId: string, status: 'open' | 'all' = 'open') =>
-    request<{
-      incidents: SafetyIncident[];
-      counts: { open: number; criticalOpen: number };
-    }>(
-      `/api/safety/incidents?jobId=${encodeURIComponent(jobId)}&status=${encodeURIComponent(status)}`,
-      { method: 'GET' },
-    ),
-
-  ackSafetyIncident: (id: string) =>
-    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/ack`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    }),
-
-  /** Dismiss needs a reason category (and a note for "other"). */
-  dismissSafetyIncident: (id: string, category: SafetyDismissCategory, reason?: string) =>
-    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/dismiss`, {
-      method: 'POST',
-      body: JSON.stringify(reason ? { category, reason } : { category }),
-    }),
 
 
 
@@ -6102,6 +6054,82 @@ export const api = {
         body: JSON.stringify(input),
       },
     ),
+
+  // ---- Computer (Chat's browser agent; org members only) ----
+  // Mounted at /api/chat-computer: /api/computer was the removed desktop agent
+  // product (the unused client above) and must stay unmounted.
+  computerSetup: () =>
+    request<{ configured: boolean; provider: string; message: string | null }>('/api/chat-computer/status'),
+
+  computerTask: (id: string) =>
+    request<{ task: ComputerTaskView }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}`),
+
+  /** A fresh, short-lived live-view link for this viewer. Never store or log it. */
+  computerLiveView: (id: string, mode: 'watch' | 'control') =>
+    request<ComputerLiveLink>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/live`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+      cache: 'no-store',
+    }),
+
+  // Logins: sign in to outside sites ahead of time. No agent runs here.
+  computerLogins: () => request<ComputerLoginsState>('/api/chat-computer/logins', { cache: 'no-store' }),
+
+  computerStartSignIn: (input: { url?: string; label?: string; loginId?: string; credential?: ComputerCredentialInput }) =>
+    request<{ signIn: ComputerSignIn }>('/api/chat-computer/logins/sign-ins', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Control-mode live link for a sign-in. Never store or log it. */
+  computerSignInLive: (sessionId: string) =>
+    request<ComputerLiveLink>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/live`, {
+      method: 'POST',
+      cache: 'no-store',
+    }),
+
+  computerSignInDone: (sessionId: string) =>
+    request<{ login: ComputerLogin }>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/done`, {
+      method: 'POST',
+    }),
+
+  computerSignInCancel: (sessionId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/logins/sign-ins/${encodeURIComponent(sessionId)}/cancel`, {
+      method: 'POST',
+    }),
+
+  /** Save or replace a site's username and password (Global Admin). The password is never returned. */
+  computerSaveCredential: (loginId: string, credential: ComputerCredentialInput) =>
+    request<{ login: ComputerLogin }>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}/credential`, {
+      method: 'PUT',
+      body: JSON.stringify(credential),
+      cache: 'no-store',
+    }),
+
+  computerDeleteCredential: (loginId: string) =>
+    request<{ deleted: boolean }>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}/credential`, {
+      method: 'DELETE',
+    }),
+
+  computerRemoveLogin: (loginId: string) =>
+    request<ComputerRemoveLoginResult>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}`, {
+      method: 'DELETE',
+    }),
+
+  computerHandBack: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/hand-back`, { method: 'POST' }),
+
+  computerResume: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
+
+  computerCancel: (id: string) =>
+    request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+
+  computerApprove: (approvalId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/approve`, { method: 'POST' }),
+
+  computerCancelApproval: (approvalId: string) =>
+    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/cancel`, { method: 'POST' }),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
@@ -6332,7 +6360,7 @@ export interface BillingOnboardingStatus {
 }
 
 /** Feature ids as the ledger stores them (`token_usage_events.feature`). */
-export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'other'] as const;
+export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'web_search', 'computer', 'other'] as const;
 export type TokenFeature = (typeof TOKEN_FEATURES)[number];
 
 /**
@@ -6340,7 +6368,7 @@ export type TokenFeature = (typeof TOKEN_FEATURES)[number];
  * the ledger's `ask` rows are shown (and summed) under "Chat"; totals are
  * unchanged. The stored feature id stays `ask`.
  */
-export const TOKEN_DISPLAY_FEATURES = ['video_analysis', 'chat', 'web_search', 'other'] as const;
+export const TOKEN_DISPLAY_FEATURES = ['video_analysis', 'chat', 'web_search', 'computer', 'other'] as const;
 export type TokenDisplayFeature = (typeof TOKEN_DISPLAY_FEATURES)[number];
 
 export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
@@ -6348,13 +6376,14 @@ export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
   chat: 'Chat',
   ask: 'Chat',
   web_search: 'Web search',
+  computer: 'Computer',
   other: 'Other',
 };
 
 /** Usage-display category for a stored feature id (`ask` → `chat`). */
 export function tokenDisplayFeature(feature: string | null | undefined): TokenDisplayFeature {
   if (feature === 'ask' || feature === 'chat') return 'chat';
-  if (feature === 'video_analysis' || feature === 'web_search') return feature;
+  if (feature === 'video_analysis' || feature === 'web_search' || feature === 'computer') return feature;
   return 'other';
 }
 

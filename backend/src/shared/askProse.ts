@@ -10,13 +10,26 @@
 import { ASK_SOURCE_FORMAT_RULES, normalizeAskSources } from './askSources.js';
 
 /** Appended to interactive Ask system prompts (job file + clip). */
-export const ASK_PROSE_FORMAT_RULES = `FORMAT (ChatGPT / Claude / Grok quality — the UI renders safe markdown):
-- Write like a top-tier chat assistant: short opener paragraph, then a tight bullet list when listing facts, optional invite to go deeper.
-- Use markdown for structure only: **bold** for short section labels (e.g. **Job setup:**), *italics* sparingly for asides, and "-" or "•" for bullet lists.
-- Never dump raw asterisk soup (no "***", no decorative * around every phrase, no unbalanced **). One clean **Label:** per bullet is enough — orphan stars must never appear in the answer.
-- Capability-only asks ("can you search Google/the web?", "are you connected?") → 1–3 short professional sentences saying yes (when web search is available), optionally offer to search something specific. Do NOT live-search, do NOT append ⟦web:…⟧ / [[web:…]], and do NOT cite google.com or how-to-search pages.
-- No headings (#), no images, no HTML, no code fences unless quoting a short on-file code-like string. Do not write markdown links, bare URLs, or a Web results heading. The app attaches web sources separately. Never write ⟦web:…⟧ or [[web:…]].
-- Glance-simple first; save long quotes and timestamps for when they ask for depth.
+/**
+ * How every Chat reply should sound. Shared by the job-file, lookup, clip and
+ * upload prompts so they all read like Grok Bot.
+ */
+export const CHAT_VOICE_RULES = `VOICE (Grok Bot quality — every Chat reply):
+- Lead with the answer: the yes/no, the number, the name or the recommendation comes first. Don't restate the question. No meta openers ("Here's a summary", "Based on the job file", "Great question"). No filler closings ("Let me know if…", "Hope this helps", "Feel free to ask").
+- Warm, plain, natural language with contractions (it's, didn't, you'll). Most answers are 1–3 short sentences. Go longer only when they ask for detail, a list, a draft or a full breakdown.
+- Prose by default. Bullets only for genuinely parallel items; numbered lists only for steps; headers only for long multi-part breakdowns. Bold sparingly: a key number or name at most, never every label.
+- Evidence: quote only when the quote supports a claim, inline in the sentence with the clip and time, like: The homeowner wants the skylights left alone: “Don't touch the skylights.” (Kitchen walkthrough, 0:15). Never reply with only a quote. Documents have no speakers; name the file instead.
+- No internal or system text: no section tags ("brief ·", "scope · excluded"), no field or column names (jobNumber, workDate, claim_number), no raw errors or status codes, no comment on whether an uploaded file is about this job. Mention "the job file" only when it actually helps the reader.
+- A very short message ("?", "ok", "hi", "thanks") gets a short friendly reply: acknowledge it or ask what they'd like to know. Never an error or a refusal.`;
+
+export const ASK_PROSE_FORMAT_RULES = `${CHAT_VOICE_RULES}
+
+FORMAT (Grok Bot quality — the UI renders safe markdown):
+- Glance-simple first: plain short paragraphs. A tight "-" bullet list only when listing parallel facts; save long quotes and timestamps for when they ask for depth.
+- Use markdown for structure only: **bold** sparingly for a key fact or a short label, *italics* rarely, \`inline code\` only for a code someone would type (a lockbox or gate code), and a simple table only for side-by-side comparisons.
+- Never dump raw asterisk soup (no "***", no decorative * around every phrase, no unbalanced **). orphan stars must never appear in the answer.
+- Capability-only asks ("can you search Google/the web?", "are you connected?") → 1–3 short sentences saying yes (when web search is available), optionally offer to search something specific. Do NOT live-search, do NOT append ⟦web:…⟧ / [[web:…]], and do NOT cite google.com or how-to-search pages.
+- No images, no HTML, no code fences unless quoting a short on-file code-like string. Headings (##) only for long multi-part breakdowns. Do not write markdown links, bare URLs, or a Web results heading. The app attaches web sources separately. Never write ⟦web:…⟧ or [[web:…]].
 - Stay grounded: only facts from the record — never invent evidence.
 
 ` + ASK_SOURCE_FORMAT_RULES;
@@ -121,4 +134,57 @@ function stripUnpairedSingleAsterisks(text: string): string {
 
   out = out.replace(/\u0000(\d+)\u0000/g, (_m, n: string) => placeholders[Number(n)] ?? '');
   return out;
+}
+
+const META_OPENER_LINE_RE =
+  /^(?:here(?:'|’)s|here is|below is|sure[,!]? here(?:'|’)s)\b[^\n]{0,80}:\s*$/i;
+const META_OPENER_PREFIX_RE =
+  /^(?:(?:certainly|great question|sure thing|of course|absolutely|happy to help)[!.,]?\s+|(?:here(?:'|’)s|here is) (?:a |the |my |what |an )?(?:quick |short |brief )?(?:summary|overview|rundown|breakdown|answer)[^:.\n]{0,40}:\s+|based on (?:the |this )(?:job file|record|file|documents?|uploaded (?:file|document)s?)[^,\n]{0,30},\s+)/i;
+const FILLER_CLOSING_RE =
+  /\s*(?:(?:please )?let me know if\b[^.!?\n]*[.!?]|i hope (?:this|that) helps\b[^.!?\n]*[.!?]|hope (?:this|that) helps\b[^.!?\n]*[.!?]|feel free to\b[^.!?\n]*[.!?]|if you (?:have|need) any (?:other|more|further) (?:questions|help)\b[^.!?\n]*[.!?]|is there anything else\b[^.!?\n]*[.!?]|happy to help(?: further| more)?[.!]?)\s*$/i;
+/** A request to write something on the user's behalf: leave its wording alone. */
+const DRAFT_REQUEST_RE = /\b(?:draft|write|compose|email|e-mail|text message|letter|reply to|message to)\b/i;
+
+/**
+ * Drop meta openers ("Here's a summary:") and filler closings ("Let me know
+ * if…") from a Chat reply so it leads with the answer, like Grok Bot. Only the
+ * first and last prose paragraphs are touched; ⟦artifact⟧ drafts, machine
+ * trailers and drafting requests are left as written.
+ */
+export function trimChatFiller(input: string, opts?: { question?: string | null }): string {
+  const text = String(input ?? '');
+  if (!text.trim()) return text;
+  if (DRAFT_REQUEST_RE.test(String(opts?.question ?? ''))) return text;
+  if (/⟦artifact⟧/.test(text)) return text;
+
+  const trailerAt = text.search(/\n*⟦(?:sources|quotes|followups|actions|web)\b/);
+  const body = trailerAt >= 0 ? text.slice(0, trailerAt) : text;
+  const trailer = trailerAt >= 0 ? text.slice(trailerAt) : '';
+
+  const paragraphs = body.split(/\n{2,}/);
+  // Opener: a whole "Here's a summary:" line, or a prefix on the first line.
+  if (paragraphs.length > 1 && !paragraphs[0]!.includes('\n') && META_OPENER_LINE_RE.test(paragraphs[0]!.trim())) {
+    paragraphs.shift();
+  } else if (paragraphs.length) {
+    const lines = paragraphs[0]!.split('\n');
+    if (lines.length > 1 && META_OPENER_LINE_RE.test(lines[0]!.trim())) lines.shift();
+    const first = lines[0] ?? '';
+    const stripped = first.replace(META_OPENER_PREFIX_RE, '');
+    if (stripped !== first && stripped.trim()) lines[0] = stripped.replace(/^([a-z])/, (c) => c.toUpperCase());
+    paragraphs[0] = lines.join('\n');
+  }
+  // Closing: filler sentence(s) at the end of the last prose paragraph.
+  for (let guard = 0; guard < 3 && paragraphs.length; guard += 1) {
+    const lastIndex = paragraphs.length - 1;
+    const last = paragraphs[lastIndex]!;
+    if (/^\s*(?:[-*•]|\d+[.)]|\|)/m.test(last.split('\n').pop() ?? '')) break;
+    const next = last.replace(FILLER_CLOSING_RE, '');
+    if (next === last) break;
+    if (next.trim()) paragraphs[lastIndex] = next.trimEnd();
+    else if (paragraphs.length > 1) paragraphs.pop();
+    else break;
+  }
+  const cleaned = paragraphs.join('\n\n').trimEnd();
+  if (!cleaned.trim()) return text;
+  return trailer ? `${cleaned}\n\n${trailer.replace(/^\n+/, '')}` : cleaned;
 }

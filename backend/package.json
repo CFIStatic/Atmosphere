@@ -51,6 +51,7 @@
     "helmet": "^7.1.0",
     "nodemailer": "^10.0.2",
     "pdfkit": "^0.20.2",
+    "playwright-core": "^1.63.0",
     "qrcode": "^1.5.4",
     "stripe": "^22.3.2",
     "ws": "^8.21.1",

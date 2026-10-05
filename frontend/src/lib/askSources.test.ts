@@ -159,3 +159,17 @@ describe('askSources', () => {
   });
 
 });
+
+describe('document quotes', () => {
+  it('never label a document excerpt with a speaker', async () => {
+    const { parseAskQuoteTrailer, isDocumentQuoteSource } = await import('./askSources');
+    const quotes = parseAskQuoteTrailer(
+      'Answer.\n\n⟦quotes: doc:abc#document|Unidentified speaker|Blox Group – Automated construction.|clip=The Future.docx ;; video/j/p/s@4.2||The tarp came off.⟧',
+    );
+    expect(quotes[0]).toMatchObject({ speaker: '', clipTitle: 'The Future.docx', text: 'Blox Group – Automated construction.' });
+    expect(quotes[1]).toMatchObject({ speaker: 'Unidentified speaker' });
+    expect(isDocumentQuoteSource('doc:abc#page 1')).toBe(true);
+    expect(isDocumentQuoteSource('video/j/p/s@4.2')).toBe(false);
+  });
+});
+

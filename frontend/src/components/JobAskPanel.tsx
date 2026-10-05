@@ -28,8 +28,9 @@ import {
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
-import { extractAskSources, type AskSourceChip } from '../lib/askSources';
+import { extractAskSources, isDocumentQuoteSource, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
+import { ComputerTaskCard } from './computer/ComputerTaskCard';
 import type { AskWebSource } from '../lib/askWebSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -38,7 +39,7 @@ import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
-import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, splitQuietDocumentNote, type AskAttachment } from '../lib/chatDocuments';
+import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 
 /**
@@ -119,14 +120,24 @@ function AskQuoteList({
         >
           <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
           <span className="mt-0.5 block text-[11px] text-ink-500">
-            {quote.speaker}
-            {quote.clipTitle ? ` · ${quote.clipTitle}` : ''}
-            {quote.atSeconds != null ? ` · ${formatMomentClock(quote.atSeconds)}` : ''}
+            {quoteAttribution(quote)}
           </span>
         </button>
       ))}
     </div>
   );
+}
+
+/** A document excerpt has no speaker: only clip quotes carry one. */
+function quoteAttribution(quote: ReturnType<typeof extractAskSources>['quotes'][number]): string {
+  return [
+    isDocumentQuoteSource(quote.sourceId) ? '' : quote.speaker,
+    quote.clipTitle ?? '',
+    quote.atSeconds != null ? formatMomentClock(quote.atSeconds) : '',
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function formatMomentClock(seconds: number): string {
@@ -215,6 +226,16 @@ function AskInlineNodes({
             </a>
           );
         }
+        if (node.kind === 'code') {
+          return (
+            <code
+              key={`c-${index}`}
+              className="rounded bg-paper-100 px-1 py-px font-mono text-[0.9em] text-ink-900"
+            >
+              {node.text}
+            </code>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold text-ink-900">
@@ -250,6 +271,16 @@ function AskBlocks({
             <Tag key={`h-${bi}`} className="text-[15px] font-semibold tracking-tight text-ink-900">
               <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
             </Tag>
+          );
+        }
+        if (block.kind === 'code') {
+          return (
+            <pre
+              key={`code-${bi}`}
+              className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-[13px] leading-snug text-ink-900"
+            >
+              {block.text}
+            </pre>
           );
         }
         if (block.kind === 'table') {
@@ -361,6 +392,7 @@ function AskAnswerBody({
 }) {
   const extracted = extractAskSources(text);
   const { quotes, followUps } = extracted;
+  const computerTasks = extracted.actions.filter((action) => action.tool === 'start_computer_task');
   const { prose, artifact } = splitAskArtifact(extracted.body);
   const blocks = parseAskProseBlocks(
     sanitizeSpeakerProse(prose, {
@@ -375,6 +407,9 @@ function AskAnswerBody({
         <p className="whitespace-pre-wrap">{prose}</p>
       ) : null}
       {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
+      {computerTasks.map((action, i) => (
+        <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
+      ))}
       <AskWebResults sources={webSources} />
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />
@@ -480,6 +515,11 @@ function dropStaleRoleGuess(
     if (row.candidateName || !row.role || !answered?.proofId || !row.proofId) return true;
     return row.speakerLabel !== answered.speakerLabel || row.proofId !== answered.proofId;
   });
+}
+
+/** A Computer task reply is about the browser, not the job file: no "From this job file" line. */
+function isComputerTaskAnswer(text: string): boolean {
+  return extractAskSources(text).actions.some((action) => action.tool === 'start_computer_task');
 }
 
 /**
@@ -1002,7 +1042,9 @@ export function JobAskPanel({
       setAskFailure({
         message:
           err instanceof ApiError
-            ? err.message
+            ? err.code === 'validation_error'
+              ? "That message didn't go through. Try rewording it."
+              : err.message
             : err instanceof Error && err.message === 'empty_answer'
               ? 'No answer came back. Try again.'
               : 'Could not answer that from the file.',
@@ -1111,7 +1153,6 @@ export function JobAskPanel({
                 .reverse()
                 .find((row) => row.role === 'assistant')?.id;
               const showActions = turn.role === 'assistant' && turn.content.trim();
-              const quiet = turn.role === 'assistant' ? splitQuietDocumentNote(turn.content) : null;
               return (
               <li
                 key={turn.id}
@@ -1133,7 +1174,7 @@ export function JobAskPanel({
                   ) : null}
                   {turn.role === 'assistant' ? (
                     <AskAnswerBody
-                      text={quiet?.note ? quiet.answer : turn.content}
+                      text={stripLegacyDocumentNote(turn.content)}
                       events={analysisEvents
                         .filter((event) =>
                           !turn.groundedIds?.length
@@ -1157,12 +1198,10 @@ export function JobAskPanel({
                       <MentionText text={turn.content} onDark />
                     </p>
                   )}
-                  {quiet?.note ? (
-                    <p className="mt-2 text-xs leading-relaxed text-ink-400" data-testid="ask-document-job-note">
-                      {quiet.note}
-                    </p>
-                  ) : null}
-                  {turn.role === 'assistant' && !quiet?.note && turn.groundedOn != null && turn.groundedOn > 0 && (
+                  {turn.role === 'assistant' &&
+                    turn.groundedOn != null &&
+                    turn.groundedOn > 0 &&
+                    !isComputerTaskAnswer(turn.content) && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                   {showActions ? (
@@ -1171,7 +1210,7 @@ export function JobAskPanel({
                         type="button"
                         data-testid="ask-message-copy"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(copyableAskText(turn.content)).then(() => {
+                          void navigator.clipboard?.writeText(copyableAskText(stripLegacyDocumentNote(turn.content))).then(() => {
                             setCopiedTurnId(turn.id);
                           });
                         }}
@@ -1337,7 +1376,7 @@ export function JobAskPanel({
             jobId={jobId}
             placeholder="Ask what you forgot…"
             disabled={asking}
-            className="min-h-[2.5rem] w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-h-[2.5rem] w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
           {inFlight ? (
             <button

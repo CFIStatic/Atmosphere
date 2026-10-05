@@ -62,7 +62,7 @@ export function routeAskQuestion(input: {
   const catalog = input.catalog;
   if (catalog) {
     const chat = classifyChatTurn(resolved, input.history, catalog);
-    if (chat === 'greeting' || chat === 'thanks' || chat === 'restate' || chat === 'clarify') {
+    if (chat === 'greeting' || chat === 'thanks' || chat === 'ack' || chat === 'restate' || chat === 'clarify') {
       return { route: 'fast', reason: chat };
     }
     if (chat === 'opinion' || chat === 'recall') return { route: 'fast', reason: chat };

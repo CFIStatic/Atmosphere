@@ -5,6 +5,7 @@
  * only or return needs_confirmation (never silent revoke/email/delete).
  */
 
+import { ComputerServiceError, startComputerTask } from '../computer/service.js';
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
@@ -56,7 +57,7 @@ export type AskToolResult = {
   data?: unknown;
   /** UI navigation hints (section / clip seek / path). */
   ui?: {
-    section?: 'access' | 'scope' | 'videos' | 'evidence' | 'parties' | 'setup' | 'brief';
+    section?: 'access' | 'scope' | 'videos' | 'evidence' | 'parties' | 'setup' | 'brief' | 'computer';
     path?: string;
     workDate?: string;
     seekSeconds?: number;
@@ -81,7 +82,8 @@ export type AskToolName =
   | 'find_evidence_moments'
   | 'draft_progress_share_copy'
   | 'draft_field_invite_copy'
-  | 'propose_revoke_access';
+  | 'propose_revoke_access'
+  | 'start_computer_task';
 
 type ToolDef = {
   name: AskToolName;
@@ -252,7 +254,37 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
       required: ['personLabel'],
     },
   },
+  {
+    name: 'start_computer_task',
+    description:
+      'Office only. Open a browser and do a task on any website for this job (for example, fill out a claim or permit form). ' +
+      'The agent only types allowlisted job fields and what the person wrote, stops for sign-in / 2FA / captcha, ' +
+      'and never submits, sends, pays, deletes, signs, accepts terms, or uploads without the person approving that click.',
+    audience: 'org',
+    input_schema: {
+      type: 'object',
+      properties: {
+        instructions: { type: 'string', description: 'What to do on the website, in the person’s words.' },
+        start_url: { type: 'string', description: 'Website to open first, if the person named one.' },
+      },
+      required: ['instructions'],
+    },
+  },
 ];
+
+/** "Fill out the claim form on the Acme portal", "go to example.gov and complete …". */
+export function looksLikeComputerTask(question: string): boolean {
+  const q = trim(question).toLowerCase();
+  if (!q) return false;
+  if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
+  // Questions about what happened are not instructions to act.
+  if (/^(did|does|do|has|have|was|were|is|are|when|why|who|what|where|how|can you tell|explain)\b/.test(q)) return false;
+  const verbs =
+    /\b(fill (?:it |this |that |the [\w-]+ )?(?:out|in)|fill out|complete|submit|enter|file|update|register|apply|request|book|schedule|upload|put (?:it|this|the [\w-]+) (?:on|in|into))\b/;
+  const surface =
+    /\b(website|web ?site|web form|online form|portal|browser|online)\b|\.(?:com|gov|org|net|us|io)\b|https?:\/\//;
+  return verbs.test(q) && surface.test(q);
+}
 
 export function askToolsForAccess(access: AskAccessRole): ToolDef[] {
   return ASK_TOOL_DEFINITIONS.filter((t) => {
@@ -312,6 +344,10 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   }
   if (/revoke|remove access|cut off access/.test(q)) {
     add('propose_revoke_access');
+  }
+  // A browser task is the whole turn: no other tool runs beside it.
+  if (allow.has('start_computer_task') && looksLikeComputerTask(question)) {
+    return ['start_computer_task'];
   }
   if (
     /\b(crm|jobnimbus|acculynx|salesforce|servicetitan|in (the )?crm|from (the )?crm)\b/.test(q) ||
@@ -409,7 +445,7 @@ async function loadAccessRoster(ctx: AskToolContext): Promise<JobAccessPerson[]>
   });
 }
 
-const ASK_MUTATING_TOOLS = new Set<AskToolName>(['update_job_fields', 'propose_revoke_access']);
+const ASK_MUTATING_TOOLS = new Set<AskToolName>(['update_job_fields', 'propose_revoke_access', 'start_computer_task']);
 
 /** Writes run first, one at a time. Reads in one turn run together. */
 export function partitionAskTools(names: AskToolName[]): { sequential: AskToolName[]; parallel: AskToolName[] } {
@@ -947,6 +983,40 @@ export async function executeAskTool(
         };
       }
 
+      case 'start_computer_task': {
+        if (ctx.access !== 'org' || !ctx.userId) {
+          return { ok: false, tool: name, summary: 'Computer is only available to signed-in office users.' };
+        }
+        const instructions = trim(input.instructions);
+        if (!instructions) {
+          return { ok: false, tool: name, summary: 'Say what to do on the website.', ui: { section: 'computer', path: 'computer-task:error' } };
+        }
+        try {
+          const task = await startComputerTask({
+            orgId: ctx.orgId,
+            userId: ctx.userId,
+            jobId: ctx.jobId || null,
+            instructions,
+            startUrl: trim(input.start_url) || null,
+            file: ctx.file,
+            address: ctx.address ?? null,
+          });
+          return {
+            ok: true,
+            tool: name,
+            summary: 'Started a browser task. It asks before anything is submitted.',
+            data: { taskId: task.id, status: task.status, jobFields: task.job_projection.length },
+            ui: { section: 'computer', path: `computer-task:${task.id}` },
+          };
+        } catch (err) {
+          if (err instanceof ComputerServiceError) {
+            const path = err.code === 'not_set_up' ? 'computer-task:not-set-up' : 'computer-task:error';
+            return { ok: false, tool: name, summary: err.message, ui: { section: 'computer', path } };
+          }
+          throw err;
+        }
+      }
+
       default:
         return { ok: false, tool: name, summary: `Unknown tool: ${name}` };
     }
@@ -986,7 +1056,8 @@ export function collectWebHitsFromToolResults(results: AskToolResult[]): AskWebH
 export function formatActionsTrailer(results: AskToolResult[]): string {
   const parts: string[] = [];
   for (const r of results) {
-    if (!r.ok) continue;
+    // The Computer card renders its own "not set up" / "not allowed" state.
+    if (!r.ok && r.tool !== 'start_computer_task') continue;
     const label = r.summary.replace(/[|,⟦⟧]/g, ' ').slice(0, 80);
     const section = r.ui?.section ?? '';
     const path = r.ui?.path ?? '';

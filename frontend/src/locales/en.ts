@@ -17,6 +17,7 @@ export const EN = {
   'nav.system': 'System',
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
+  'nav.logins': 'Logins',
   'nav.connectCrm': 'Connect',
   'nav.settings': 'Settings',
   'nav.support': 'Support',

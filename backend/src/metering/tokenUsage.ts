@@ -234,6 +234,7 @@ function emptyByFeature(): Record<TokenFeature, TokenTotals> {
     chat: EMPTY_TOTALS(),
     ask: EMPTY_TOTALS(),
     web_search: EMPTY_TOTALS(),
+    computer: EMPTY_TOTALS(),
     other: EMPTY_TOTALS(),
   };
 }

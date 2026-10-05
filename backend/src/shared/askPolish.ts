@@ -859,7 +859,7 @@ function composeTask(
   return `Here is a ${heading.toLowerCase()} in prose.\n\n${artifact(`**${heading} — ${name}**\n\n${prose}`)}\n\n${next}`;
 }
 
-export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
+export type ChatKind = 'greeting' | 'thanks' | 'ack' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
 
 type SpeechLine = { text: string; title: string; when: string; workDate: string | null; clipId: string };
 
@@ -911,10 +911,9 @@ function jobOffer(catalog: AskLookupCatalog): string {
   const client = String(catalog.clientName ?? '').trim().replace(/\.$/, '');
   const address = String(catalog.jobAddress ?? '').trim();
   const where = [client ? `client ${client}` : '', address].filter(Boolean).join(', ');
-  const who = people.length ? people.join(', ') : 'No one is listed';
-  const verb = people.length === 1 ? 'is' : 'are';
-  const when = dates.length ? dates.join(' and ') : 'the clips on file';
-  return `**${name}** is the open file${where ? ` (${where})` : ''}. ${who} ${verb} on clips from ${when}. I can quote a visit, compare the days, or summarize the job.`;
+  const when = dates.length ? `clips from ${dates.join(' and ')}` : 'the clips on file';
+  const withWho = people.length ? `, with ${people.join(', ')}` : '';
+  return `**${name}**${where ? ` (${where})` : ''} has ${when}${withWho}. I can quote a visit, compare the days, or summarize the job.`;
 }
 
 function splitSocial(question: string): { prefix: 'thanks' | 'greeting' | null; body: string } {
@@ -930,6 +929,11 @@ function isGreeting(question: string): boolean {
   return /^(?:hi|hey|hello|howdy|yo|good\s+(?:morning|afternoon|evening)|how are you|how'?s it going|what'?s up)(?:\s+there)?[!.?\s]*$/i.test(
     question.trim(),
   );
+}
+
+/** A bare "?", "ok" or "got it": conversation, not a lookup that came up empty. */
+function isAck(question: string): boolean {
+  return /^(?:\?+|ok(?:ay)?|k|cool|got it|great|nice|perfect|sounds good|alright|all right)[!.?\s]*$/i.test(question.trim());
 }
 
 function isThanks(question: string): boolean {
@@ -987,6 +991,7 @@ export function classifyChatTurn(
   if ((prefix === 'thanks' || prefix === 'greeting') && isFollowOnQuestion(body)) return null;
   if (prefix === 'thanks' || isThanks(q)) return 'thanks';
   if (isGreeting(q)) return 'greeting';
+  if (isAck(q)) return 'ack';
   return null;
 }
 
@@ -1098,7 +1103,9 @@ function composeChat(
 ): string {
   switch (kind) {
     case 'greeting':
-      return `Hi. ${jobOffer(catalog)}`;
+      return `Hi! ${jobOffer(catalog)}`;
+    case 'ack':
+      return /^\?+$/.test(question.trim()) ? `What do you want to know? ${jobOffer(catalog)}` : 'Got it.';
     case 'thanks':
       return composeThanks(catalog, history);
     case 'opinion':

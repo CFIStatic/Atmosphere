@@ -2,6 +2,7 @@ import {
   BoltIcon,
   DecisionIcon,
   GaugeIcon,
+  KeyIcon,
   MicIcon,
   SettingsIcon,
 } from '../components/icons';
@@ -47,12 +48,13 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
-/** Office rail — Start a job and Dashboard, in this order. */
+/** Office rail — Start a job, Dashboard, then Logins, in this order. */
 const WORK: NavGroup = {
   label: 'Work',
   items: [
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
+    { to: '/logins', label: 'Logins', Icon: KeyIcon },
   ],
 };
 

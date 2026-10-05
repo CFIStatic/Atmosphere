@@ -25,6 +25,13 @@ function InlineNodes({ nodes }: { nodes: AskInline[] }) {
             </a>
           );
         }
+        if (node.kind === 'code') {
+          return (
+            <code key={`c-${index}`} className="rounded bg-paper-100 px-1 py-px font-mono text-[0.92em] text-ink-900">
+              {node.text}
+            </code>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold">
@@ -63,6 +70,13 @@ function Block({ block }: { block: AskProseBlock }) {
           </li>
         ))}
       </Tag>
+    );
+  }
+  if (block.kind === 'code') {
+    return (
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-paper-100 px-2 py-1.5 font-mono text-[12px] text-ink-900">
+        {block.text}
+      </pre>
     );
   }
   if (block.kind === 'table') {

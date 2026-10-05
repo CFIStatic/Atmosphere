@@ -2205,6 +2205,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label" data-i18n-chrome="dashboard">Dashboard</span>
       </button>
+      <button type="button" class="navitem nav-icon" id="nav-logins">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M16 7l3 3M18 5l2 2"/></svg>
+        <span class="label" data-i18n-chrome="logins">Logins</span>
+      </button>
     </div>
 
     <div class="rail-section" id="ask-history-nav" hidden>
@@ -8087,7 +8091,7 @@
     });
     function send(text) {
       var q = String(text || '').trim();
-      if (q.length < 3) return;
+      if (!q) return;
       if (item._askBusy) return;
       item._askBusy = true;
       var pendingDocs = (item._pendingDocs || []).slice();
@@ -8689,6 +8693,11 @@
       if (startJob) startJob.setAttribute('aria-current', 'true');
       return;
     }
+    if (activeRoute === '/logins') {
+      var loginsBtn = document.getElementById('nav-logins');
+      if (loginsBtn) loginsBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/shared' || activeRoute === '/job-progress') {
       // Job record is a Dashboard detail — keep Dashboard lit.
       var dashOnRecord = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
@@ -9160,6 +9169,10 @@
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
       navStartJob.addEventListener('click', function () { goShell('/intake'); });
+    }
+    var navLogins = document.getElementById('nav-logins');
+    if (navLogins) {
+      navLogins.addEventListener('click', function () { goShell('/logins'); });
     }
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {

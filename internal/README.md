@@ -25,7 +25,7 @@ Navigation is grouped like a report's table of contents.
 | Accounts | Organizations | overview `accounts` + `GET /api/analytics/accounts/:orgId` | internal |
 | Contacts & campaigns | Contacts (`/contacts`) | `GET /api/analytics/contacts` | internal |
 | Contacts & campaigns | Campaigns (`/campaigns`, `/campaigns/:id`) | `/api/analytics/campaigns*` | internal |
-| System & access | Access, Legal holds, Safety, System status | existing routes | internal (System: both) |
+| System & access | Access, Legal holds, System status | existing routes | internal (System: both) |
 
 ### Metrics on the Overview
 

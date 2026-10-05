@@ -40,6 +40,87 @@
   })();
 </script>
 <script>
+  /* iPhone / Android app shell (Capacitor, apps/mobile). The app appends
+     "AtmosphereFieldCapture" to the user agent. Everything below only runs
+     there, so the website in any browser is unchanged. */
+  (function () {
+    try {
+      var cap = window.Capacitor;
+      var native = /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
+        !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+      if (!native) return;
+      var root = document.documentElement;
+      var android = /Android/i.test(navigator.userAgent || '');
+      root.setAttribute('data-app-shell', android ? 'android' : 'ios');
+      /* Natural phone size: no pinch zoom and no zoom-on-focus. */
+      var vp = document.querySelector('meta[name="viewport"]');
+      if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+
+      function plugin(name) {
+        var c = window.Capacitor;
+        return c && c.Plugins ? c.Plugins[name] : null;
+      }
+      function quiet(p) { if (p && typeof p.catch === 'function') p.catch(function () {}); }
+
+      /* Keyboard up → hide the Field Capture / Dashboard bar (CSS). The
+         Keyboard plugin's events cover inputs inside the Platform iframe
+         too; focus and height changes are the fallback. */
+      var open = false;
+      function setKeyboard(on) {
+        if (on === open) return;
+        open = on;
+        /* Own attribute: FieldCaptureCore's data-keyboard only sees fields in
+           this document, not ones inside the Dashboard iframe. */
+        if (on) root.setAttribute('data-app-keyboard', 'open');
+        else root.removeAttribute('data-app-keyboard');
+      }
+      window.addEventListener('keyboardWillShow', function () { setKeyboard(true); });
+      window.addEventListener('keyboardDidShow', function () { setKeyboard(true); });
+      window.addEventListener('keyboardWillHide', function () { setKeyboard(false); });
+      window.addEventListener('keyboardDidHide', function () { setKeyboard(false); });
+      var typing = 'input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),textarea,select,[contenteditable="true"]';
+      document.addEventListener('focusin', function (e) {
+        if (e.target && e.target.matches && e.target.matches(typing)) setKeyboard(true);
+      });
+      document.addEventListener('focusout', function () {
+        setTimeout(function () {
+          var a = document.activeElement;
+          if (!(a && a.matches && a.matches(typing)) && !(a && a.tagName === 'IFRAME')) setKeyboard(false);
+        }, 60);
+      });
+      var tallest = 0;
+      function viewportHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
+      function measure() { var h = viewportHeight(); if (h > tallest) tallest = h; }
+      window.addEventListener('load', measure);
+      document.addEventListener('DOMContentLoaded', measure);
+      function onResize() {
+        var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        if (h > tallest) tallest = h;
+        if (tallest - h > 150) setKeyboard(true);
+        else if (tallest - h < 60 && document.activeElement && document.activeElement.tagName === 'IFRAME') setKeyboard(false);
+      }
+      window.addEventListener('resize', onResize);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+
+      function nativeChrome() {
+        /* No grey accessory bar (up/down/Done) above the keyboard. */
+        var kb = plugin('Keyboard');
+        if (kb && kb.setAccessoryBarVisible) { try { quiet(kb.setAccessoryBarVisible({ isVisible: false })); } catch (e) {} }
+        /* Status bar text follows the page theme (light text on dark). */
+        var sb = plugin('StatusBar');
+        if (sb && sb.setStyle) {
+          try { quiet(sb.setStyle({ style: root.getAttribute('data-theme') === 'light' ? 'LIGHT' : 'DARK' })); } catch (e) {}
+        }
+      }
+      nativeChrome();
+      document.addEventListener('DOMContentLoaded', nativeChrome);
+      if (window.MutationObserver) {
+        new MutationObserver(nativeChrome).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+      }
+    } catch (e) {}
+  })();
+</script>
+<script>
   try {
     if (/(?:^|[?&])elevate=1(?:&|$)/.test(location.search)) {
       document.documentElement.setAttribute('data-elevate-preview', '1');
@@ -148,9 +229,13 @@
   }
 
   /* ---------- header ---------- */
+  /* Safe areas: in the iPhone app (Capacitor, viewport-fit=cover, web view
+     under the status bar) env(safe-area-inset-*) is the notch / Dynamic
+     Island and home-indicator height. In a normal browser it is 0, so
+     these add nothing there. */
   .top {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px 18px 12px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
     position: sticky; top: 0; z-index: 40;
@@ -233,12 +318,51 @@
   /* No back button: the app is one button and the two screens it moves
      between. There is nowhere to go back to. */
 
+  /* ---------- iPhone / Android app shell only (html[data-app-shell]) ----------
+     Set by the head script from the app's user agent; never in a browser. */
+  html[data-app-shell] { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+  /* Solid band behind the status bar on every screen but the camera. */
+  html[data-app-shell] body::after {
+    content: ''; position: fixed; left: 0; right: 0; top: 0; z-index: 1000;
+    height: env(safe-area-inset-top, 0px); background: var(--panel); pointer-events: none;
+  }
+  html[data-app-shell] body[data-screen="s-rec"]::after { display: none; }
+  /* Long place names end in "…" inside the REC pill instead of being clipped. */
+  html[data-app-shell] #site-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* Small text links get a finger-sized hit area without moving anything. */
+  html[data-app-shell] :is(#forgot-link, #signup-link, #signin-toggle) {
+    display: inline-block; padding: 12px 6px; margin: -12px -6px;
+  }
+  /* 16px fields: iOS zooms the page into anything smaller. */
+  html[data-app-shell] input:not([type=checkbox]):not([type=radio]):not([type=range]),
+  html[data-app-shell] textarea,
+  html[data-app-shell] select { font-size: 16px; }
+  /* App chrome is not text: no copy callout, no selection, on long press. */
+  html[data-app-shell] :is(button, a, label, .top, .switchbar, .recwrap, .door-actions, .stopwrap, .recbar, .who-menu) {
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
+  /* Fields stay normal text fields (the email field sits inside its label):
+     typing, selecting, paste and Password AutoFill must work as in Safari. */
+  html[data-app-shell] :is(input, textarea, select, [contenteditable="true"]) {
+    -webkit-touch-callout: default; -webkit-user-select: text; user-select: text;
+  }
+  /* Keyboard up: the product bar (and Today's start button) step aside so
+     the field sits right on the keyboard with no empty band. */
+  html[data-app-shell][data-app-keyboard="open"] .switchbar,
+  html[data-app-shell][data-app-keyboard="open"] #s-home .recwrap { display: none !important; }
+
   /* ---------- screens ---------- */
   .screen { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: auto; }
   .screen[data-on="1"] { display: flex; }
-  #s-platform { overflow: hidden; }
+  /* The office console has no .top, so its frame starts below the status bar
+     (an iframe gets no safe-area insets of its own). */
+  #s-platform { overflow: hidden; padding-top: env(safe-area-inset-top, 0px); background: var(--panel); }
+  /* Login and terms have no bottom bar: keep their end clear of the home indicator. */
+  #s-blocked, #s-terms { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* width 1px + min-width 100%: iOS WebKit otherwise sizes an iframe to its
+     content's width, pushing the office console past the right edge. */
   .platform-frame {
-    flex: 1; width: 100%; min-height: 0; border: 0;
+    flex: 1; width: 1px; min-width: 100%; min-height: 0; border: 0;
     background: var(--bg);
   }
   body[data-screen="s-platform"] .top { display: none; }
@@ -623,14 +747,6 @@
   .recbar .reclabel { letter-spacing: 0.08em; }
   .recdot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); animation: blink 1.1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: .25; } }
-  .safetypaused[hidden] { display: none; }
-  .safetypaused {
-    position: absolute; z-index: 3; left: 12px; right: 12px;
-    top: calc(max(12px, env(safe-area-inset-top)) + 44px);
-    padding: 10px 14px; border-radius: 12px;
-    background: rgba(17,17,17,.85); color: #FEDF89;
-    font-size: 13.5px; font-weight: 650; text-align: center;
-  }
   .stopwrap {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
     padding: 28px 18px max(18px, env(safe-area-inset-bottom));
@@ -1039,7 +1155,7 @@
             <a id="forgot-link" href="/forgot-password">Forgot password?</a>
           </div>
           <div class="auth-pass">
-            <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
+            <input id="login-password" name="password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
             <button type="button" id="password-toggle" aria-label="Show password">Show</button>
           </div>
         </div>
@@ -1060,7 +1176,7 @@
           <input id="signup-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="you@company.com" />
         </label>
         <label for="signup-password">Password
-          <input id="signup-password" name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" />
+          <input id="signup-password" name="password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" />
         </label>
         <label class="tos-ack" for="signup-tos">
           <input id="signup-tos" type="checkbox" />
@@ -1109,11 +1225,6 @@
         <span class="reclabel">REC</span>
         <span class="mono" id="clock">0:00</span>
         <span class="sitestrip" id="sitestrip"><span class="pin"></span><span id="site-text">Getting your bearings…</span></span>
-      </div>
-
-      <!-- Live safety paused: no connection (resumes on its own). -->
-      <div class="safetypaused" id="safety-paused" role="status" aria-live="polite" hidden>
-        Live safety paused, no connection. Recording continues.
       </div>
 
       <div class="stopwrap">

@@ -34,9 +34,6 @@ import {
   createUploadUrl,
   recordProof,
 } from './proofOfWork.js';
-import { processSafetySampleForParty } from '../safety/sample.js';
-import { processLiveSafetyChunkForParty } from '../safety/live.js';
-import { processWellnessHeartbeatForParty } from '../safety/wellness.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
@@ -164,22 +161,6 @@ fieldAppRouter.all('/office/preview', (_req: Request, res: Response) => {
 });
 
 fieldAppRouter.use(requireAuth);
-
-/*
- * Live safety stream: one frame every 5 s + a 10 s audio segment while
- * recording (~12 posts a minute). Its own budget, registered before the
- * general Field Capture limiter (180 / 15 min) so a recording never starves
- * the filing routes, and a safety alert is never rate-limited away by them.
- */
-const liveSafetyLimiter = rateLimit({
-  windowMs: 60_000,
-  limit: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many live safety samples.', code: 'rate_limited' },
-});
-/** POST /api/field-app/jobs/:jobId/proof/safety-live — live audio segment + frame. */
-fieldAppRouter.post('/jobs/:jobId/proof/safety-live', liveSafetyLimiter, proofRoute(processLiveSafetyChunkForParty));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -906,12 +887,6 @@ fieldAppRouter.post('/jobs/:jobId/proof/upload-part-url', proofRoute(createPartU
 
 /** POST /api/field-app/jobs/:jobId/proof/upload-complete — stitch resumed or streamed parts. */
 fieldAppRouter.post('/jobs/:jobId/proof/upload-complete', proofRoute(completeChunkedProofUpload));
-
-/** POST /api/field-app/jobs/:jobId/proof/safety-sample — near-real-time safety classify while recording. */
-fieldAppRouter.post('/jobs/:jobId/proof/safety-sample', proofRoute(processSafetySampleForParty));
-
-/** POST /api/field-app/jobs/:jobId/proof/wellness-heartbeat — silent panic / no-motion wellness check. */
-fieldAppRouter.post('/jobs/:jobId/proof/wellness-heartbeat', proofRoute(processWellnessHeartbeatForParty));
 
 /** POST /api/field-app/jobs/:jobId/proof — file the uploaded day film into the org record. */
 fieldAppRouter.post('/jobs/:jobId/proof', proofRoute(recordProof, 201));

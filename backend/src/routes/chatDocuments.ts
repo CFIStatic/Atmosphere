@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { writerForOrg } from '../lib/scopedAdmin.js';
@@ -368,10 +369,10 @@ chatDocumentsRouter.post('/documents/:id/attach', async (req: Request, res: Resp
 chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = z.object({
-      question: z.string().trim().min(3).max(1000),
+      question: askQuestionText,
       documentIds: z.array(z.string().uuid()).min(1).max(8),
       jobId: z.string().uuid().nullable().optional(),
-      /** False once this chat already showed the quiet unrelated line. */
+      /** Ignored. Older clients still send it; answers no longer add a job-match note. */
       quietNote: z.boolean().optional(),
     }).parse(req.body ?? {});
     const { supabase, orgId } = await requireOrgContext(req);
@@ -389,9 +390,7 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
       res.json({ answer: null });
       return;
     }
-    const direct = answerFromJobDocuments(body.question, views, [], {
-      quietNote: body.quietNote !== false,
-    });
+    const direct = answerFromJobDocuments(body.question, views, []);
     // Null means the question is not about these uploads. An abstain here
     // would hide the job file, clips, and room answers.
     if (!direct) {

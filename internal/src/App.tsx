@@ -17,7 +17,6 @@ import { SystemPage } from './pages/SystemPage';
 import { AccessPage } from './pages/AccessPage';
 import { LegalPage } from './pages/LegalPage';
 import { JobLegalPage } from './pages/JobLegalPage';
-import { SafetyAlertsPage } from './pages/SafetyAlertsPage';
 import { MotionClipsPage } from './pages/MotionClipsPage';
 import { GrowthPage } from './pages/GrowthPage';
 import { CapturePage } from './pages/CapturePage';
@@ -61,7 +60,6 @@ export function App() {
             <Route path="token-usage" element={<TokenUsagePage />} />
             <Route path="ai-reconciliation" element={<RequireInternal><AiReconciliationPage /></RequireInternal>} />
             <Route path="legal" element={<LegalPage />} />
-            <Route path="safety" element={<SafetyAlertsPage />} />
             <Route path="motion-clips" element={<MotionClipsPage />} />
             <Route path="legal/jobs/:jobId" element={<JobLegalPage />} />
             <Route path="system" element={<SystemPage />} />
