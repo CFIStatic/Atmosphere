@@ -218,7 +218,15 @@ export type RetrievalContextParts = {
   analysis: string;
   stuffed: string;
   stable: string;
-  searched: { phrases: string[]; terms: string[]; clipCount: number; hitCount: number };
+  searched: {
+    phrases: string[];
+    terms: string[];
+    clipCount: number;
+    hitCount: number;
+    noteCount?: number;
+    documentCount?: number;
+    transcriptChunkCount?: number;
+  };
 };
 
 /**

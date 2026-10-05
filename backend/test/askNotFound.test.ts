@@ -1,30 +1,69 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyHonestNotFound, formatHonestNotFound } from '../src/shared/askNotFound.js';
-import { rememberAskSearchMeta } from '../src/shared/askRetrievalContext.js';
+import {
+  applyHonestNotFound,
+  formatHonestNotFound,
+  stripEmptyJobBoilerplate,
+} from '../src/shared/askNotFound.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
 
 const catalog: AskLookupCatalog = {
   orgId: 'o',
   jobId: 'j',
+  jobTitle: 'Sample roof',
   access: 'org',
-  jobTitle: 'Tiffany',
-  clips: [{ proofId: 'p1', jobId: 'j', orgId: 'o', title: 'Office walk' }],
-  people: [],
-  history: [],
-};
+  clips: [
+    {
+      proofId: 'p1',
+      orgId: 'o',
+      jobId: 'j',
+      title: 'Clip 1',
+      transcript: 'We talked about the roof schedule.',
+      workDate: '2026-10-01',
+    },
+  ],
+  history: [{ at: '2026-10-01T12:00:00Z', summary: 'Note about materials' }],
+} as AskLookupCatalog;
 
-test('honest not-found names the search and what is on file', () => {
-  rememberAskSearchMeta('j', { phrases: ['purple dumpster'], terms: ['purple'], clipCount: 1, hitCount: 0 });
-  const text = formatHonestNotFound({ question: 'Is there a purple dumpster?', catalog });
-  assert.match(text, /purple dumpster/i);
-  assert.match(text, /1 clip/i);
-  assert.match(text, /Tiffany|Office walk/);
+test('formatHonestNotFound leads with Not found and search counts', () => {
+  const text = formatHonestNotFound({
+    question: 'Did anyone mention a dollar amount, price or deadline for the roof work?',
+    catalog,
+    searched: {
+      phrases: ['dollar amount', 'price', 'deadline'],
+      terms: ['roof'],
+      clipCount: 1,
+      hitCount: 0,
+      noteCount: 1,
+      documentCount: 0,
+      transcriptChunkCount: 1,
+    },
+  });
+  assert.match(text, /^Not found\./);
+  assert.match(text, /1 clip/);
+  assert.match(text, /1 note/);
+  assert.match(text, /0 document/);
+  assert.doesNotMatch(text, /Field Capture can still film/i);
 });
 
-test('applyHonestNotFound rewrites hedges only', () => {
+test('stripEmptyJobBoilerplate drops Field Capture filler when clips exist', () => {
+  const raw =
+    'Work type: construction. No work description yet. Field Capture can still film — AI will describe what happened from the video.';
+  const cleaned = stripEmptyJobBoilerplate(raw, catalog);
+  assert.doesNotMatch(cleaned, /Field Capture can still film/i);
+  assert.doesNotMatch(cleaned, /Work type:/i);
+});
+
+test('applyHonestNotFound rewrites hedges and boilerplate', () => {
   const ok = applyHonestNotFound('There are **2** clips on this job.', catalog, 'how many');
-  assert.equal(ok.startsWith('There are'), true);
+  assert.match(ok, /2/);
   const hedged = applyHonestNotFound('Nothing on this file matches that.', catalog, 'purple?');
-  assert.match(hedged, /Searched for|looked through/i);
+  assert.match(hedged, /^Not found\./);
+  const boiler = applyHonestNotFound(
+    'Work type: construction. No work description yet. Field Capture can still film — AI will describe what happened from the video.',
+    catalog,
+    'Did anyone mention a dollar amount for the roof?',
+  );
+  assert.match(boiler, /^Not found\./);
+  assert.doesNotMatch(boiler, /Field Capture/i);
 });
