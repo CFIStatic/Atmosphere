@@ -73,6 +73,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { writeAskAnalysisChunksForProof } from '../shared/askChunkEmbeddings.js';
 import {
   loadCommunicationStyle,
   recordCommunicationStyleTurn,
@@ -1286,6 +1287,7 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
       analysis_lease_until: null,
     })
     .eq('id', job.proofId);
+  void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
 
   // The read goes into the chain of custody like any other access — the model
   // looked at the evidence, and that is a fact about the evidence.
@@ -1997,6 +1999,7 @@ async function performLongFormAnalysis(
         .filter(Boolean)
         .slice(0, 24),
     });
+    void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
     await finishProofActions(admin, job, dictation.actions, dictation.model);
     await finishClipTitle(admin, job.proofId, {
       summary: dictation.narrationSummary || dictation.narrationText,
@@ -2082,6 +2085,7 @@ async function performLongFormAnalysis(
       .filter(Boolean)
       .slice(0, 24),
   });
+  void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
   await finishProofActions(admin, job, actions, result.report.model);
   await finishClipTitle(admin, job.proofId, {
     summary: result.report.narrative,

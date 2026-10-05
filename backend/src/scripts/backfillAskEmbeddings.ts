@@ -9,6 +9,9 @@
  * Needs OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and the
  * ask_retrieval_embeddings migration. Do not run live from an agent without
  * sign-off — this script only exists so ops can run it deliberately.
+ *
+ * Always process.exit after work: supabase-js keeps a Realtime client that
+ * otherwise leaves the Node event loop open (looks like a hang on Node 20).
  */
 import 'dotenv/config';
 import { backfillAskEmbeddings } from '../lib/backfillAskEmbeddings.js';
@@ -19,23 +22,34 @@ function arg(name: string): string | null {
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
 }
 
-async function main() {
+async function main(): Promise<number> {
   const apply = process.argv.includes('--apply');
   const admin = createAdminClient();
   if (!admin) {
     console.error('SUPABASE_SERVICE_ROLE_KEY is not set. Nothing was changed.');
-    process.exit(1);
+    return 1;
   }
-  const result = await backfillAskEmbeddings(admin, {
-    apply,
-    orgId: arg('--org'),
-    jobId: arg('--job'),
-    onProgress: (line) => console.log(line),
-  });
-  console.log(JSON.stringify({ apply, ...result }, null, 2));
+  try {
+    const result = await backfillAskEmbeddings(admin, {
+      apply,
+      orgId: arg('--org'),
+      jobId: arg('--job'),
+      onProgress: (line) => console.log(line),
+    });
+    console.log(JSON.stringify({ apply, ...result }, null, 2));
+    return 0;
+  } finally {
+    try {
+      await admin.realtime.disconnect();
+    } catch {
+      // ignore — CLI teardown only
+    }
+  }
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
