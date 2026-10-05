@@ -50,11 +50,18 @@ export function MentionTextarea({
   jobId?: string | null;
 }) {
   const localRef = useRef<HTMLTextAreaElement | null>(null);
+  const blurClearRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const [query, setQuery] = useState<{ start: number; end: number; query: string } | null>(null);
   const [highlight, setHighlight] = useState(0);
   const open = query != null;
   const members = useOrgMentions(open, jobId);
   const options = open ? filterMentionMembers(members, query.query) : [];
+
+  useEffect(() => {
+    return () => {
+      if (blurClearRef.current != null) window.clearTimeout(blurClearRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!autoGrow) return;
@@ -138,7 +145,11 @@ export function MentionTextarea({
         onPaste={onPaste}
         onClick={(event) => syncQuery(value, event.currentTarget.selectionStart ?? value.length)}
         onBlur={() => {
-          window.setTimeout(() => setQuery(null), 140);
+          if (blurClearRef.current != null) window.clearTimeout(blurClearRef.current);
+          blurClearRef.current = window.setTimeout(() => {
+            blurClearRef.current = null;
+            setQuery(null);
+          }, 140);
         }}
       />
       {open && (
