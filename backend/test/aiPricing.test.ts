@@ -190,7 +190,7 @@ test('a model with no price is flagged loudly, recorded as unpriced, never silen
 test('the migration rate card matches the backend rate card for every row it writes', () => {
   const files = [
     '20261003020000_provider_usage_and_rate_card.sql',
-    '20261005120000_rate_card_claude_5_5_gemini_3.sql',
+    '20261005130000_rate_card_claude_5_5_gemini_3.sql',
   ];
   const rowRe = /\(\s*'([a-z0-9.-]+)',\s*'[^']*',\s*'[a-z]+',\s*'(anthropic|google)',\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),[^)]*'(https:[^']+)',\s*'(\d{4}-\d{2}-\d{2})'\)/g;
   const rows = files.flatMap((file) => {
