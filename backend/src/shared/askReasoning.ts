@@ -72,6 +72,7 @@ import {
 } from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
+import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
 import { fastAnswerNeedsDeepFallback, logAskRouteDecision, resolveAskRoute, type AskModelRoute } from './askRoute.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
@@ -763,6 +764,7 @@ export async function groundLookupAnswer(input: {
   resolved: string;
   history?: Array<{ role?: string | null; text?: string | null }> | null;
   memory?: LongThreadMemory | null;
+  orgMemory?: OrgMemoryFact[] | null;
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
   signal?: AbortSignal;
@@ -774,7 +776,12 @@ export async function groundLookupAnswer(input: {
   verify: { quotesChecked: number; quotesFailed: number; claimsFailed: number; repaired: boolean; stripped: boolean };
 }> {
   // The lookup prompt already showed this summary and these notes. Check and repair against them too.
-  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  const memoryBlock = [
+    formatOrgMemoryForPrompt(input.orgMemory ?? []),
+    formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const shown = [memoryBlock, input.extra].filter(Boolean).join('\n\n') || null;
   const index = buildGroundingIndex({
     catalog: input.catalog,
@@ -866,6 +873,8 @@ export async function answerFromAskLookup(input: {
   history?: Array<{ role?: string | null; text?: string | null }> | null;
   /** Rolling summary and durable notes for turns older than the verbatim window. */
   memory?: LongThreadMemory | null;
+  /** Org-wide company memory already filtered for this caller's job access. */
+  orgMemory?: OrgMemoryFact[] | null;
   extra?: string | null;
   /** Non-clip job file record (docs, CRM, notes, scope). */
   jobFileRecord?: string | null;
@@ -907,7 +916,12 @@ export async function answerFromAskLookup(input: {
   research?: AskResearchTrace | null;
 }> {
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
-  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  const memoryBlock = [
+    formatOrgMemoryForPrompt(input.orgMemory ?? []),
+    formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   // Retrieval runs first, over transcript chunks and summaries, so the exact
   // lines for the question's topic are in front of the model (and the
   // fallback) whatever the lookup plan does.
