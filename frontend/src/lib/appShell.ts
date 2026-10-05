@@ -24,7 +24,40 @@ export function initAppShell(): void {
       'content',
       'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
     );
+    keepDocumentUnscrolled();
   } catch {
     /* no DOM — nothing to mark */
+  }
+}
+
+/**
+ * Phone app: the page itself never scrolls; lists inside it do. When a field
+ * is focused, iOS scrolls the document (and even overflow:hidden boxes) to
+ * bring it into view, which slid the job Chat up under the status bar inside
+ * Field Capture's Dashboard frame. Undo any such scroll right away.
+ */
+function keepDocumentUnscrolled(): void {
+  const reset = () => {
+    if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
+    const composer = document.activeElement?.closest?.('[data-ask-composer]');
+    for (let el = composer?.parentElement ?? null; el && el !== document.body; el = el.parentElement) {
+      if (el.scrollTop && getComputedStyle(el).overflowY === 'hidden') el.scrollTop = 0;
+    }
+  };
+  window.addEventListener('scroll', reset, { passive: true });
+  window.visualViewport?.addEventListener('resize', reset);
+  document.addEventListener('focusin', () => {
+    reset();
+    window.setTimeout(reset, 60);
+    window.setTimeout(reset, 320);
+  });
+}
+
+/** True inside the phone app (html[data-app-shell] was set by initAppShell). */
+export function isAppShellDocument(): boolean {
+  try {
+    return typeof document !== 'undefined' && Boolean(document.documentElement.dataset.appShell);
+  } catch {
+    return false;
   }
 }

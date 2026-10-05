@@ -175,3 +175,26 @@ describe('parseAskProseBlocks renders Grok-style markdown without raw syntax', (
     expect(flat(text)).not.toMatch(/\*\*|\|\s*---/);
   });
 });
+
+describe('scraped web text in a Chat answer', () => {
+  const SCRAPED =
+    '#### Sunday, October 4 [...] NY Jets at Bills, TBD Jaguars at Colts, TBD ### WEEK Colts 30, Chiefs 33, FINAL, Sunday, September 20th Final Indianapolis Colts Team LogoCOLTS0-2 Kansas City Chiefs Team LogoCHIEFS2-0 Final Watch Replay ### Week 3 Rams at Broncos, Sunday, September 27th [...]';
+
+  it('never shows ####, [...] or site labels', () => {
+    const blocks = parseAskProseBlocks(SCRAPED);
+    const text = blocks.map((block) => ('children' in block ? askInlineText(block.children) : '')).join('\n');
+    expect(text).not.toMatch(/#|\[\.\.\.\]|Team Logo|Watch Replay/);
+    expect(blocks[0]).toMatchObject({ kind: 'heading', level: 3 });
+    expect(blocks.slice(1).map((block) => block.kind)).toEqual(['paragraph', 'paragraph']);
+    expect(text).toMatch(/Indianapolis Colts 0-2 Kansas City Chiefs 2-0/);
+  });
+
+  it('renders h1–h6 and keeps an over-long "heading" as a paragraph', () => {
+    const blocks = parseAskProseBlocks(
+      '# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six\n###Seven\n#1 pick\n## ' + 'x'.repeat(80),
+    );
+    expect(blocks.slice(0, 7).map((block) => (block.kind === 'heading' ? block.level : block.kind))).toEqual([2, 2, 3, 3, 3, 3, 3]);
+    expect(blocks[7]).toMatchObject({ kind: 'paragraph' });
+    expect(askInlineText((blocks[7] as { children: never[] }).children)).toBe(`#1 pick\n${'x'.repeat(80)}`);
+  });
+});
