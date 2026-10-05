@@ -9,7 +9,8 @@
  * (ASK_ANALYSIS_MODEL) is the last model, then the reply is only what the
  * tools returned.
  *
- * The system prompt and the job context are a cached prefix. Text tokens are
+ * Retrieval-first context (summary + top-k chunks; optional stuffed fallback via
+ * ASK_STUFF_JOB_CONTEXT) is a cached prefix with the system prompt. Text tokens are
  * forwarded as they arrive. Network Ask tools in one turn run together.
  * In-memory lookup tools are timed as one batch; they do not wait on a model.
  */
@@ -94,6 +95,7 @@ import {
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
+import { buildRetrievalAskContext } from './askRetrievalContext.js';
 import {
   ASK_REPAIR_SYSTEM,
   buildGroundingIndex,
@@ -907,6 +909,12 @@ export async function answerFromAskLookup(input: {
   const evidence = retrieveAskEvidence(input.catalog, resolved);
   const topicQuestion = isTopicSpeechQuestion(resolved, evidence);
   const evidenceBlock = formatEvidenceForPrompt(evidence, topicQuestion);
+  const retrieval = await buildRetrievalAskContext({
+    catalog: input.catalog,
+    question: resolved,
+    jobFileRecord: input.jobFileRecord ?? null,
+    fetchFn: input.fetchFn,
+  });
   const promptInput = {
     question: input.question,
     resolved,
@@ -914,9 +922,11 @@ export async function answerFromAskLookup(input: {
     history: input.history,
     extra: [memoryBlock, input.extra?.trim(), evidenceBlock].filter(Boolean).join('\n\n'),
     jobFileRecord: input.jobFileRecord ?? null,
+    stableOverride: retrieval.stable,
   };
   const fullUser = buildLookupUserPrompt(promptInput);
   const parts = splitLookupPrompt(promptInput);
+  rememberAskSearchMeta(input.catalog.jobId, retrieval.searched);
   const onToken = (text: string) => {
     if (text) input.timing?.markFirstToken();
     input.onToken?.(text);
