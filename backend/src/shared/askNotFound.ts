@@ -88,8 +88,13 @@ export function formatHonestNotFound(input: {
     ...(searched?.phrases ?? []),
     ...(searched?.terms ?? []).slice(0, 6),
   ].filter(Boolean);
+  // Plain list — never curly quotes (those look like transcript citations to the scorer/UI).
   const needleText = needles.length
-    ? needles.slice(0, 8).map((n) => `“${n}”`).join(', ')
+    ? needles
+        .slice(0, 8)
+        .map((n) => String(n).replace(/[“”"']/g, '').trim())
+        .filter(Boolean)
+        .join('; ')
     : 'the words in your question';
   const searchedWhat = [
     `${searched.clipCount ?? counts.clipCount} clip${(searched.clipCount ?? counts.clipCount) === 1 ? '' : 's'}`,

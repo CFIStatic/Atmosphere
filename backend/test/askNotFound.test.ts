@@ -44,6 +44,8 @@ test('formatHonestNotFound leads with Not found and search counts', () => {
   assert.match(text, /1 note/);
   assert.match(text, /0 document/);
   assert.doesNotMatch(text, /Field Capture can still film/i);
+  assert.doesNotMatch(text, /[“”]/);
+  assert.match(text, /dollar amount; price; deadline/);
 });
 
 test('stripEmptyJobBoilerplate drops Field Capture filler when clips exist', () => {
