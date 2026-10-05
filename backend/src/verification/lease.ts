@@ -11,6 +11,8 @@
 
 export const VERIFICATION_LEASE_MS = 90_000;
 export const VERIFICATION_RECLAIM_INTERVAL_MS = 30_000;
+/** Keep failed proof work off the claim path long enough to stop Disk IO thrash. */
+export const FAILURE_LEASE_BACKOFF_MS = 15 * 60_000;
 
 export function leaseOwnerId(env: NodeJS.Dict<string> = process.env): string {
   return (

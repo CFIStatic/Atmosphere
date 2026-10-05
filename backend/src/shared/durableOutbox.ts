@@ -32,6 +32,8 @@ export interface DurableOutboxWorkerOptions<R extends OutboxRow> {
   owner?: string;
   leaseMs?: number;
   pollIntervalMs?: number;
+  /** Empty-queue poll cap (default 60s). Grows from pollIntervalMs while idle. */
+  maxIdlePollMs?: number;
   /** Waits between attempts of the same claim. length + 1 = total attempts. */
   delaysMs?: number[];
   sleep?: (ms: number) => Promise<void>;
@@ -40,12 +42,16 @@ export interface DurableOutboxWorkerOptions<R extends OutboxRow> {
 }
 
 export class DurableOutboxWorker<R extends OutboxRow> {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private draining = false;
+  private stopped = true;
+  private emptyStreak = 0;
   private inFlight = new Set<string>();
   private readonly owner: string;
   private readonly leaseMs: number;
   private readonly pollIntervalMs: number;
+  /** Cap for empty-queue backoff (keeps Disk IO Budget from empty polls). */
+  private readonly maxIdlePollMs: number;
   private readonly batchSize: number;
   private readonly delaysMs: number[];
   private readonly sleep: (ms: number) => Promise<void>;
@@ -55,6 +61,7 @@ export class DurableOutboxWorker<R extends OutboxRow> {
     this.owner = opts.owner ?? leaseOwnerId();
     this.leaseMs = opts.leaseMs ?? VERIFICATION_LEASE_MS;
     this.pollIntervalMs = opts.pollIntervalMs ?? 5_000;
+    this.maxIdlePollMs = Math.max(this.pollIntervalMs, opts.maxIdlePollMs ?? 60_000);
     this.batchSize = Math.max(1, Math.min(opts.batchSize ?? 8, 25));
     this.delaysMs = opts.delaysMs ?? [2_000, 15_000, 60_000];
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -69,22 +76,51 @@ export class DurableOutboxWorker<R extends OutboxRow> {
     return this.owner;
   }
 
+  /** How many consecutive empty polls (for tests / metrics). */
+  get idleStreak(): number {
+    return this.emptyStreak;
+  }
+
   start(): void {
-    if (this.timer) return;
-    void this.tick();
-    this.timer = setInterval(() => void this.tick(), this.pollIntervalMs);
-    this.timer.unref?.();
+    if (!this.stopped && this.timer) return;
+    this.stopped = false;
+    this.emptyStreak = 0;
+    void this.arm(0);
   }
 
   stop(): void {
+    this.stopped = true;
     if (!this.timer) return;
-    clearInterval(this.timer);
+    clearTimeout(this.timer);
     this.timer = null;
   }
 
   /** Immediate drain — used after an HTTP enqueue writes the outbox row. */
   poke(): void {
-    void this.tick();
+    this.emptyStreak = 0;
+    if (this.stopped) return;
+    void this.arm(0);
+  }
+
+  /** Next delay: base interval when busy; exponential backoff while the queue is empty. */
+  private nextDelayMs(): number {
+    if (this.emptyStreak <= 0) return this.pollIntervalMs;
+    const grown = this.pollIntervalMs * 2 ** Math.min(this.emptyStreak, 4);
+    return Math.min(grown, this.maxIdlePollMs);
+  }
+
+  private arm(delayMs: number): void {
+    if (this.stopped) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.loop(), delayMs);
+    this.timer.unref?.();
+  }
+
+  private async loop(): Promise<void> {
+    if (this.stopped) return;
+    await this.tick();
+    if (this.stopped) return;
+    this.arm(this.nextDelayMs());
   }
 
   /**
@@ -97,6 +133,8 @@ export class DurableOutboxWorker<R extends OutboxRow> {
     let finished = 0;
     try {
       const candidates = await this.opts.store.listClaimable(this.batchSize);
+      if (candidates.length === 0) this.emptyStreak += 1;
+      else this.emptyStreak = 0;
       for (const row of candidates) {
         if (this.inFlight.has(row.id)) continue;
         const claimed = await this.opts.store.claim(

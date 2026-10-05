@@ -48,7 +48,7 @@ import {
   type StoredAskPair,
 } from '../shared/askMemory.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
-import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
+import { FAILURE_LEASE_BACKOFF_MS, leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
   verifyDay,
   verifyProof,
@@ -1266,7 +1266,7 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
       .update({
         analysis_status: 'skipped',
         analysis_error: result.reason,
-        analysis_lease_until: null,
+        analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
     return result;
@@ -1315,7 +1315,7 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
       .update({
         analysis_status: 'failed',
         analysis_error: detail,
-        analysis_lease_until: null,
+        analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
   },
@@ -1738,7 +1738,11 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
   let settled = await ensureStillsAndDuration(admin, job.proofId);
 
   if (!isVisionConfigured()) {
-    await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
+    await write({
+      narration_status: 'skipped',
+      narration_error: 'No model is configured.',
+      narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
+    });
     return;
   }
 
@@ -1756,6 +1760,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       narration_error: settled.error
         ? `Could not extract frames from this recording: ${settled.error}`
         : 'Could not extract frames from this recording for analysis.',
+      narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
     });
     return;
   }
@@ -2107,7 +2112,7 @@ const narrationQueue = new RetryQueue<NarrationJob>({
       .update({
         narration_status: 'failed',
         narration_error: detail,
-        narration_lease_until: null,
+        narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
   },
@@ -2273,6 +2278,7 @@ export async function ensureClipReading(
       .update({
         narration_status: 'failed',
         narration_error: formatVisionFailure(error),
+        narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', proofId);
     return 'failed';
@@ -4254,6 +4260,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
           .update({
             analysis_status: 'failed',
             analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+            analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
           })
           .eq('id', job.proofId);
         throw new HttpError(

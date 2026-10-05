@@ -20,7 +20,7 @@ import { sweepStaleSummaries } from '../audio/summaryQueue.js';
 
 const SWEEP_LIMIT = 20;
 const FIRST_DELAY_MS = 3_000;
-const INTERVAL_MS = 30_000;
+const INTERVAL_MS = 60_000;
 
 let timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -143,22 +143,27 @@ export async function sweepUnanalyzedProofs(
     }
     const party = { org_id: row.org_id, job_id: row.job_id, id: row.party_id };
     if (needsNarration(row.narration_status, row.narration_error) && !leaseIsHeld(row.narration_lease_until)) {
-      if (await claimProofKind(admin, 'narration', row.id, owner)) {
-        await enqueueNarration(admin, party, row.id, row.phase, row.work_date);
-        narration += 1;
+      if (await ensureProofKindQueuedForClaim(admin, 'narration', row)) {
+        if (await claimProofKind(admin, 'narration', row.id, owner)) {
+          await enqueueNarration(admin, party, row.id, row.phase, row.work_date);
+          narration += 1;
+        }
       }
     }
     if (needsTranscript(row.transcript_status) && !leaseIsHeld(row.transcript_lease_until)) {
-      if (await claimProofKind(admin, 'transcript', row.id, owner)) {
-        await enqueueTranscript(admin, row.id);
-        transcript += 1;
+      if (await ensureProofKindQueuedForClaim(admin, 'transcript', row)) {
+        if (await claimProofKind(admin, 'transcript', row.id, owner)) {
+          await enqueueTranscript(admin, row.id);
+          transcript += 1;
+        }
       }
     }
     if (needsAnalysisReclaim(row.analysis_status, row.analysis_error) && !leaseIsHeld(row.analysis_lease_until)) {
-      if (!(await ensureAnalysisQueuedForClaim(admin, row))) continue;
-      if (await claimProofKind(admin, 'analysis', row.id, owner)) {
-        await enqueueAnalysis(admin, party, row.work_date, row.id);
-        analysis += 1;
+      if (await ensureAnalysisQueuedForClaim(admin, row)) {
+        if (await claimProofKind(admin, 'analysis', row.id, owner)) {
+          await enqueueAnalysis(admin, party, row.work_date, row.id);
+          analysis += 1;
+        }
       }
     }
   }
@@ -166,30 +171,48 @@ export async function sweepUnanalyzedProofs(
 }
 
 /**
- * Claim RPC only accepts analysis queued/running. Stamp never-started and
- * failed rows to queued first (CAS) so SKIP LOCKED can take them once.
+ * Claim RPC only accepts queued/running (plus null/idle for narration/transcript).
+ * Stamp never-started, skipped, and failed rows to queued first (CAS) so
+ * SKIP LOCKED can take them once. Callers must honor lease backoff on failed
+ * rows so we do not thrash Disk IO every sweep.
  */
-async function ensureAnalysisQueuedForClaim(admin: any, row: any): Promise<boolean> {
-  const status = row.analysis_status ?? null;
+async function ensureProofKindQueuedForClaim(
+  admin: any,
+  kind: ProofWorkKind,
+  row: any,
+): Promise<boolean> {
+  const cols =
+    kind === 'narration'
+      ? { status: 'narration_status', error: 'narration_error' }
+      : kind === 'transcript'
+        ? { status: 'transcript_status', error: 'transcript_error' }
+        : { status: 'analysis_status', error: 'analysis_error' };
+  const status = row[cols.status] ?? null;
   if (status === 'queued' || status === 'running') return true;
+  // Narration/transcript claim also accepts null/idle without a pre-stamp.
+  if (kind !== 'analysis' && (status == null || status === 'idle')) return true;
 
   let builder = admin
     .from('job_proofs')
-    .update({ analysis_status: 'queued', analysis_error: null })
+    .update({ [cols.status]: 'queued', [cols.error]: null })
     .eq('id', row.id);
 
-  if (status === 'failed') {
-    builder = builder.eq('analysis_status', 'failed');
-    if (row.analysis_error != null) builder = builder.eq('analysis_error', row.analysis_error);
+  if (status === 'failed' || status === 'skipped') {
+    builder = builder.eq(cols.status, status);
+    if (row[cols.error] != null) builder = builder.eq(cols.error, row[cols.error]);
   } else if (status === 'idle') {
-    builder = builder.eq('analysis_status', 'idle');
+    builder = builder.eq(cols.status, 'idle');
   } else {
-    builder = builder.is('analysis_status', null);
+    builder = builder.is(cols.status, null);
   }
 
   const { data, error } = await builder.select('id').maybeSingle();
   if (error) throw new Error(error.message);
   return Boolean(data?.id);
+}
+
+async function ensureAnalysisQueuedForClaim(admin: any, row: any): Promise<boolean> {
+  return ensureProofKindQueuedForClaim(admin, 'analysis', row);
 }
 
 async function claimProofKind(

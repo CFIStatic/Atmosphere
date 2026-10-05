@@ -212,6 +212,7 @@
     "20261004180000_computer_logins.sql",
     "20261004200000_computer_login_credentials.sql",
     "20261005120000_ask_communication_styles.sql",
+    "20261005123000_tighten_proof_claim_eligibility.sql",
     "20261005130000_rate_card_claude_5_5_gemini_3.sql"
   ],
   "migrations": [
@@ -5030,11 +5031,12 @@
         "column|public.job_proofs.narration_lease_owner",
         "column|public.job_proofs.narration_lease_until",
         "column|public.job_proofs.transcript_lease_owner",
-        "column|public.job_proofs.transcript_lease_until",
+        "column|public.job_proofs.transcript_lease_until"
+      ],
+      "sharedWithOtherMigrations": [
         "index|public.job_proofs.job_proofs_narration_lease_idx",
         "index|public.job_proofs.job_proofs_transcript_lease_idx"
       ],
-      "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
     },
@@ -5046,11 +5048,12 @@
       "expect": [
         "column|public.job_proofs.analysis_lease_owner",
         "column|public.job_proofs.analysis_lease_until",
-        "function|public.claim_job_proof_work",
         "function|public.claim_video_processing_job",
         "index|public.job_proofs.job_proofs_analysis_lease_idx"
       ],
-      "sharedWithOtherMigrations": [],
+      "sharedWithOtherMigrations": [
+        "function|public.claim_job_proof_work"
+      ],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
     },
@@ -6400,6 +6403,20 @@
         "policy|public.ask_communication_styles.ask_communication_styles_select",
         "rls|public.ask_communication_styles",
         "table|public.ask_communication_styles"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005123000_tighten_proof_claim_eligibility",
+      "file": "20261005123000_tighten_proof_claim_eligibility.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.claim_job_proof_work",
+        "index|public.job_proofs.job_proofs_narration_lease_idx",
+        "index|public.job_proofs.job_proofs_transcript_lease_idx"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
