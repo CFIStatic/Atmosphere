@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import {
   GEMINI_ASK_MAX_TOKENS,
   GEMINI_ASK_THINKING_LEVEL,
+  anthropicVisibleText,
   askProviderLabel,
+  completeAnthropicAsk,
   completeAskText,
   geminiAskModel,
   isAskModelConfigured,
+  resolveGeminiAskModel,
 } from '../src/lib/askModel.js';
 import { answerFromJobFile } from '../src/shared/jobFileAsk.js';
 
@@ -378,4 +381,38 @@ test('reasoning mode keeps deadlineAt instead of starting a new window', async (
     restoreEnv('GOOGLE_API_KEY', prevGoogle);
     restoreEnv('ASK_REASONING_TIMEOUT_MS', prevTimeout);
   }
+});
+
+test('anthropicVisibleText ignores thinking-only blocks', () => {
+  assert.equal(anthropicVisibleText([{ type: 'thinking', text: 'secret' }]), '');
+  assert.equal(
+    anthropicVisibleText([
+      { type: 'thinking', text: 'hmm' },
+      { type: 'text', text: ' Hello ' },
+    ]),
+    'Hello',
+  );
+});
+
+test('resolveGeminiAskModel remaps Claude analysis pins to gemini-3.1-pro-preview', () => {
+  assert.equal(resolveGeminiAskModel('claude-opus-5', 'analysis'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('claude-opus-5-5', 'analysis'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('claude-sonnet-5-5', 'reasoning'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('gemini-3.1-pro-preview', 'analysis'), 'gemini-3.1-pro-preview');
+  // Interactive mode leaves Claude ids alone (not a Gemini analysis pin).
+  assert.equal(resolveGeminiAskModel('claude-opus-5-5', 'interactive'), 'claude-opus-5-5');
+});
+
+test('completeAnthropicAsk is exported and empty-text path is covered by anthropicVisibleText', () => {
+  // Integration retry against the live SDK needs credentials; the empty-text
+  // detection + one-shot retry live in completeWithAnthropic (issue #653).
+  assert.equal(typeof completeAnthropicAsk, 'function');
+  assert.equal(anthropicVisibleText([{ type: 'thinking' } as { type: string }]), '');
+  assert.equal(
+    anthropicVisibleText([
+      { type: 'thinking' },
+      { type: 'text', text: 'After retry.' },
+    ]),
+    'After retry.',
+  );
 });
