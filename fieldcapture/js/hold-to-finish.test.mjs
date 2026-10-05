@@ -453,6 +453,9 @@ assert.match(appSrc, /function flushFieldWork/);
 assert.match(appSrc, /addEventListener\('online'/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
+assert.doesNotMatch(appSrc, /field-app\/join/);
+assert.doesNotMatch(coreSrc, /field-app\/join/, 'Field Capture must not POST the removed /api/field-app/join');
+
 assert.doesNotMatch(
   appSrc,
   /j\.number \? j\.number \+ ' · '/,

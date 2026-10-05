@@ -9,6 +9,18 @@ function hostOf(url: string | null): string | null {
   }
 }
 
+function isCosmeticApprovalField(label: string, value = ''): boolean {
+  const l = label.toLowerCase();
+  const v = value.toLowerCase();
+  if (/\b(font|font-family|font family|font size|fontsize|typeface|text style)\b/.test(l)) return true;
+  if (/\b(arial|calibri|times new roman|helvetica)\b/.test(v) && /font/.test(l)) return true;
+  return false;
+}
+
+function isMailBodyField(label: string): boolean {
+  return /^(to|subject|body|message)\b/i.test(label.trim());
+}
+
 /**
  * The one place a person lets Computer submit, send, pay, delete, sign,
  * accept terms or upload. Shows the page as it is now and every filled
@@ -28,7 +40,11 @@ export function ComputerApprovalCard({
   onCancel: () => void;
 }) {
   const host = hostOf(approval.pageUrl);
-  const unverified = approval.fields.filter((f) => !f.verified).length;
+  const fields = approval.fields.filter((f) => !isCosmeticApprovalField(f.label, f.value));
+  const unverified = fields.filter((f) => !f.verified).length;
+  const mailFields = fields.filter((f) => isMailBodyField(f.label));
+  const otherFields = fields.filter((f) => !isMailBodyField(f.label));
+  const ordered = [...mailFields, ...otherFields];
   return (
     <div className="space-y-3 rounded-xl border border-caution-600/40 bg-caution-50 p-3" data-testid="computer-approval-card">
       <div>
@@ -46,9 +62,9 @@ export function ComputerApprovalCard({
           data-testid="computer-approval-screenshot"
         />
       ) : null}
-      {approval.fields.length ? (
+      {ordered.length ? (
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-paper-0" aria-label="Filled fields">
-          {approval.fields.map((f, i) => (
+          {ordered.map((f, i) => (
             <li
               key={`${f.label}-${i}`}
               className="grid gap-x-3 gap-y-0.5 px-2.5 py-2 text-[13px] sm:grid-cols-[minmax(7rem,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)]"
@@ -97,7 +113,7 @@ export function ComputerApprovalCard({
           Cancel
         </button>
       </div>
-      <p className="text-[11px] text-ink-500">One approval covers one click. Nothing is submitted until you approve.</p>
+      <p className="text-[11px] text-ink-500">One approval covers one irreversible click. Nothing is submitted until you approve. Your name and time are logged.</p>
     </div>
   );
 }

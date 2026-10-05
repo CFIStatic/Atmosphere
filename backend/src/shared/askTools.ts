@@ -5,6 +5,7 @@
  * only or return needs_confirmation (never silent revoke/email/delete).
  */
 
+import { buildSiteDigest, formatSiteDigestForContractor } from './siteDigest.js';
 import { ComputerServiceError, startComputerTask } from '../computer/service.js';
 import { computerStore } from '../computer/worker.js';
 import { looksLikeComputerTask, planComputerTask } from './askComputerCommand.js';
@@ -84,6 +85,7 @@ export type AskToolName =
   | 'get_punch_list'
   | 'find_evidence_moments'
   | 'draft_progress_share_copy'
+  | 'draft_site_digest_copy'
   | 'draft_field_invite_copy'
   | 'propose_revoke_access'
   | 'start_computer_task'
@@ -233,6 +235,18 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
     },
   },
   {
+    name: 'draft_site_digest_copy',
+    description:
+      'Build the daily on-site digest for this job: what got done, missing-work flags, safety flags from video, and an auto-drafted homeowner update. Does NOT send — homeowner email requires Computer Approve.',
+    audience: 'org',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workDate: { type: 'string', description: 'YYYY-MM-DD; defaults to latest clip day' },
+      },
+    },
+  },
+  {
     name: 'draft_field_invite_copy',
     description:
       'Draft a Field Capture invite message for a crew/sub. Does NOT send email — returns copy only.',
@@ -358,6 +372,9 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   }
   if (/draft.*(progress|share|homeowner)|progress share (message|email|copy)/.test(q)) {
     add('draft_progress_share_copy');
+  }
+  if (/\b(daily\s+digest|site\s+digest|what got done|on[- ]site\s+update|safety\s+flags?)\b/.test(q)) {
+    add('draft_site_digest_copy');
   }
   if (/draft.*(invite|field capture)|invite (message|email|copy)/.test(q)) {
     add('draft_field_invite_copy');
@@ -940,6 +957,47 @@ export async function executeAskTool(
         };
       }
 
+      case 'draft_site_digest_copy': {
+        const workDate = trim(input.workDate) || null;
+        const digest = buildSiteDigest({
+          jobTitle: ctx.file.job?.title ?? ctx.jobTitle ?? null,
+          claimNumber: ctx.file.job?.claimNumber ?? null,
+          address: ctx.address ?? null,
+          workDate,
+          clips: (ctx.file.clips ?? []).map((clip) => ({
+            workDate: clip.workDate,
+            title: null,
+            summary: clip.summary,
+            narration: clip.narration,
+            transcript: clip.transcript,
+            concerns: clip.concerns,
+            changes: clip.changes,
+          })),
+          scope: [
+            ...(ctx.file.scope ?? []).map((line) => ({
+              title: line.title,
+              status: line.state ?? null,
+            })),
+            ...(ctx.file.tasks ?? []).map((task) => ({
+              title: task.title,
+              status: task.status ?? null,
+            })),
+          ],
+        });
+        const summary = formatSiteDigestForContractor(digest);
+        return {
+          ok: true,
+          tool: name,
+          summary,
+          data: {
+            ...digest,
+            sent: false,
+            requiresApprove: true,
+          },
+          ui: { section: 'videos' },
+        };
+      }
+
       case 'draft_progress_share_copy': {
         const nameLabel = trim(input.recipientName) || 'there';
         const title = trim(ctx.file.job?.title) || trim(ctx.jobTitle) || 'your project';
@@ -1104,7 +1162,32 @@ export async function executeAskTool(
               summary: plan.summary,
               ui: {
                 section: plan.offerLogins ? 'logins' : 'computer',
-                path: plan.offerLogins ? 'logins' : plan.needsClarification ? 'computer-task:need-detail' : 'computer-task:error',
+                path: plan.offerLogins
+                  ? 'logins'
+                  : plan.needsClarification
+                    ? 'computer-task:need-detail'
+                    : 'computer-task:error',
+              },
+            };
+          }
+          if ('emailDraftPreview' in plan && plan.emailDraftPreview) {
+            const draftOnly = Boolean('draftOnly' in plan && plan.draftOnly);
+            return {
+              ok: true,
+              tool: name,
+              summary: plan.summary,
+              data: {
+                channel: 'email',
+                draftPreview: true,
+                draftOnly,
+                to: plan.to,
+                subject: plan.subject,
+                body: plan.body,
+                offerLogins: Boolean(plan.offerLogins),
+              },
+              ui: {
+                section: plan.offerLogins ? 'logins' : 'computer',
+                path: draftOnly ? 'computer-task:draft-only' : 'computer-task:draft-preview',
               },
             };
           }

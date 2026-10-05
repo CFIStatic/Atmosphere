@@ -20,7 +20,7 @@
  * this card too.
  */
 
-export const RATE_CARD_VERIFIED_AT = '2026-10-02';
+export const RATE_CARD_VERIFIED_AT = '2026-10-05';
 
 export const PRICE_SOURCES = {
   anthropic: 'https://platform.claude.com/docs/en/about-claude/pricing',
@@ -130,16 +130,26 @@ const G = PRICE_SOURCES.google;
 const MODELS: ModelPriceRule[] = [
   // Anthropic — Claude API, standard (global) pricing. Long context: "Claude
   // 4.6 and later include the full 1M token context window at standard pricing".
+  { id: 'claude-fable-5-1', provider: 'anthropic', match: exact('claude-fable-5-1'), tokens: claude(10, 50), source: A },
   { id: 'claude-fable-5', provider: 'anthropic', match: exact('claude-fable-5'), tokens: claude(10, 50), source: A },
+  { id: 'claude-opus-5-5', provider: 'anthropic', match: exact('claude-opus-5-5'), tokens: claude(4, 20), source: A },
   { id: 'claude-opus-5', provider: 'anthropic', match: exact('claude-opus-5'), tokens: claude(5, 25), source: A },
   { id: 'claude-opus-4-8', provider: 'anthropic', match: exact('claude-opus-4-8'), tokens: claude(5, 25), source: A },
   // Sonnet 5's $2/$10 launch price "is now the standard price"; the scheduled
   // move to $3/$15 on 2026-09-01 "will not occur".
+  { id: 'claude-sonnet-5-5', provider: 'anthropic', match: exact('claude-sonnet-5-5'), tokens: claude(2, 10), source: A },
   { id: 'claude-sonnet-5', provider: 'anthropic', match: exact('claude-sonnet-5'), tokens: claude(2, 10), source: A },
   { id: 'claude-sonnet-4-6', provider: 'anthropic', match: exact('claude-sonnet-4-6'), tokens: claude(3, 15), source: A },
   { id: 'claude-haiku-4-5', provider: 'anthropic', match: exact('claude-haiku-4-5'), tokens: claude(1, 5), source: A },
 
   // Google — Gemini Developer API, paid tier, standard. Output includes thinking tokens.
+  {
+    id: 'gemini-3.8-flash',
+    provider: 'google',
+    match: exact('gemini-3.8-flash'),
+    tokens: gemini(0.75, 3.75, 0.075),
+    source: G,
+  },
   {
     id: 'gemini-3.6-flash',
     provider: 'google',

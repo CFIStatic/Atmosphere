@@ -13,6 +13,7 @@
 import { createHash } from 'node:crypto';
 import { askTimed, type AskLookupClip } from './askLookup.js';
 import { chunkClipTranscript, searchPhrases } from './askTranscriptIndex.js';
+import { embedTranscriptChunksForProof } from './askChunkEmbeddings.js';
 
 export const TRANSCRIPT_CHUNK_TABLE = 'ask_transcript_chunks';
 
@@ -109,6 +110,8 @@ export async function writeTranscriptChunks(admin: any, proofId: string): Promis
       warnOnce(`chunk trim failed: ${trim.error.message ?? trim.error}`);
       return null;
     }
+    // Best-effort: keep HNSW columns warm for new segments. Never fail the write.
+    void embedTranscriptChunksForProof(admin, proofId).catch(() => undefined);
     return rows.length;
   } catch (err) {
     warnOnce(`chunk write failed: ${err instanceof Error ? err.message : String(err)}`);

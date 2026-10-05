@@ -62,7 +62,9 @@ export function evidenceText(record: ClipAskRecord): string {
 }
 
 function quotedSpans(answer: string): string[] {
-  return [...answer.matchAll(/[“"]([^”"]{2,400})[”"]/g)].map((m) => m[1]!.trim());
+  // Drop the honest-not-found search inventory line — its phrases are not clip quotes.
+  const cleaned = answer.replace(/I searched [^.]*\./gi, ' ');
+  return [...cleaned.matchAll(/[“"]([^”"]{2,400})[”"]/g)].map((m) => m[1]!.trim());
 }
 
 export function scoreAnswer(question: GoldQuestion, answer: string, record: ClipAskRecord): AnswerScore {

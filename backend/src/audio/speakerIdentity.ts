@@ -784,7 +784,7 @@ export async function webIdentifyPublicSpeakers(input: {
   }
 
   const model =
-    (process.env.SPEAKER_IDENTITY_MODEL || process.env.VERIFICATION_PRIMARY_MODEL || 'gemini-2.5-flash').trim();
+    (process.env.SPEAKER_IDENTITY_MODEL || process.env.VERIFICATION_PRIMARY_MODEL || 'gemini-3.8-flash').trim();
   const baseUrl = (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(
     /\/+$/,
     '',

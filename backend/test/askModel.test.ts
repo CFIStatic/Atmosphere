@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import {
   GEMINI_ASK_MAX_TOKENS,
   GEMINI_ASK_THINKING_LEVEL,
+  anthropicVisibleText,
   askProviderLabel,
+  completeAnthropicAsk,
   completeAskText,
   geminiAskModel,
   isAskModelConfigured,
+  resolveGeminiAskModel,
 } from '../src/lib/askModel.js';
 import { answerFromJobFile } from '../src/shared/jobFileAsk.js';
 
@@ -56,7 +59,7 @@ test('interactive Ask defaults to flash-lite without high thinking or 20k tokens
   delete process.env.GOOGLE_MODEL_FAST;
   process.env.GEMINI_API_KEY = 'live-gemini';
   try {
-    assert.equal(geminiAskModel('interactive'), 'gemini-2.5-flash-lite');
+    assert.equal(geminiAskModel('interactive'), 'gemini-3.5-flash-lite');
     assert.equal(GEMINI_ASK_THINKING_LEVEL, 'minimal');
     assert.ok(GEMINI_ASK_MAX_TOKENS < 10_000);
 
@@ -66,7 +69,7 @@ test('interactive Ask defaults to flash-lite without high thinking or 20k tokens
       const headers = new Headers(init?.headers);
       const body = JSON.parse(String(init?.body ?? '{}'));
       calls.push({ url, key: headers.get('x-goog-api-key'), body });
-      assert.match(url, /gemini-2\.5-flash-lite:generateContent/);
+      assert.match(url, /gemini-3\.5-flash-lite:generateContent/);
       assert.equal(body.generationConfig?.maxOutputTokens, GEMINI_ASK_MAX_TOKENS);
       // Flash-lite: no thinkingConfig attached.
       assert.equal(body.generationConfig?.thinkingConfig, undefined);
@@ -74,7 +77,7 @@ test('interactive Ask defaults to flash-lite without high thinking or 20k tokens
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'North slope is stripped to decking.' }] } }],
           usageMetadata: { promptTokenCount: 40, candidatesTokenCount: 12 },
-          modelVersion: 'gemini-2.5-flash-lite',
+          modelVersion: 'gemini-3.5-flash-lite',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -88,7 +91,7 @@ test('interactive Ask defaults to flash-lite without high thinking or 20k tokens
       mode: 'interactive',
     });
     assert.ok(result);
-    assert.equal(result.model, 'gemini-2.5-flash-lite');
+    assert.equal(result.model, 'gemini-3.5-flash-lite');
     assert.match(result.text, /North slope/);
     assert.equal(result.usage?.inputTokens, 40);
     assert.equal(result.usage?.outputTokens, 12);
@@ -111,18 +114,16 @@ test('ASK_MODEL env overrides the interactive Ask model', async () => {
   const prevAsk = process.env.ASK_MODEL;
   delete process.env.ANTHROPIC_API_KEY;
   process.env.GEMINI_API_KEY = 'live-gemini';
-  process.env.ASK_MODEL = 'gemini-2.5-flash';
+  process.env.ASK_MODEL = 'gemini-3.8-flash';
   try {
     const urls: string[] = [];
     const fetchFn: typeof fetch = async (input, init) => {
       urls.push(String(input));
       const body = JSON.parse(String(init?.body ?? '{}'));
-      // Non-lite 2.5 interactive: thinkingBudget 0
-      assert.equal(body.generationConfig?.thinkingConfig?.thinkingBudget, 0);
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Fast flash reply.' }] } }],
-          modelVersion: 'gemini-2.5-flash',
+          modelVersion: 'gemini-3.8-flash',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -134,7 +135,7 @@ test('ASK_MODEL env overrides the interactive Ask model', async () => {
       fetchFn,
     });
     assert.equal(result?.text, 'Fast flash reply.');
-    assert.match(urls[0] ?? '', /gemini-2\.5-flash:generateContent/);
+    assert.match(urls[0] ?? '', /gemini-3\.8-flash:generateContent/);
   } finally {
     restoreEnv('ANTHROPIC_API_KEY', prevAnthropic);
     restoreEnv('GEMINI_API_KEY', prevGemini);
@@ -153,7 +154,7 @@ test('completeAskText streams Gemini SSE tokens via onToken', async () => {
       assert.match(String(input), /streamGenerateContent\?alt=sse/);
       const sse =
         'data: {"candidates":[{"content":{"parts":[{"text":"Hello "}]}}]}\n\n' +
-        'data: {"candidates":[{"content":{"parts":[{"text":"world."}]}}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2},"modelVersion":"gemini-2.5-flash-lite"}\n\n';
+        'data: {"candidates":[{"content":{"parts":[{"text":"world."}]}}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2},"modelVersion":"gemini-3.5-flash-lite"}\n\n';
       return new Response(sse, {
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
@@ -168,7 +169,7 @@ test('completeAskText streams Gemini SSE tokens via onToken', async () => {
     });
     assert.deepEqual(tokens, ['Hello ', 'world.']);
     assert.equal(result?.text, 'Hello world.');
-    assert.equal(result?.model, 'gemini-2.5-flash-lite');
+    assert.equal(result?.model, 'gemini-3.5-flash-lite');
   } finally {
     restoreEnv('ANTHROPIC_API_KEY', prevAnthropic);
     restoreEnv('GEMINI_API_KEY', prevGemini);
@@ -181,22 +182,22 @@ test('completeAskText retries a retired Gemini model id', async () => {
   const prevAsk = process.env.ASK_MODEL;
   delete process.env.ANTHROPIC_API_KEY;
   process.env.GEMINI_API_KEY = 'live-gemini';
-  process.env.ASK_MODEL = 'gemini-2.5-flash-lite';
+  process.env.ASK_MODEL = 'gemini-2.5-pro';
   try {
     const urls: string[] = [];
     const fetchFn: typeof fetch = async (input) => {
       const url = String(input);
       urls.push(url);
-      if (url.includes('gemini-2.5-flash-lite')) {
+      if (url.includes('gemini-2.5-pro')) {
         return new Response(
-          'This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-2.5-flash.',
+          'This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview.',
           { status: 404 },
         );
       }
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Retried on the current model.' }] } }],
-          modelVersion: 'gemini-2.5-flash',
+          modelVersion: 'gemini-3.1-pro-preview',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -208,7 +209,7 @@ test('completeAskText retries a retired Gemini model id', async () => {
       fetchFn,
     });
     assert.equal(result?.text, 'Retried on the current model.');
-    assert.equal(result?.model, 'gemini-2.5-flash');
+    assert.equal(result?.model, 'gemini-3.1-pro-preview');
     assert.equal(urls.length, 2);
   } finally {
     restoreEnv('GEMINI_API_KEY', prevGemini);
@@ -236,7 +237,7 @@ test('answerFromJobFile uses Gemini when only a Google key is wired', async () =
               },
             },
           ],
-          modelVersion: 'gemini-2.5-flash-lite',
+          modelVersion: 'gemini-3.5-flash-lite',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )) as typeof fetch;
@@ -277,7 +278,7 @@ test('analysis mode defaults to gemini-3.1-pro-preview with high thinkingLevel',
   process.env.GEMINI_API_KEY = 'live-gemini';
   try {
     assert.equal(geminiAskModel('analysis'), 'gemini-3.1-pro-preview');
-    assert.equal(geminiAskModel('interactive'), 'gemini-2.5-flash-lite');
+    assert.equal(geminiAskModel('interactive'), 'gemini-3.5-flash-lite');
 
     const bodies: Array<{
       generationConfig?: {
@@ -380,4 +381,38 @@ test('reasoning mode keeps deadlineAt instead of starting a new window', async (
     restoreEnv('GOOGLE_API_KEY', prevGoogle);
     restoreEnv('ASK_REASONING_TIMEOUT_MS', prevTimeout);
   }
+});
+
+test('anthropicVisibleText ignores thinking-only blocks', () => {
+  assert.equal(anthropicVisibleText([{ type: 'thinking', text: 'secret' }]), '');
+  assert.equal(
+    anthropicVisibleText([
+      { type: 'thinking', text: 'hmm' },
+      { type: 'text', text: ' Hello ' },
+    ]),
+    'Hello',
+  );
+});
+
+test('resolveGeminiAskModel remaps Claude analysis pins to gemini-3.1-pro-preview', () => {
+  assert.equal(resolveGeminiAskModel('claude-opus-5', 'analysis'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('claude-opus-5-5', 'analysis'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('claude-sonnet-5-5', 'reasoning'), 'gemini-3.1-pro-preview');
+  assert.equal(resolveGeminiAskModel('gemini-3.1-pro-preview', 'analysis'), 'gemini-3.1-pro-preview');
+  // Interactive mode leaves Claude ids alone (not a Gemini analysis pin).
+  assert.equal(resolveGeminiAskModel('claude-opus-5-5', 'interactive'), 'claude-opus-5-5');
+});
+
+test('completeAnthropicAsk is exported and empty-text path is covered by anthropicVisibleText', () => {
+  // Integration retry against the live SDK needs credentials; the empty-text
+  // detection + one-shot retry live in completeWithAnthropic (issue #653).
+  assert.equal(typeof completeAnthropicAsk, 'function');
+  assert.equal(anthropicVisibleText([{ type: 'thinking' } as { type: string }]), '');
+  assert.equal(
+    anthropicVisibleText([
+      { type: 'thinking' },
+      { type: 'text', text: 'After retry.' },
+    ]),
+    'After retry.',
+  );
 });

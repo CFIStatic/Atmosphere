@@ -587,6 +587,9 @@ function asksAboutThisRecording(q: string): boolean {
     /\btalking about\b/i.test(q) ||
     /\bdid (?:they|he|she|anyone|anything)\b/i.test(q) ||
     /\b(?:anyone|they|he|she) mention(?:ed)?\b/i.test(q) ||
+    /\b(?:contractor|crew|homeowner|adjuster|tech) (?:promise|promised|say|said|agree|agreed)\b/i.test(q) ||
+    /\b(?:finish|done|complete) by\b/i.test(q) ||
+    /\b(?:dollar amount|price|deadline|due date)\b/i.test(q) ||
     /\bagree(?:d)? on\b/i.test(q) ||
     /\bis the (?:tv|light|fan|switch|screen|power|water|heater|ac|heat) (?:on|off)\b/i.test(q) ||
     /\b(?:the|this) worker\b/i.test(q) ||
@@ -652,7 +655,10 @@ export function shouldSupplementWithWebSearch(question: string, grounded = ''): 
   if (looksLikePureWebCapabilityAsk(question)) return false;
   if (looksLikeSmallTalk(question)) return false;
   if (looksLikeExplicitWebSearchRequest(question)) return true;
+  // Job-file questions never auto-search; the model may still call web_search
+  // only when the user asked for outside info.
   if (looksLikeJobEvidenceQuestion(question)) return false;
+  if (asksAboutJobFile(question)) return false;
   return true;
 }
 

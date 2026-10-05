@@ -1,3 +1,4 @@
+import { resolveAnthropicModel } from '../lib/anthropicModel.js';
 /**
  * Computer settings. Read from the environment on every call so tests and
  * a redeploy with new variables both take effect without a code change.
@@ -6,7 +7,7 @@
  * it never moves Chat, and changing Chat never moves Computer.
  */
 
-export const DEFAULT_COMPUTER_AGENT_MODEL = 'claude-sonnet-5';
+export const DEFAULT_COMPUTER_AGENT_MODEL = 'claude-sonnet-5-5';
 
 function intEnv(name: string, fallback: number, min: number, max: number): number {
   const raw = Number(process.env[name]);
@@ -40,7 +41,7 @@ export interface ComputerSettings {
 }
 
 export function computerSettings(): ComputerSettings {
-  const model = (process.env.COMPUTER_AGENT_MODEL ?? '').trim() || DEFAULT_COMPUTER_AGENT_MODEL;
+  const model = resolveAnthropicModel(process.env.COMPUTER_AGENT_MODEL, DEFAULT_COMPUTER_AGENT_MODEL);
   const idleTimeoutMs = intEnv('COMPUTER_IDLE_TIMEOUT_MS', 10 * 60_000, 10_000, 2 * 60 * 60_000);
   const budgetUsd = numEnv('COMPUTER_TASK_BUDGET_USD', 2, 0.01, 100);
   return {

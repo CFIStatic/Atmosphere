@@ -13,9 +13,21 @@ test('retired Anthropic pins are upgraded even when Railway still overrides the 
   assert.equal(resolveAnthropicModel(undefined), DEFAULT_ANTHROPIC_MODEL);
 });
 
-test('current operator-selected Anthropic models are preserved', () => {
-  assert.equal(resolveAnthropicModel('claude-sonnet-5'), 'claude-sonnet-5');
-  assert.equal(resolveAnthropicModel('', 'claude-opus-4-8'), 'claude-opus-4-8');
+test('superseded Anthropic pins upgrade to the current lineup', () => {
+  assert.equal(resolveAnthropicModel('claude-sonnet-5'), 'claude-sonnet-5-5');
+  assert.equal(resolveAnthropicModel('claude-opus-5'), 'claude-opus-5-5');
+  assert.equal(resolveAnthropicModel('', 'claude-opus-4-8'), 'claude-opus-5-5');
+});
+
+test('ANTHROPIC_MODEL_PIN keeps an explicit prior pin', () => {
+  const prev = process.env.ANTHROPIC_MODEL_PIN;
+  process.env.ANTHROPIC_MODEL_PIN = '1';
+  try {
+    assert.equal(resolveAnthropicModel('claude-sonnet-5'), 'claude-sonnet-5');
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_MODEL_PIN;
+    else process.env.ANTHROPIC_MODEL_PIN = prev;
+  }
 });
 
 test('only terminal failures caused by retired model pins are auto-recoverable', () => {

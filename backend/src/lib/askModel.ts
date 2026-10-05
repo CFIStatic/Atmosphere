@@ -66,6 +66,8 @@ export const ANTHROPIC_REASONING_MAX_TOKENS = 16_000;
 export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 const RETIRED_GEMINI_ANALYSIS = /^(?:gemini-2\.5-pro|gemini-2\.0-pro|gemini-1\.5-pro|gemini-pro)(?:-|$)/i;
+/** Fast / interactive Gemini pins we supersede when Railway still names 2.5 flash. */
+const SUPERSEDED_GEMINI_FAST = /^(?:gemini-2\.5-flash(?:-lite)?|gemini-2\.0-flash(?:-lite)?)(?:-|$)/i;
 
 export type AskCompletionMode = 'interactive' | 'analysis' | 'reasoning';
 
@@ -144,7 +146,23 @@ export function isRetiredGeminiAnalysisModel(model: string): boolean {
  */
 export function resolveGeminiAskModel(model: string, mode: AskCompletionMode = 'analysis'): string {
   const id = model.trim();
-  if ((mode === 'analysis' || mode === 'reasoning') && isRetiredGeminiAnalysisModel(id)) {
+  const deep = mode === 'analysis' || mode === 'reasoning';
+  if (!id) {
+    return deep ? GEMINI_ANALYSIS_MODEL_DEFAULT : 'gemini-3.5-flash-lite';
+  }
+  // Analysis/vision must not stay pinned to Anthropic ids (e.g. VERIFICATION_PRIMARY_MODEL
+  // or ASK_ANALYSIS_MODEL accidentally set to claude-opus-*). Remap to Gemini 3.1 Pro.
+  if (deep && /^claude-/i.test(id)) {
+    return GEMINI_ANALYSIS_MODEL_DEFAULT;
+  }
+  if (deep && isRetiredGeminiAnalysisModel(id)) {
+    return GEMINI_ANALYSIS_MODEL_DEFAULT;
+  }
+  // 2.5 flash family is limited to prior users; move interactive/fast calls to 3.x.
+  if (!deep && SUPERSEDED_GEMINI_FAST.test(id)) {
+    return /lite/i.test(id) ? 'gemini-3.5-flash-lite' : 'gemini-3.8-flash';
+  }
+  if (deep && SUPERSEDED_GEMINI_FAST.test(id)) {
     return GEMINI_ANALYSIS_MODEL_DEFAULT;
   }
   return id;
@@ -206,7 +224,7 @@ export function anthropicReasoningRequest(model: string): {
  * Sonnet-class model for simple Ask turns. Same Anthropic key as Opus.
  * Override with ASK_FAST_ANTHROPIC_MODEL (a Haiku id is fine when that key serves it).
  */
-export const ASK_FAST_ANTHROPIC_DEFAULT = 'claude-sonnet-5';
+export const ASK_FAST_ANTHROPIC_DEFAULT = 'claude-sonnet-5-5';
 
 export function askFastAnthropicModel(): string {
   const configured = (process.env.ASK_FAST_ANTHROPIC_MODEL ?? '').trim();
@@ -216,7 +234,8 @@ export function askFastAnthropicModel(): string {
 
 /** Gemini Flash for a fast Ask turn when Anthropic is unset. */
 export function askFastGeminiModel(): string {
-  return (process.env.ASK_FAST_MODEL ?? process.env.GOOGLE_MODEL_FAST ?? 'gemini-2.5-flash').trim();
+  const configured = (process.env.ASK_FAST_MODEL ?? process.env.GOOGLE_MODEL_FAST ?? '').trim();
+  return resolveGeminiAskModel(configured || 'gemini-3.8-flash', 'interactive');
 }
 
 /** Fast Ask turns do not spend the output budget on thinking. */
@@ -229,18 +248,20 @@ export function anthropicFastRequest(): { max_tokens: number } {
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */
 export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string {
   if (mode === 'analysis' || mode === 'reasoning') {
-    return (
+    const configured = (
       process.env.ASK_ANALYSIS_MODEL ??
       process.env.VERIFICATION_PRIMARY_MODEL ??
       GEMINI_ANALYSIS_MODEL_DEFAULT
     ).trim();
+    return resolveGeminiAskModel(configured, mode);
   }
-  return (
+  const configured = (
     process.env.ASK_MODEL ??
     process.env.ASK_FAST_MODEL ??
     process.env.GOOGLE_MODEL_FAST ??
-    'gemini-2.5-flash-lite'
+    'gemini-3.5-flash-lite'
   ).trim();
+  return resolveGeminiAskModel(configured, mode);
 }
 
 function geminiThinkingLevel(mode: AskCompletionMode): string {
@@ -344,7 +365,8 @@ export function buildGeminiGenerationConfig(input: {
   // Flash-Lite / non-thinking ids reject thinkingConfig; only attach when useful.
   if (/^gemini-3/i.test(input.model)) {
     // Gemini 3 reasoning is tuned for the default temperature. Don't send 0.
-    if (level !== 'none' && level !== 'off') {
+    // Lite variants reject thinkingConfig entirely.
+    if (!/lite/i.test(input.model) && level !== 'none' && level !== 'off' && level !== 'minimal') {
       generationConfig.thinkingConfig = { thinkingLevel: gemini3ThinkingLevel(level) };
     }
   } else {
@@ -372,6 +394,15 @@ function anthropicSystem(system: string, stable?: string | null): string | Retur
   return asAnthropicSystem(anthropicCachedSystem(system, prefix));
 }
 
+/** Visible reply text from an Anthropic messages response (skips thinking blocks). */
+export function anthropicVisibleText(content: Array<{ type: string; text?: string }>): string {
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('\n')
+    .trim();
+}
+
 async function completeWithAnthropic(input: {
   apiKey: string;
   system: string;
@@ -394,52 +425,91 @@ async function completeWithAnthropic(input: {
         ...(shaped.output_config ? { output_config: shaped.output_config } : {}),
       }
     : {};
-  if (input.onToken) {
-    const stream = anthropicClientForKey(input.apiKey).messages.stream(
+
+  const runOnce = async (
+    user: string,
+    tokens: number,
+    streamTokens: boolean,
+  ): Promise<{
+    text: string;
+    model: string;
+    usage: MeasuredUsage | null;
+    stopReason: string | null;
+    blockTypes: string[];
+  }> => {
+    if (streamTokens && input.onToken) {
+      const stream = anthropicClientForKey(input.apiKey).messages.stream(
+        {
+          model,
+          max_tokens: tokens,
+          system,
+          messages: [{ role: 'user', content: user }],
+          ...extra,
+        },
+        input.signal ? { signal: input.signal } : undefined,
+      );
+      let text = '';
+      stream.on('text', (delta: string) => {
+        if (!delta) return;
+        text += delta;
+        input.onToken?.(delta);
+      });
+      const response = await stream.finalMessage();
+      const blockTypes = (response.content ?? []).map((b: { type: string }) => b.type);
+      text =
+        text.trim() ||
+        anthropicVisibleText(response.content as Array<{ type: string; text?: string }>);
+      return {
+        text,
+        model: response.model,
+        usage: tryExtractUsage(response.usage, response.model ?? null),
+        stopReason: (response as { stop_reason?: string | null }).stop_reason ?? null,
+        blockTypes,
+      };
+    }
+    const response = await anthropicClientForKey(input.apiKey).messages.create(
       {
         model,
-        max_tokens: maxTokens,
+        max_tokens: tokens,
         system,
-        messages: [{ role: 'user', content: input.user }],
+        messages: [{ role: 'user', content: user }],
         ...extra,
       },
       input.signal ? { signal: input.signal } : undefined,
     );
-    let text = '';
-    stream.on('text', (delta: string) => {
-      if (!delta) return;
-      text += delta;
-      input.onToken?.(delta);
-    });
-    const response = await stream.finalMessage();
-    text = text.trim() ||
-      response.content
-        .filter((block: { type: string }) => block.type === 'text')
-        .map((block: { type: string; text?: string }) => block.text ?? '')
-        .join('\n')
-        .trim();
-    if (!text) throw new Error('Anthropic Ask returned an empty reply');
-    return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
-  }
+    const blockTypes = (response.content ?? []).map((b: { type: string }) => b.type);
+    const text = anthropicVisibleText(response.content as Array<{ type: string; text?: string }>);
+    return {
+      text,
+      model: response.model,
+      usage: tryExtractUsage(response.usage, response.model ?? null),
+      stopReason: (response as { stop_reason?: string | null }).stop_reason ?? null,
+      blockTypes,
+    };
+  };
 
-  const response = await anthropicClientForKey(input.apiKey).messages.create(
-    {
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: input.user }],
-      ...extra,
-    },
-    input.signal ? { signal: input.signal } : undefined,
-  );
-  const text = response.content
-    .filter((block: { type: string }) => block.type === 'text')
-    .map((block: { type: string; text?: string }) => block.text ?? '')
-    .join('\n')
-    .trim();
-  if (!text) throw new Error('Anthropic Ask returned an empty reply');
-  return { text, model: response.model, usage: tryExtractUsage(response.usage, response.model ?? null) };
+  let result = await runOnce(input.user, maxTokens, Boolean(input.onToken));
+  if (!result.text) {
+    logger.warn(
+      `ask_anthropic_empty_reply stop_reason=${result.stopReason ?? 'null'} blocks=${result.blockTypes.join(',') || 'none'} model=${result.model}`,
+      { stopReason: result.stopReason, blockTypes: result.blockTypes, model: result.model },
+    );
+    const retryUser = `${input.user}\n\nRespond with the answer as visible text.`;
+    const retryTokens = Math.min(Math.max(maxTokens + 1024, maxTokens), 32_000);
+    result = await runOnce(retryUser, retryTokens, false);
+  }
+  if (!result.text) {
+    throw new Error('Anthropic Ask returned an empty reply');
+  }
+  return { text: result.text, model: result.model, usage: result.usage };
 }
+
+export async function completeAnthropicAsk(
+  input: Parameters<typeof completeWithAnthropic>[0],
+): Promise<AskModelResult> {
+  return completeWithAnthropic(input);
+}
+
 
 function visibleGeminiText(part: { text?: string; thought?: boolean }): string {
   if (part.thought) return '';

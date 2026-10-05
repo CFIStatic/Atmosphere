@@ -23,7 +23,7 @@ import {
 } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
-import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
+import { FAILURE_LEASE_BACKOFF_MS, leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import { modelPriceTable, transcriptionCostNanos } from '../metering/modelPriceTable.js';
 import { resolveTranscriptionConfig } from '../lib/transcriptionConfig.js';
 import { recordFlatProviderCost } from '../metering/tokenUsage.js';
@@ -325,7 +325,7 @@ export async function transcribeProofVideo(
         transcript_text: null,
         transcript_segments: null,
         transcript_words: null,
-        transcript_lease_until: null,
+        transcript_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
         ...staleSummaryPatch(),
       })
       .eq('id', proofId);
@@ -394,7 +394,7 @@ const transcriptQueue = new RetryQueue<TranscriptJob>({
       .update({
         transcript_status: 'failed',
         transcript_error: error instanceof Error ? error.message : 'Transcription failed.',
-        transcript_lease_until: null,
+        transcript_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
   },

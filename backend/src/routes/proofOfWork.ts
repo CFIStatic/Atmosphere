@@ -47,8 +47,13 @@ import {
   type DurableJobNote,
   type StoredAskPair,
 } from '../shared/askMemory.js';
+import {
+  extractOrgMemoryCandidates,
+  loadOrgMemoryFacts,
+  rememberOrgMemoryFacts,
+} from '../shared/askOrgMemory.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
-import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
+import { FAILURE_LEASE_BACKOFF_MS, leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
   verifyDay,
   verifyProof,
@@ -68,6 +73,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { writeAskAnalysisChunksForProof } from '../shared/askChunkEmbeddings.js';
 import {
   loadCommunicationStyle,
   recordCommunicationStyleTurn,
@@ -1266,7 +1272,7 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
       .update({
         analysis_status: 'skipped',
         analysis_error: result.reason,
-        analysis_lease_until: null,
+        analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
     return result;
@@ -1281,6 +1287,7 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
       analysis_lease_until: null,
     })
     .eq('id', job.proofId);
+  void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
 
   // The read goes into the chain of custody like any other access — the model
   // looked at the evidence, and that is a fact about the evidence.
@@ -1315,7 +1322,7 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
       .update({
         analysis_status: 'failed',
         analysis_error: detail,
-        analysis_lease_until: null,
+        analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
   },
@@ -1738,7 +1745,11 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
   let settled = await ensureStillsAndDuration(admin, job.proofId);
 
   if (!isVisionConfigured()) {
-    await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
+    await write({
+      narration_status: 'skipped',
+      narration_error: 'No model is configured.',
+      narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
+    });
     return;
   }
 
@@ -1756,6 +1767,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       narration_error: settled.error
         ? `Could not extract frames from this recording: ${settled.error}`
         : 'Could not extract frames from this recording for analysis.',
+      narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
     });
     return;
   }
@@ -1987,6 +1999,7 @@ async function performLongFormAnalysis(
         .filter(Boolean)
         .slice(0, 24),
     });
+    void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
     await finishProofActions(admin, job, dictation.actions, dictation.model);
     await finishClipTitle(admin, job.proofId, {
       summary: dictation.narrationSummary || dictation.narrationText,
@@ -2072,6 +2085,7 @@ async function performLongFormAnalysis(
       .filter(Boolean)
       .slice(0, 24),
   });
+  void writeAskAnalysisChunksForProof(admin, job.proofId).catch(() => undefined);
   await finishProofActions(admin, job, actions, result.report.model);
   await finishClipTitle(admin, job.proofId, {
     summary: result.report.narrative,
@@ -2107,7 +2121,7 @@ const narrationQueue = new RetryQueue<NarrationJob>({
       .update({
         narration_status: 'failed',
         narration_error: detail,
-        narration_lease_until: null,
+        narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', job.proofId);
   },
@@ -2273,6 +2287,7 @@ export async function ensureClipReading(
       .update({
         narration_status: 'failed',
         narration_error: formatVisionFailure(error),
+        narration_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
       })
       .eq('id', proofId);
     return 'failed';
@@ -3489,6 +3504,20 @@ async function runProofAskTurn(input: {
       now: new Date().toISOString(),
     };
 
+    const orgAdmin = unscopedAdminOrNull();
+    const accessibleJobIds =
+      askAccess === 'org' && jobId ? new Set<string>([jobId]) : new Set<string>();
+    // Office Ask on a job: treat current job as accessible; restricted facts that
+    // cite other jobs are dropped unless those ids are also in the set (fail closed).
+    const orgMemory =
+      askAccess === 'org'
+        ? await loadOrgMemoryFacts(orgAdmin, {
+            orgId,
+            accessibleJobIds,
+            limit: 40,
+          }).catch(() => [])
+        : [];
+
     const sessionDocuments =
       askAccess === 'org' ? await loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : [];
     const aboutUpload = chatUploadShouldAnswer(input.question, sessionDocuments);
@@ -3609,6 +3638,7 @@ async function runProofAskTurn(input: {
         }),
         now: longMemory.now,
       },
+      orgMemory,
       apiKey,
       onToken,
       onStatus: input.onStatus,
@@ -3658,6 +3688,17 @@ async function runProofAskTurn(input: {
     if (result.webDerivedAnswer) storedAnswer = scrubWebDerivedAskAnswer(storedAnswer);
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
+    if (askAccess === 'org' && orgAdmin) {
+      const learned = extractOrgMemoryCandidates({
+        orgId,
+        jobId,
+        question: storedQuestion,
+        answer: storedAnswer,
+        restrictedJob: false,
+      });
+      void rememberOrgMemoryFacts(orgAdmin, learned, userId ?? null);
+    }
+
     if (input.signal?.aborted) {
       if (clock.routeReason === 'pending') clock.noteRoute('grounded', 'stopped');
       logAskTurnTiming(clock.snapshot());
@@ -4254,6 +4295,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
           .update({
             analysis_status: 'failed',
             analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+            analysis_lease_until: leaseUntilIso(Date.now(), FAILURE_LEASE_BACKOFF_MS),
           })
           .eq('id', job.proofId);
         throw new HttpError(

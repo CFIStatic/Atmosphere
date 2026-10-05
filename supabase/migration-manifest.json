@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 197,
+    "migrationCount": 203,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -211,7 +211,14 @@
     "20261004150100_computer_tasks.sql",
     "20261004180000_computer_logins.sql",
     "20261004200000_computer_login_credentials.sql",
-    "20261005120000_ask_communication_styles.sql"
+    "20261005120000_ask_communication_styles.sql",
+    "20261005123000_tighten_proof_claim_eligibility.sql",
+    "20261005130000_rate_card_claude_5_5_gemini_3.sql",
+    "20261005140000_ask_retrieval_embeddings.sql",
+    "20261005150000_ask_route_decisions.sql",
+    "20261005160000_ask_job_context_cache.sql",
+    "20261005180000_ask_org_company_memory.sql",
+    "20261005190000_ask_route_skipped.sql"
   ],
   "migrations": [
     {
@@ -5029,11 +5036,12 @@
         "column|public.job_proofs.narration_lease_owner",
         "column|public.job_proofs.narration_lease_until",
         "column|public.job_proofs.transcript_lease_owner",
-        "column|public.job_proofs.transcript_lease_until",
+        "column|public.job_proofs.transcript_lease_until"
+      ],
+      "sharedWithOtherMigrations": [
         "index|public.job_proofs.job_proofs_narration_lease_idx",
         "index|public.job_proofs.job_proofs_transcript_lease_idx"
       ],
-      "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
     },
@@ -5045,11 +5053,12 @@
       "expect": [
         "column|public.job_proofs.analysis_lease_owner",
         "column|public.job_proofs.analysis_lease_until",
-        "function|public.claim_job_proof_work",
         "function|public.claim_video_processing_job",
         "index|public.job_proofs.job_proofs_analysis_lease_idx"
       ],
-      "sharedWithOtherMigrations": [],
+      "sharedWithOtherMigrations": [
+        "function|public.claim_job_proof_work"
+      ],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
     },
@@ -6400,6 +6409,157 @@
         "rls|public.ask_communication_styles",
         "table|public.ask_communication_styles"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005123000_tighten_proof_claim_eligibility",
+      "file": "20261005123000_tighten_proof_claim_eligibility.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.claim_job_proof_work",
+        "index|public.job_proofs.job_proofs_narration_lease_idx",
+        "index|public.job_proofs.job_proofs_transcript_lease_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005130000_rate_card_claude_5_5_gemini_3",
+      "file": "20261005130000_rate_card_claude_5_5_gemini_3.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005140000_ask_retrieval_embeddings",
+      "file": "20261005140000_ask_retrieval_embeddings.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_analysis_chunks.created_at",
+        "column|public.ask_analysis_chunks.embedding",
+        "column|public.ask_analysis_chunks.embedding_at",
+        "column|public.ask_analysis_chunks.embedding_model",
+        "column|public.ask_analysis_chunks.end_sec",
+        "column|public.ask_analysis_chunks.fts",
+        "column|public.ask_analysis_chunks.id",
+        "column|public.ask_analysis_chunks.job_id",
+        "column|public.ask_analysis_chunks.kind",
+        "column|public.ask_analysis_chunks.org_id",
+        "column|public.ask_analysis_chunks.proof_id",
+        "column|public.ask_analysis_chunks.seq",
+        "column|public.ask_analysis_chunks.source_sha256",
+        "column|public.ask_analysis_chunks.start_sec",
+        "column|public.ask_analysis_chunks.text",
+        "column|public.ask_transcript_chunks.embedding",
+        "column|public.ask_transcript_chunks.embedding_at",
+        "column|public.ask_transcript_chunks.embedding_model",
+        "index|public.ask_analysis_chunks.ask_analysis_chunks_fts_idx",
+        "index|public.ask_analysis_chunks.ask_analysis_chunks_job_idx",
+        "index|public.ask_analysis_chunks.ask_analysis_chunks_pkey",
+        "index|public.ask_analysis_chunks.ask_analysis_chunks_proof_seq_kind_key",
+        "policy|public.ask_analysis_chunks.ask_analysis_chunks_select",
+        "rls|public.ask_analysis_chunks",
+        "table|public.ask_analysis_chunks"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005150000_ask_route_decisions",
+      "file": "20261005150000_ask_route_decisions.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_route_decisions.created_at",
+        "column|public.ask_route_decisions.id",
+        "column|public.ask_route_decisions.job_id",
+        "column|public.ask_route_decisions.model_hint",
+        "column|public.ask_route_decisions.org_id",
+        "column|public.ask_route_decisions.question",
+        "column|public.ask_route_decisions.reason",
+        "column|public.ask_route_decisions.route",
+        "column|public.ask_route_decisions.unsure",
+        "index|public.ask_route_decisions.ask_route_decisions_job_idx",
+        "index|public.ask_route_decisions.ask_route_decisions_org_idx",
+        "index|public.ask_route_decisions.ask_route_decisions_pkey",
+        "policy|public.ask_route_decisions.ask_route_decisions_select",
+        "rls|public.ask_route_decisions",
+        "table|public.ask_route_decisions"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005160000_ask_job_context_cache",
+      "file": "20261005160000_ask_job_context_cache.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_job_context_cache.fingerprint",
+        "column|public.ask_job_context_cache.index_meta",
+        "column|public.ask_job_context_cache.job_id",
+        "column|public.ask_job_context_cache.org_id",
+        "column|public.ask_job_context_cache.rebuilt_at",
+        "column|public.ask_job_context_cache.source_updated_at",
+        "column|public.ask_job_context_cache.summary_text",
+        "index|public.ask_job_context_cache.ask_job_context_cache_org_idx",
+        "index|public.ask_job_context_cache.ask_job_context_cache_pkey",
+        "policy|public.ask_job_context_cache.ask_job_context_cache_select",
+        "rls|public.ask_job_context_cache",
+        "table|public.ask_job_context_cache"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005180000_ask_org_company_memory",
+      "file": "20261005180000_ask_org_company_memory.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_org_memory_facts.confidence",
+        "column|public.ask_org_memory_facts.created_at",
+        "column|public.ask_org_memory_facts.created_by",
+        "column|public.ask_org_memory_facts.detail",
+        "column|public.ask_org_memory_facts.id",
+        "column|public.ask_org_memory_facts.kind",
+        "column|public.ask_org_memory_facts.label",
+        "column|public.ask_org_memory_facts.org_id",
+        "column|public.ask_org_memory_facts.restricted",
+        "column|public.ask_org_memory_facts.source_job_ids",
+        "column|public.ask_org_memory_facts.source_question_id",
+        "column|public.ask_org_memory_facts.updated_at",
+        "function|private.user_can_access_job",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_org_kind_idx",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_org_updated_idx",
+        "index|public.ask_org_memory_facts.ask_org_memory_facts_pkey",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_insert",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_select",
+        "policy|public.ask_org_memory_facts.ask_org_memory_facts_update",
+        "rls|public.ask_org_memory_facts",
+        "table|public.ask_org_memory_facts"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005190000_ask_route_skipped",
+      "file": "20261005190000_ask_route_skipped.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "alters ask_route_decisions check constraint only; no new durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

@@ -1,17 +1,18 @@
 /**
  * Multi-step Ask over lookup tools.
  *
- * Simple lookups, quotes, greetings, and follow-ups use a fast model with
- * thinking off (ASK_FAST_ANTHROPIC_MODEL, otherwise Gemini Flash). Drafts,
- * comparisons, and multi-step questions stay on ANTHROPIC_MODEL with adaptive
- * thinking. If the fast model fails or returns nothing grounded, the deep
+ * Simple factual / inventory Ask turns use a fast model with thinking off
+ * (ASK_FAST_ANTHROPIC_MODEL / Sonnet 5.5, otherwise Gemini Flash) and a trimmed
+ * job-context card. Quotes, evidence, drafts, comparisons, and multi-step
+ * questions stay on ANTHROPIC_MODEL (Opus 5.5) with adaptive thinking and the
+ * full file. If the fast model fails or returns nothing grounded, the deep
  * model answers from the same tools. If that also fails, Gemini
  * (ASK_ANALYSIS_MODEL) is the last model, then the reply is only what the
  * tools returned.
  *
- * The system prompt and the job context are a cached prefix. Text tokens are
- * forwarded as they arrive. Network Ask tools in one turn run together.
- * In-memory lookup tools are timed as one batch; they do not wait on a model.
+ * Retrieval-first context (summary + top-k; optional ASK_STUFF_JOB_CONTEXT
+ * stuffing) plus the system prompt are a cached Anthropic / Gemini prefix
+ * (askPromptCache). Text tokens stream as they arrive.
  */
 import { CHAT_VOICE_RULES } from './askProse.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -35,6 +36,8 @@ import { toGeminiFunctionDeclaration } from './geminiSchema.js';
 import {
   ASK_LOOKUP_TOOLS,
   asksAboutOtherJobs,
+  ASK_FAST_CONTEXT_BUDGET,
+  ASK_FAST_JOB_FILE_BUDGET,
   buildLookupUserPrompt,
   clipsInScope,
   collectMomentSourceIds,
@@ -69,7 +72,9 @@ import {
 } from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
-import { fastAnswerNeedsDeepFallback, routeAskQuestion, type AskModelRoute } from './askRoute.js';
+import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
+import { fastAnswerNeedsDeepFallback, logAskRouteDecision, resolveAskRoute, type AskModelRoute } from './askRoute.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ASK_RESEARCH_BUDGET_MS,
   ASK_RESEARCH_SYNTHESIS_RESERVE_MS,
@@ -93,7 +98,10 @@ import {
   retrievedChunksFor,
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { ensureClaimCitations } from './askClaimCitations.js';
+import { applyHonestNotFound } from './askNotFound.js';
 import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
+import { buildRetrievalAskContext, rememberAskSearchMeta } from './askRetrievalContext.js';
 import {
   ASK_REPAIR_SYSTEM,
   buildGroundingIndex,
@@ -114,7 +122,7 @@ import {
   webSearchModelPayload,
 } from './askWebSearch.js';
 
-const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
+const LOOKUP_SYSTEM = `You are a sharp project manager who knows every detail of this job — every clip, transcript, note, document, CRM field, room, and timeline event. The job context in this request already includes that file. You also have tools for deeper lookups. Use tools when a fact is missing from the context; otherwise answer from what you already have.
 
 Rules:
 1. The user message already includes the job context (project, address, client, clips, redacted transcripts, history, people) and earlier turns of this chat. Use that context for a broad question such as what the job is about. Call a tool when you need a cited spoken moment, one person's clips, or a detail the context does not already settle. Do not guess.
@@ -756,6 +764,7 @@ export async function groundLookupAnswer(input: {
   resolved: string;
   history?: Array<{ role?: string | null; text?: string | null }> | null;
   memory?: LongThreadMemory | null;
+  orgMemory?: OrgMemoryFact[] | null;
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
   signal?: AbortSignal;
@@ -767,7 +776,12 @@ export async function groundLookupAnswer(input: {
   verify: { quotesChecked: number; quotesFailed: number; claimsFailed: number; repaired: boolean; stripped: boolean };
 }> {
   // The lookup prompt already showed this summary and these notes. Check and repair against them too.
-  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  const memoryBlock = [
+    formatOrgMemoryForPrompt(input.orgMemory ?? []),
+    formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const shown = [memoryBlock, input.extra].filter(Boolean).join('\n\n') || null;
   const index = buildGroundingIndex({
     catalog: input.catalog,
@@ -859,7 +873,11 @@ export async function answerFromAskLookup(input: {
   history?: Array<{ role?: string | null; text?: string | null }> | null;
   /** Rolling summary and durable notes for turns older than the verbatim window. */
   memory?: LongThreadMemory | null;
+  /** Org-wide company memory already filtered for this caller's job access. */
+  orgMemory?: OrgMemoryFact[] | null;
   extra?: string | null;
+  /** Non-clip job file record (docs, CRM, notes, scope). */
+  jobFileRecord?: string | null;
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
@@ -898,22 +916,36 @@ export async function answerFromAskLookup(input: {
   research?: AskResearchTrace | null;
 }> {
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
-  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  const memoryBlock = [
+    formatOrgMemoryForPrompt(input.orgMemory ?? []),
+    formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   // Retrieval runs first, over transcript chunks and summaries, so the exact
   // lines for the question's topic are in front of the model (and the
   // fallback) whatever the lookup plan does.
   const evidence = retrieveAskEvidence(input.catalog, resolved);
   const topicQuestion = isTopicSpeechQuestion(resolved, evidence);
   const evidenceBlock = formatEvidenceForPrompt(evidence, topicQuestion);
+  const retrieval = await buildRetrievalAskContext({
+    catalog: input.catalog,
+    question: resolved,
+    jobFileRecord: input.jobFileRecord ?? null,
+    fetchFn: input.fetchFn,
+  });
   const promptInput = {
     question: input.question,
     resolved,
     catalog: input.catalog,
     history: input.history,
     extra: [memoryBlock, input.extra?.trim(), evidenceBlock].filter(Boolean).join('\n\n'),
+    jobFileRecord: input.jobFileRecord ?? null,
+    stableOverride: retrieval.stable,
   };
-  const fullUser = buildLookupUserPrompt(promptInput);
-  const parts = splitLookupPrompt(promptInput);
+  let parts = splitLookupPrompt(promptInput);
+  let fullUser = buildLookupUserPrompt(promptInput);
+  rememberAskSearchMeta(input.catalog.jobId, retrieval.searched);
   const onToken = (text: string) => {
     if (text) input.timing?.markFirstToken();
     input.onToken?.(text);
@@ -1035,15 +1067,38 @@ export async function answerFromAskLookup(input: {
     input.timing?.noteRoute('deep', 'provided_step');
     await consume(input.step, fullUser, 6);
   } else {
-    const decision = routeAskQuestion({
+    const decision = await resolveAskRoute({
       question: input.question,
       resolved,
       history: input.history,
       catalog: input.catalog,
+      fetchFn: input.fetchFn,
     });
     input.timing?.noteRoute(decision.route, decision.reason);
+    void logAskRouteDecision({
+      orgId: input.catalog.orgId,
+      jobId: input.catalog.jobId,
+      question: resolved,
+      route: decision.route,
+      reason: decision.reason,
+      unsure: decision.unsure,
+      admin: unscopedAdminOrNull(),
+    });
     if (input.timing) {
+      // Anthropic cache_control on system + stable job context (askPromptCache).
       input.timing.promptCache = Boolean((input.anthropicApiKey ?? anthropicAskApiKey()).trim());
+    }
+    // Fast turns use a trimmed, transcript-light job card so Sonnet/Flash stay cheap.
+    // Deep turns keep the full cached file. Same question on the same route shares the prefix.
+    if (decision.route === 'fast') {
+      const fastInput = {
+        ...promptInput,
+        contextBudget: ASK_FAST_CONTEXT_BUDGET,
+        includeTranscripts: false,
+        jobFileBudget: ASK_FAST_JOB_FILE_BUDGET,
+      };
+      parts = splitLookupPrompt(fastInput);
+      fullUser = buildLookupUserPrompt(fastInput);
     }
     const stepFor = (route: AskModelRoute) =>
       providerLookupStep({
@@ -1060,10 +1115,23 @@ export async function answerFromAskLookup(input: {
         (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
       );
       if (!stopped() && fastAnswerNeedsDeepFallback(resolved, prose, traceHasHit)) {
-        input.timing?.noteRoute('deep', decision.reason, true);
+        input.timing?.noteRoute('deep', `escalate_low_confidence:${decision.reason}`, true);
+        void logAskRouteDecision({
+          orgId: input.catalog.orgId,
+          jobId: input.catalog.jobId,
+          question: resolved,
+          route: 'deep',
+          reason: `escalate_low_confidence:${decision.reason}`,
+          unsure: true,
+          admin: unscopedAdminOrNull(),
+        });
         prose = '';
         streamed = false;
         input.onStatus?.('Looking through clips…');
+        // Escalate with the full job file so grounding / quotes still hold.
+        const deepInput = { ...promptInput };
+        parts = splitLookupPrompt(deepInput);
+        fullUser = buildLookupUserPrompt(deepInput);
         const deepUser = trace.length
           ? `${parts.volatile}\n\nTool results so far:\n${formatTrace(trace)}\n\nAnswer from these results. Use another tool only if a fact is still missing.`
           : parts.volatile;
@@ -1163,6 +1231,13 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
+  const cited = ensureClaimCitations(answer, retrievedChunks);
+  answer = cited.answer;
+  const hasCite = /⟦(?:quotes|sources):/i.test(answer);
+  answer = applyHonestNotFound(answer, input.catalog, input.question, {
+    // Only force Not found. when nothing on the answer is grounded to the file.
+    noGroundedClaim: !hasCite,
+  });
   answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {

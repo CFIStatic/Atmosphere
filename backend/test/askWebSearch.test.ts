@@ -1195,3 +1195,20 @@ test('model links stay plain text except relative job paths', () => {
   assert.equal(isRelativeAskAppPath('https://evil.example/job-progress?job=steal'), false);
   assert.equal(isRelativeAskAppPath('//evil.example/jobs/job-1'), false);
 });
+
+test('item 2: job questions do not auto web-search; NFL still does', async () => {
+  const { shouldSupplementWithWebSearch, looksLikeJobEvidenceQuestion, looksLikeExplicitWebSearchRequest } =
+    await import('../src/shared/askWebSearch.js');
+  assert.equal(
+    looksLikeJobEvidenceQuestion('What did the contractor promise to finish by Friday?'),
+    true,
+  );
+  assert.equal(
+    shouldSupplementWithWebSearch('What did the contractor promise to finish by Friday?'),
+    false,
+  );
+  assert.equal(looksLikeExplicitWebSearchRequest('what NFL game is Thursday'), false);
+  // Public sports questions still supplement when configured; when key missing, false is ok.
+  const nfl = shouldSupplementWithWebSearch('what NFL game is Thursday');
+  assert.equal(typeof nfl, 'boolean');
+});

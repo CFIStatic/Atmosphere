@@ -66,7 +66,7 @@ function failedSearchTrace(question: string) {
   }));
 }
 
-test('video inventory questions are recognized and routed deep', () => {
+test('video inventory questions are recognized and routed fast', () => {
   for (const q of [
     'what kind of videos do we have on this job',
     'how many clips are on this file',
@@ -75,7 +75,7 @@ test('video inventory questions are recognized and routed deep', () => {
     'when were the videos filmed',
   ]) {
     assert.equal(isJobContentsQuestion(q), true, q);
-    assert.equal(routeAskQuestion({ question: q, catalog: tiffany }).route, 'deep', q);
+    assert.equal(routeAskQuestion({ question: q, catalog: tiffany }).route, 'fast', q);
     assert.equal(routeAskQuestion({ question: q, catalog: tiffany }).reason, 'job_contents', q);
   }
   assert.equal(isJobContentsQuestion('is there a purple dumpster on this job'), false);

@@ -6,9 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adjusterDraftSignOff,
+  isDraftOnlyIntent,
   jobIdentifiers,
   jobSummaryForEmail,
   looksLikeComputerTask,
+  isReadOnlyMailboxIntent,
   matchSavedLogin,
   parseComputerCommand,
   planComputerTask,
@@ -119,7 +121,7 @@ test('planComputerTask: email the homeowner fills To from the job file', () => {
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
   assert.match(plan.instructions, /To: Dana Test <dana\.homeowner@example\.test>/);
-  assert.match(plan.instructions, /Claim number: CLM-1|Claim: CLM-1/);
+  assert.match(plan.instructions, /claim CLM-1|Claim number: CLM-1|Claim: CLM-1/i);
   assert.match(plan.instructions, /request_approval/);
   assert.match(plan.instructions, /Never click Send/);
   assert.doesNotMatch(plan.instructions, /9999|Lockbox/);
@@ -179,11 +181,44 @@ test('planComputerTask: named site without a Login offers Logins', () => {
   assert.match(plan.summary, /Logins/);
 });
 
-test('planComputerTask: email without Outlook/Gmail offers Logins', () => {
-  const plan = planComputerTask({ question: 'email Pat a summary', logins: [PORTAL] });
+test('planComputerTask: email without Outlook/Gmail returns exact draft preview + Logins', () => {
+  const plan = planComputerTask({ question: 'email Pat a summary', logins: [PORTAL], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.ok('emailDraftPreview' in plan && plan.emailDraftPreview);
+  if (!('emailDraftPreview' in plan)) return;
+  assert.equal(plan.offerLogins, true);
+  assert.match(plan.summary, /Exact draft/);
+  assert.match(plan.summary, /Subject:/);
+  assert.match(plan.summary, /Logins/);
+  assert.match(plan.subject, /Update|summary/i);
+});
+
+test('planComputerTask: unnamed CRM notes asks which CRM (no blank browser)', () => {
+  const plan = planComputerTask({
+    question: 'update the CRM notes with a short status',
+    logins: [OUTLOOK],
+    file: FILE,
+  });
   assert.equal(plan.ok, false);
   if (plan.ok) return;
-  assert.match(plan.summary, /Outlook or Gmail/);
+  assert.equal(plan.offerLogins, true);
+  assert.equal(plan.needsClarification, true);
+  assert.match(plan.summary, /Which CRM/i);
+  assert.doesNotMatch(plan.summary, /Opening a browser/i);
+});
+
+test('planComputerTask: CRM notes with AccuLynx login drafts note and requires approval', () => {
+  const plan = planComputerTask({
+    question: 'update the AccuLynx CRM notes',
+    logins: [ACCULYNX],
+    file: FILE,
+  });
+  assert.equal(plan.ok, true);
+  if (!plan.ok || !('instructions' in plan)) return;
+  assert.match(plan.instructions, /request_approval/);
+  assert.match(plan.instructions, /notes/i);
+  assert.ok(plan.startUrl);
 });
 
 test('jobIdentifiers and summary never include secrets', () => {
@@ -399,4 +434,79 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   if (missing.ok) return;
   assert.equal(missing.needsClarification, true);
   assert.match(missing.summary, /could not find the adjuster/i);
+});
+
+test('item 9: read-only mailbox intent does not compose email', () => {
+  const q = 'tell me the subject and sender of my most recent email';
+  assert.equal(isReadOnlyMailboxIntent(q), true);
+  assert.equal(looksLikeComputerTask(q), true);
+  const cmd = parseComputerCommand(q);
+  assert.equal(cmd.kind, 'email_read');
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.equal(plan.kind, 'email_read');
+  assert.match(plan.instructions, /read only|Inbox/i);
+  assert.match(plan.instructions, /Do not compose/i);
+  assert.match(plan.instructions, /Do not call request_approval for Send/);
+  assert.doesNotMatch(plan.instructions, /Then call request_approval/);
+});
+
+test('item 9: send/email still composes', () => {
+  assert.equal(isReadOnlyMailboxIntent('email the homeowner a status update'), false);
+  assert.equal(parseComputerCommand('email the homeowner a status update').kind, 'email');
+});
+
+test('item 10: honor user subject and body exactly', () => {
+  const q =
+    'email dana.homeowner@example.test subject: "Roof schedule update" body: "We will be on site Tuesday at 9am."';
+  const cmd = parseComputerCommand(q);
+  assert.equal(cmd.userSubject, 'Roof schedule update');
+  assert.equal(cmd.userBody, 'We will be on site Tuesday at 9am.');
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.match(plan.instructions, /Subject: Roof schedule update/);
+  assert.match(plan.instructions, /We will be on site Tuesday at 9am/);
+  assert.match(plan.instructions, /Honor the Subject and Body exactly/);
+});
+
+test('item 10: draft only never requests Send approval even with Outlook', () => {
+  const q =
+    'draft an email to the homeowner, draft only, do not send. subject: "Quick note" body: "Just checking in."';
+  assert.equal(isDraftOnlyIntent(q), true);
+  const plan = planComputerTask({ question: q, logins: [OUTLOOK], file: FILE });
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.ok('emailDraftPreview' in plan && plan.emailDraftPreview);
+  if (!('emailDraftPreview' in plan)) return;
+  assert.equal(plan.draftOnly, true);
+  assert.equal(plan.subject, 'Quick note');
+  assert.equal(plan.body, 'Just checking in.');
+  assert.match(plan.summary, /draft only|nothing will be sent/i);
+  assert.doesNotMatch(plan.summary, /request_approval|Approve before Send/i);
+  assert.equal('instructions' in plan, false);
+});
+
+test('item 11: email body pulls clips and timeline, not a bare template', () => {
+  const rich = {
+    ...FILE,
+    workLogs: [{ kind: 'site visit', body: 'Installed underlayment on the south slope.' }],
+    messages: [{ author: 'Office', body: 'Homeowner confirmed Tuesday access.' }],
+    clips: [
+      {
+        workDate: '2026-09-12',
+        summary: 'Crew removing damaged shingles on the south elevation.',
+        transcript: 'Speaker 1: We still need the ridge cap delivered Friday.',
+      },
+    ],
+  };
+  const text = jobSummaryForEmail(rich, '1842 Cedar Ridge Dr');
+  assert.match(text, /Hello,/);
+  assert.match(text, /brief status update/i);
+  assert.match(text, /underlayment|south slope/i);
+  assert.match(text, /field video|Removing damaged shingles|removing damaged shingles/i);
+  assert.doesNotMatch(text, /Quick update on this job:/);
+  assert.doesNotMatch(text, /9999|Lockbox/);
+  assert.doesNotMatch(text, /^• Job:/m);
 });

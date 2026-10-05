@@ -34,7 +34,7 @@ export const KNOWN_COMPUTER_SITES: ReadonlyArray<{
   { aliases: ['servicetitan', 'service titan'], host: 'go.servicetitan.com', url: 'https://go.servicetitan.com', kind: 'crm' },
 ];
 
-export type ComputerCommandKind = 'email' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'generic';
+export type ComputerCommandKind = 'email' | 'email_read' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'generic';
 
 export interface ParsedComputerCommand {
   kind: ComputerCommandKind;
@@ -51,6 +51,12 @@ export interface ParsedComputerCommand {
   wantsEstimate: boolean;
   /** How to reach the adjuster when asking for a status update. */
   messageChannel: 'xactanalysis' | 'email' | 'sms' | null;
+  /** User said draft only / don't send — never request Send approval. */
+  draftOnly: boolean;
+  /** Exact Subject line the person typed, when present. */
+  userSubject: string | null;
+  /** Exact Body the person typed, when present. */
+  userBody: string | null;
   question: string;
 }
 
@@ -62,6 +68,40 @@ const WEB_SURFACE =
 
 const EMAIL_VERB = /\b(email|e-?mail|send|message|compose)\b/i;
 const EMAIL_NOUN = /\b(email|e-?mail|message|note)\b/i;
+
+/** Read the inbox / one message — never compose or send. */
+export function isReadOnlyMailboxIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\b(email|e-?mail|inbox|outlook|gmail|mailbox|message)\b/.test(q)) return false;
+  if (/\b(send|compose|draft|write|reply|forward|new email)\b/.test(q)) return false;
+  // Explicit compose fields mean write, not read.
+  if (/\bsubject\s*[:=]/.test(q) || /\b(?:body|saying|message)\s*[:=]/.test(q)) return false;
+  if (
+    /\bemail\b/.test(q) &&
+    /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/.test(q) &&
+    /\b(subject|body|saying)\b/.test(q)
+  ) {
+    return false;
+  }
+  return (
+    /\b(most recent|latest|last|newest)\b/.test(q) ||
+    /\b(subject|sender|from|who sent|what does .* say)\b/.test(q) ||
+    /\b(read|check|look\s*up|find|show|tell me|what(?:'| i)?s)\b/.test(q)
+  );
+}
+
+/** CRM lookup without writing notes / changing status. */
+export function isReadOnlyCrmLookup(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q) && !KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))) {
+    return false;
+  }
+  if (/\b(update|add|write|put|post|enter|save|change|delete|upload|submit)\b/.test(q) && /\bnotes?\b/.test(q)) {
+    return false;
+  }
+  return /\b(look\s*up|find|check|show|tell me|what(?:'| i)?s|status|read)\b/.test(q);
+}
+
 const SUMMARY = /\b(summar(?:y|ies|ize|ise)|how\s+things\s+are\s+going|status\s+update|update\s+on|progress\s+update|what'?s\s+going\s+on)\b/i;
 const OUTSTANDING =
   /\b(outstanding|incomplete|missing|pending|still\s+need(?:s|ed)?|not\s+(?:yet\s+)?(?:done|complete|signed|uploaded)|overdue|what'?s\s+(?:left|open|outstanding)|paperwork|documents?\s+needed|checklist)\b/i;
@@ -75,6 +115,7 @@ export function looksLikeComputerTask(question: string): boolean {
   const q = String(question ?? '').trim().toLowerCase();
   if (!q) return false;
   if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
+  if (isReadOnlyMailboxIntent(q)) return true;
   if (/^(did|does|do|has|have|was|were|is|are|when|why|who|how|can you tell|explain)\b/.test(q) && !OUTSTANDING.test(q) && !/\bwhat'?s\s+(?:outstanding|left|open)\b/.test(q)) {
     // Allow "what is outstanding in AccuLynx" / "what's left in JobNimbus".
     if (!(/\bwhat\b/.test(q) && (OUTSTANDING.test(q) || KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))))) {
@@ -154,6 +195,79 @@ function emailRecipient(text: string): string | null {
   return to ? to[1] : null;
 }
 
+
+/** "Update the CRM notes" without naming AccuLynx/JobNimbus/etc. */
+export function isCrmNotesIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q)) return false;
+  if (!/\bnotes?\b/.test(q)) return false;
+  return /\b(update|add|write|put|post|enter|save)\b/.test(q);
+}
+
+/** Bare "CRM" with no known product alias and no host. */
+export function isUnnamedCrmIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!/\bcrm\b/.test(q)) return false;
+  if (KNOWN_COMPUTER_SITES.some((s) => s.kind === 'crm' && s.aliases.some((a) => q.includes(a)))) return false;
+  return true;
+}
+
+
+/** "draft only", "don't send", "do not send" — compose/show draft, never Send approval. */
+export function isDraftOnlyIntent(question: string): boolean {
+  const q = String(question ?? '').toLowerCase();
+  if (!q) return false;
+  if (/\bdraft\s+only\b/.test(q)) return true;
+  if (/\bdon'?t\s+send\b/.test(q) || /\bdo\s+not\s+send\b/.test(q)) return true;
+  if (/\bnever\s+send\b/.test(q)) return true;
+  if (/\bdraft\b/.test(q) && /\b(without\s+sending|no\s+send)\b/.test(q)) return true;
+  return false;
+}
+
+/**
+ * Pull exact Subject / Body the person wrote in Chat.
+ * Supports "subject: …", "subject \"…\"", "with subject …", and body after "body:" / "saying:" / quoted block.
+ */
+export function extractUserEmailSubjectBody(question: string): { subject: string | null; body: string | null } {
+  const q = String(question ?? '').trim();
+  if (!q) return { subject: null, body: null };
+
+  let subject: string | null = null;
+  const subjQuoted =
+    q.match(/\bsubject\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\bsubject\s+[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\bwith\s+subject\s+[\"“]([^\"”]+)[\"”]/i);
+  if (subjQuoted) {
+    subject = subjQuoted[1].trim();
+  } else {
+    const subjLine = q.match(/\bsubject\s*[:=]\s*([^\n]+)/i);
+    if (subjLine) {
+      subject = subjLine[1].replace(/\b(body|saying|message)\s*[:=].*$/i, '').trim().replace(/[,;.]+$/, '');
+    }
+  }
+
+  let body: string | null = null;
+  const bodyQuoted =
+    q.match(/\b(?:body|saying|message)\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
+    q.match(/\b(?:body|saying|message)\s+[\"“]([^\"”]+)[\"”]/i);
+  if (bodyQuoted) {
+    body = bodyQuoted[1].trim();
+  } else {
+    const bodyBlock = q.match(/\b(?:body|saying|message)\s*[:=]\s*([\s\S]+)$/i);
+    if (bodyBlock) {
+      body = bodyBlock[1].trim();
+      // Strip trailing draft-only instructions from the body itself
+      body = body
+        .replace(/\b(draft\s+only|don'?t\s+send|do\s+not\s+send|never\s+send)\.?\s*$/i, '')
+        .trim();
+    }
+  }
+
+  if (subject) subject = subject.slice(0, 500);
+  if (body) body = body.slice(0, 8000);
+  return { subject: subject || null, body: body || null };
+}
+
 export function parseComputerCommand(question: string): ParsedComputerCommand {
   const q = String(question ?? '').trim();
   const known = findKnown(q);
@@ -172,16 +286,27 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     else if (/\b(text|sms|text\s+message)\b/i.test(q)) messageChannel = 'sms';
     else if (EMAIL_VERB.test(q) || /\bemail\b/i.test(q) || known?.kind === 'email') messageChannel = 'email';
   }
+  const readMailbox = isReadOnlyMailboxIntent(q);
   const isEmail =
-    (EMAIL_VERB.test(q) && (EMAIL_NOUN.test(q) || Boolean(emailRecipient(q)) || Boolean(role))) ||
-    (Boolean(known && known.kind === 'email') && EMAIL_VERB.test(q));
-  const isCrm = Boolean(known?.kind === 'crm') && (wantsOutstanding || /\b(crm|paperwork|status|documents?)\b/i.test(q) || /\bwhat\b/i.test(q));
+    !readMailbox &&
+    ((EMAIL_VERB.test(q) && (EMAIL_NOUN.test(q) || Boolean(emailRecipient(q)) || Boolean(role))) ||
+      (Boolean(known && known.kind === 'email') && EMAIL_VERB.test(q)));
+  const isCrm =
+    Boolean(known?.kind === 'crm') &&
+    (wantsOutstanding ||
+      isReadOnlyCrmLookup(q) ||
+      /\b(crm|paperwork|status|documents?)\b/i.test(q) ||
+      /\bwhat\b/i.test(q));
   const isXactEstimate =
     wantsEstimate &&
     (Boolean(known && (known.aliases.includes('xactimate') || known.aliases.includes('xactware') || known.host.includes('xactware'))) ||
       /\b(xactimate|xactware)\b/i.test(q));
+  const draftOnly = isDraftOnlyIntent(q);
+  const userMail = extractUserEmailSubjectBody(q);
   return {
-    kind: isEmail && !isAdjusterStatus
+    kind: readMailbox
+      ? 'email_read'
+      : isEmail && !isAdjusterStatus
       ? 'email'
       : isXactEstimate
         ? 'xactimate_estimate'
@@ -206,6 +331,9 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     wantsOutstanding,
     wantsEstimate,
     messageChannel,
+    draftOnly,
+    userSubject: userMail.subject,
+    userBody: userMail.body,
     question: q,
   };
 }
@@ -240,7 +368,7 @@ export function matchSavedLogin(logins: ComputerLoginRow[], command: ParsedCompu
     const byLabel = logins.find((l) => l.label.toLowerCase() === mention || l.label.toLowerCase().includes(mention));
     if (byLabel) return { login: byLabel, via: 'label' };
   }
-  if (command.kind === 'email') {
+  if (command.kind === 'email' || command.kind === 'email_read') {
     for (const pref of KNOWN_COMPUTER_SITES.filter((s) => s.kind === 'email')) {
       const hit = byHost(pref.host) ?? logins.find((l) => pref.aliases.some((a) => l.label.toLowerCase().includes(a)));
       if (hit) return { login: hit, via: 'alias' };
@@ -433,20 +561,124 @@ export function jobIdentifiers(file: JobFileAskContext | null | undefined, addre
   return lines;
 }
 
-export function jobSummaryForEmail(file: JobFileAskContext | null | undefined, address?: string | null): string {
-  const pretty: string[] = [];
-  const job = file?.job ?? null;
-  if (job?.title) pretty.push(`Job: ${String(job.title).trim()}`);
-  for (const id of jobIdentifiers(file, address)) {
-    if (id.startsWith('Job title:')) continue;
-    pretty.push(id);
+/** One clean sentence from a clip for an outbound email (no speaker labels, no raw dumps). */
+function clipHighlightForEmail(clip: {
+  workDate?: string | null;
+  summary?: string | null;
+  narration?: string | null;
+  transcript?: string | null;
+  concerns?: string[] | null;
+}): string | null {
+  const date = String(clip.workDate ?? '').trim();
+  const seen = String(clip.summary ?? clip.narration ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 220);
+  if (seen) return date ? `On ${date}, field video showed: ${seen}` : `Field video showed: ${seen}`;
+  const heard = String(clip.transcript ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  if (heard) {
+    const snip = heard.length >= 180 ? `${heard.replace(/\s+\S*$/, '').trim()}…` : heard;
+    return date ? `On ${date}, the crew discussed on site: "${snip}"` : `On site, the crew discussed: "${snip}"`;
   }
+  const concern = (clip.concerns ?? []).map((c) => String(c).trim()).filter(Boolean)[0];
+  if (concern) return date ? `On ${date}, a concern was noted: ${concern.slice(0, 180)}` : `A concern was noted: ${concern.slice(0, 180)}`;
+  return null;
+}
+
+/**
+ * Professional office-admin email body from the job file.
+ * Prefer clips / transcripts / timeline over a bare name + work-type template.
+ */
+export function jobSummaryForEmail(file: JobFileAskContext | null | undefined, address?: string | null): string {
+  const job = file?.job ?? null;
+  const title = String(job?.title ?? '').trim();
+  const claim = String(job?.claimNumber ?? '').trim();
+  const addr = String(address ?? '').trim();
+  const insured = fact(file, 'insured name', 'insured', 'homeowner', 'homeowner name', 'customer', 'customer name');
   const loss = String(job?.lossType ?? '').trim();
-  if (loss) pretty.push(`Loss type: ${loss}`);
   const work = String(job?.workType ?? '').trim();
-  if (work) pretty.push(`Work: ${work}`);
-  if (!pretty.length) return 'No job details on file yet.';
-  return ['Quick update on this job:', ...pretty.map((l) => `• ${l}`), '', 'Please reply if you need anything else.'].join('\n');
+
+  const openerParts: string[] = ['Hello,'];
+  const introBits: string[] = [];
+  if (title) introBits.push(title);
+  else if (work) introBits.push(work);
+  if (claim) introBits.push(`claim ${claim}`);
+  if (addr) introBits.push(addr);
+  if (insured) introBits.push(`insured ${insured}`);
+  const intro =
+    introBits.length > 0
+      ? `Here is a brief status update on ${introBits.slice(0, 3).join(', ')}.`
+      : 'Here is a brief status update on this job.';
+
+  const paragraphs: string[] = [openerParts[0], '', intro];
+
+  // Timeline / notes / scope (skip secrets like lockbox)
+  const timeline: string[] = [];
+  for (const log of file?.workLogs ?? []) {
+    const kind = String(log.kind ?? '').trim();
+    const summary = String(log.body ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!summary || /lockbox|gate code|password|\bpin\b/i.test(summary)) continue;
+    timeline.push(kind ? `${kind}: ${summary.slice(0, 160)}` : summary.slice(0, 160));
+    if (timeline.length >= 3) break;
+  }
+  for (const msg of file?.messages ?? []) {
+    if (timeline.length >= 4) break;
+    const body = String(msg.body ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!body || /lockbox|gate code|password|\bpin\b/i.test(body)) continue;
+    const who = String(msg.author ?? '').trim();
+    timeline.push(who ? `${who}: ${body.slice(0, 140)}` : body.slice(0, 160));
+  }
+  for (const line of file?.scope ?? []) {
+    if (timeline.length >= 5) break;
+    const titleLine = String(line.title ?? '').trim();
+    if (titleLine) timeline.push(titleLine.slice(0, 120));
+  }
+  for (const task of file?.tasks ?? []) {
+    if (timeline.length >= 5) break;
+    const titleLine = String(task.title ?? '').trim();
+    const status = String(task.status ?? '').trim();
+    if (!titleLine) continue;
+    timeline.push(status ? `${titleLine} (${status})` : titleLine);
+  }
+  if (timeline.length) {
+    paragraphs.push('');
+    paragraphs.push('Recent activity on file:');
+    for (const t of timeline.slice(0, 4)) paragraphs.push(`• ${t}`);
+  }
+
+  // Clips / transcripts
+  const clipLines: string[] = [];
+  for (const clip of file?.clips ?? []) {
+    const h = clipHighlightForEmail(clip);
+    if (h) clipLines.push(h);
+    if (clipLines.length >= 3) break;
+  }
+  if (clipLines.length) {
+    paragraphs.push('');
+    paragraphs.push('From recent field video:');
+    for (const c of clipLines) paragraphs.push(`• ${c}`);
+  }
+
+  // Thin file fallback — still prose, not a naked name/number/work-type dump
+  if (!timeline.length && !clipLines.length) {
+    const bits: string[] = [];
+    if (loss) bits.push(`This is a ${loss} loss.`);
+    if (work && !title) bits.push(`Work type on file: ${work}.`);
+    if (!bits.length) bits.push('We are continuing work and will share more detail as the file is updated.');
+    paragraphs.push('');
+    paragraphs.push(bits.join(' '));
+  }
+
+  paragraphs.push('');
+  paragraphs.push('Please reply if you need anything else from us.');
+  return paragraphs.join('\n');
 }
 
 export interface ComputerTaskPlan {
@@ -467,6 +699,25 @@ export interface ComputerTaskSmsPending {
   body: string;
   lead: string;
   adjusterName: string | null;
+}
+
+/**
+ * Exact email draft shown in Chat when no Outlook/Gmail Login exists yet.
+ * Nothing is sent; the person adds a Login, then asks again so Computer can Approve Send.
+ */
+export interface ComputerTaskEmailDraftPending {
+  ok: true;
+  kind: 'email';
+  emailDraftPreview: true;
+  /** True when no mailbox Login yet — person should add one before a real Send. */
+  offerLogins: boolean;
+  /** True when the person asked for draft only / don't send — never show Send approval. */
+  draftOnly?: boolean;
+  to: string | null;
+  subject: string;
+  body: string;
+  lead: string;
+  summary: string;
 }
 
 export interface ComputerTaskBlocked {
@@ -710,23 +961,112 @@ export function planComputerTask(input: {
   signerName?: string | null;
   /** Their company name for the closing, when known. */
   companyName?: string | null;
-}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending {
+}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending | ComputerTaskEmailDraftPending {
   const command = parseComputerCommand(input.question);
   const matched = matchSavedLogin(input.logins, command);
   const namedSite = Boolean(command.known || command.siteMention);
   const ids = jobIdentifiers(input.file, input.address);
 
-  // ---- Email ----
-  if (command.kind === 'email') {
+  // ---- Read-only mailbox (never compose / send) ----
+  if (command.kind === 'email_read') {
     if (!matched) {
       return {
         ok: false,
         offerLogins: true,
         summary:
-          "I can send that from Outlook or Gmail once Computer is signed in. Open Logins in the sidebar, add Outlook or Gmail, and save the password (or sign in once). Then ask me again.",
+          "I don't have a saved Outlook or Gmail login yet. Open Logins in the sidebar, add it and sign in, then ask me again. I'll open the inbox and report back — nothing will be sent.",
       };
     }
+    const host = matched.login.host;
+    const label = matched.login.label || host;
+    const instructions = [
+      `Open ${label} (${host}) and go to the Inbox (not Compose / New mail).`,
+      `Task (read only): ${command.question.trim()}`,
+      'Find the message that answers the question (usually the most recent).',
+      'Report the Subject and Sender (From) exactly as shown. Include the received time when visible.',
+      `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
+      'Do not compose, reply, forward, or click Send. Do not call request_approval for Send.',
+      'If the inbox UI is unclear, call look_up_how_to, then continue. If still stuck, call ask_clarification.',
+      'End with finish: title like "Inbox check", fields = Subject and Sender (and Received when known), submitted=false.',
+    ].join('\n');
+    return {
+      ok: true,
+      kind: 'email_read',
+      instructions,
+      startUrl: matched.login.url,
+      matchedLogin: matched,
+      lead: `Opening ${label} to read the inbox. Nothing will be sent.`,
+    };
+  }
+
+  // ---- Email ----
+  if (command.kind === 'email') {
     const person = resolvePersonFromJob({ command, file: input.file, accessPeople: input.accessPeople });
+    const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
+    const toName = person?.name && to ? `${person.name} <${to}>` : to;
+    const generatedBody = jobSummaryForEmail(input.file, input.address);
+    const subject =
+      (command.userSubject && command.userSubject.trim()) ||
+      (input.file?.job?.title ? `Update: ${String(input.file.job.title).trim()}` : null) ||
+      (command.wantsSummary ? 'Job status update' : 'Update');
+    const body =
+      (command.userBody && command.userBody.trim()) ||
+      generatedBody ||
+      '(Add the message body once you confirm what to send.)';
+    const honorNote =
+      command.userSubject || command.userBody
+        ? 'Honor the Subject and Body exactly as given below — do not rewrite, shorten, or add facts.'
+        : null;
+
+    // Draft-only: show exact draft in Chat, never open Send approval (even with a Login).
+    if (command.draftOnly) {
+      const draftLines = [
+        'Exact draft (draft only — nothing will be sent):',
+        `To: ${toName || '(need recipient email)'}`,
+        `Subject: ${subject}`,
+        '',
+        body,
+        '',
+        matched
+          ? 'I did not open Send approval. Say the word when you want me to send this for real.'
+          : 'Open Logins in the sidebar, add Outlook or Gmail, then ask me to send this when you are ready.',
+      ];
+      return {
+        ok: true,
+        kind: 'email',
+        emailDraftPreview: true,
+        offerLogins: !matched,
+        draftOnly: true,
+        to: to ?? null,
+        subject,
+        body,
+        lead: 'Draft only — nothing was sent, and no Send approval was shown.',
+        summary: draftLines.join('\n'),
+      };
+    }
+
+    if (!matched) {
+      const draftLines = [
+        'Exact draft (nothing was sent):',
+        `To: ${toName || '(need recipient email)'}`,
+        `Subject: ${subject}`,
+        '',
+        body,
+        '',
+        'Open Logins in the sidebar, add Outlook or Gmail and save the password, then ask me again. I will open the mailbox, fill this draft, and check with you before Send.',
+      ];
+      return {
+        ok: true,
+        kind: 'email',
+        emailDraftPreview: true,
+        offerLogins: true,
+        to: to ?? null,
+        subject,
+        body,
+        lead: 'I drafted the email in Chat. Add an Outlook or Gmail login, then ask again so I can open the browser and get your Approve before Send.',
+        summary: draftLines.join('\n'),
+      };
+    }
     const needsEmail = Boolean(command.recipientRole || (command.recipient && !command.recipient.includes('@')));
     if (needsEmail && (!person || !person.email)) {
       const who = command.recipientRole === 'homeowner' || command.recipientRole === 'insured' || command.recipientRole === 'customer'
@@ -741,7 +1081,6 @@ export function planComputerTask(input: {
         summary: `I don't have an email address for the ${who} on this job file. What's their email? Once I have it I'll open ${matched.login.label}, draft the message, and check with you before sending.`,
       };
     }
-    const to = person?.email ?? (command.recipient?.includes('@') ? command.recipient : null);
     if (!to) {
       return {
         ok: false,
@@ -750,22 +1089,16 @@ export function planComputerTask(input: {
         summary: `Who should I email, and what's their address? I'll open ${matched.login.label} and draft it once I know.`,
       };
     }
-    const toName = person?.name ? `${person.name} <${to}>` : to;
-    const summary = jobSummaryForEmail(input.file, input.address);
-    const subject = input.file?.job?.title
-      ? `Update: ${String(input.file.job.title).trim()}`
-      : command.wantsSummary
-        ? 'Job status update'
-        : 'Update';
     const host = matched.login.host;
     const label = matched.login.label || host;
     const instructions = [
       `Open ${label} (${host}) and compose a new email.`,
       `To: ${toName}`,
       `Subject: ${subject}`,
-      'Body (use this text; you may tidy line breaks but do not invent facts):',
+      honorNote,
+      'Body (use this text exactly when the person supplied it; otherwise you may tidy line breaks but do not invent facts):',
       '---',
-      summary,
+      body,
       '---',
       person?.source ? `Recipient came from ${person.source}.` : '',
       `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
@@ -1077,6 +1410,52 @@ export function planComputerTask(input: {
     };
   }
 
+  // ---- CRM notes (before read-only crm_status) ----
+  if (isCrmNotesIntent(command.question)) {
+    if (!matched) {
+      const note = jobSummaryForEmail(input.file, input.address);
+      return {
+        ok: false,
+        offerLogins: true,
+        needsClarification: true,
+        summary: [
+          command.known?.kind === 'crm'
+            ? `I don't have a saved login for ${command.known.aliases[0]} yet. Open Logins in the sidebar, add it, then ask me again.`
+            : 'Which CRM should I open (AccuLynx, JobNimbus, ServiceTitan, Salesforce, or another site under Logins)?',
+          'I will not start a blank browser until a CRM Login is ready.',
+          note ? `Exact note draft I would enter once you Approve:\n---\n${note}\n---` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      };
+    }
+    const host = matched.login.host;
+    const label = matched.login.label || host;
+    const note = jobSummaryForEmail(input.file, input.address);
+    const instructions = [
+      `Open ${label} (${host}) and find THIS job's record using these identifiers:`,
+      ...(ids.length ? ids.map((l) => `• ${l}`) : ['• (use the job title / address from the job file)']),
+      '',
+      'Open the notes / activity / comments field for this job.',
+      'Draft this exact note (tidy line breaks only; do not invent facts):',
+      '---',
+      note || command.question.trim(),
+      '---',
+      `Call sign_in_saved with site "${host}" if you hit a sign-in page.`,
+      'Call request_approval with the exact Save / Update / Post button label before clicking it. Never save the note without approval.',
+      'If you cannot find the record or the notes field, call ask_clarification with one clear question.',
+      'End with finish after an approved save, or without saving if they decline.',
+    ].join('\n');
+    return {
+      ok: true,
+      kind: 'crm_status',
+      instructions,
+      startUrl: matched.login.url,
+      matchedLogin: matched,
+      lead: `Opening ${label} to draft the CRM note. I will check with you before anything is saved.`,
+    };
+  }
+
   // ---- CRM outstanding / paperwork ----
   if (command.kind === 'crm_status') {
     const crmName = command.known?.aliases[0] ?? command.siteMention ?? 'that CRM';
@@ -1136,6 +1515,33 @@ export function planComputerTask(input: {
     };
   }
 
+  // ---- Unnamed CRM notes: ask which CRM; never open a blank browser ----
+  if (
+    (command.kind === 'generic' || command.kind === 'website') &&
+    isCrmNotesIntent(command.question) &&
+    !matched
+  ) {
+    const named = Boolean(command.known?.kind === 'crm' || (command.siteMention && !isUnnamedCrmIntent(command.question)));
+    if (!named || isUnnamedCrmIntent(command.question)) {
+      const note = jobSummaryForEmail(input.file, input.address);
+      return {
+        ok: false,
+        offerLogins: true,
+        needsClarification: true,
+        summary: [
+          'Which CRM should I open (AccuLynx, JobNimbus, ServiceTitan, Salesforce, or another site under Logins)?',
+          'I will not start a blank browser until I know which one.',
+          note
+            ? `Exact note draft I would enter once you pick a CRM and Approve:\n---\n${note}\n---`
+            : null,
+          'Add that CRM under Logins if it is not there yet, then ask me again.',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      };
+    }
+  }
+
   // ---- Generic website / fill ----
   const parts = [command.question.trim()];
   if (matched) {
@@ -1166,6 +1572,17 @@ export function planComputerTask(input: {
         ? command.siteMention
         : `https://${command.siteMention}`
       : null);
+
+  // Never open an empty-URL browser for CRM-notes-shaped asks.
+  if (isCrmNotesIntent(command.question) && !startUrl) {
+    return {
+      ok: false,
+      offerLogins: true,
+      needsClarification: true,
+      summary:
+        'Which CRM should I open? Add it under Logins (AccuLynx, JobNimbus, ServiceTitan, Salesforce, …), then ask me again. I will not start a blank browser.',
+    };
+  }
 
   return {
     ok: true,
