@@ -1077,12 +1077,25 @@ export async function executeAskTool(
           } catch {
             accessPeople = [];
           }
+          let companyName: string | null = null;
+          try {
+            const { data: orgRow } = await ctx.supabase
+              .from('orgs')
+              .select('name')
+              .eq('id', ctx.orgId)
+              .maybeSingle();
+            companyName = String((orgRow as { name?: string | null } | null)?.name ?? '').trim() || null;
+          } catch {
+            companyName = null;
+          }
           const plan = planComputerTask({
             question: instructions,
             logins,
             file: ctx.file,
             address: ctx.address ?? null,
             accessPeople,
+            signerName: ctx.authorLabel ?? null,
+            companyName,
           });
           if (!plan.ok) {
             return {

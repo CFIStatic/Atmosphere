@@ -689,12 +689,27 @@ function jobMentionsSketch(file?: JobFileAskContext | null, question?: string): 
   return KNOWN_COMPUTER_SITES.some((s) => s.kind === 'sketch' && s.aliases.some((a) => hay.includes(a)));
 }
 
+
+/** Closing for adjuster text/email drafts: "Thank you," then the person and company. */
+export function adjusterDraftSignOff(signerName?: string | null, companyName?: string | null): string[] {
+  const name = String(signerName ?? '').trim();
+  const company = String(companyName ?? '').trim();
+  const lines = ['Thank you,'];
+  if (name) lines.push(name);
+  if (company && company.toLowerCase() !== name.toLowerCase()) lines.push(company);
+  return lines;
+}
+
 export function planComputerTask(input: {
   question: string;
   logins: ComputerLoginRow[];
   file?: JobFileAskContext | null;
   address?: string | null;
   accessPeople?: AccessPersonHint[] | null;
+  /** Signed-in person's name for the closing (adjuster drafts). */
+  signerName?: string | null;
+  /** Their company name for the closing, when known. */
+  companyName?: string | null;
 }): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending {
   const command = parseComputerCommand(input.question);
   const matched = matchSavedLogin(input.logins, command);
@@ -801,7 +816,7 @@ export function planComputerTask(input: {
       '',
       'Please let us know the current status and any next steps on your side.',
       '',
-      'Thank you,',
+      ...adjusterDraftSignOff(input.signerName, input.companyName),
     ].join('\n');
 
     if (!channel) {

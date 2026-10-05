@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  adjusterDraftSignOff,
   jobIdentifiers,
   jobSummaryForEmail,
   looksLikeComputerTask,
@@ -322,6 +323,8 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
     question: 'email the adjuster for a status update',
     logins: [OUTLOOK],
     file,
+    signerName: 'Alex Rivera',
+    companyName: 'Restore 365',
   });
   assert.equal(emailPlan.ok, true);
   if (!emailPlan.ok) return;
@@ -329,6 +332,7 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   assert.match(emailPlan.instructions, /sam\.adjuster@carrier\.test/);
   assert.match(emailPlan.instructions, /request_approval/);
   assert.match(emailPlan.instructions, /Never click Send/);
+  assert.match(emailPlan.instructions, /Thank you,\nAlex Rivera\nRestore 365/);
 
   const xaPlan = planComputerTask({
     question: 'ask the adjuster for a status update in XactAnalysis',
@@ -365,6 +369,8 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
     question: 'text the adjuster for a status update',
     logins: [OUTLOOK],
     file,
+    signerName: 'Alex Rivera',
+    companyName: 'Restore 365',
   });
   assert.equal(smsOn.ok, true);
   if (!smsOn.ok) return;
@@ -373,6 +379,10 @@ test('adjuster status: email via Outlook; ask when missing; SMS scaffold', () =>
   assert.match(smsOn.lead, /Draft text to/);
   assert.match(smsOn.lead, /check with you before anything is sent/i);
   assert.doesNotMatch(smsOn.lead, /from job file|Twilio is not/i);
+  assert.match(smsOn.body, /Thank you,\nAlex Rivera\nRestore 365/);
+  assert.deepEqual(adjusterDraftSignOff('Alex Rivera', 'Restore 365'), ['Thank you,', 'Alex Rivera', 'Restore 365']);
+  assert.deepEqual(adjusterDraftSignOff('Alex Rivera', null), ['Thank you,', 'Alex Rivera']);
+  assert.deepEqual(adjusterDraftSignOff(null, null), ['Thank you,']);
   if (prevSid === undefined) delete process.env.TWILIO_ACCOUNT_SID;
   else process.env.TWILIO_ACCOUNT_SID = prevSid;
   if (prevTok === undefined) delete process.env.TWILIO_AUTH_TOKEN;
