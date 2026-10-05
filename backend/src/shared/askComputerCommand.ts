@@ -561,20 +561,124 @@ export function jobIdentifiers(file: JobFileAskContext | null | undefined, addre
   return lines;
 }
 
-export function jobSummaryForEmail(file: JobFileAskContext | null | undefined, address?: string | null): string {
-  const pretty: string[] = [];
-  const job = file?.job ?? null;
-  if (job?.title) pretty.push(`Job: ${String(job.title).trim()}`);
-  for (const id of jobIdentifiers(file, address)) {
-    if (id.startsWith('Job title:')) continue;
-    pretty.push(id);
+/** One clean sentence from a clip for an outbound email (no speaker labels, no raw dumps). */
+function clipHighlightForEmail(clip: {
+  workDate?: string | null;
+  summary?: string | null;
+  narration?: string | null;
+  transcript?: string | null;
+  concerns?: string[] | null;
+}): string | null {
+  const date = String(clip.workDate ?? '').trim();
+  const seen = String(clip.summary ?? clip.narration ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 220);
+  if (seen) return date ? `On ${date}, field video showed: ${seen}` : `Field video showed: ${seen}`;
+  const heard = String(clip.transcript ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  if (heard) {
+    const snip = heard.length >= 180 ? `${heard.replace(/\s+\S*$/, '').trim()}…` : heard;
+    return date ? `On ${date}, the crew discussed on site: "${snip}"` : `On site, the crew discussed: "${snip}"`;
   }
+  const concern = (clip.concerns ?? []).map((c) => String(c).trim()).filter(Boolean)[0];
+  if (concern) return date ? `On ${date}, a concern was noted: ${concern.slice(0, 180)}` : `A concern was noted: ${concern.slice(0, 180)}`;
+  return null;
+}
+
+/**
+ * Professional office-admin email body from the job file.
+ * Prefer clips / transcripts / timeline over a bare name + work-type template.
+ */
+export function jobSummaryForEmail(file: JobFileAskContext | null | undefined, address?: string | null): string {
+  const job = file?.job ?? null;
+  const title = String(job?.title ?? '').trim();
+  const claim = String(job?.claimNumber ?? '').trim();
+  const addr = String(address ?? '').trim();
+  const insured = fact(file, 'insured name', 'insured', 'homeowner', 'homeowner name', 'customer', 'customer name');
   const loss = String(job?.lossType ?? '').trim();
-  if (loss) pretty.push(`Loss type: ${loss}`);
   const work = String(job?.workType ?? '').trim();
-  if (work) pretty.push(`Work: ${work}`);
-  if (!pretty.length) return 'No job details on file yet.';
-  return ['Quick update on this job:', ...pretty.map((l) => `• ${l}`), '', 'Please reply if you need anything else.'].join('\n');
+
+  const openerParts: string[] = ['Hello,'];
+  const introBits: string[] = [];
+  if (title) introBits.push(title);
+  else if (work) introBits.push(work);
+  if (claim) introBits.push(`claim ${claim}`);
+  if (addr) introBits.push(addr);
+  if (insured) introBits.push(`insured ${insured}`);
+  const intro =
+    introBits.length > 0
+      ? `Here is a brief status update on ${introBits.slice(0, 3).join(', ')}.`
+      : 'Here is a brief status update on this job.';
+
+  const paragraphs: string[] = [openerParts[0], '', intro];
+
+  // Timeline / notes / scope (skip secrets like lockbox)
+  const timeline: string[] = [];
+  for (const log of file?.workLogs ?? []) {
+    const kind = String(log.kind ?? '').trim();
+    const summary = String(log.body ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!summary || /lockbox|gate code|password|\bpin\b/i.test(summary)) continue;
+    timeline.push(kind ? `${kind}: ${summary.slice(0, 160)}` : summary.slice(0, 160));
+    if (timeline.length >= 3) break;
+  }
+  for (const msg of file?.messages ?? []) {
+    if (timeline.length >= 4) break;
+    const body = String(msg.body ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!body || /lockbox|gate code|password|\bpin\b/i.test(body)) continue;
+    const who = String(msg.author ?? '').trim();
+    timeline.push(who ? `${who}: ${body.slice(0, 140)}` : body.slice(0, 160));
+  }
+  for (const line of file?.scope ?? []) {
+    if (timeline.length >= 5) break;
+    const titleLine = String(line.title ?? '').trim();
+    if (titleLine) timeline.push(titleLine.slice(0, 120));
+  }
+  for (const task of file?.tasks ?? []) {
+    if (timeline.length >= 5) break;
+    const titleLine = String(task.title ?? '').trim();
+    const status = String(task.status ?? '').trim();
+    if (!titleLine) continue;
+    timeline.push(status ? `${titleLine} (${status})` : titleLine);
+  }
+  if (timeline.length) {
+    paragraphs.push('');
+    paragraphs.push('Recent activity on file:');
+    for (const t of timeline.slice(0, 4)) paragraphs.push(`• ${t}`);
+  }
+
+  // Clips / transcripts
+  const clipLines: string[] = [];
+  for (const clip of file?.clips ?? []) {
+    const h = clipHighlightForEmail(clip);
+    if (h) clipLines.push(h);
+    if (clipLines.length >= 3) break;
+  }
+  if (clipLines.length) {
+    paragraphs.push('');
+    paragraphs.push('From recent field video:');
+    for (const c of clipLines) paragraphs.push(`• ${c}`);
+  }
+
+  // Thin file fallback — still prose, not a naked name/number/work-type dump
+  if (!timeline.length && !clipLines.length) {
+    const bits: string[] = [];
+    if (loss) bits.push(`This is a ${loss} loss.`);
+    if (work && !title) bits.push(`Work type on file: ${work}.`);
+    if (!bits.length) bits.push('We are continuing work and will share more detail as the file is updated.');
+    paragraphs.push('');
+    paragraphs.push(bits.join(' '));
+  }
+
+  paragraphs.push('');
+  paragraphs.push('Please reply if you need anything else from us.');
+  return paragraphs.join('\n');
 }
 
 export interface ComputerTaskPlan {

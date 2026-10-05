@@ -121,7 +121,7 @@ test('planComputerTask: email the homeowner fills To from the job file', () => {
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
   assert.match(plan.instructions, /To: Dana Test <dana\.homeowner@example\.test>/);
-  assert.match(plan.instructions, /Claim number: CLM-1|Claim: CLM-1/);
+  assert.match(plan.instructions, /claim CLM-1|Claim number: CLM-1|Claim: CLM-1/i);
   assert.match(plan.instructions, /request_approval/);
   assert.match(plan.instructions, /Never click Send/);
   assert.doesNotMatch(plan.instructions, /9999|Lockbox/);
@@ -486,4 +486,27 @@ test('item 10: draft only never requests Send approval even with Outlook', () =>
   assert.match(plan.summary, /draft only|nothing will be sent/i);
   assert.doesNotMatch(plan.summary, /request_approval|Approve before Send/i);
   assert.equal('instructions' in plan, false);
+});
+
+test('item 11: email body pulls clips and timeline, not a bare template', () => {
+  const rich = {
+    ...FILE,
+    workLogs: [{ kind: 'site visit', body: 'Installed underlayment on the south slope.' }],
+    messages: [{ author: 'Office', body: 'Homeowner confirmed Tuesday access.' }],
+    clips: [
+      {
+        workDate: '2026-09-12',
+        summary: 'Crew removing damaged shingles on the south elevation.',
+        transcript: 'Speaker 1: We still need the ridge cap delivered Friday.',
+      },
+    ],
+  };
+  const text = jobSummaryForEmail(rich, '1842 Cedar Ridge Dr');
+  assert.match(text, /Hello,/);
+  assert.match(text, /brief status update/i);
+  assert.match(text, /underlayment|south slope/i);
+  assert.match(text, /field video|Removing damaged shingles|removing damaged shingles/i);
+  assert.doesNotMatch(text, /Quick update on this job:/);
+  assert.doesNotMatch(text, /9999|Lockbox/);
+  assert.doesNotMatch(text, /^• Job:/m);
 });
