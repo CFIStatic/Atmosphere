@@ -73,6 +73,7 @@ import {
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 import { fastAnswerNeedsDeepFallback, logAskRouteDecision, resolveAskRoute, type AskModelRoute } from './askRoute.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ASK_RESEARCH_BUDGET_MS,
   ASK_RESEARCH_SYNTHESIS_RESERVE_MS,
@@ -1067,6 +1068,7 @@ export async function answerFromAskLookup(input: {
       route: decision.route,
       reason: decision.reason,
       unsure: decision.unsure,
+      admin: unscopedAdminOrNull(),
     });
     if (input.timing) {
       // Anthropic cache_control on system + stable job context (askPromptCache).
