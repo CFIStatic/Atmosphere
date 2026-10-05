@@ -149,6 +149,63 @@ function formatMomentClock(seconds: number): string {
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
+
+function AskStepsSourcesPanel({
+  sources,
+  webSources,
+  quotes,
+  actions,
+  onOpenSource,
+}: {
+  sources: AskSourceChip[];
+  webSources?: readonly AskWebSource[] | null;
+  quotes: ReturnType<typeof extractAskSources>['quotes'];
+  actions: ReturnType<typeof extractAskSources>['actions'];
+  onOpenSource: (source: AskSourceChip) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const webCount = (webSources ?? []).length;
+  const count = sources.length + webCount + quotes.length + actions.length;
+  if (!count) return null;
+  return (
+    <div className="mt-2" data-testid="ask-steps-sources">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
+        aria-expanded={open}
+        data-testid="ask-steps-sources-toggle"
+      >
+        {open ? 'Hide steps / sources' : `Steps / Sources (${count})`}
+      </button>
+      {open ? (
+        <div className="mt-1.5 space-y-2 rounded-lg border border-line bg-paper-50 p-2.5" data-testid="ask-steps-sources-body">
+          {actions.length ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Steps</p>
+              <ol className="mt-1 list-decimal space-y-0.5 ps-5 text-[12px] text-ink-700">
+                {actions.map((action, i) => (
+                  <li key={`${action.tool}-${i}`}>{action.label}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+          {sources.length || quotes.length || webCount ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Sources</p>
+              <div className="mt-1">
+                <AskSourceChips sources={sources} onOpen={onOpenSource} />
+                <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
+                <AskWebResults sources={webSources} />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AskFollowUps({
   questions,
   onAsk,
@@ -412,9 +469,14 @@ function AskAnswerBody({
       {computerTasks.map((action, i) => (
         <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
       ))}
-      <AskWebResults sources={webSources} />
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
-      <AskSourceChips sources={sources} onOpen={onOpenSource} />
+      <AskStepsSourcesPanel
+        sources={sources}
+        webSources={webSources}
+        quotes={[]}
+        actions={extracted.actions.filter((a) => a.tool !== 'start_computer_task')}
+        onOpenSource={onOpenSource}
+      />
       {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
     </div>
   );

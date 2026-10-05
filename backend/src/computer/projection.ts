@@ -66,6 +66,18 @@ export function projectJobForComputer(
   return out;
 }
 
+/** Default editor chrome — not real content for Approve provenance. */
+export function isCosmeticFormField(label: string, value = ''): boolean {
+  const l = String(label ?? '').toLowerCase();
+  const v = String(value ?? '').toLowerCase();
+  if (/\b(font|font-family|font family|font size|fontsize|typeface|text style|paragraph style|line spacing|letter spacing)\b/.test(l)) {
+    return true;
+  }
+  if (/\b(arial|calibri|times new roman|helvetica|sans-serif|serif)\b/.test(v) && /\bfont\b/.test(l)) return true;
+  if (/^\d{1,3}(\s*(pt|px))?$/.test(v.trim()) && /\b(font|size)\b/.test(l)) return true;
+  return false;
+}
+
 function norm(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9@.]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -89,6 +101,7 @@ export function verifyApprovalFields(input: {
     const label = clean(raw.label, 120) || 'Field';
     const value = clean(raw.value, 500);
     if (!value) continue;
+    if (isCosmeticFormField(label, value)) continue;
     const n = norm(value);
     seenValues.add(n);
     const match = input.projection.find((f) => norm(f.value) === n);
@@ -103,14 +116,21 @@ export function verifyApprovalFields(input: {
   for (const field of input.onPage) {
     const value = clean(field.value, 500);
     if (!value || field.type === 'password') continue;
+    const pageLabel = clean(field.label, 120) || clean(field.name, 120) || 'Field on the page';
+    if (isCosmeticFormField(pageLabel, value)) continue;
     if (seenValues.has(norm(value))) continue;
     seenValues.add(norm(value));
     out.push({
-      label: clean(field.label, 120) || clean(field.name, 120) || 'Field on the page',
+      label: pageLabel,
       value,
       source: 'Already on the page (not listed by the agent)',
       verified: false,
     });
   }
   return out;
+}
+
+/** Unverified values shown on the Approve card (cosmetic font fields already excluded). */
+export function countUnverifiedApprovalFields(fields: ApprovalField[]): number {
+  return fields.filter((f) => !f.verified && !isCosmeticFormField(f.label, f.value)).length;
 }

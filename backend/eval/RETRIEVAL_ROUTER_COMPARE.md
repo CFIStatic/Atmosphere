@@ -1,33 +1,28 @@
-# Ask eval: before vs after (feat/ask-retrieval-router-eval)
+# Ask eval: before vs after (feat/chat-computer-audit-658)
 
 Zone: America/Chicago (CT). Deterministic path (no live model keys in eval).
 
-## Baseline (main @ 02a0951, original synthetic gold)
-
-| metric | value |
-| --- | --- |
-| questions | 66 |
-| correctness | 66/66 (100%) |
-| grounding / citation validity | 100% |
-| cost USD / answer | n/a (deterministic) |
-| latency ms avg | n/a (deterministic; wall <3s suite) |
-
-Source: `/workspace/chat-routing-shots/baseline-main.json`
-
-## After items 1–7 (this branch, expanded gold)
+## Baseline (prior 88-Q synthetic gold)
 
 | metric | value |
 | --- | --- |
 | questions | 88 |
 | correctness | 88/88 (100%) |
-| grounding / citation validity | 97.7% |
-| cost USD / answer | n/a (deterministic) |
-| latency ms avg | n/a (deterministic; wall <3s suite) |
+| grounding / citation validity | ~97.7% |
+| ASK_STUFF_JOB_CONTEXT default | on (`1`) |
 
-Source: `/workspace/chat-routing-shots/after-all.json`
+## After items 1–7 (this branch)
 
-## Notes
+| metric | stuffing on (default kept) | stuffing off |
+| --- | --- | --- |
+| questions | 112 | 112 |
+| correctness | 112/112 (100%) | 112/112 (100%) |
+| grounding / citation validity | 93.8% | 93.8% |
 
-- Gold was expanded with inventory / list / simple-fact job questions (88 total). Flaky brand/dispute extras were pruned.
-- Live Opus/Sonnet **cost and latency** were not re-measured on Sample Job / Tiffany in this pass (no new Railway services; prod not deployed). Prior Tiffany metering (~$0.06/q on Opus) remains the pre-router reference; after deploy, re-run Ask on the same 10 questions and diff `token_usage_events` + `ask_route_decisions`.
-- Stuffing fallback still **on by default** (`ASK_STUFF_JOB_CONTEXT=1`) until a live-model A/B shows retrieval-alone ≥ stuffed accuracy.
+Gold expanded 88 → 112 (inventory, unanswerable price/deadline, quote-accuracy).
+
+**Stuffing decision:** Retrieval-alone matched stuffed accuracy on synthetic gold, but a multi-turn chat regression (opinion follow-up lost the day label) kept **ASK_STUFF_JOB_CONTEXT default on**. Set `=0` to try retrieval-only in staging.
+
+## Live Sample Job (058b09a8 / appreview@)
+
+Not re-measured here (no Outlook/CRM Logins on demo). Never used Tiffany `d7fe1a01` or `jack@jettx.ai`.

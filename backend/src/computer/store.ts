@@ -212,6 +212,8 @@ export interface ComputerStore {
   insertApproval(row: NewApproval): Promise<ComputerApprovalRow>;
   getApproval(orgId: string | null, id: string): Promise<ComputerApprovalRow | null>;
   latestApproval(taskId: string): Promise<ComputerApprovalRow | null>;
+  /** Approvals for one task, newest first (idempotency / Sent Items gate). */
+  listApprovalsForTask(taskId: string, limit?: number): Promise<ComputerApprovalRow[]>;
   /** pending → approved / canceled by a person. */
   decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null): Promise<boolean>;
   /** approved → consumed, only with the matching token hash and before expiry. */
@@ -497,6 +499,17 @@ export class SupabaseComputerStore implements ComputerStore {
       .limit(1);
     if (error) throw error;
     return ((data ?? [])[0] as ComputerApprovalRow | undefined) ?? null;
+  }
+
+  async listApprovalsForTask(taskId: string, limit = 40) {
+    const { data, error } = await this.db
+      .from('computer_approvals')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('requested_at', { ascending: false })
+      .limit(Math.max(1, Math.min(limit, 100)));
+    if (error) throw error;
+    return (data as ComputerApprovalRow[]) ?? [];
   }
 
   async decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null) {
@@ -793,6 +806,14 @@ export class MemoryComputerStore implements ComputerStore {
       .filter((a) => a.task_id === taskId)
       .sort((a, b) => b.requested_at.localeCompare(a.requested_at));
     return rows[0] ? { ...rows[0] } : null;
+  }
+
+  async listApprovalsForTask(taskId: string, limit = 40) {
+    return [...this.approvals.values()]
+      .filter((a) => a.task_id === taskId)
+      .sort((a, b) => b.requested_at.localeCompare(a.requested_at))
+      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .map((a) => ({ ...a }));
   }
 
   async decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null) {

@@ -15,7 +15,7 @@ import { askFastGeminiModel, scrubProviderDetail } from '../lib/askModel.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
 import { classifyAskIntent, classifyChatTurn, isJobContentsQuestion, isJobOverview } from './askPolish.js';
 
-export type AskModelRoute = 'fast' | 'deep';
+export type AskModelRoute = 'fast' | 'deep' | 'skipped';
 
 export type AskRouteDecision = {
   route: AskModelRoute;
@@ -66,7 +66,7 @@ export function needsDeepEvidence(question: string): boolean {
   if (/\b(?:compare|versus|vs\.?|difference between|both (?:visits|days|clips))\b/i.test(q)) return true;
   if (/\bwhy\b/i.test(q) && wordCount(q) >= 5 && !/\b(?:status|how many)\b/i.test(q)) return true;
   // Money, safety, hard dates / deadlines always stay on Opus.
-  if (/\b(?:\$|price|cost|invoice|payment|paid|owe|deductible|settlement|approved amount)\b/i.test(q)) return true;
+  if (/\b(?:\$|dollar|dollars|price|cost|amount|invoice|payment|paid|owe|deductible|settlement|approved amount)\b/i.test(q)) return true;
   if (/\b(?:unsafe|safety|hazard|emergency|gas leak|structural|collapse|asbestos|mold remediation)\b/i.test(q)) {
     return true;
   }
@@ -169,6 +169,26 @@ const HEDGE =
  * Greetings and ordinary prose are left alone. Checked on the model text, before
  * the server adds citation chips.
  */
+/** Money, safety, dispute, and hard-date asks always escalate off Fast when thin. */
+export function needsCriticalEscalation(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (/\b(?:dispute|disputed|denied|denial|carrier|liability|coverage fight)\b/i.test(q)) return true;
+  if (/\b(?:\$|dollar|dollars|price|cost|amount|invoice|payment|paid|owe|deductible|settlement|approved amount)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:unsafe|safety|hazard|emergency|gas leak|structural|collapse|asbestos|mold remediation)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:deadline|due (?:date|by)|must (?:be|finish)|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d))\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(?:when is|what(?:'s| is) the date)\b/i.test(q) && /\b(?:due|deadline|inspection|closing)\b/i.test(q)) {
+    return true;
+  }
+  return false;
+}
+
 export function fastAnswerNeedsDeepFallback(
   question: string,
   prose: string,
@@ -176,9 +196,16 @@ export function fastAnswerNeedsDeepFallback(
 ): boolean {
   const text = prose.replace(/⟦[^⟧]*⟧/g, '').trim();
   if (!text) return true;
+  // Money / safety / dispute / date escalate when Fast hedged or answered thinly —
+  // not every deep-evidence question (quotes can be short and still grounded).
+  if (needsCriticalEscalation(question) && (HEDGE.test(text) || text.length < 40)) return true;
   const wantsEvidence = /\b(say|said|quote|transcript|what did|when did|who )\b/i.test(question);
   if (!wantsEvidence && !traceHasHit) return false;
   if (HEDGE.test(text) && (traceHasHit || wantsEvidence)) return true;
+  // Low-confidence hedges on any Fast answer escalate to the strongest model.
+  if (/\b(might be|possibly|not entirely sure|i think|perhaps)\b/i.test(text) && wordCount(text) < 80) {
+    return true;
+  }
   return false;
 }
 
@@ -298,7 +325,7 @@ export async function logAskRouteDecision(
     route: row.route,
     reason: row.reason,
     unsure: row.unsure,
-    modelHint: row.modelHint ?? (row.route === 'fast' ? 'claude-sonnet-5-5|gemini-3.8-flash' : 'claude-opus-5-5'),
+    modelHint: row.modelHint ?? (row.route === 'fast' ? 'claude-sonnet-5-5|gemini-3.8-flash' : row.route === 'skipped' ? 'deterministic' : 'claude-opus-5-5'),
   };
   recentRouteDecisions.push(entry);
   while (recentRouteDecisions.length > ROUTE_LOG_MAX) recentRouteDecisions.shift();

@@ -26,7 +26,7 @@ const TOOL_NAMES = new Set([
   'propose_revoke_access',
 ]);
 
-export type AskTurnRoute = 'fast' | 'deep' | 'grounded';
+export type AskTurnRoute = 'fast' | 'deep' | 'grounded' | 'skipped';
 
 export type AskGeminiCache = 'hit' | 'miss' | 'skip';
 

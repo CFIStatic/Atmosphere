@@ -8,6 +8,7 @@ import { foldThreadMemory, type StoredAskPair } from '../src/shared/askMemory.js
 import {
   fastAnswerNeedsDeepFallback,
   isSimpleFactQuestion,
+  needsCriticalEscalation,
   needsDeepEvidence,
   refineAskRouteWithClassifier,
   routeAskQuestion,
@@ -85,6 +86,21 @@ test('an ungrounded fast answer falls back, a grounded one does not', () => {
     false,
   );
   assert.equal(fastAnswerNeedsDeepFallback('Hey', 'This file is Project Tiffany.', false), false);
+});
+
+test('money safety dispute and date escalate thin fast answers; quotes do not', () => {
+  assert.equal(needsCriticalEscalation('what is the deductible?'), true);
+  assert.equal(needsCriticalEscalation('any safety hazards on site?'), true);
+  assert.equal(needsCriticalEscalation('is there a deadline by Friday?'), true);
+  assert.equal(needsCriticalEscalation('What did he say about the tarp?'), false);
+  assert.equal(
+    fastAnswerNeedsDeepFallback('what is the claim amount?', 'About two thousand.', true),
+    true,
+  );
+  assert.equal(
+    fastAnswerNeedsDeepFallback('What did he say about the tarp?', 'He said the tarp came off.', true),
+    false,
+  );
 });
 
 test('the timing log is structured and has no transcript or question text', () => {

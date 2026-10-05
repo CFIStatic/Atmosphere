@@ -1,3 +1,5 @@
+import { logAskRouteDecision } from './askRoute.js';
+import { looksLikeNotFound } from './askNotFound.js';
 /**
  * Ask the whole job file — not only the videos.
  *
@@ -968,6 +970,16 @@ export function isDuplicateAskTurn(
   return sameThread && String(recent.answer ?? '').trim() === answer.trim();
 }
 
+
+/** Never attach web results to a job not-found answer. */
+export function clearWebOnNotFound<T extends { answer: string; webHits?: unknown[]; webDerivedAnswer?: boolean }>(
+  result: T,
+): T {
+  const ans = String(result.answer ?? '');
+  if (!looksLikeNotFound(ans) && !/^Not found\./i.test(ans)) return result;
+  return { ...result, webHits: [], webDerivedAnswer: false };
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -1035,6 +1047,17 @@ export async function answerFromJobFile(input: {
     if (text) input.timing?.markFirstToken();
     input.onToken?.(text);
   };
+  const logSkipped = (reason: string) => {
+    void logAskRouteDecision({
+      orgId: input.lookup?.orgId ?? input.toolContext?.orgId ?? null,
+      jobId: input.lookup?.jobId ?? input.toolContext?.jobId ?? null,
+      question: input.question,
+      route: 'skipped',
+      reason,
+      unsure: false,
+    });
+    input.timing?.noteRoute('skipped', reason);
+  };
   const grounded = groundedJobFileAnswer(input.question, input.file);
   // What the reader sees when the deterministic path answers.
   const spoken = readableJobFileAnswer(input.question, input.file);
@@ -1053,6 +1076,7 @@ export async function answerFromJobFile(input: {
 
   // "What websites can you log in to?" is about Chat, not the file or an upload.
   if (looksLikeComputerCapabilityAsk(input.question)) {
+    logSkipped('skipped_computer_capability');
     const answer = computerCapabilityAnswer({
       access: input.toolContext?.access === 'org' ? 'org' : 'viewer',
       configured: computerStatus().configured,
@@ -1064,6 +1088,7 @@ export async function answerFromJobFile(input: {
   // Capability-only ("can you search Google?") → short professional yes, no live
   // search, no model star soup / google.com junk citations.
   if (looksLikePureWebCapabilityAsk(input.question)) {
+    logSkipped('skipped_web_capability');
     const answer = professionalWebCapabilityAnswer(input.question);
     emit(answer);
     return { ...empty, answer, groundedOn: 0, toolResults: [], webHits: [] };
@@ -1170,6 +1195,7 @@ export async function answerFromJobFile(input: {
 
   const mentionScoped = Boolean(trim(input.file.mentionSupplement));
   if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
+    logSkipped('skipped_empty_job');
     emit(spoken);
     return { ...empty, answer: spoken, groundedOn: 0, toolResults };
   }
@@ -1233,7 +1259,7 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived });
     }
     if (toolOnly.length) {
       const prose =
@@ -1244,7 +1270,7 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       const answer = trailer ? `${prose}\n\n${trailer}` : prose;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits });
     }
     emit(spoken);
     return { ...empty, answer: spoken, groundedOn: spokenFromJob ? groundedOn : 0, toolResults, webHits };
@@ -1398,14 +1424,14 @@ export async function answerFromJobFile(input: {
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
+      return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived });
     }
     const toolOnly = toolResults.filter((r) => r.ok);
     const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : spoken;
     const trailer = formatActionsTrailer(toolResults);
     const answer = trailer ? `${prose}\n\n${trailer}` : prose;
     emit(answer);
-    return { ...empty, answer, groundedOn, toolResults, webHits };
+    return clearWebOnNotFound({ ...empty, answer, groundedOn, toolResults, webHits });
   }
   let answer = trimChatFiller(normalizeAskProse(completed.text), { question: input.question });
   const applied = await applyWebResults(answer, input.question, webHits, webAnswer, {

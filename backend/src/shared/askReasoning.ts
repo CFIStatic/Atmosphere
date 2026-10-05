@@ -1115,7 +1115,16 @@ export async function answerFromAskLookup(input: {
         (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
       );
       if (!stopped() && fastAnswerNeedsDeepFallback(resolved, prose, traceHasHit)) {
-        input.timing?.noteRoute('deep', decision.reason, true);
+        input.timing?.noteRoute('deep', `escalate_low_confidence:${decision.reason}`, true);
+        void logAskRouteDecision({
+          orgId: input.catalog.orgId,
+          jobId: input.catalog.jobId,
+          question: resolved,
+          route: 'deep',
+          reason: `escalate_low_confidence:${decision.reason}`,
+          unsure: true,
+          admin: unscopedAdminOrNull(),
+        });
         prose = '';
         streamed = false;
         input.onStatus?.('Looking through clips…');
@@ -1222,8 +1231,13 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
-  answer = ensureClaimCitations(answer, retrievedChunks).answer;
-  answer = applyHonestNotFound(answer, input.catalog, input.question);
+  const cited = ensureClaimCitations(answer, retrievedChunks);
+  answer = cited.answer;
+  const hasCite = /⟦(?:quotes|sources):/i.test(answer);
+  answer = applyHonestNotFound(answer, input.catalog, input.question, {
+    // Only force Not found. when nothing on the answer is grounded to the file.
+    noGroundedClaim: !hasCite,
+  });
   answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {

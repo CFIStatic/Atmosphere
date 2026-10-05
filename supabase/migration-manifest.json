@@ -217,7 +217,8 @@
     "20261005140000_ask_retrieval_embeddings.sql",
     "20261005150000_ask_route_decisions.sql",
     "20261005160000_ask_job_context_cache.sql",
-    "20261005180000_ask_org_company_memory.sql"
+    "20261005180000_ask_org_company_memory.sql",
+    "20261005190000_ask_route_skipped.sql"
   ],
   "migrations": [
     {
@@ -6549,6 +6550,16 @@
         "rls|public.ask_org_memory_facts",
         "table|public.ask_org_memory_facts"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261005190000_ask_route_skipped",
+      "file": "20261005190000_ask_route_skipped.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "alters ask_route_decisions check constraint only; no new durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

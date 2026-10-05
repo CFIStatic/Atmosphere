@@ -32,6 +32,21 @@ const MAX_TITLE_CHARS = 60;
 const MAX_TITLE_WORDS = 8;
 const MIN_TITLE_CHARS = 2;
 
+const UUID_TITLE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Empty, whitespace, or a raw UUID — treat as untitled for derivation/backfill. */
+export function isPlaceholderClipTitle(title: string | null | undefined): boolean {
+  const text = String(title ?? '').trim();
+  if (!text) return true;
+  if (UUID_TITLE.test(text)) return true;
+  // Short hex tails sometimes used as list ids ("Video · a1b2c3d4") are fine as titles
+  // only when longer human text exists; pure 32-hex blobs are placeholders.
+  if (/^[0-9a-f]{32}$/i.test(text)) return true;
+  return false;
+}
+
+
 const NOISE_LABEL = /^(before|after|workday|walkthrough|no_scope|change:|action:|stage:)/i;
 const STOP_LEAD = /^(the|a|an|this|that|there|here|it|we|they|crew|technician)\s+/i;
 
@@ -137,7 +152,7 @@ export async function persistProofClipTitleIfEmpty(
   proofId: string,
   source: ProofTitleSource,
 ): Promise<string | null> {
-  const title = deriveProofClipTitle(source);
+  const title = deriveProofClipTitle({ ...source, existingTitle: undefined });
   if (!title) return null;
 
   const { data: row } = await admin
@@ -145,7 +160,7 @@ export async function persistProofClipTitleIfEmpty(
     .select('title')
     .eq('id', proofId)
     .maybeSingle();
-  if (row?.title && String(row.title).trim()) return null;
+  if (!isPlaceholderClipTitle(row?.title)) return null;
 
   const { error } = await admin.from('job_proofs').update({ title }).eq('id', proofId);
   if (error) {
@@ -236,7 +251,7 @@ export function proofClipListLabel(input: {
   const custom = normalizeCustomClipTitle(input.customTitle);
   if (custom) return custom;
   const stored = typeof input.title === 'string' ? input.title.trim() : '';
-  if (stored) return stored;
+  if (stored && !isPlaceholderClipTitle(stored)) return stored;
 
   const derived = deriveProofClipTitle({
     summary: input.summary,
@@ -296,4 +311,138 @@ export async function setProofCustomTitle(
     aiTitle,
     title: customTitle ?? aiTitle,
   };
+}
+
+
+export type ProofClipTitleBackfillResult = {
+  scanned: number;
+  wouldWrite: number;
+  written: number;
+  skipped: number;
+  dryRun: boolean;
+};
+
+/**
+ * Backfill AI titles for clips that still show blank/UUID titles.
+ * Dry-run by default (apply=false). Uses existing analysis fields — no model calls.
+ */
+export async function backfillProofClipTitles(
+  admin: { from: (table: string) => any },
+  options?: {
+    apply?: boolean;
+    orgId?: string | null;
+    jobId?: string | null;
+    limit?: number;
+  },
+): Promise<ProofClipTitleBackfillResult> {
+  const apply = Boolean(options?.apply);
+  const limit = Math.max(1, Math.min(Number(options?.limit) || 500, 5000));
+  let q = admin
+    .from('job_proofs')
+    .select(
+      'id, title, custom_title, phase, ai_summary, narration_text, narration, actions, labels, ai_findings',
+    )
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (options?.orgId) q = q.eq('org_id', options.orgId);
+  if (options?.jobId) q = q.eq('job_id', options.jobId);
+
+  const { data, error } = await q;
+  if (error) throw new Error(error.message || 'Could not list proofs for title backfill');
+
+  const rows = Array.isArray(data) ? data : [];
+  let wouldWrite = 0;
+  let written = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    if (!isPlaceholderClipTitle(row.title)) {
+      skipped += 1;
+      continue;
+    }
+    if (normalizeCustomClipTitle(row.custom_title)) {
+      skipped += 1;
+      continue;
+    }
+    const findings =
+      row.ai_findings && typeof row.ai_findings === 'object' ? (row.ai_findings as Record<string, unknown>) : {};
+    const narration =
+      (typeof row.narration_text === 'string' && row.narration_text.trim()) ||
+      (typeof row.narration === 'string' && row.narration.trim()) ||
+      (typeof findings.narrative === 'string' ? String(findings.narrative) : null);
+    const actions = Array.isArray(row.actions)
+      ? row.actions
+      : Array.isArray(findings.actions)
+        ? findings.actions
+        : [];
+    const title = deriveProofClipTitle({
+      summary: row.ai_summary ?? (typeof findings.summary === 'string' ? findings.summary : null),
+      narration,
+      actions: actions as ProofTitleAction[],
+      labels: Array.isArray(row.labels) ? row.labels : null,
+      phase: row.phase,
+    });
+    if (!title) {
+      skipped += 1;
+      continue;
+    }
+    wouldWrite += 1;
+    if (!apply) continue;
+    const { error: writeErr } = await admin.from('job_proofs').update({ title }).eq('id', row.id);
+    if (writeErr) {
+      console.warn('[proof-title-backfill] write failed', row.id, writeErr.message);
+      skipped += 1;
+      continue;
+    }
+    written += 1;
+  }
+
+  return {
+    scanned: rows.length,
+    wouldWrite,
+    written: apply ? written : 0,
+    skipped,
+    dryRun: !apply,
+  };
+}
+
+/** Stable short citation label: title, or date + clip number. Never mid-word cut. */
+export function stableClipCitationLabel(input: {
+  title?: string | null;
+  workDate?: string | null;
+  clipNumber?: number | null;
+  atSeconds?: number | null;
+  maxLen?: number;
+}): string {
+  const max = input.maxLen ?? 40;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const formatDate = (iso: string): string => {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso;
+    return `${months[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}`;
+  };
+  const formatClock = (seconds: number): string => {
+    const s = Math.max(0, Math.round(seconds));
+    const h = Math.floor(s / 3600);
+    const min = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    if (h) return `${h}:${String(min).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${min}:${String(r).padStart(2, '0')}`;
+  };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let base = '';
+  const title = String(input.title ?? '').replace(/\s+/g, ' ').trim();
+  if (title && !uuid.test(title)) {
+    base = title.length <= max ? title : title.slice(0, max).replace(/\s+\S*$/, '').trim() || title.slice(0, max);
+  } else if (input.workDate) {
+    const date = formatDate(String(input.workDate).slice(0, 10));
+    const n = input.clipNumber;
+    base = n != null && n > 0 ? `${date} · Clip ${n}` : `${date} clip`;
+  } else {
+    base = 'Clip';
+  }
+  if (input.atSeconds != null && Number.isFinite(input.atSeconds)) {
+    return `${base} · ${formatClock(input.atSeconds)}`;
+  }
+  return base;
 }

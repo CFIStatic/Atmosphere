@@ -147,7 +147,8 @@ const prompts: Array<{ question: string; check: (answer: string) => void }> = [
   {
     question: 'what is the lockbox code',
     check: (answer) => {
-      assert.match(firstSentence(answer), /does not include/i);
+      assert.match(answer, /^Not found\./);
+      assert.match(answer, /I searched .+ clip/);
       assert.doesNotMatch(answer, /4412/);
       assert.doesNotMatch(answer, /toddler said hello/);
     },
@@ -155,8 +156,9 @@ const prompts: Array<{ question: string; check: (answer: string) => void }> = [
   {
     question: "what's the permit number",
     check: (answer) => {
-      assert.match(firstSentence(answer), /permit/i);
-      assert.match(firstSentence(answer), /does not include/i);
+      assert.match(answer, /^Not found\./);
+      assert.match(answer, /I searched .+ clip/);
+      assert.match(answer, /permit/i);
     },
   },
   {
