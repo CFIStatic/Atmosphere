@@ -1115,7 +1115,16 @@ export async function answerFromAskLookup(input: {
         (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
       );
       if (!stopped() && fastAnswerNeedsDeepFallback(resolved, prose, traceHasHit)) {
-        input.timing?.noteRoute('deep', decision.reason, true);
+        input.timing?.noteRoute('deep', `escalate_low_confidence:${decision.reason}`, true);
+        void logAskRouteDecision({
+          orgId: input.catalog.orgId,
+          jobId: input.catalog.jobId,
+          question: resolved,
+          route: 'deep',
+          reason: `escalate_low_confidence:${decision.reason}`,
+          unsure: true,
+          admin: unscopedAdminOrNull(),
+        });
         prose = '';
         streamed = false;
         input.onStatus?.('Looking through clips…');

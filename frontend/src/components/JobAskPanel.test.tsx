@@ -101,6 +101,11 @@ const proofs: ProofResponse = {
   siteKnown: true,
 };
 
+async function openAskStepsSources(user: Awaited<ReturnType<typeof userEvent.setup>>) {
+  const toggles = await screen.findAllByTestId('ask-steps-sources-toggle');
+  await user.click(toggles[0]!);
+}
+
 describe('JobAskPanel', () => {
   beforeEach(() => {
     sharedJob.mockReset();
@@ -443,6 +448,7 @@ describe('JobAskPanel', () => {
         },
       ],
     });
+    const user = userEvent.setup();
     render(
       <JobFileFocusProvider>
         <VideoSeekProvider>
@@ -450,6 +456,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
+    await openAskStepsSources(user);
     const results = await screen.findByTestId('ask-web-results');
     expect(results.querySelector('a')?.getAttribute('href')).toBe('https://example.com/nfl');
     expect(results.textContent).toContain('Thursday night game.');
@@ -479,6 +486,7 @@ describe('JobAskPanel', () => {
     const box = await screen.findByPlaceholderText(/ask what you forgot/i);
     await user.type(box, 'what NFL game is Thursday');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    await openAskStepsSources(user);
     const results = await screen.findByTestId('ask-web-results');
     expect(results.querySelector('a')?.getAttribute('href')).toBe('https://example.com/nfl');
     const body = screen.getByTestId('ask-answer-body');
@@ -526,6 +534,7 @@ describe('JobAskPanel', () => {
 
     expect(await screen.findByText(/skylights/i)).toBeInTheDocument();
     expect(screen.queryByText(/\(Source:/i)).not.toBeInTheDocument();
+    await openAskStepsSources(user);
     const chips = await screen.findAllByTestId('ask-source-chip');
     expect(chips.map((el) => el.textContent)).toEqual([
       'Who has access',
@@ -588,6 +597,7 @@ describe('JobAskPanel', () => {
     expect(screen.getByTestId('ask-quote').textContent).toMatch(/Unidentified speaker/);
     expect(screen.getByTestId('ask-quote').textContent).not.toMatch(/Homeowner|\(/);
     expect(screen.getByTestId('ask-quote').textContent).toMatch(/north slope/);
+    await openAskStepsSources(user);
     const chip = await screen.findByTestId('ask-source-chip');
     expect(chip.textContent).toMatch(/0:18/);
     await user.click(chip);
