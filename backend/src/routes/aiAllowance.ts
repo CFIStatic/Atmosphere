@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { rejectPurchasesInAppShell } from '../lib/appShell.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -80,7 +81,7 @@ aiAllowanceRouter.get('/', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
-aiAllowanceRouter.post('/credits/checkout', async (req: Request, res: Response, next: NextFunction) => {
+aiAllowanceRouter.post('/credits/checkout', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can buy AI credits.', 'billing_forbidden');
@@ -136,7 +137,7 @@ aiAllowanceRouter.post('/credits/checkout', async (req: Request, res: Response, 
   }
 });
 
-aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, next: NextFunction) => {
+aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can change the plan.', 'billing_forbidden');
@@ -253,7 +254,7 @@ aiAllowanceRouter.get('/auto-recharge', async (req: Request, res: Response, next
  * Owner-only. Turning it on needs explicit consent, a configured pack price,
  * and a saved card. Turning it off is always allowed.
  */
-aiAllowanceRouter.put('/auto-recharge', async (req: Request, res: Response, next: NextFunction) => {
+aiAllowanceRouter.put('/auto-recharge', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const canManage = await callerCanManage(req);
     const body = autoRechargeSchema.parse(req.body ?? {});

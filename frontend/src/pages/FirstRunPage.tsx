@@ -13,6 +13,7 @@ import {
   type FirstRunState,
 } from '../lib/firstRun';
 import { safeAuthRedirect } from '../lib/authRedirect';
+import { isInAppShell } from '../lib/appShell';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { firstClipPreview, posterClock, SAMPLE_EVIDENCE, type FirstClipPreview } from '../lib/firstEvidence';
 
@@ -24,6 +25,8 @@ const POLL_MS = 5000;
  * until checkout, so the field path offers the plan instead of waiting on a clip.
  */
 export function FirstRunPage() {
+  // iPhone/Android app: no plan prompts (App Store 3.1.1).
+  const inApp = isInAppShell();
   const { membership, membershipLoading, logout } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -182,7 +185,11 @@ export function FirstRunPage() {
                 <ChoiceButton
                   testId="first-run-field"
                   title="I'm in the field"
-                  detail="Choose a plan, then record the first clip in Field Capture. Recording stays locked until then."
+                  detail={
+                    inApp
+                      ? 'Record the first clip in Field Capture once this workspace has a plan.'
+                      : 'Choose a plan, then record the first clip in Field Capture. Recording stays locked until then.'
+                  }
                   onClick={() => choose('field')}
                 />
                 <ChoiceButton
@@ -197,13 +204,15 @@ export function FirstRunPage() {
 
           {stage === 'evidence' && state.path === 'field' && (
             <Card
-              title={clip ? 'Your first evidence' : 'Choose a plan to record'}
+              title={clip ? 'Your first evidence' : inApp ? 'A plan is needed to record' : 'Choose a plan to record'}
               subtitle={
                 clip
                   ? clip.processing
                     ? 'Uploaded. Transcript and summary are processing.'
                     : 'Transcript and summary from your recording.'
-                  : 'Field Capture cannot file a clip until this workspace has a plan. Choose a plan, then record on your phone with the same login.'
+                  : inApp
+                    ? 'Field Capture cannot file a clip until this workspace has a plan. Plans are managed on atmosphereteam.com.'
+                    : 'Field Capture cannot file a clip until this workspace has a plan. Choose a plan, then record on your phone with the same login.'
               }
             >
               {clip ? (
@@ -259,7 +268,7 @@ function FirstRunSteps({ stage }: { stage: 'job' | 'choose' | 'evidence' }) {
     { key: 'account', label: 'Account' },
     { key: 'job', label: 'First job' },
     { key: 'evidence', label: 'First evidence' },
-    { key: 'plan', label: 'Plan & invites' },
+    { key: 'plan', label: isInAppShell() ? 'Invites' : 'Plan & invites' },
   ];
   const at = stage === 'job' ? 1 : 2;
   return (
@@ -425,7 +434,9 @@ function PlanFooter({
     <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-ink-600">
         {ready
-          ? 'Next: pick a plan, then invite your team from the job file.'
+          ? isInAppShell()
+            ? 'Next: invite your team from the job file.'
+            : 'Next: pick a plan, then invite your team from the job file.'
           : 'No phone handy? '}
         {!ready && onSwitch ? (
           <button type="button" onClick={onSwitch} className="font-medium text-brand-600 hover:text-brand-700">
@@ -443,7 +454,7 @@ function PlanFooter({
           </a>
         ) : null}
         <Primary onClick={onContinue} disabled={!ready}>
-          Choose a plan
+          {isInAppShell() ? 'Continue' : 'Choose a plan'}
         </Primary>
       </div>
     </div>

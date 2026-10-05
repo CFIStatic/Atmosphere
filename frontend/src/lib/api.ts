@@ -6,6 +6,7 @@
  * `VITE_API_BASE_URL` if the backend is served from a different origin.
  */
 
+import { appShellSafeBillingText, isInAppShell } from './appShell';
 import type {
   ComputerLiveLink,
   ComputerLogin,
@@ -3019,11 +3020,13 @@ export class ApiError extends Error {
     checkoutUrl: string | null = null,
     body: Record<string, unknown> | null = null,
   ) {
-    super(message);
+    // In the iPhone/Android app nothing links to a purchase (App Store 3.1.1).
+    const inApp = isInAppShell();
+    super(appShellSafeBillingText(message, inApp));
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
-    this.checkoutUrl = checkoutUrl;
+    this.checkoutUrl = inApp ? null : checkoutUrl;
     this.canManage = body?.canManage === true;
   }
 }

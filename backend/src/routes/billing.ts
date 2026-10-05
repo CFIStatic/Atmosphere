@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import { rejectPurchasesInAppShell } from '../lib/appShell.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
@@ -248,7 +249,7 @@ billingRouter.post('/purchases', async (_req: Request, res: Response, next: Next
  * Hosted Stripe Checkout for a paid plan. The subscription itself is applied by
  * the `customer.subscription.*` webhook, not on return from checkout.
  */
-billingRouter.post('/checkout/subscription', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/checkout/subscription', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (config.billing.paymentProvider !== 'stripe') {
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
@@ -314,7 +315,7 @@ billingRouter.post('/checkout/subscription', async (req: Request, res: Response,
  * Stripe's hosted billing portal — card management, invoice history, and
  * cancellation, without us handling card data or reimplementing any of it.
  */
-billingRouter.post('/portal', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/portal', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (config.billing.paymentProvider !== 'stripe') {
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
@@ -539,7 +540,7 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
  * Hosted Stripe Checkout for the Work Verification platform subscription.
  * Applied by the subscription webhook — the browser only opens the session.
  */
-billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/checkout/onboarding', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (config.billing.paymentProvider !== 'stripe') {
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
@@ -615,7 +616,7 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
  * subscription. Refuses when that subscription is missing so we never open a
  * second extra-seat-only Checkout that can cancel the $849 plan.
  */
-billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/checkout/extra-seats', rejectPurchasesInAppShell, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { quantity } = extraSeatCheckoutSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);

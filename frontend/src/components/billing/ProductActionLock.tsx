@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { billingStepHref } from '../../lib/firstRun';
+import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../../lib/appShell';
+
+/** Why an action is locked. In the app there is no plan link (App Store 3.1.1). */
+export function planRequiredMessage(inApp = isInAppShell()): string {
+  return inApp
+    ? `This workspace needs a plan before you can upload, record, share, or invite. ${APP_SHELL_BILLING_NOTE}`
+    : 'Choose a plan to upload, record, share, or invite.';
+}
 
 /** True when this office still owes a plan. Missing billing calls stay unlocked. */
 export function useProductActionsLocked(): boolean {
@@ -27,6 +35,13 @@ export function useProductActionsLocked(): boolean {
 export function UpgradePrompt() {
   const location = useLocation();
   const next = `${location.pathname}${location.search}`;
+  if (isInAppShell()) {
+    return (
+      <p className="text-sm text-ink-700" data-testid="upgrade-prompt">
+        {planRequiredMessage(true)}
+      </p>
+    );
+  }
   return (
     <p className="text-sm text-ink-700" data-testid="upgrade-prompt">
       Choose a plan to upload, record, share, or invite.{' '}
