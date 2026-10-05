@@ -44,13 +44,13 @@ export function catalogSearchCounts(catalog: AskLookupCatalog): {
     const text = String(clip.transcript ?? '').trim();
     return n + (text ? Math.max(1, Math.ceil(text.length / 400)) : 0);
   }, 0);
-  const noteCount = Array.isArray((catalog as { notes?: unknown[] }).notes)
-    ? ((catalog as { notes: unknown[] }).notes?.length ?? 0)
+  const noteCount = Array.isArray((catalog as unknown as { notes?: unknown[] }).notes)
+    ? ((catalog as unknown as { notes?: unknown[] }).notes?.length ?? 0)
     : Array.isArray(catalog.history)
       ? catalog.history.length
       : 0;
-  const documentCount = Array.isArray((catalog as { documents?: unknown[] }).documents)
-    ? ((catalog as { documents: unknown[] }).documents?.length ?? 0)
+  const documentCount = Array.isArray((catalog as unknown as { documents?: unknown[] }).documents)
+    ? ((catalog as unknown as { documents?: unknown[] }).documents?.length ?? 0)
     : 0;
   return {
     noteCount,

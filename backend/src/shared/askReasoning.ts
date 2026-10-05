@@ -99,7 +99,7 @@ import {
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { ensureClaimCitations } from './askClaimCitations.js';
-import { applyHonestNotFound, looksLikeNotFound } from './askNotFound.js';
+import { applyHonestNotFound } from './askNotFound.js';
 import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import { buildRetrievalAskContext, rememberAskSearchMeta } from './askRetrievalContext.js';
 import {
