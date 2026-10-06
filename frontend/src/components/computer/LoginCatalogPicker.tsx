@@ -2,22 +2,86 @@ import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { groupLoginCatalog, type LoginCatalog, type LoginCatalogEntry } from '../../lib/computer';
 
-/** Monogram in the brand colour (no third-party logo files are loaded). */
+/** Public favicon for a site host (Google’s favicon service). Falls back to the monogram on error. */
+export function siteLogoUrl(host: string): string {
+  const clean = host.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(clean)}&sz=128`;
+}
+
+function sizeClass(size: 'sm' | 'md' | 'lg'): string {
+  if (size === 'lg') return 'h-10 w-10 text-sm';
+  if (size === 'sm') return 'h-7 w-7 text-[10px]';
+  return 'h-8 w-8 text-[11px]';
+}
+
+/** Company logo for a catalog site, with monogram fallback. */
 export function SiteLogo({
   site,
   size = 'md',
 }: {
-  site: Pick<LoginCatalogEntry, 'logo' | 'name'>;
-  size?: 'md' | 'lg';
+  site: Pick<LoginCatalogEntry, 'logo' | 'name' | 'host'>;
+  size?: 'sm' | 'md' | 'lg';
 }) {
-  const dims = size === 'lg' ? 'h-10 w-10 text-sm' : 'h-8 w-8 text-[11px]';
+  return (
+    <HostLogo
+      host={site.host}
+      name={site.name}
+      monogram={site.logo}
+      size={size}
+    />
+  );
+}
+
+/** Logo by hostname (saved login rows and catalog). Monogram when the image fails. */
+export function HostLogo({
+  host,
+  name,
+  monogram,
+  size = 'md',
+}: {
+  host: string;
+  name: string;
+  monogram?: { text: string; color: string } | null;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const [failed, setFailed] = useState(false);
+  const dims = sizeClass(size);
+  const fromName = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+  const initials = monogram?.text || fromName || host.slice(0, 2).toUpperCase() || '?';
+  const color = monogram?.color ?? '#475569';
+
+  if (!failed && host.trim()) {
+    return (
+      <span
+        aria-hidden="true"
+        className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-paper-0 ${dims}`}
+        data-testid="site-logo"
+      >
+        <img
+          src={siteLogoUrl(host)}
+          alt=""
+          className="h-full w-full object-contain p-1"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
   return (
     <span
       aria-hidden="true"
       className={`inline-flex shrink-0 items-center justify-center rounded-lg font-bold text-white ${dims}`}
-      style={{ backgroundColor: site.logo.color }}
+      style={{ backgroundColor: color }}
+      data-testid="site-logo-monogram"
     >
-      {site.logo.text}
+      {initials}
     </span>
   );
 }
