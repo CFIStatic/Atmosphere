@@ -184,7 +184,7 @@ export function LoginsPage() {
     null,
   );
   const [confirmForget, setConfirmForget] = useState<string | null>(null);
-  /** The Add-a-login site catalog (loaded when Add login opens). */
+  /** Ready-to-go site catalog (loaded with the page). */
   const [catalog, setCatalog] = useState<LoginCatalog | null>(null);
   const [catalogFailed, setCatalogFailed] = useState(false);
   /** What the person picked in the catalog: a site, Custom website, or nothing yet. */
@@ -215,6 +215,17 @@ export function LoginsPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(errorText(err, 'Could not load your logins.'));
+      });
+    api
+      .computerLoginCatalog()
+      .then((next) => {
+        if (!cancelled) {
+          setCatalog(next);
+          setCatalogFailed(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogFailed(true);
       });
     return () => {
       cancelled = true;
@@ -354,38 +365,42 @@ export function LoginsPage() {
     }
   }
 
-  function openAdd() {
+  function beginAdd() {
     setAdding(true);
-    setPicked(null);
     setRowPanel(null);
-    setDraft(EMPTY_DRAFT);
-    setUrl('');
-    setLabel('');
     setActionError(null);
     setNotice(null);
-    if (!catalog) {
-      setCatalogFailed(false);
-      api
-        .computerLoginCatalog()
-        .then(setCatalog)
-        .catch(() => setCatalogFailed(true));
-    }
+  }
+
+  function canBeginSignIn(): boolean {
+    return Boolean(state?.configured) && !state?.busy && !state?.signingIn && working === null;
   }
 
   function pickSite(site: LoginCatalogEntry) {
+    if (!canBeginSignIn()) return;
+    beginAdd();
     setPicked(site);
     setUrl(site.signInUrl);
     setLabel(site.name);
     // Pick a site, enter a username and password, done: the password option starts checked.
     setDraft({ ...EMPTY_DRAFT, save: canManagePasswords, loginUrl: site.signInUrl });
-    setActionError(null);
   }
 
   function pickCustom() {
+    if (!canBeginSignIn()) return;
+    beginAdd();
     setPicked('custom');
     setUrl('');
     setLabel('');
     setDraft(EMPTY_DRAFT);
+  }
+
+  function cancelAdd() {
+    setAdding(false);
+    setPicked(null);
+    setDraft(EMPTY_DRAFT);
+    setUrl('');
+    setLabel('');
   }
 
   function submitAdd(e: FormEvent) {
@@ -455,16 +470,6 @@ export function LoginsPage() {
             {PASSWORD_LINE}
           </p>
         </div>
-        {state?.configured && !adding && !mySignIn ? (
-          <button
-            type="button"
-            onClick={openAdd}
-            disabled={!canStart}
-            className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Add login
-          </button>
-        ) : null}
       </header>
 
       {loadError ? (
@@ -507,6 +512,47 @@ export function LoginsPage() {
         </div>
       ) : null}
 
+      {state?.configured && !mySignIn && !adding ? (
+        <section
+          className="mt-5"
+          aria-label="Ready-to-go sites"
+          data-testid="logins-catalog-section"
+          aria-disabled={!canStart}
+        >
+          <h2 className="text-sm font-semibold text-ink-900">Websites</h2>
+          <p className="mt-1 text-sm text-ink-600">
+            Pick a site to sign Computer in. Sign-in addresses are already filled in.
+          </p>
+          <div
+            className={`mt-3 rounded-xl border border-line bg-paper-0 p-4 ${canStart ? '' : 'pointer-events-none opacity-50'}`}
+            aria-disabled={!canStart}
+          >
+            {catalogFailed ? (
+              <p className="text-sm text-ink-700" data-testid="logins-catalog-failed">
+                Could not load the site list.{' '}
+                <button
+                  type="button"
+                  onClick={pickCustom}
+                  disabled={!canStart}
+                  className="font-semibold text-brand-700 hover:underline disabled:opacity-50"
+                >
+                  Add a custom website
+                </button>
+              </p>
+            ) : catalog ? (
+              <LoginCatalogPicker
+                catalog={catalog}
+                onPick={pickSite}
+                onCustom={pickCustom}
+                savedHosts={logins.map((l) => l.host)}
+              />
+            ) : (
+              <PanelSpinner label="Loading sites" />
+            )}
+          </div>
+        </section>
+      ) : null}
+
       {adding && !mySignIn ? (
         <form
           onSubmit={submitAdd}
@@ -515,20 +561,6 @@ export function LoginsPage() {
           aria-label="Add login"
         >
           <h2 className="text-sm font-semibold text-ink-900">Add login</h2>
-          {picked === null && !catalogFailed ? (
-            <div className="mt-3">
-              {catalog ? (
-                <LoginCatalogPicker
-                  catalog={catalog}
-                  onPick={pickSite}
-                  onCustom={pickCustom}
-                  savedHosts={logins.map((l) => l.host)}
-                />
-              ) : (
-                <PanelSpinner label="Loading sites" />
-              )}
-            </div>
-          ) : null}
           {picked && picked !== 'custom' ? (
             <div
               className="mt-3 rounded-lg border border-line bg-paper-50 p-3"
@@ -545,7 +577,7 @@ export function LoginsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPicked(null)}
+                  onClick={cancelAdd}
                   className="shrink-0 text-xs font-semibold text-brand-700 hover:underline"
                 >
                   Change site
@@ -576,15 +608,13 @@ export function LoginsPage() {
           ) : null}
           {picked === 'custom' || (picked === null && catalogFailed) ? (
             <>
-              {catalog ? (
-                <button
-                  type="button"
-                  onClick={() => setPicked(null)}
-                  className="mt-2 text-xs font-semibold text-brand-700 hover:underline"
-                >
-                  Back to the site list
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={cancelAdd}
+                className="mt-2 text-xs font-semibold text-brand-700 hover:underline"
+              >
+                Back to the site list
+              </button>
               <div className="mt-3 grid gap-3 sm:grid-cols-[2fr_1fr]">
                 <label className="block text-xs font-medium text-ink-700">
                   Website address
@@ -632,10 +662,7 @@ export function LoginsPage() {
             ) : null}
             <button
               type="button"
-              onClick={() => {
-                setAdding(false);
-                setPicked(null);
-              }}
+              onClick={cancelAdd}
               className="rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:border-brand-200"
             >
               Cancel
@@ -701,17 +728,17 @@ export function LoginsPage() {
       ) : null}
 
       <section className="mt-6" aria-label="Saved logins">
+        {state?.configured && !mySignIn ? (
+          <h2 className="mb-3 text-sm font-semibold text-ink-900">Saved logins</h2>
+        ) : null}
         {logins.length === 0 ? (
           state?.configured && !mySignIn ? (
-            <div
-              className="rounded-xl border border-dashed border-line bg-paper-50 px-4 py-8 text-center"
+            <p
+              className="rounded-xl border border-dashed border-line bg-paper-50 px-4 py-3 text-sm text-ink-600"
               data-testid="logins-empty"
             >
-              <p className="text-sm font-medium text-ink-800">No logins yet</p>
-              <p className="mt-1 text-sm text-ink-600">
-                Add the sites Computer should be signed in to, like Outlook or a carrier portal.
-              </p>
-            </div>
+              No saved logins yet. Pick a website above to sign Computer in.
+            </p>
           ) : null
         ) : (
           <ul
