@@ -5,6 +5,8 @@ import {
   formatMaterialsListForChat,
   looksLikeMaterialsListAsk,
   materialsRowsForUi,
+  isPlausibleSpec,
+  specForItem,
 } from '../src/shared/jobMaterials.js';
 
 const FILE = {
@@ -92,4 +94,46 @@ test('one source chip per clip, keeping the moment that names the item', () => {
   assert.equal(lam!.sources.length, 1);
   assert.equal(lam!.sources[0].atSeconds, 8);
   assert.match(lam!.sources[0].label, /0:08/);
+});
+
+/* -------------------------------------------------- spec is an attribute -- */
+
+test('regression: "colored packaging behind" never becomes a spec (Sample Job 058b09a8 case)', () => {
+  // Paraphrase of the Sample Job narration that produced "ed packaging behind"
+  // on birch plywood, construction adhesive and flooring.
+  const narration =
+    'Crew sets an unfinished birch plywood carcass on the bench. Someone runs a bead of adhesive along the edge before clamping. ' +
+    'Off to one side there is a shipping carton or colored packaging behind the saw. ' +
+    'Underfoot is new plank flooring, trim not yet on.';
+  const list = extractJobMaterials(
+    { job: { id: 'j' }, facts: {}, scope: [], documents: [], clips: [{ workDate: '2026-10-04', proofId: 'p', narration, transcript: '', concerns: [], changes: [] }] } as never,
+    null,
+  );
+  const byItem = new Map(list.items.map((i) => [i.item, i]));
+  for (const name of ['birch plywood', 'construction adhesive', 'flooring']) {
+    assert.ok(byItem.has(name), `${name} is still listed`);
+    assert.equal(byItem.get(name)!.spec, null, `${name} has no spec`);
+  }
+  assert.ok(list.items.every((i) => !/packaging|behind/i.test(i.spec ?? '')));
+});
+
+test('isPlausibleSpec accepts attributes and rejects fragments', () => {
+  for (const ok of ['3/4 in.', '4 ft x 8 ft', '2-1/4"', '30 x 24 in.', 'Weathered Wood', 'Brite White', 'A-grade', 'grade B']) {
+    assert.equal(isPlausibleSpec(ok), true, ok);
+  }
+  for (const bad of ['ed packaging behind', 'packaging behind', 'the corner pieces', 'is visible at left', 'or glue', '', null, 'A Very Long Name That Keeps Going On And On']) {
+    assert.equal(isPlausibleSpec(bad), false, String(bad));
+  }
+});
+
+test('specForItem only reads attributes tied to that item', () => {
+  assert.equal(specForItem('birch plywood', 'Two sheets of 3/4 in. birch plywood for the boxes.'), '3/4 in.');
+  assert.equal(specForItem('laminate countertop', 'Laminate countertop, color: Brite White, matte.'), 'Brite White');
+  assert.equal(specForItem('architectural shingles', 'Architectural shingles in weathered wood on the main roof.'), 'Weathered Wood');
+  // Quantity, not size.
+  assert.equal(specForItem('crown molding', 'We need 20 ft of crown molding.'), null);
+  // Attribute in a different sentence belongs to something else.
+  assert.equal(specForItem('flooring', 'The trim is 3/4 in. thick. Flooring goes in tomorrow.'), null);
+  // "colored" is not "color:".
+  assert.equal(specForItem('flooring', 'Flooring box with colored packaging behind it.'), null);
 });

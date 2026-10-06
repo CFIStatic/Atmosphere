@@ -498,6 +498,9 @@ export function stripAskWebTrailer(answer: string): string {
 }
 
 
+/** Action paths whose label is a card body (full text), not a short chip label. */
+const CARD_ACTION_PATHS = new Set(['computer-task:sms-approval', 'computer-task:materials-list']);
+
 /** Decode a `b64:` (base64url, UTF-8) card payload label; null when not encoded or invalid. */
 export function decodeActionLabel(label: string): string | null {
   if (!label.startsWith('b64:')) return null;
@@ -520,10 +523,12 @@ export function parseAskActionsTrailer(raw: string): AskActionChip[] {
     const [tool, label, section, path] = part.split('|');
     if (!trim(tool) || !trim(label)) continue;
     const decoded = decodeActionLabel(trim(label));
+    // Card paths render the label as the card body, so never cut it.
+    const isCard = CARD_ACTION_PATHS.has(trim(path));
     out.push({
       tool: trim(tool),
       // Card payloads (b64:) arrive whole; plain chip labels stay short.
-      label: decoded ?? trim(label).slice(0, 120),
+      label: decoded ?? (isCard ? trim(label) : trim(label).slice(0, 120)),
       section: trim(section) || undefined,
       path: trim(path) || undefined,
     });

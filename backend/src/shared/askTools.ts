@@ -1240,6 +1240,8 @@ export async function executeAskTool(
               ok: true,
               tool: name,
               summary: draft,
+              // The approval card shows the whole draft, commas and all.
+              cardPayload: draft,
               data: {
                 channel: 'sms',
                 to: plan.to,

@@ -217,6 +217,29 @@ describe('actions trailer card payloads (b64:)', () => {
     expect(actions[0].path).toBe('computer-task:materials-list');
   });
 
+  it('shows a long text message approval in full, commas included', () => {
+    const draft = [
+      'Here is the text for the adjuster. Nothing was sent yet.',
+      '',
+      'To: +15555550123',
+      '',
+      'Hi Sam, this is the crew on the sample job. We finished the tear-off, dried in the deck, and photographed every slope. Please let us know a good time to walk the roof, and whether you need anything else for the file. Thanks.',
+    ].join('\n');
+    expect(draft.length).toBeGreaterThan(120);
+    const label = `b64:${Buffer.from(draft, 'utf8').toString('base64url')}`;
+    const { actions } = extractAskSources(`Draft ready.\n\n⟦actions: start_computer_task|${label}|computer|computer-task:sms-approval⟧`);
+    expect(actions[0].label).toBe(draft);
+    expect(actions[0].path).toBe('computer-task:sms-approval');
+  });
+
+  it('does not cut older plain text message approval labels to 120 characters', () => {
+    const plain = `Hi Sam ${'we finished the tear-off and dried in the deck '.repeat(6)}Thanks.`;
+    expect(plain.length).toBeGreaterThan(120);
+    const { actions } = extractAskSources(`ok\n\n⟦actions: start_computer_task|${plain}|computer|computer-task:sms-approval⟧`);
+    expect(actions[0].label).toBe(plain.trim());
+    expect(actions[0].label.endsWith('Thanks.')).toBe(true);
+  });
+
   it('keeps plain chip labels short', () => {
     const long = 'x'.repeat(300);
     const { actions } = extractAskSources(`ok\n\n⟦actions: update_job|${long}|setup|⟧`);

@@ -93,8 +93,80 @@ function preferKnownMaterialName(text: string): string | null {
   return null;
 }
 
-const COLOR_SPEC =
-  /\b(?:color|colour)\s*[:=]?\s*([A-Z][A-Za-z0-9 /-]{2,40})\b|\b(Weathered Wood|Charcoal|Colonial Slate|Estate Gray|Desert Tan|Driftwood|Shakewood|Barkwood|Onyx Black|Antique Silver|Hunter Green|Pewter)\b/i;
+/** Product colors we recognise by name (shingle lines, laminate finishes). */
+const NAMED_COLORS =
+  /\b(Weathered Wood|Charcoal|Colonial Slate|Estate Gray|Desert Tan|Driftwood|Shakewood|Barkwood|Onyx Black|Antique Silver|Hunter Green|Pewter|Brite White|Bright White)\b/i;
+/** "color: Brite White" / "colour = Pewter". The keyword must be a whole word followed by : or =. */
+const LABELED_COLOR = /\b[Cc]olou?r\s*[:=]\s*([A-Z][A-Za-z0-9]*(?:[ /-][A-Za-z0-9]+){0,3})/;
+const DIM_UNIT = '(?:in\\.?|inch(?:es)?|"|ft\\.?|feet|foot|mm|cm)';
+const DIM_NUM = '(?:\\d+(?:\\.\\d+)?(?:[- ]\\d+\\/\\d+)?|\\d+\\/\\d+)';
+/** Sizes and thicknesses: 3/4 in., 4 ft x 8 ft, 2-1/4", 30 x 24 in. */
+const DIMENSION = new RegExp(
+  `${DIM_NUM}\\s*(?:${DIM_UNIT}\\s*)?(?:(?:x|×|by)\\s*${DIM_NUM}\\s*(?:${DIM_UNIT}\\s*)?)*${DIM_UNIT}|${DIM_NUM}\\s*${DIM_UNIT}`,
+  'i',
+);
+const GRADE = /\b(?:[A-D]{1,2}-grade|grade\s+[A-D0-9]{1,2})\b/i;
+const SPEC_FILLER =
+  /\b(behind|the|and|with|or|of|is|are|was|were|to|for|it|its|this|that|these|those|we|they|on|at|visible|packaging|box|some|any|there|here)\b/i;
+
+function fullMatch(re: RegExp, s: string): boolean {
+  const m = s.match(re);
+  return Boolean(m && m.index === 0 && m[0].trim().length === s.length);
+}
+
+/**
+ * A spec is a real product attribute (size, thickness, color, grade, or a
+ * labeled brand/finish name), never a sentence fragment. When in doubt: no.
+ */
+export function isPlausibleSpec(raw: string | null | undefined): boolean {
+  const s = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!s || s.length > 40 || s.split(' ').length > 5) return false;
+  if (fullMatch(DIMENSION, s) || fullMatch(GRADE, s)) return true;
+  // Fragments ("ed packaging behind") start lowercase or carry filler words.
+  if (/^[^A-Z0-9]/.test(s) || SPEC_FILLER.test(s)) return false;
+  if (fullMatch(NAMED_COLORS, s)) return true;
+  // Labeled names ("Brite White", "Matte Finish 2"): capitalised words only.
+  return /^[A-Z][A-Za-z0-9]*(?:[ /-][A-Z0-9][A-Za-z0-9]*){0,3}$/.test(s);
+}
+
+function titleCase(s: string): string {
+  return s.replace(/\b([a-z])/g, (c) => c.toUpperCase());
+}
+
+function itemPattern(item: string): RegExp {
+  const known = KNOWN_MATERIAL_PHRASES.filter((row) => row.item === item).map((row) => row.re.source);
+  const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(known.length ? known.join('|') : `\\b${escaped}\\b`, 'i');
+}
+
+/**
+ * Spec for one item, taken only from a sentence that names that item. Colors
+ * may be anywhere in that sentence; sizes / grades must sit right next to the
+ * item name. Anything else (or anything implausible) gives null.
+ */
+export function specForItem(item: string, text: string): string | null {
+  const re = itemPattern(item);
+  // Split on sentence ends only when a new sentence starts, so "3/4 in. birch" stays whole.
+  for (const sentence of text.split(/(?<=[.!?;])\s+(?=[A-Z0-9"“(])/)) {
+    const m = re.exec(sentence);
+    if (!m) continue;
+    const labeled = sentence.match(LABELED_COLOR);
+    if (labeled && isPlausibleSpec(labeled[1])) return labeled[1].trim();
+    const named = sentence.match(NAMED_COLORS);
+    if (named) return titleCase(named[1].toLowerCase());
+    const before = sentence.slice(0, m.index).trim().split(/\s+/).slice(-5).join(' ');
+    const after = sentence.slice(m.index + m[0].length).trim().split(/\s+/).slice(0, 4).join(' ');
+    for (const window of [before, after]) {
+      const d = window.match(DIMENSION) ?? window.match(GRADE);
+      if (!d || d.index == null) continue;
+      // "20 ft of crown molding" is a quantity, not a size.
+      if (/^\s*of\b/i.test(window.slice(d.index + d[0].length))) continue;
+      const value = d[0].trim();
+      if (isPlausibleSpec(value)) return value;
+    }
+  }
+  return null;
+}
 
 const TIME_MARK = /(?:^|\s)(?:\[)?(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\])?\s/;
 
@@ -161,6 +233,7 @@ function mergeItem(
 ): void {
   const item = trimItem(input.item);
   if (!looksLikeMaterialName(item) && !MATERIAL_HINT.test(item)) return;
+  input = { ...input, spec: isPlausibleSpec(input.spec) ? input.spec!.trim() : null };
   const key = `${item.toLowerCase()}|${(input.spec ?? '').toLowerCase()}`;
   const existing = acc.get(key);
   if (!existing) {
@@ -224,11 +297,11 @@ function harvestLine(
       if (!Number.isFinite(qty) || qty <= 0) continue;
       if (!looksLikeMaterialName(name) && !MATERIAL_HINT.test(name)) continue;
       matchedQty = true;
-      const color = text.match(COLOR_SPEC);
       const preferred = preferKnownMaterialName(name) ?? preferKnownMaterialName(text);
+      const itemName = preferred ?? name;
       mergeItem(acc, {
-        item: preferred ?? name,
-        spec: color ? (color[1] || color[2] || null) : null,
+        item: itemName,
+        spec: specForItem(trimItem(itemName), text),
         quantity: qty,
         unit,
         citation: { ...citeBase, excerpt: (citation.excerpt ?? text).slice(0, 240) },
@@ -237,7 +310,6 @@ function harvestLine(
   }
 
   if (!matchedQty) {
-    const color = text.match(COLOR_SPEC);
     const found: string[] = [];
     for (const row of KNOWN_MATERIAL_PHRASES) {
       if (row.re.test(text)) found.push(row.item);
@@ -283,7 +355,7 @@ function harvestLine(
       }
       mergeItem(acc, {
         item: name,
-        spec: color ? (color[1] || color[2] || null) : null,
+        spec: specForItem(name, text),
         quantity,
         unit,
         citation: { ...citeBase, excerpt: (citation.excerpt ?? text).slice(0, 240) },
