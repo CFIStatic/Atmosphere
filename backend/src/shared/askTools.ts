@@ -64,6 +64,12 @@ export type AskToolResult = {
   ok: boolean;
   tool: string;
   summary: string;
+  /**
+   * Full payload for a Chat card (e.g. the materials table JSON). Never shown
+   * as text or given to the model; it rides the actions trailer base64url-encoded
+   * so separators and commas inside it survive.
+   */
+  cardPayload?: string;
   data?: unknown;
   /** UI navigation hints (section / clip seek / path). */
   ui?: {
@@ -1187,7 +1193,9 @@ export async function executeAskTool(
             return {
               ok: true,
               tool: name,
-              summary: plan.summary,
+              // The table renders as a card; the reply text is the lead sentence only.
+              summary: materialsLeadText(plan.summary),
+              cardPayload: plan.summary,
               data: {
                 channel: 'materials',
                 materialsOnly: true,
@@ -1332,12 +1340,26 @@ export function collectWebHitsFromToolResults(results: AskToolResult[]): AskWebH
   return hits;
 }
 
+/** Prefix for a base64url-encoded card payload in an actions trailer label. */
+export const ACTION_LABEL_B64_PREFIX = 'b64:';
+
+/** The human sentence(s) before the MATERIALS_JSON marker. */
+export function materialsLeadText(summary: string): string {
+  const idx = summary.indexOf('MATERIALS_JSON:');
+  return (idx >= 0 ? summary.slice(0, idx) : summary).trim();
+}
+
 /** Machine trailer for actions taken — UI turns into chips. */
 export function formatActionsTrailer(results: AskToolResult[]): string {
   const parts: string[] = [];
   for (const r of results) {
     // The Computer card renders its own "not set up" / "not allowed" state.
     if (!r.ok && r.tool !== 'start_computer_task') continue;
+    if (r.cardPayload) {
+      const encoded = Buffer.from(r.cardPayload, 'utf8').toString('base64url');
+      parts.push(`${r.tool}|${ACTION_LABEL_B64_PREFIX}${encoded}|${r.ui?.section ?? ''}|${r.ui?.path ?? ''}`);
+      continue;
+    }
     const maxLabel =
       r.ui?.path === 'computer-task:sms-approval' || r.ui?.path === 'computer-task:materials-list'
         ? 12000
@@ -1349,6 +1371,15 @@ export function formatActionsTrailer(results: AskToolResult[]): string {
   }
   if (!parts.length) return '';
   return `⟦actions: ${parts.join(' ;; ')}⟧`;
+}
+
+function decodeActionLabel(label: string): string {
+  if (!label.startsWith(ACTION_LABEL_B64_PREFIX)) return label;
+  try {
+    return Buffer.from(label.slice(ACTION_LABEL_B64_PREFIX.length), 'base64url').toString('utf8');
+  } catch {
+    return label;
+  }
 }
 
 export function parseActionsTrailer(raw: string): Array<{
@@ -1365,7 +1396,7 @@ export function parseActionsTrailer(raw: string): Array<{
     if (!trim(tool) || !trim(label)) continue;
     out.push({
       tool: trim(tool),
-      label: trim(label),
+      label: decodeActionLabel(trim(label)),
       section: trim(section) || undefined,
       path: trim(path) || undefined,
     });

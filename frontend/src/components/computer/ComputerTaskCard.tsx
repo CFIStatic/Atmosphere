@@ -86,9 +86,12 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
       <div data-testid="computer-materials-list" className="rounded-xl border border-line bg-paper-50 p-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Materials</p>
         <p className="mt-0.5 text-[15px] font-semibold text-ink-900">From this job file</p>
-        <div className="mt-2 whitespace-pre-wrap text-sm text-ink-700">{summary || 'No materials found on file yet.'}</div>
+        <div className="mt-2 whitespace-pre-wrap text-sm text-ink-700">
+          {(summary ?? '').split('MATERIALS_JSON:')[0].trim() || 'No materials found on file yet.'}
+        </div>
         <p className="mt-2 text-xs text-ink-500">
-          Quantities are taken only from evidence. Ask me to order these from Home Depot when you are ready — nothing is purchased until you Approve.
+          Quantities come only from the evidence. Ask me to order these from Home Depot when you’re ready. Nothing is
+          purchased until you Approve.
         </p>
       </div>
     );

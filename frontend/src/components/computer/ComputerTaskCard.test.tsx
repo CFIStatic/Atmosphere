@@ -349,3 +349,23 @@ describe('Computer live view CSP', () => {
     expect(frameSrc).toBe("'self' https://www.browserbase.com");
   });
 });
+
+describe('ComputerTaskCard materials list', () => {
+  it('renders the full table from a decoded card payload', async () => {
+    const { default: fixture } = await import('../../dev/hdOrderV2Fixture.json');
+    render(<ComputerTaskCard path="computer-task:materials-list" summary={fixture.materialsSummary as string} />);
+    expect(screen.getAllByTestId('materials-row')).toHaveLength(9);
+  });
+
+  it('falls back to the lead sentence only, never raw JSON', () => {
+    render(
+      <ComputerTaskCard
+        path="computer-task:materials-list"
+        summary={'Materials on this job file (9 items). Quantities marked unknown were not stated in the evidence.\nMATERIALS_JSON:{"rows":'}
+      />,
+    );
+    const card = screen.getByTestId('computer-materials-list');
+    expect(card.textContent).not.toMatch(/MATERIALS_JSON/);
+    expect(card.textContent).toMatch(/Materials on this job file \(9 items\)/);
+  });
+});
