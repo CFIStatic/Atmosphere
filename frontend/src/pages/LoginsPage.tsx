@@ -9,6 +9,7 @@ import {
   type LoginCatalogEntry,
 } from '../lib/computer';
 import {
+  HostLogo,
   LoginCatalogPicker,
   SiteBadges,
   SiteLogo,
@@ -754,7 +755,9 @@ export function LoginsPage() {
               return (
                 <li key={login.id} className="px-4 py-3" data-testid={`login-row-${login.id}`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <HostLogo host={login.host} name={login.label} size="md" />
+                      <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink-900">{login.label}</p>
                       <p className="truncate text-xs text-ink-600">{login.host}</p>
                       <p className="mt-0.5 text-xs text-ink-500">
@@ -798,6 +801,7 @@ export function LoginsPage() {
                             : 'Ask a Global Admin to update it.'}
                         </p>
                       ) : null}
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {confirmForget === login.id ? (
