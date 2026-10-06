@@ -403,7 +403,7 @@ export async function matchHomeDepotProduct(
     } else {
       notes = `Home Depot search wasn't reachable from the server (status ${res.status}). Computer will match it in the browser.`;
     }
-  } catch (err) {
+  } catch {
     notes = "Home Depot search wasn't reachable from the server. Computer will match it in the browser.";
   }
 

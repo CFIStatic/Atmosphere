@@ -609,9 +609,19 @@ test('supply cart Approve records exactly the checked lines on the approval and 
     ['305213039', 3, 'person', 15474],
   ]);
   assert.deepEqual(row?.approved_order?.excluded.map((e) => e.sku), ['202911152']);
-  const audit = h.store.audit.find((e) => e.event === 'approved' && (e.detail as any).approvalId === undefined && (e.detail as any).orderFingerprint);
+  type ApprovedAudit = {
+    approvalId?: string;
+    orderFingerprint?: string;
+    approvedLines: Array<{ sku: string }>;
+    excludedLines: Array<{ sku: string }>;
+  };
+  const audit = h.store.audit.find((e) => {
+    const d = e.detail as Partial<ApprovedAudit>;
+    return e.event === 'approved' && d.approvalId === undefined && Boolean(d.orderFingerprint);
+  });
   assert.ok(audit, 'audit has the approved order');
-  assert.equal((audit!.detail as any).orderFingerprint, row?.approved_order?.fingerprint);
-  assert.deepEqual((audit!.detail as any).approvedLines.map((l: any) => l.sku), ['305213039']);
-  assert.deepEqual((audit!.detail as any).excludedLines.map((l: any) => l.sku), ['202911152']);
+  const detail = audit!.detail as ApprovedAudit;
+  assert.equal(detail.orderFingerprint, row?.approved_order?.fingerprint);
+  assert.deepEqual(detail.approvedLines.map((l) => l.sku), ['305213039']);
+  assert.deepEqual(detail.excludedLines.map((l) => l.sku), ['202911152']);
 });

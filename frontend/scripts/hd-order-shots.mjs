@@ -15,7 +15,11 @@ await page.waitForSelector('[data-testid="computer-approval-card"]');
 
 const shot = page.locator('[data-testid="approve-shot"]');
 const line = (material) => page.locator('[data-testid="order-line"]', { hasText: `For ${material}` });
-const approveLabel = () => page.locator('[data-testid="computer-approval-approve"]').innerText();
+const approveLabel = async () => ({
+  button: await page.locator('[data-testid="computer-approval-approve"]').innerText(),
+  summary: await page.locator('[data-testid="order-live-summary"]').innerText(),
+  total: await page.locator('[data-testid="order-total-amount"]').innerText(),
+});
 const caption = (text) =>
   page.evaluate((t) => { document.querySelector('[data-testid="example-caption"]').textContent = t; }, text);
 const report = {};

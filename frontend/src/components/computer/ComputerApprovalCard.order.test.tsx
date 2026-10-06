@@ -47,21 +47,26 @@ describe('ComputerApprovalCard (per-line checkboxes)', () => {
     expect(within(byMaterial('base cabinet')).getByTestId('order-line-check')).not.toBeChecked();
     expect(within(byMaterial('birch plywood')).getByTestId('order-line-check')).toBeDisabled();
     const approve = screen.getByTestId('computer-approval-approve');
+    const summary = screen.getByTestId('order-live-summary');
     expect(approve).toHaveTextContent('Approve 1 item, $73.44');
+    expect(summary).toHaveTextContent('1 of 7 items checked, $73.44. 5 still need a quantity and 3 need your choice.');
 
     // Confirm the low-confidence cabinet: total updates live.
     fireEvent.click(within(byMaterial('base cabinet')).getByTestId('order-line-check'));
     expect(approve).toHaveTextContent('Approve 2 items, $292.44');
+    expect(summary).toHaveTextContent('2 of 7 items checked, $292.44. 5 still need a quantity and 2 need your choice.');
     expect(screen.getByTestId('order-total-amount')).toHaveTextContent('$292.44');
 
     // Typing a quantity fixes an unknown-qty line and checks it.
     fireEvent.change(within(byMaterial('birch plywood')).getByTestId('order-line-qty-input'), { target: { value: '2' } });
     expect(within(byMaterial('birch plywood')).getByTestId('order-line-check')).toBeChecked();
     expect(approve).toHaveTextContent('Approve 3 items, $395.60');
+    expect(summary).toHaveTextContent('3 of 7 items checked, $395.60. 4 still need a quantity and 2 need your choice.');
 
     // Unchecking removes it from the total.
     fireEvent.click(within(byMaterial('laminate countertop')).getByTestId('order-line-check'));
     expect(approve).toHaveTextContent('Approve 2 items, $322.16');
+    expect(summary).toHaveTextContent('2 of 7 items checked, $322.16. 4 still need a quantity and 2 need your choice.');
     expect(within(byMaterial('laminate countertop')).getByTestId('order-line-total')).toHaveTextContent('Not in order');
 
     fireEvent.click(approve);
@@ -75,5 +80,23 @@ describe('ComputerApprovalCard (per-line checkboxes)', () => {
     fireEvent.click(within(lam).getByTestId('order-line-check'));
     expect(screen.getByTestId('computer-approval-approve')).toBeDisabled();
     expect(screen.getByTestId('computer-approval-approve')).toHaveTextContent('Check an item to approve');
+  });
+});
+
+describe('ComputerApprovalCard (live summary)', () => {
+  it('reads "All N items checked" once every line is fixed and checked', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(<ComputerApprovalCard approval={approval} onApprove={() => {}} onTakeControl={() => {}} onCancel={() => {}} />);
+    const rows = screen.getAllByTestId('order-line');
+    for (const r of rows) {
+      const input = within(r).queryByTestId('order-line-qty-input');
+      if (input) fireEvent.change(input, { target: { value: '1' } });
+      const box = within(r).getByTestId('order-line-check') as HTMLInputElement;
+      if (!box.checked) fireEvent.click(box);
+    }
+    const total = screen.getByTestId('order-total-amount').textContent!;
+    expect(screen.getByTestId('order-live-summary')).toHaveTextContent(`All 7 items checked, ${total}.`);
+    expect(screen.getByTestId('order-live-summary').textContent).not.toMatch(/need/);
+    expect(screen.getByTestId('computer-approval-approve')).toHaveTextContent(`Approve 7 items, ${total}`);
   });
 });

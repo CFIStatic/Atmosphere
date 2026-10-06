@@ -4,7 +4,7 @@
 create table if not exists public.computer_supply_orders (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.orgs(id) on delete cascade,
-  job_id uuid references public.jobs(id) on delete set null,
+  job_id uuid references public.crm_jobs(id) on delete set null,
   task_id uuid,
   approval_id uuid,
   vendor text not null,

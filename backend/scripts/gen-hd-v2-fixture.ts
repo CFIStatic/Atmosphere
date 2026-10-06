@@ -42,7 +42,7 @@ async function main() {
     documents: [],
   };
 
-  const list = extractJobMaterials(file as any, null);
+  const list = extractJobMaterials(file as unknown as Parameters<typeof extractJobMaterials>[0], null);
   const rows = materialsRowsForUi(list, { jobId: JOB_ID });
   const summary = formatMaterialsListForChat(list, { jobId: JOB_ID });
 

@@ -162,6 +162,28 @@ function rowStates(order: ParsedOrderApproval, checked: Record<string, boolean>,
   });
 }
 
+/**
+ * Summary line for the order card, computed from the same row state as the
+ * total and the Approve button so the three always agree.
+ */
+function liveOrderSummary(rows: OrderRowState[], totalCents: number): string {
+  const checkedRows = rows.filter((r) => r.checked);
+  const needQty = rows.filter((r) => r.line.flags.includes('qty_unknown') && r.qty == null).length;
+  const needChoice = rows.filter((r) => r.line.flags.includes('needs_choice') && !r.checked).length;
+  const unpriced = checkedRows.filter((r) => r.lineCents == null).length;
+  const head =
+    checkedRows.length === rows.length
+      ? `All ${rows.length} ${rows.length === 1 ? 'item' : 'items'} checked, ${formatCents(totalCents)}.`
+      : `${checkedRows.length} of ${rows.length} items checked, ${formatCents(totalCents)}.`;
+  const todo: string[] = [];
+  if (needQty) todo.push(`${needQty} still ${needQty === 1 ? 'needs' : 'need'} a quantity`);
+  if (needChoice) todo.push(`${needChoice} ${needChoice === 1 ? 'needs' : 'need'} your choice`);
+  const parts = [head];
+  if (todo.length) parts.push(`${todo.join(' and ')}.`.replace(/^./, (c) => c.toUpperCase()));
+  if (unpriced) parts.push(`${unpriced} checked ${unpriced === 1 ? 'item has' : 'items have'} no price yet and ${unpriced === 1 ? "isn't" : "aren't"} in the total.`);
+  return parts.join(' ');
+}
+
 function OrderLineRow({
   row,
   onToggle,
@@ -429,7 +451,9 @@ export function ComputerApprovalCard({
         <p className="mt-0.5 text-[15px] font-semibold text-ink-900" data-testid="computer-approval-title">
           {title}
         </p>
-        <p className="mt-1 text-sm text-ink-700">{approval.summary}</p>
+        <p className="mt-1 text-sm text-ink-700" data-testid={order ? 'order-live-summary' : undefined}>
+          {order ? liveOrderSummary(rows, totalCents) : approval.summary}
+        </p>
         {isOrder ? (
           <p className="mt-1 text-[12px] font-medium text-ink-700" data-testid="computer-approval-order-note">
             {order?.payment

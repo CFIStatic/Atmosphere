@@ -6586,6 +6586,43 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20261005220000_computer_supply_orders",
+      "file": "20261005220000_computer_supply_orders.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.computer_approvals.approved_order",
+        "column|public.computer_supply_orders.approval_id",
+        "column|public.computer_supply_orders.created_at",
+        "column|public.computer_supply_orders.created_by",
+        "column|public.computer_supply_orders.currency",
+        "column|public.computer_supply_orders.detail",
+        "column|public.computer_supply_orders.fulfillment_mode",
+        "column|public.computer_supply_orders.has_job_address",
+        "column|public.computer_supply_orders.id",
+        "column|public.computer_supply_orders.job_id",
+        "column|public.computer_supply_orders.line_count",
+        "column|public.computer_supply_orders.low_confidence_count",
+        "column|public.computer_supply_orders.order_key_hash",
+        "column|public.computer_supply_orders.org_id",
+        "column|public.computer_supply_orders.status",
+        "column|public.computer_supply_orders.subtotal_cents",
+        "column|public.computer_supply_orders.task_id",
+        "column|public.computer_supply_orders.updated_at",
+        "column|public.computer_supply_orders.vendor",
+        "index|public.computer_supply_orders.computer_supply_orders_job_idx",
+        "index|public.computer_supply_orders.computer_supply_orders_order_key_unique",
+        "index|public.computer_supply_orders.computer_supply_orders_org_created_idx",
+        "index|public.computer_supply_orders.computer_supply_orders_pkey",
+        "policy|public.computer_supply_orders.computer_supply_orders_org_select",
+        "rls|public.computer_supply_orders",
+        "table|public.computer_supply_orders"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
     }
   ]
 }
