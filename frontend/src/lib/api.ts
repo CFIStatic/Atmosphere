@@ -7,6 +7,7 @@
  */
 
 import { appShellSafeBillingText, isInAppShell } from './appShell';
+import type { ComputerOrderSelection } from './supplyOrderApproval';
 import type {
   ComputerLiveLink,
   ComputerLogin,
@@ -6134,8 +6135,12 @@ export const api = {
   computerCancel: (id: string) =>
     request<{ ok: true }>(`/api/chat-computer/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
 
-  computerApprove: (approvalId: string) =>
-    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/approve`, { method: 'POST' }),
+  /** `selection` = the cart lines the person checked on a supply-order Approve card. */
+  computerApprove: (approvalId: string, selection?: ComputerOrderSelection) =>
+    request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/approve`, {
+      method: 'POST',
+      ...(selection ? { body: JSON.stringify(selection) } : {}),
+    }),
 
   computerCancelApproval: (approvalId: string) =>
     request<{ ok: true }>(`/api/chat-computer/approvals/${encodeURIComponent(approvalId)}/cancel`, { method: 'POST' }),

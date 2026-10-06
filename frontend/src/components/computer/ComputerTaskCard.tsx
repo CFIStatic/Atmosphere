@@ -14,7 +14,8 @@ import { SpinnerIcon } from '../icons';
 import { ComputerApprovalCard } from './ComputerApprovalCard';
 import { ComputerLiveView } from './ComputerLiveView';
 import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
-import { MaterialsListCard, parseMaterialsSummary } from './MaterialsListCard';
+import { MaterialsListCard } from './MaterialsListCard';
+import { parseMaterialsSummary } from '../../lib/materialsList';
 
 const POLL_MS = 1500;
 
@@ -202,9 +203,12 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
 
       {task.status === 'awaiting_approval' && task.approval && task.approval.status === 'pending' ? (
         <ComputerApprovalCard
+          key={task.approval.id}
           approval={task.approval}
           busy={busy}
-          onApprove={() => act(() => api.computerApprove(task.approval!.id))}
+          onApprove={(selection) =>
+            act(() => (selection ? api.computerApprove(task.approval!.id, selection) : api.computerApprove(task.approval!.id)))
+          }
           onTakeControl={takeControl}
           onCancel={() => act(() => api.computerCancelApproval(task.approval!.id))}
         />

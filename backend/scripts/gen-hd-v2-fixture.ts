@@ -63,16 +63,7 @@ async function main() {
     const bi = priority.findIndex((r) => r.test(b.item));
     return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
   });
-  const uniq: typeof ranked = [];
-  const seen = new Set<string>();
-  for (const it of ranked) {
-    const k = it.item.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    uniq.push(it);
-    if (uniq.length >= 5) break;
-  }
-  const top = { ...list, items: uniq };
+  const top = { ...list, items: ranked };
 
   const matches = await matchMaterialsForVendor(top, 'home_depot', async () => ({
     ok: false,
@@ -104,6 +95,7 @@ async function main() {
     cart: {
       subtotalCents: cart.subtotalCents,
       lineCount: cart.lines.length,
+      notAdded: cart.notAdded,
       lines: cart.lines.map((l) => ({
         item: l.match.materialItem,
         product: l.match.productName,

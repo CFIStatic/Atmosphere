@@ -11,6 +11,7 @@ import type { ContentBlock, ComputerModel, ComputerModelRequest, ComputerModelRe
 import { computerSettings } from '../src/computer/config.js';
 import { MockComputerProvider, MockSite } from '../src/computer/providers/mock.js';
 import { setComputerProviderForTests } from '../src/computer/providers/index.js';
+import { buildSupplyCart, checkFulfillment } from '../src/computer/supplyOrder.js';
 import { cancelTask, decideApproval, resumeTask, startComputerTask, mintLiveView, loadTaskView } from '../src/computer/service.js';
 import { MemoryComputerStore } from '../src/computer/store.js';
 import { runComputerTask, setComputerWorkerDepsForTests } from '../src/computer/worker.js';
@@ -574,4 +575,43 @@ test('live view: short-lived per-viewer links, never stored or audited; control 
   assert.ok(!dump.includes('live.mock.invalid'), 'no live URL is stored or audited');
   assert.ok(h.store.audit.some((e) => e.event === 'took_control'));
   assert.ok(h.store.audit.some((e) => e.event === 'live_view_opened'));
+});
+
+test('supply cart Approve records exactly the checked lines on the approval and in the audit', async () => {
+  const h = await setup({ turns: [[tool('finish', { summary: 'ok' })]] });
+  const base = {
+    materialSpec: null, unit: 'each', currency: 'USD' as const, alternatives: [], searchQuery: 'q',
+    searchUrl: 'https://www.homedepot.com/s/q', notes: null,
+  };
+  const matches = [
+    { ...base, materialId: 'a', materialItem: 'laminate countertop', quantity: 1, productName: 'FORMICA Laminate Sheet', sku: '202911152', url: 'https://www.homedepot.com/p/x/202911152', priceCents: 7344, confidence: 'medium' as const },
+    { ...base, materialId: 'b', materialItem: 'birch plywood', quantity: null, unit: null, productName: 'Swaner Birch Plywood', sku: '305213039', url: 'https://www.homedepot.com/p/x/305213039', priceCents: 5158, confidence: 'medium' as const },
+  ];
+  const cart = buildSupplyCart({ vendor: 'home_depot', matches, fulfillment: checkFulfillment({ jobAddress: null, matches }) });
+  const insert = () =>
+    h.store.insertApproval({
+      org_id: ORG, task_id: h.taskId, action_kind: 'pay', button_label: 'Place Order', summary: cart.summary,
+      page_url: 'https://www.homedepot.com/checkout', page_origin: 'https://www.homedepot.com', fields: cart.approvalFields,
+      screenshot_jpeg_b64: 'x', token_hash: 'x', expires_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+  const a1 = await insert();
+  await assert.rejects(
+    decideApproval(ORG, a1.id, USER, 'approve', { lines: [{ key: 'L2:305213039' }] }),
+    /Enter a quantity/,
+  );
+  assert.equal((await h.store.getApproval(null, a1.id))?.status, 'pending', 'a bad selection approves nothing');
+
+  await decideApproval(ORG, a1.id, USER, 'approve', { lines: [{ key: 'L2:305213039', quantity: 3 }] });
+  const row = await h.store.getApproval(null, a1.id);
+  assert.equal(row?.status, 'approved');
+  assert.deepEqual(row?.approved_order?.lines.map((l) => [l.sku, l.quantity, l.quantitySource, l.lineTotalCents]), [
+    ['305213039', 3, 'person', 15474],
+  ]);
+  assert.deepEqual(row?.approved_order?.excluded.map((e) => e.sku), ['202911152']);
+  const audit = h.store.audit.find((e) => e.event === 'approved' && (e.detail as any).approvalId === undefined && (e.detail as any).orderFingerprint);
+  assert.ok(audit, 'audit has the approved order');
+  assert.equal((audit!.detail as any).orderFingerprint, row?.approved_order?.fingerprint);
+  assert.deepEqual((audit!.detail as any).approvedLines.map((l: any) => l.sku), ['305213039']);
+  assert.deepEqual((audit!.detail as any).excludedLines.map((l: any) => l.sku), ['202911152']);
 });

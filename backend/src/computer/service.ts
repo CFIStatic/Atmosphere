@@ -4,6 +4,13 @@
  * Ask tool's org access), and every lookup is filtered by it.
  */
 import { parseTaskResult } from './result.js';
+import {
+  isPlaceOrderLikeApproval,
+  OrderSelectionError,
+  orderLinesFromApprovalFields,
+  resolveOrderSelection,
+  type ApprovedOrderSelection,
+} from './supplyOrder.js';
 import type { JobFileAskContext } from '../shared/jobFileAsk.js';
 import { computerSettings, NOT_SET_UP_MESSAGE } from './config.js';
 import { projectJobForComputer } from './projection.js';
@@ -306,7 +313,13 @@ export async function cancelTask(orgId: string, taskId: string, userId: string) 
   await audit(orgId, task, userId, 'cancel_requested', {});
 }
 
-export async function decideApproval(orgId: string, approvalId: string, userId: string, decision: 'approve' | 'cancel') {
+export async function decideApproval(
+  orgId: string,
+  approvalId: string,
+  userId: string,
+  decision: 'approve' | 'cancel',
+  opts: { lines?: Array<{ key: string; quantity?: number | null }> | null } = {},
+) {
   const store = computerStore();
   if (!store) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
   const approval = await store.getApproval(orgId, approvalId);
@@ -320,9 +333,53 @@ export async function decideApproval(orgId: string, approvalId: string, userId: 
       'incomplete_preview',
     );
   }
-  const ok = await store.decideApproval(approval.id, decision === 'approve' ? 'approved' : 'canceled', userId);
+  // Supply carts: the person checks which lines to order. Validate against the
+  // approval's own fields (prices and evidence quantities never come from the client).
+  let approvedOrder: ApprovedOrderSelection | null = null;
+  const cartLines =
+    decision === 'approve' && isPlaceOrderLikeApproval(approval.button_label, approval.action_kind)
+      ? orderLinesFromApprovalFields(approval.fields ?? [])
+      : [];
+  if (cartLines.length) {
+    const selected =
+      opts.lines ??
+      // Older clients send no selection: approve only the lines that need nothing from the person.
+      cartLines.filter((l) => !l.needsChoice && l.quantity != null).map((l) => ({ key: l.key }));
+    try {
+      approvedOrder = resolveOrderSelection({
+        fields: approval.fields ?? [],
+        origin: approval.page_origin,
+        buttonLabel: approval.button_label,
+        selected,
+      });
+    } catch (err) {
+      if (err instanceof OrderSelectionError) throw new ComputerServiceError(err.message, 'bad_request');
+      throw err;
+    }
+  }
+  const ok = await store.decideApproval(approval.id, decision === 'approve' ? 'approved' : 'canceled', userId, {
+    approved_order: approvedOrder,
+  });
   if (!ok) throw new ComputerServiceError('This approval is no longer open.', 'conflict');
   await audit(orgId, task, userId, decision === 'approve' ? 'approved' : 'approval_canceled', {
+    ...(approvedOrder
+      ? {
+          approvedLines: approvedOrder.lines.map((l) => ({
+            key: l.key,
+            material: l.material,
+            product: l.productName,
+            sku: l.sku,
+            quantity: l.quantity,
+            quantitySource: l.quantitySource,
+            unitPriceCents: l.unitPriceCents,
+            lineTotalCents: l.lineTotalCents,
+            confirmedChoice: l.confirmedChoice,
+          })),
+          excludedLines: approvedOrder.excluded,
+          approvedSubtotalCents: approvedOrder.subtotalCents,
+          orderFingerprint: approvedOrder.fingerprint,
+        }
+      : {}),
     kind: approval.action_kind,
     label: approval.button_label,
     pageUrl: approval.page_url,

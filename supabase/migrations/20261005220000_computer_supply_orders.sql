@@ -44,3 +44,11 @@ create policy computer_supply_orders_org_select
 
 revoke insert, update, delete on public.computer_supply_orders from authenticated, anon;
 grant select on public.computer_supply_orders to authenticated;
+
+-- Per-line Approve: which cart lines the person checked (and quantities they typed),
+-- with the fingerprint of exactly that order. No card data.
+alter table public.computer_approvals
+  add column if not exists approved_order jsonb;
+
+comment on column public.computer_approvals.approved_order is
+  'Supply carts: approved lines (sku, qty, qty source, line total), excluded lines, subtotal, and order fingerprint.';

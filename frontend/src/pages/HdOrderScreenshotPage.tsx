@@ -41,6 +41,14 @@ export default function HdOrderScreenshotPage() {
 
       <section className="mx-auto max-w-3xl space-y-2" data-testid="approve-shot">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Approve card</p>
+        <p
+          className="rounded-md border border-dashed border-ink-300 bg-paper-0 px-2.5 py-1.5 text-[12px] text-ink-700"
+          data-testid="example-data-label"
+        >
+          <span className="font-semibold">Example data.</span> This cart was not built on homedepot.com and no order was
+          placed. Products and prices are public Home Depot listings found Oct 5, 2026.
+          <span className="block font-medium text-ink-900 empty:hidden" data-testid="example-caption" />
+        </p>
         <ComputerApprovalCard
           approval={approval}
           busy={false}

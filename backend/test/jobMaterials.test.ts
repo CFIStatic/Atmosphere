@@ -4,6 +4,7 @@ import {
   extractJobMaterials,
   formatMaterialsListForChat,
   looksLikeMaterialsListAsk,
+  materialsRowsForUi,
 } from '../src/shared/jobMaterials.js';
 
 const FILE = {
@@ -72,4 +73,23 @@ test('unknown quantity when not in evidence', () => {
   const ridge = list.items.find((i) => /ridge/i.test(i.item));
   assert.ok(ridge);
   assert.equal(ridge!.quantity, null);
+});
+
+test('one source chip per clip, keeping the moment that names the item', () => {
+  const list = extractJobMaterials({
+    clips: [
+      {
+        workDate: '2026-10-04',
+        proofId: 'cedca9e4-5f44-4094-bd03-e4289f44e183',
+        summary: 'Laminate countertop measured on the bench.',
+        transcript: '[0:00] The countertop is not on yet.\n[0:08] Measuring the laminate countertop. 61 and a half inches.',
+      },
+    ],
+  } as never);
+  const rows = materialsRowsForUi(list, { jobId: '058b09a8-3ca0-4d29-b554-4c54de26dea5' });
+  const lam = rows.find((r) => r.item === 'laminate countertop');
+  assert.ok(lam);
+  assert.equal(lam!.sources.length, 1);
+  assert.equal(lam!.sources[0].atSeconds, 8);
+  assert.match(lam!.sources[0].label, /0:08/);
 });

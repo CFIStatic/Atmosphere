@@ -7,7 +7,7 @@
     "workDate": "2026-10-04",
     "clipTitle": "Cabinets, countertop and floors — day 1"
   },
-  "materialsSummary": "Materials on this job file (9 items). Quantities marked unknown were not stated in the evidence.\nMATERIALS_JSON:{\"rows\":[{\"id\":\"base-cabinet-7\",\"item\":\"base cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16\",\"label\":\"Clip · 2026-10-04 · 0:16\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":16,\"workDate\":\"2026-10-04\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"birch-plywood-3\",\"item\":\"birch plywood\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"caulk-11\",\"item\":\"caulk\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"construction-adhesive-5\",\"item\":\"construction adhesive\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16\",\"label\":\"Clip · 2026-10-04 · 0:16\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":16,\"workDate\":\"2026-10-04\"}]},{\"id\":\"crown-molding-9\",\"item\":\"crown molding\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40\",\"label\":\"Clip · 2026-10-04 · 0:40\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":40,\"workDate\":\"2026-10-04\"}]},{\"id\":\"finished-nails-10\",\"item\":\"finished nails\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"flooring-6\",\"item\":\"flooring\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@47\",\"label\":\"Clip · 2026-10-04 · 0:47\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":47,\"workDate\":\"2026-10-04\"}]},{\"id\":\"laminate-countertop-1\",\"item\":\"laminate countertop\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@8\",\"label\":\"Clip · 2026-10-04 · 0:08\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":8,\"workDate\":\"2026-10-04\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"upper-cabinet-8\",\"item\":\"upper cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@32\",\"label\":\"Clip · 2026-10-04 · 0:32\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":32,\"workDate\":\"2026-10-04\"}]}]}",
+  "materialsSummary": "Materials on this job file (9 items). Quantities marked unknown were not stated in the evidence.\nMATERIALS_JSON:{\"rows\":[{\"id\":\"base-cabinet-7\",\"item\":\"base cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@0\",\"label\":\"Clip · 2026-10-04 · 0:00\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":0,\"workDate\":\"2026-10-04\"}]},{\"id\":\"birch-plywood-3\",\"item\":\"birch plywood\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"caulk-11\",\"item\":\"caulk\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@53\",\"label\":\"Clip · 2026-10-04 · 0:53\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":53,\"workDate\":\"2026-10-04\"}]},{\"id\":\"construction-adhesive-5\",\"item\":\"construction adhesive\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16\",\"label\":\"Clip · 2026-10-04 · 0:16\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":16,\"workDate\":\"2026-10-04\"}]},{\"id\":\"crown-molding-9\",\"item\":\"crown molding\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40\",\"label\":\"Clip · 2026-10-04 · 0:40\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":40,\"workDate\":\"2026-10-04\"}]},{\"id\":\"finished-nails-10\",\"item\":\"finished nails\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40\",\"label\":\"Clip · 2026-10-04 · 0:40\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":40,\"workDate\":\"2026-10-04\"}]},{\"id\":\"flooring-6\",\"item\":\"flooring\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@47\",\"label\":\"Clip · 2026-10-04 · 0:47\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":47,\"workDate\":\"2026-10-04\"}]},{\"id\":\"laminate-countertop-1\",\"item\":\"laminate countertop\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@8\",\"label\":\"Clip · 2026-10-04 · 0:08\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":8,\"workDate\":\"2026-10-04\"}]},{\"id\":\"upper-cabinet-8\",\"item\":\"upper cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@32\",\"label\":\"Clip · 2026-10-04 · 0:32\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":32,\"workDate\":\"2026-10-04\"}]}]}",
   "materialsRows": [
     {
       "id": "base-cabinet-7",
@@ -17,29 +17,13 @@
       "unit": "each",
       "sources": [
         {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
-        {
-          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16",
-          "label": "Clip · 2026-10-04 · 0:16",
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@0",
+          "label": "Clip · 2026-10-04 · 0:00",
           "section": "videos",
           "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
           "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "atSeconds": 16,
+          "atSeconds": 0,
           "workDate": "2026-10-04"
-        },
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
         }
       ]
     },
@@ -50,14 +34,6 @@
       "quantity": null,
       "unit": null,
       "sources": [
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
         {
           "id": "clip:2026-10-04",
           "label": "Clip · 2026-10-04",
@@ -76,12 +52,13 @@
       "unit": null,
       "sources": [
         {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@53",
+          "label": "Clip · 2026-10-04 · 0:53",
           "section": "videos",
-          "workDate": "2026-10-04",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
           "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+          "atSeconds": 53,
+          "workDate": "2026-10-04"
         }
       ]
     },
@@ -92,22 +69,6 @@
       "quantity": null,
       "unit": null,
       "sources": [
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
         {
           "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16",
           "label": "Clip · 2026-10-04 · 0:16",
@@ -145,12 +106,13 @@
       "unit": null,
       "sources": [
         {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40",
+          "label": "Clip · 2026-10-04 · 0:40",
           "section": "videos",
-          "workDate": "2026-10-04",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
           "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+          "atSeconds": 40,
+          "workDate": "2026-10-04"
         }
       ]
     },
@@ -161,14 +123,6 @@
       "quantity": null,
       "unit": null,
       "sources": [
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
         {
           "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@47",
           "label": "Clip · 2026-10-04 · 0:47",
@@ -188,14 +142,6 @@
       "unit": "each",
       "sources": [
         {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
-        },
-        {
           "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@8",
           "label": "Clip · 2026-10-04 · 0:08",
           "section": "videos",
@@ -203,14 +149,6 @@
           "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
           "atSeconds": 8,
           "workDate": "2026-10-04"
-        },
-        {
-          "id": "clip:2026-10-04",
-          "label": "Clip · 2026-10-04",
-          "section": "videos",
-          "workDate": "2026-10-04",
-          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
-          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
         }
       ]
     },
@@ -236,7 +174,7 @@
   "approve": {
     "actionKind": "pay",
     "buttonLabel": "Place Order",
-    "summary": "Home Depot cart for 5 materials · priced lines $292.44 · 3 lines not priced yet · fulfillment TBD · 2 low-confidence matches to confirm. Nothing is purchased until you press Approve.",
+    "summary": "7 items, $292.44 priced so far. 5 need a quantity and 3 need your choice.",
     "pageUrl": "https://www.homedepot.com/checkout/review-order",
     "fields": [
       {
@@ -301,7 +239,7 @@
       },
       {
         "label": "Stock / substitution",
-        "value": "Low-confidence size match — confirm width before Approve.",
+        "value": "Low-confidence size match. Confirm the width before you approve.",
         "source": "Catalog check",
         "verified": false
       },
@@ -319,8 +257,8 @@
       },
       {
         "label": "Quantity",
-        "value": "Unknown — not stated in evidence",
-        "source": "Unknown in evidence — do not guess",
+        "value": "Unknown: not stated in the evidence",
+        "source": "Not in the evidence, so not guessed",
         "verified": false
       },
       {
@@ -331,7 +269,7 @@
       },
       {
         "label": "Line total",
-        "value": "Not priced — quantity unknown",
+        "value": "Not priced: quantity unknown",
         "source": "Excluded from cart total",
         "verified": false
       },
@@ -349,8 +287,8 @@
       },
       {
         "label": "Quantity",
-        "value": "Unknown — not stated in evidence",
-        "source": "Unknown in evidence — do not guess",
+        "value": "Unknown: not stated in the evidence",
+        "source": "Not in the evidence, so not guessed",
         "verified": false
       },
       {
@@ -361,7 +299,7 @@
       },
       {
         "label": "Line total",
-        "value": "Not priced — quantity unknown",
+        "value": "Not priced: quantity unknown",
         "source": "Excluded from cart total",
         "verified": false
       },
@@ -379,8 +317,8 @@
       },
       {
         "label": "Quantity",
-        "value": "Unknown — not stated in evidence",
-        "source": "Unknown in evidence — do not guess",
+        "value": "Unknown: not stated in the evidence",
+        "source": "Not in the evidence, so not guessed",
         "verified": false
       },
       {
@@ -391,13 +329,79 @@
       },
       {
         "label": "Line total",
-        "value": "Not priced — quantity unknown",
+        "value": "Not priced: quantity unknown",
         "source": "Excluded from cart total",
         "verified": false
       },
       {
         "label": "Stock / substitution",
-        "value": "Profile not specified in evidence — confirm before Approve.",
+        "value": "The profile isn't in the evidence. Confirm it before you approve.",
+        "source": "Catalog check",
+        "verified": false
+      },
+      {
+        "label": "Job material",
+        "value": "caulk",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "DAP Alex Plus 10.1 oz. White Acrylic Latex Caulk Plus Silicone · Internet #100097524 · https://www.homedepot.com/p/DAP-Alex-Plus-10-1-oz-White-Acrylic-Latex-Caulk-Plus-Silicone-18103/100097524",
+        "source": "Home Depot public listing",
+        "verified": true
+      },
+      {
+        "label": "Quantity",
+        "value": "Unknown: not stated in the evidence",
+        "source": "Not in the evidence, so not guessed",
+        "verified": false
+      },
+      {
+        "label": "Unit price",
+        "value": "$3.98",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "Not priced: quantity unknown",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Job material",
+        "value": "finished nails · low-confidence match",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "Grip-Rite 2 in. x 13-Gauge 6-penny Bright Steel Finish Nails 1 lb. Box · Internet #100027781 · https://www.homedepot.com/p/Grip-Rite-2-in-x-13-Gauge-6-penny-Bright-Steel-Finish-Nails-1-lb-Box-6F1/100027781",
+        "source": "Needs your choice",
+        "verified": false
+      },
+      {
+        "label": "Quantity",
+        "value": "Unknown: not stated in the evidence",
+        "source": "Not in the evidence, so not guessed",
+        "verified": false
+      },
+      {
+        "label": "Unit price",
+        "value": "$7.82",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "Not priced: quantity unknown",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Stock / substitution",
+        "value": "Matched from a public Home Depot listing. Computer confirms it on the site before checkout.",
         "source": "Catalog check",
         "verified": false
       },
@@ -409,19 +413,31 @@
       },
       {
         "label": "Not priced yet",
-        "value": "birch plywood (quantity unknown); construction adhesive (quantity unknown); crown molding (quantity unknown)",
+        "value": "birch plywood (quantity unknown); construction adhesive (quantity unknown); crown molding (quantity unknown); caulk (quantity unknown); finished nails (quantity unknown)",
         "source": "Excluded from cart total",
         "verified": false
       },
       {
+        "label": "Not added",
+        "value": "upper cabinet — Spec needed: the cabinet size isn't in the evidence.",
+        "source": "Left out of the cart",
+        "verified": false
+      },
+      {
+        "label": "Not added",
+        "value": "flooring — Spec needed: the flooring type and area aren't in the evidence.",
+        "source": "Left out of the cart",
+        "verified": false
+      },
+      {
         "label": "Fulfillment",
-        "value": "Confirm delivery or pickup on the site",
+        "value": "Not chosen yet. Confirm on the site.",
         "source": "Needs confirmation",
         "verified": false
       },
       {
         "label": "Payment",
-        "value": "Use the card already saved on the Home Depot account. Atmosphere never handles raw card numbers.",
+        "value": "The card already saved on your Home Depot account. Atmosphere never sees card numbers.",
         "source": "Account on file",
         "verified": true
       }
@@ -430,7 +446,19 @@
   },
   "cart": {
     "subtotalCents": 29244,
-    "lineCount": 5,
+    "lineCount": 7,
+    "notAdded": [
+      {
+        "materialId": "upper-cabinet-8",
+        "item": "upper cabinet",
+        "reason": "Spec needed: the cabinet size isn't in the evidence."
+      },
+      {
+        "materialId": "flooring-6",
+        "item": "flooring",
+        "reason": "Spec needed: the flooring type and area aren't in the evidence."
+      }
+    ],
     "lines": [
       {
         "item": "laminate countertop",
@@ -484,6 +512,28 @@
         "qty": null,
         "unit": null,
         "unitPriceCents": 2088,
+        "lineTotalCents": null,
+        "confidence": "low"
+      },
+      {
+        "item": "caulk",
+        "product": "DAP Alex Plus 10.1 oz. White Acrylic Latex Caulk Plus Silicone",
+        "sku": "100097524",
+        "url": "https://www.homedepot.com/p/DAP-Alex-Plus-10-1-oz-White-Acrylic-Latex-Caulk-Plus-Silicone-18103/100097524",
+        "qty": null,
+        "unit": null,
+        "unitPriceCents": 398,
+        "lineTotalCents": null,
+        "confidence": "medium"
+      },
+      {
+        "item": "finished nails",
+        "product": "Grip-Rite 2 in. x 13-Gauge 6-penny Bright Steel Finish Nails 1 lb. Box",
+        "sku": "100027781",
+        "url": "https://www.homedepot.com/p/Grip-Rite-2-in-x-13-Gauge-6-penny-Bright-Steel-Finish-Nails-1-lb-Box-6F1/100027781",
+        "qty": null,
+        "unit": null,
+        "unitPriceCents": 782,
         "lineTotalCents": null,
         "confidence": "low"
       }

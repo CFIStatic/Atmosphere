@@ -300,6 +300,13 @@ export class MockDriver implements ComputerDriver {
       }));
   }
 
+  /** Tests set this to simulate a checkout page's text. */
+  pageText: string | null = null;
+
+  async visibleText(): Promise<string> {
+    return this.pageText ?? PAGES[this.site.page]?.text ?? '';
+  }
+
   async pageSignals(): Promise<PageSignals> {
     const els = this.site.elements();
     const numberMatch = this.site.page === 'number_match';

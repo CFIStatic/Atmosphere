@@ -6,6 +6,7 @@
  * unconsumed approval token for this task, this site and this button.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import type { ApprovedOrderSelection } from './supplyOrder.js';
 import type { ConsequentialKind, NeedsYouReason, TargetDescriptor } from './types.js';
 
 export type GateDecision =
@@ -185,6 +186,8 @@ export interface ApprovalTicket {
   buttonLabel: string;
   origin: string | null;
   expiresAt: number;
+  /** Supply carts: the lines the person checked; removed ones must be gone before the click. */
+  order?: ApprovedOrderSelection | null;
 }
 
 export function hashApprovalToken(token: string): string {

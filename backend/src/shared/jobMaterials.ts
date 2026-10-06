@@ -296,15 +296,19 @@ function harvestClip(acc: Acc, clip: CollectionClip, index: number): void {
   const date = String(clip.workDate ?? '').trim() || `clip ${index + 1}`;
   const label = `Clip · ${date}`;
   const clipId = clip.proofId ?? null;
-  const blobs: Array<{ kind: MaterialSourceKind; text: string }> = [];
+  const blobs: Array<{ kind: MaterialSourceKind; text: string; at?: number | null }> = [];
   if (clip.summary) blobs.push({ kind: 'clip', text: clip.summary });
   if (clip.narration && clip.narration !== clip.summary) blobs.push({ kind: 'clip', text: clip.narration });
   for (const c of clip.changes ?? []) blobs.push({ kind: 'clip', text: c });
   for (const c of clip.concerns ?? []) blobs.push({ kind: 'clip', text: c });
   if (clip.transcript) {
-    // Split transcript into short lines for better citations.
-    for (const line of clip.transcript.split(/(?<=[.!?])\s+|\n+/)) {
-      if (MATERIAL_HINT.test(line)) blobs.push({ kind: 'transcript', text: line });
+    // Split transcript into sentences, carrying each line's [m:ss] mark so
+    // every sentence keeps a seekable timestamp.
+    for (const row of clip.transcript.split(/\n+/)) {
+      const at = parseTimestamp(` ${row.trim()} `);
+      for (const sentence of row.split(/(?<=[.!?])\s+/)) {
+        if (MATERIAL_HINT.test(sentence)) blobs.push({ kind: 'transcript', text: sentence, at });
+      }
     }
   }
   for (const b of blobs) {
@@ -312,6 +316,7 @@ function harvestClip(acc: Acc, clip: CollectionClip, index: number): void {
       kind: b.kind,
       label: b.kind === 'transcript' ? `${label} (transcript)` : label,
       clipId,
+      timestampSeconds: b.at ?? null,
     });
   }
 }
@@ -520,6 +525,10 @@ function citationToSourceChip(
   return { id: 'evidence', label: cite.label || 'Evidence', section: 'evidence' };
 }
 
+function mentions(cite: MaterialCitation, item: string): boolean {
+  return cite.excerpt.toLowerCase().includes(item.toLowerCase());
+}
+
 /** Structured rows for the materials card (no raw markdown). */
 export function materialsRowsForUi(
   list: JobMaterialsList,
@@ -531,8 +540,34 @@ export function materialsRowsForUi(
     spec: it.spec,
     quantity: it.quantity,
     unit: it.unit,
-    sources: it.citations.slice(0, 3).map((c) => citationToSourceChip(c, opts)),
+    sources: dedupeSourceChips(
+      [...it.citations]
+        // Citations that name the item exactly come first (best moment to seek to).
+        .sort((a, b) => Number(mentions(b, it.item)) - Number(mentions(a, it.item)))
+        .map((c) => citationToSourceChip(c, opts)),
+    ).slice(0, 3),
   }));
+}
+
+/**
+ * One chip per clip (or per non-clip source). Input is ordered by relevance;
+ * a chip without a timestamp is upgraded to one that can seek.
+ */
+export function dedupeSourceChips(chips: MaterialsSourceChip[]): MaterialsSourceChip[] {
+  const out: MaterialsSourceChip[] = [];
+  const index = new Map<string, number>();
+  for (const chip of chips) {
+    const key = chip.proofId || (chip.workDate ? `date:${chip.workDate}` : `id:${chip.id}`);
+    const at = index.get(key);
+    if (at == null) {
+      index.set(key, out.length);
+      out.push(chip);
+      continue;
+    }
+    // Keep the first (most relevant) chip; only upgrade one that can't seek.
+    if (out[at].atSeconds == null && chip.atSeconds != null) out[at] = chip;
+  }
+  return out;
 }
 
 /**

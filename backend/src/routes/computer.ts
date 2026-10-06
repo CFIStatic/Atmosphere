@@ -152,11 +152,23 @@ computerRouter.post(
   }),
 );
 
+/** Supply carts: which lines the person checked, and quantities typed for unknown-qty lines. */
+const approveBodySchema = z.object({
+  lines: z
+    .array(z.object({ key: z.string().min(1).max(120), quantity: z.number().int().min(1).max(999).nullable().optional() }))
+    .max(100)
+    .optional(),
+});
+
 computerRouter.post(
   '/approvals/:id/approve',
   wrap(async (req, res) => {
     const ctx = await requireOrgContext(req);
-    res.json(await decideApproval(ctx.orgId, parseId(req.params.id), ctx.userId, 'approve'));
+    const body = approveBodySchema.safeParse(req.body ?? {});
+    if (!body.success) throw new ComputerServiceError('Send the checked cart lines as { lines: [{ key, quantity? }] }.', 'bad_request');
+    res.json(
+      await decideApproval(ctx.orgId, parseId(req.params.id), ctx.userId, 'approve', { lines: body.data.lines ?? null }),
+    );
   }),
 );
 
