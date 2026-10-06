@@ -1237,6 +1237,8 @@ interface AnalysisJob {
   workDate: string;
   trade: string | null;
   proofId: string;
+  /** Signed-in admin who pressed re-analyse; last-resort seat for metering. */
+  triggeredBy?: string | null;
 }
 
 /**
@@ -1256,13 +1258,22 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     .eq('id', job.proofId);
 
   // Every model call in the reading is billed to the org as video analysis.
-  const result = await withVideoUsageScope(admin, { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId }, () =>
-    runDayAnalysis(
-      admin,
-      { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
-      job.workDate,
-      job.proofId,
-    ),
+  const result = await withVideoUsageScope(
+    admin,
+    {
+      proofId: job.proofId,
+      orgId: job.orgId,
+      jobId: job.jobId,
+      partyId: job.partyId,
+      triggeredBy: job.triggeredBy ?? null,
+    },
+    () =>
+      runDayAnalysis(
+        admin,
+        { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
+        job.workDate,
+        job.proofId,
+      ),
   );
 
   if (result.outcome === 'skipped') {
@@ -1701,8 +1712,10 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   if (existing) return existing;
   // Narration, long-form windows, synthesis and the summary rebuild are all
   // video analysis on this org's ledger.
-  const work = withVideoUsageScope(admin, { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId }, () =>
-    runNarration(admin, job),
+  const work = withVideoUsageScope(
+    admin,
+    { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId, partyId: job.partyId },
+    () => runNarration(admin, job),
   ).finally(() => {
     narrationLocks.delete(job.proofId);
   });
@@ -4248,7 +4261,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
  */
 export async function reanalyseProofDay(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase, userId } = await requireOrgContext(req);
     const input = z.object({ partyId: z.string().uuid() }).parse(req.body ?? {});
 
     const { data: party } = await supabase
@@ -4288,6 +4301,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
         workDate: req.params.workDate,
         trade: (party as any).trade ?? null,
         proofId: film.id,
+        triggeredBy: userId ?? null,
       };
       try {
         result = await performAnalysis(admin, job, 1);

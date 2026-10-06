@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import { currentAiUsageScope, runWithAiUsageScope } from './aiUsageContext.js';
+import { resolveUsageActor } from './usageAttribution.js';
 
 export const VIDEO_ANALYSIS_FEATURE = 'video_analysis';
 
@@ -83,36 +84,60 @@ export function meterAnthropicResponse(
  * Run background video work for one proof inside a metering scope, so every
  * model call it makes is recorded on the proof's org as video analysis.
  * Looks the org up from the proof when the caller does not have it.
+ *
+ * The scope also names the seat: background work runs as the service role,
+ * so without this every frame landed in Unattributed (System) on Billing ›
+ * By employee. Resolved once per scope: the clip's uploader, then the
+ * teammate who opened the capture link (Field Capture), then the job owner /
+ * creator, then the org admin who pressed re-analyse.
  */
 export async function withVideoUsageScope<T>(
   client: SupabaseClient,
-  ref: { proofId: string; orgId?: string | null; jobId?: string | null; userId?: string | null },
+  ref: {
+    proofId: string;
+    orgId?: string | null;
+    jobId?: string | null;
+    partyId?: string | null;
+    userId?: string | null;
+    /** Signed-in admin who triggered this run, when there is one. */
+    triggeredBy?: string | null;
+  },
   fn: () => Promise<T>,
 ): Promise<T> {
   const current = currentAiUsageScope();
   if (current?.meterFeature && (!ref.orgId || current.orgId === ref.orgId)) return fn();
   let orgId = ref.orgId ?? null;
   let jobId = ref.jobId ?? null;
+  let partyId = ref.partyId ?? null;
   if (!orgId) {
     try {
       const { data } = await client
         .from('job_proofs')
-        .select('org_id, job_id')
+        .select('org_id, job_id, party_id')
         .eq('id', ref.proofId)
         .maybeSingle();
       orgId = (data?.org_id as string | undefined) ?? null;
       jobId = jobId ?? ((data?.job_id as string | undefined) ?? null);
+      partyId = partyId ?? ((data?.party_id as string | undefined) ?? null);
     } catch {
       orgId = null;
     }
   }
   if (!orgId) return fn();
+  const userId = await resolveUsageActor(client, {
+    orgId,
+    userId: ref.userId ?? null,
+    proofId: ref.proofId,
+    jobId,
+    partyId,
+    triggeredBy: ref.triggeredBy ?? null,
+  });
   return runWithAiUsageScope(
     {
       client,
       orgId,
       jobId,
-      userId: ref.userId ?? null,
+      userId,
       requestId: `video:${ref.proofId}:${randomUUID()}`,
       meterFeature: VIDEO_ANALYSIS_FEATURE,
     },

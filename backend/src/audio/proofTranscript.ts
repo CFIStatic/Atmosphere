@@ -254,7 +254,9 @@ export async function transcribeProofVideo(
       costNanos: transcriptionCostNanos(modelPriceTable(), transcriptionModel, heardSeconds) ?? 0,
       jobId: proof.job_id ?? null,
       provider: 'openai',
-      metadata: { audioSeconds: heardSeconds, durationSource: 'ffprobe' },
+      // proofId lets the ledger name the uploader (recordTokenUsage resolves
+      // uploader → capture-party inviter → job owner when no seat is passed).
+      metadata: { audioSeconds: heardSeconds, durationSource: 'ffprobe', proofId },
     });
   };
   // An "empty" reply (no speech heard) is still a billed Whisper call: charge
