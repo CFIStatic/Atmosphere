@@ -26,6 +26,16 @@ import {
   findConsumedMatchingApproval,
   isSendLikeApproval,
 } from './sendIdempotency.js';
+import {
+  ALREADY_ORDERED_APPROVAL_MESSAGE,
+  approvedOrderFingerprint,
+  approvedOrderInstructions,
+  excludedItemsStillOnPage,
+  findConsumedMatchingOrderApproval,
+  orderLinesFromApprovalFields,
+  isPlaceOrderLikeApproval,
+  orderActionFingerprint,
+} from './supplyOrder.js';
 import { autoSignIn, findSavedSignIn, savedSignIns, trustedSites, type SavedSignIn } from './autoSignIn.js';
 import { mfaPauseFromSignals } from './mfaPause.js';
 import { isAskWebSearchConfigured, searchAskWeb, sanitizeAskWebQuery } from '../shared/askWebSearch.js';
@@ -273,6 +283,19 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
     }
     const url = await driver.currentUrl();
     if (ticket && ticketCovers(ticket, decision, url, run.now())) {
+      // Unchecked lines must be out of the cart before the one approved click.
+      if (ticket.order?.excluded.length) {
+        const text = driver.visibleText ? await driver.visibleText().catch(() => null) : null;
+        const still = text ? excludedItemsStillOnPage(ticket.order, text) : [];
+        if (still.length) {
+          await audit('blocked', { action, kind: decision.kind, label: decision.label, why: 'removed_items_in_cart' });
+          return {
+            ok: false,
+            text: `Not clicked. These were unchecked by the person and are still in the cart: ${still.join('; ')}. Remove them, take a screenshot, then click "${decision.label}" again.`,
+          };
+        }
+        if (!text) await audit('cart_check_skipped', { action, why: 'no_page_text' }, 'system');
+      }
       const consumed = await store.consumeApproval(ticket.approvalId, ticket.tokenHash, new Date(run.now()).toISOString());
       const approvalId = ticket.approvalId;
       ticket = null;
@@ -509,6 +532,35 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
             return { text: ALREADY_SENT_APPROVAL_MESSAGE, isError: false };
           }
         }
+        if (isPlaceOrderLikeApproval(buttonLabel, kind)) {
+          const fingerprint = orderActionFingerprint({
+            kind,
+            origin: originOf(url),
+            buttonLabel,
+            fields,
+          });
+          const knownQty = orderLinesFromApprovalFields(fields).filter((l) => l.quantity != null);
+          const cartFingerprint = knownQty.length
+            ? approvedOrderFingerprint({
+                origin: originOf(url),
+                buttonLabel,
+                lines: knownQty.map((l) => ({ sku: l.sku, material: l.material, quantity: l.quantity as number })),
+              })
+            : null;
+          const prior = findConsumedMatchingOrderApproval(
+            await store.listApprovalsForTask(task.id, 40),
+            fingerprint,
+            cartFingerprint,
+          );
+          if (prior) {
+            await audit('approval_blocked_duplicate_order', {
+              priorApprovalId: prior.id,
+              kind,
+              label: buttonLabel,
+            });
+            return { text: ALREADY_ORDERED_APPROVAL_MESSAGE, isError: false };
+          }
+        }
         const shot = await driver.screenshot('jpeg');
         const { token, tokenHash } = newApprovalToken();
         const expiresAt = run.now() + settings.approvalTtlMs;
@@ -568,6 +620,22 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
           origin: originOf(url),
           expiresAt,
         };
+        const decided = await store.getApproval(null, approval.id);
+        const order = decided?.approved_order ?? null;
+        if (order) {
+          ticket.order = order;
+          await audit(
+            'approval_granted',
+            {
+              approvalId: approval.id,
+              approvedLines: order.lines.length,
+              excludedLines: order.excluded.length,
+              orderFingerprint: order.fingerprint,
+            },
+            'system',
+          );
+          return { text: approvedOrderInstructions(buttonLabel, order), isError: false };
+        }
         await audit('approval_granted', { approvalId: approval.id }, 'system');
         return {
           text: `Approved. You may click “${buttonLabel}” once now. Any other submit-type click needs a new approval.`,

@@ -7,6 +7,7 @@
  * one-active-task-per-org rule and single-use approvals.
  */
 import { randomUUID } from 'node:crypto';
+import type { ApprovedOrderSelection } from './supplyOrder.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ApprovalField, ComputerTaskStatus, ConsequentialKind, NeedsYouReason, ProjectedJobField } from './types.js';
 
@@ -62,6 +63,8 @@ export interface ComputerApprovalRow {
   decided_by: string | null;
   decided_at: string | null;
   consumed_at: string | null;
+  /** Supply orders: the cart lines the person checked (and any quantities they typed). */
+  approved_order?: ApprovedOrderSelection | null;
 }
 
 export interface ComputerSessionRow {
@@ -215,7 +218,12 @@ export interface ComputerStore {
   /** Approvals for one task, newest first (idempotency / Sent Items gate). */
   listApprovalsForTask(taskId: string, limit?: number): Promise<ComputerApprovalRow[]>;
   /** pending → approved / canceled by a person. */
-  decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null): Promise<boolean>;
+  decideApproval(
+    id: string,
+    to: 'approved' | 'canceled',
+    userId: string | null,
+    extra?: { approved_order?: ApprovedOrderSelection | null },
+  ): Promise<boolean>;
   /** approved → consumed, only with the matching token hash and before expiry. */
   consumeApproval(id: string, tokenHash: string, nowIso: string): Promise<boolean>;
   expireApproval(id: string): Promise<void>;
@@ -512,10 +520,17 @@ export class SupabaseComputerStore implements ComputerStore {
     return (data as ComputerApprovalRow[]) ?? [];
   }
 
-  async decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null) {
+  async decideApproval(
+    id: string,
+    to: 'approved' | 'canceled',
+    userId: string | null,
+    extra?: { approved_order?: ApprovedOrderSelection | null },
+  ) {
+    const patch: Record<string, unknown> = { status: to, decided_by: userId, decided_at: nowIso() };
+    if (extra?.approved_order) patch.approved_order = extra.approved_order;
     const { data, error } = await this.db
       .from('computer_approvals')
-      .update({ status: to, decided_by: userId, decided_at: nowIso() })
+      .update(patch)
       .eq('id', id)
       .eq('status', 'pending')
       .gt('expires_at', nowIso())
@@ -816,10 +831,21 @@ export class MemoryComputerStore implements ComputerStore {
       .map((a) => ({ ...a }));
   }
 
-  async decideApproval(id: string, to: 'approved' | 'canceled', userId: string | null) {
+  async decideApproval(
+    id: string,
+    to: 'approved' | 'canceled',
+    userId: string | null,
+    extra?: { approved_order?: ApprovedOrderSelection | null },
+  ) {
     const a = this.approvals.get(id);
     if (!a || a.status !== 'pending' || a.expires_at <= nowIso()) return false;
-    this.approvals.set(id, { ...a, status: to, decided_by: userId, decided_at: nowIso() });
+    this.approvals.set(id, {
+      ...a,
+      status: to,
+      decided_by: userId,
+      decided_at: nowIso(),
+      ...(extra?.approved_order ? { approved_order: extra.approved_order } : {}),
+    });
     return true;
   }
 

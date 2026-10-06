@@ -1,3 +1,4 @@
+import HdOrderScreenshotPage from './pages/HdOrderScreenshotPage';
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
@@ -350,6 +351,8 @@ export default function App() {
           <TermsGate>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/__screens__/hd-order" element={<HdOrderScreenshotPage />} />
+
           {/* iPhone/Android app: sign-up and plans happen on atmosphereteam.com, never in the app. */}
           <Route path="/signup" element={isInAppShell() ? <AppShellSignupBlockedPage /> : <SignupPage />} />
           {/* First run, value before payment: first job and first evidence, then plan. */}

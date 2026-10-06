@@ -11,6 +11,24 @@ import type { JobFileAskContext } from './jobFileAsk.js';
 import type { ComputerLoginRow } from '../computer/store.js';
 import { siteOf } from '../computer/sites.js';
 import { normalizeSmsNumber, smsProviderConfigured } from './smsProvider.js';
+import {
+  extractJobMaterials,
+  formatMaterialsListForChat,
+  materialsRowsForUi,
+  looksLikeMaterialsListAsk,
+} from './jobMaterials.js';
+import {
+  buildSupplyCart,
+  checkFulfillment,
+  detectSupplyVendor,
+  formatSupplyCartForChat,
+  looksLikeSupplyOrderAsk,
+  matchMaterialsForVendor,
+  SUPPLY_VENDOR_META,
+  type SupplyCart,
+  type SupplyVendor,
+} from '../computer/supplyOrder.js';
+import { homeDepotOrderStepsForInstructions } from '../computer/homeDepotPlaybook.js';
 
 /** Well-known sites people name in Chat; matched to Logins by host or label. */
 export const KNOWN_COMPUTER_SITES: ReadonlyArray<{
@@ -32,9 +50,13 @@ export const KNOWN_COMPUTER_SITES: ReadonlyArray<{
   { aliases: ['jobnimbus', 'job nimbus', 'jn'], host: 'app.jobnimbus.com', url: 'https://app.jobnimbus.com', kind: 'crm' },
   { aliases: ['salesforce', 'sfdc'], host: 'login.salesforce.com', url: 'https://login.salesforce.com', kind: 'crm' },
   { aliases: ['servicetitan', 'service titan'], host: 'go.servicetitan.com', url: 'https://go.servicetitan.com', kind: 'crm' },
+  { aliases: ['home depot', 'homedepot', 'the home depot'], host: 'www.homedepot.com', url: 'https://www.homedepot.com', kind: 'portal' },
+  { aliases: ["lowe's", 'lowes', 'lowe'], host: 'www.lowes.com', url: 'https://www.lowes.com', kind: 'portal' },
+  { aliases: ['abc supply', 'abcsupply'], host: 'www.abcsupply.com', url: 'https://www.abcsupply.com', kind: 'portal' },
+  { aliases: ['srs', 'srs distribution', 'srsdistribution'], host: 'www.srsdistribution.com', url: 'https://www.srsdistribution.com', kind: 'portal' },
 ];
 
-export type ComputerCommandKind = 'email' | 'email_read' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'generic';
+export type ComputerCommandKind = 'email' | 'email_read' | 'website' | 'crm_status' | 'xactimate_estimate' | 'adjuster_status' | 'supply_order' | 'generic';
 
 export interface ParsedComputerCommand {
   kind: ComputerCommandKind;
@@ -64,7 +86,7 @@ const ACTION_VERBS =
   /\b(fill(?:\s+(?:it|this|that|the\s+[\w-]+))?\s*(?:out|in)?|fill\s+out|complete|submit|enter|file|update|change|add|register|apply|request|book|schedule|upload|put\s+(?:it|this|the\s+[\w-]+)\s+(?:on|in|into)|send|email|e-?mail|message|compose|write|draft\s+(?:and\s+)?send|open|go\s+to|use|check|look\s*up|find|review|see|show|list)\b/i;
 
 const WEB_SURFACE =
-  /\b(website|web\s*site|web\s*form|online\s*form|portal|browser|online|crm)\b|\bsite\b(?!\s+address)|\.(?:com|gov|org|net|us|io|co\.uk)\b|https?:\/\/|\b(outlook|gmail|xactimate|xactware|office\s*365|o365|microsoft\s*365|acculynx|jobnimbus|salesforce|servicetitan|xactanalysis|docusketch|companycam|hover|eagleview|magicplan)\b/i;
+  /\b(website|web\s*site|web\s*form|online\s*form|portal|browser|online|crm)\b|\bsite\b(?!\s+address)|\.(?:com|gov|org|net|us|io|co\.uk)\b|https?:\/\/|\b(outlook|gmail|xactimate|xactware|office\s*365|o365|microsoft\s*365|acculynx|jobnimbus|salesforce|servicetitan|xactanalysis|docusketch|companycam|hover|eagleview|magicplan|home\s*depot|homedepot|lowe'?s|lowes|abc\s*supply|srs)\b/i;
 
 const EMAIL_VERB = /\b(email|e-?mail|send|message|compose)\b/i;
 const EMAIL_NOUN = /\b(email|e-?mail|message|note)\b/i;
@@ -115,6 +137,8 @@ export function looksLikeComputerTask(question: string): boolean {
   const q = String(question ?? '').trim().toLowerCase();
   if (!q) return false;
   if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
+  if (looksLikeSupplyOrderAsk(q)) return true;
+  if (looksLikeMaterialsListAsk(q)) return true;
   if (isReadOnlyMailboxIntent(q)) return true;
   if (/^(did|does|do|has|have|was|were|is|are|when|why|who|how|can you tell|explain)\b/.test(q) && !OUTSTANDING.test(q) && !/\bwhat'?s\s+(?:outstanding|left|open)\b/.test(q)) {
     // Allow "what is outstanding in AccuLynx" / "what's left in JobNimbus".
@@ -303,9 +327,12 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
       /\b(xactimate|xactware)\b/i.test(q));
   const draftOnly = isDraftOnlyIntent(q);
   const userMail = extractUserEmailSubjectBody(q);
+  const isSupplyOrder = looksLikeSupplyOrderAsk(q);
   return {
     kind: readMailbox
       ? 'email_read'
+      : isSupplyOrder
+        ? 'supply_order'
       : isEmail && !isAdjusterStatus
       ? 'email'
       : isXactEstimate
@@ -320,7 +347,9 @@ export function parseComputerCommand(question: string): ParsedComputerCommand {
     siteMention: siteMention ?? null,
     known:
       known ??
-      (isXactEstimate
+      (isSupplyOrder
+        ? KNOWN_COMPUTER_SITES.find((x) => x.aliases.includes('home depot')) ?? null
+        : isXactEstimate
         ? KNOWN_COMPUTER_SITES.find((x) => x.aliases.includes('xactimate')) ?? null
         : isAdjusterStatus && messageChannel === 'xactanalysis'
           ? KNOWN_COMPUTER_SITES.find((x) => x.aliases.includes('xactanalysis')) ?? null
@@ -728,6 +757,25 @@ export interface ComputerTaskBlocked {
   needsClarification?: boolean;
 }
 
+/** Materials extracted + matched cart shown in Chat before / while Computer runs. */
+export interface ComputerTaskSupplyOrderPlan extends ComputerTaskPlan {
+  kind: 'supply_order';
+  materialsMarkdown: string;
+  cartMarkdown: string;
+  cart: SupplyCart;
+  vendor: SupplyVendor;
+  needsHomeDepotLogin: boolean;
+}
+
+/** Chat-only materials list (no Computer task). */
+export interface ComputerTaskMaterialsListOnly {
+  ok: true;
+  kind: 'materials_list';
+  materialsOnly: true;
+  summary: string;
+  itemCount: number;
+}
+
 /**
  * Gather rooms, measurements, footage findings, and scope from the job file,
  * then add clearly labeled industry-standard scaffold line items. Used as the
@@ -961,11 +1009,24 @@ export function planComputerTask(input: {
   signerName?: string | null;
   /** Their company name for the closing, when known. */
   companyName?: string | null;
-}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending | ComputerTaskEmailDraftPending {
+}): ComputerTaskPlan | ComputerTaskBlocked | ComputerTaskSmsPending | ComputerTaskEmailDraftPending | ComputerTaskMaterialsListOnly {
   const command = parseComputerCommand(input.question);
   const matched = matchSavedLogin(input.logins, command);
   const namedSite = Boolean(command.known || command.siteMention);
   const ids = jobIdentifiers(input.file, input.address);
+
+  // ---- Materials list only (no order / no browser) ----
+  if (looksLikeMaterialsListAsk(input.question) && !looksLikeSupplyOrderAsk(input.question)) {
+    const list = extractJobMaterials(input.file, input.address);
+    const jobId = String((input.file as { job?: { id?: string } } | null | undefined)?.job?.id ?? '').trim() || null;
+    return {
+      ok: true,
+      kind: 'materials_list',
+      materialsOnly: true,
+      summary: formatMaterialsListForChat(list, { jobId }),
+      itemCount: list.items.length,
+    };
+  }
 
   // ---- Read-only mailbox (never compose / send) ----
   if (command.kind === 'email_read') {
@@ -1121,6 +1182,87 @@ export function planComputerTask(input: {
 
 
 
+
+
+  // ---- Supply order (Home Depot first; same design for Lowe's / ABC / SRS later) ----
+  if (command.kind === 'supply_order') {
+    const vendor: SupplyVendor = detectSupplyVendor(command.question) ?? 'home_depot';
+    if (vendor !== 'home_depot') {
+      const label = SUPPLY_VENDOR_META[vendor].label;
+      return {
+        ok: false,
+        offerLogins: false,
+        needsClarification: true,
+        summary: `${label} ordering uses the same Approve-gated design as Home Depot and is next. For now, ask me to order the materials from Home Depot.`,
+      };
+    }
+    const list = extractJobMaterials(input.file, input.address);
+    if (!list.items.length) {
+      return {
+        ok: false,
+        offerLogins: false,
+        needsClarification: true,
+        summary:
+          'I could not find materials in the clips, transcripts, or scope on this job file yet. Add a scope or estimate, capture more field video, or tell me the items and quantities to order.',
+      };
+    }
+    const hdKnown = KNOWN_COMPUTER_SITES.find((x) => x.aliases.includes('home depot')) ?? null;
+    const hdLogin =
+      matched?.login.host.includes('homedepot') || matched?.login.label.toLowerCase().includes('home depot')
+        ? matched
+        : matchSavedLogin(input.logins, {
+            ...command,
+            known: hdKnown,
+            siteMention: 'home depot',
+            kind: 'website',
+          });
+    const materialsMd = formatMaterialsListForChat(list);
+    // Sync path: no HTTP match yet. askTools calls planSupplyOrderComputerTask for full matching.
+    const lines = list.items
+      .map((it, i) => {
+        const qty = it.quantity != null ? `${it.quantity}${it.unit ? ` ${it.unit}` : ''}` : 'quantity unknown — confirm with the person, never guess';
+        const cite = it.citations[0]?.label ?? 'job file';
+        return `${i + 1}. ${it.item}${it.spec ? ` (${it.spec})` : ''} — ${qty} [${cite}]`;
+      })
+      .join('\n');
+    const addr = String(input.address ?? '').trim();
+    const instructions = [
+      'Mission: order the materials for THIS job from Home Depot. Nothing is purchased until the person presses Approve on the Place Order card.',
+      '',
+      'MATERIALS LIST (from the job file — cite sources; never invent quantities):',
+      lines,
+      '',
+      homeDepotOrderStepsForInstructions(),
+      '',
+      addr ? `Job address for delivery / store check: ${addr}` : 'No job address on file — ask_clarification for delivery vs pickup before checkout.',
+      hdLogin
+        ? `Call sign_in_saved with site "${hdLogin.login.host}" when you reach a Home Depot sign-in page. Passwords never go to the model.`
+        : 'No Home Depot Login is saved yet. Prefer public search and cart assembly; if sign-in is required for checkout, call needs_you / ask the person to add a Login under Logins, then continue after they Resume.',
+      'For each line: search Home Depot, pick the best product match, record product name, SKU/URL, price, and confidence. Flag low-confidence matches for the person on the Approve card.',
+      'Check stock and delivery vs pickup for the job address.',
+      'Build the cart, then call request_approval with the exact Place Order (or Place Your Order) button label. Include every line (material, matched product + link, qty, price), cart total, out-of-stock/substitutions, delivery address and date, and note that payment uses the card already on the account.',
+      'Never click Place Order / Pay / Buy without an approved request_approval. Never type or capture card numbers.',
+      'If Place Order was already approved for this same cart on this task, do not request_approval again — confirm the order and finish with submitted=true.',
+      'Writing: clean professional English, as a careful office admin would write. No slang, no emoji.',
+      'End with finish: title "Home Depot materials order", fields = each SKU + qty, submitted=true only if an approved Place Order went through.',
+    ].join('\n');
+    return {
+      ok: true,
+      kind: 'supply_order',
+      instructions,
+      startUrl: hdLogin?.login.url ?? hdKnown?.url ?? 'https://www.homedepot.com',
+      matchedLogin: hdLogin,
+      lead: [
+        hdLogin
+          ? `Opening Home Depot with your saved Login to build a cart for ${list.items.length} material${list.items.length === 1 ? '' : 's'}.`
+          : `I can match products on Home Depot's public site and prepare an Approve card. A saved Home Depot Login is needed before checkout — add one under Logins when you are ready.`,
+        '',
+        materialsMd,
+        '',
+        'Nothing is purchased until you press Approve. Card numbers never leave the Home Depot account.',
+      ].join('\n'),
+    };
+  }
 
   // ---- Adjuster status (XactAnalysis / email / SMS scaffold) ----
   if (command.kind === 'adjuster_status') {
@@ -1595,3 +1737,75 @@ export function planComputerTask(input: {
       : "Opening a browser now, and I'll check with you before anything is submitted.",
   };
 }
+
+/**
+ * Full supply-order plan with public product matching (Home Depot).
+ * Prefer this from askTools so Chat can show the cart before / as Computer starts.
+ */
+export async function planSupplyOrderComputerTask(input: {
+  question: string;
+  logins: ComputerLoginRow[];
+  file?: JobFileAskContext | null;
+  address?: string | null;
+  /** Optional fetch override for tests. */
+  fetchImpl?: Parameters<typeof matchMaterialsForVendor>[2];
+}): Promise<ComputerTaskSupplyOrderPlan | ComputerTaskBlocked> {
+  const sync = planComputerTask({
+    question: input.question,
+    logins: input.logins,
+    file: input.file,
+    address: input.address,
+  });
+  if (!sync.ok) return sync;
+  if (!('kind' in sync) || sync.kind !== 'supply_order' || !('instructions' in sync)) {
+    return {
+      ok: false,
+      offerLogins: false,
+      summary: 'Could not plan a Home Depot materials order from that request.',
+    };
+  }
+  const vendor: SupplyVendor = detectSupplyVendor(input.question) ?? 'home_depot';
+  const list = extractJobMaterials(input.file, input.address);
+  const matches = await matchMaterialsForVendor(list, vendor, input.fetchImpl);
+  const fulfillment = checkFulfillment({ jobAddress: list.jobAddress, matches });
+  const cart = buildSupplyCart({ vendor, matches, fulfillment });
+  const materialsMarkdown = formatMaterialsListForChat(list);
+  const cartMarkdown = formatSupplyCartForChat(cart);
+  const matchBlock = matches
+    .map((m, i) => {
+      const conf = m.confidence;
+      const prod = m.productName
+        ? `${m.productName}${m.sku ? ` SKU ${m.sku}` : ''}${m.url ? ` ${m.url}` : ''} @ ${
+            m.priceCents != null ? `$${(m.priceCents / 100).toFixed(2)}` : 'price pending'
+          } [${conf}]`
+        : `no public match — search ${m.searchUrl}`;
+      return `${i + 1}. ${m.materialItem}: ${prod}`;
+    })
+    .join('\n');
+  const instructions = [
+    sync.instructions,
+    '',
+    'PUBLIC MATCH PREVIEW (verify on the live site before Approve):',
+    matchBlock,
+    '',
+    'Approve card fields to include (label / value / source):',
+    ...cart.approvalFields.map(
+      (f) => `• ${f.label}: ${f.value} (${f.source}${f.verified ? '' : ' — check this'})`,
+    ),
+  ].join('\n');
+  return {
+    ok: true,
+    kind: 'supply_order',
+    instructions,
+    startUrl: sync.startUrl,
+    matchedLogin: sync.matchedLogin,
+    lead: [sync.lead, '', cartMarkdown].join('\n'),
+    materialsMarkdown,
+    cartMarkdown,
+    cart,
+    vendor,
+    needsHomeDepotLogin: !sync.matchedLogin,
+  };
+}
+
+export { extractJobMaterials, formatMaterialsListForChat, materialsRowsForUi, looksLikeMaterialsListAsk };

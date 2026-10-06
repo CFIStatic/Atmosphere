@@ -14,6 +14,7 @@ import {
   matchSavedLogin,
   parseComputerCommand,
   planComputerTask,
+  planSupplyOrderComputerTask,
   resolvePersonFromJob,
 } from '../src/shared/askComputerCommand.js';
 import type { ComputerLoginRow } from '../src/computer/store.js';
@@ -509,4 +510,90 @@ test('item 11: email body pulls clips and timeline, not a bare template', () => 
   assert.doesNotMatch(text, /Quick update on this job:/);
   assert.doesNotMatch(text, /9999|Lockbox/);
   assert.doesNotMatch(text, /^• Job:/m);
+});
+
+
+const HD = login({
+  id: '11111111-1111-4111-8111-111111111199',
+  label: 'Home Depot',
+  host: 'www.homedepot.com',
+  url: 'https://www.homedepot.com/',
+});
+
+const MATERIALS_FILE = {
+  job: { title: 'Sample Job', claimNumber: '058b09a8' },
+  scope: [{ title: 'Architectural shingles', detail: '10 squares Charcoal', state: 'included' }],
+  clips: [
+    {
+      workDate: '2026-09-01',
+      summary: 'Crew unloading drip edge and starter strip.',
+      transcript: 'We need 2 boxes of roofing nails.',
+    },
+  ],
+};
+
+test('looksLikeComputerTask: Home Depot materials order', () => {
+  assert.equal(looksLikeComputerTask('order the materials for this job from Home Depot'), true);
+  assert.equal(looksLikeComputerTask('list the materials for this job'), true);
+});
+
+test('parseComputerCommand: supply_order', () => {
+  const a = parseComputerCommand('order the materials for this job from Home Depot');
+  assert.equal(a.kind, 'supply_order');
+  assert.ok(a.known?.host.includes('homedepot'));
+});
+
+test('planComputerTask: materials list only (no browser)', () => {
+  const plan = planComputerTask({
+    question: 'list the materials for this job',
+    logins: [],
+    file: MATERIALS_FILE,
+    address: '1 Sample Way',
+  });
+  assert.equal(plan.ok, true);
+  assert.ok('materialsOnly' in plan && plan.materialsOnly);
+  assert.match(plan.summary, /Materials on this job file|shingle|drip|nail/i);
+});
+
+test('planComputerTask: supply_order builds instructions and Approve gate', () => {
+  const plan = planComputerTask({
+    question: 'order the materials for this job from Home Depot',
+    logins: [HD],
+    file: MATERIALS_FILE,
+    address: '1 Sample Way',
+  });
+  assert.equal(plan.ok, true);
+  assert.ok('instructions' in plan);
+  assert.equal(plan.kind, 'supply_order');
+  assert.match(plan.instructions, /request_approval/);
+  assert.match(plan.instructions, /Place Order/);
+  assert.match(plan.instructions, /Never type or capture card numbers|card already/i);
+  assert.equal(plan.matchedLogin?.login.host, 'www.homedepot.com');
+});
+
+test('planSupplyOrderComputerTask: matches via stub fetch', async () => {
+  const html = `<a href="https://www.homedepot.com/p/Arch-Shingles-555666777">Architectural Shingles Charcoal</a><span>$99.00</span>`;
+  const plan = await planSupplyOrderComputerTask({
+    question: 'order the materials for this job from Home Depot',
+    logins: [HD],
+    file: MATERIALS_FILE,
+    address: '1 Sample Way',
+    fetchImpl: async () => ({ ok: true, status: 200, text: html }),
+  });
+  assert.equal(plan.ok, true);
+  if (!plan.ok || !('cart' in plan)) throw new Error('expected cart');
+  assert.ok(plan.cart.lines.length >= 1);
+  assert.match(plan.cartMarkdown, /Draft Home Depot order|Approve/);
+  assert.equal(plan.needsHomeDepotLogin, false);
+});
+
+test("planComputerTask: Lowes deferred with same design note", () => {
+  const plan = planComputerTask({
+    question: "order the materials from Lowes",
+    logins: [],
+    file: MATERIALS_FILE,
+  });
+  assert.equal(plan.ok, false);
+  if (plan.ok) throw new Error('expected block');
+  assert.match(plan.summary, /Lowe|Home Depot/i);
 });

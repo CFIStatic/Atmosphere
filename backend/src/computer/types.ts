@@ -114,6 +114,8 @@ export interface ComputerDriver {
   describeTarget(x: number, y: number): Promise<TargetDescriptor | null>;
   focusedElement(): Promise<TargetDescriptor | null>;
   readFormFields(): Promise<FormFieldReading[]>;
+  /** Visible page text (capped). Used to confirm removed cart items are gone before Place Order. */
+  visibleText?(): Promise<string>;
   pageSignals(): Promise<PageSignals>;
   cursorPosition(): Promise<[number, number]>;
   /**

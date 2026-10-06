@@ -14,6 +14,8 @@ import { SpinnerIcon } from '../icons';
 import { ComputerApprovalCard } from './ComputerApprovalCard';
 import { ComputerLiveView } from './ComputerLiveView';
 import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
+import { MaterialsListCard } from './MaterialsListCard';
+import { parseMaterialsSummary } from '../../lib/materialsList';
 
 const POLL_MS = 1500;
 
@@ -71,6 +73,23 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
           {summary || 'Draft is ready. Add a Login under Logins, then ask again to open the browser and Approve Send.'}
         </p>
         <p className="mt-2 text-xs text-ink-500">Nothing was sent. Computer needs a saved Outlook or Gmail login first.</p>
+      </div>
+    );
+  }
+  if (ref.kind === 'materials_list') {
+    const rows = parseMaterialsSummary(summary);
+    if (rows && rows.length) {
+      return <MaterialsListCard rows={rows} />;
+    }
+    // Fallback when the trailer was truncated before MATERIALS_JSON landed.
+    return (
+      <div data-testid="computer-materials-list" className="rounded-xl border border-line bg-paper-50 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Materials</p>
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">From this job file</p>
+        <div className="mt-2 whitespace-pre-wrap text-sm text-ink-700">{summary || 'No materials found on file yet.'}</div>
+        <p className="mt-2 text-xs text-ink-500">
+          Quantities are taken only from evidence. Ask me to order these from Home Depot when you are ready — nothing is purchased until you Approve.
+        </p>
       </div>
     );
   }
@@ -184,9 +203,12 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
 
       {task.status === 'awaiting_approval' && task.approval && task.approval.status === 'pending' ? (
         <ComputerApprovalCard
+          key={task.approval.id}
           approval={task.approval}
           busy={busy}
-          onApprove={() => act(() => api.computerApprove(task.approval!.id))}
+          onApprove={(selection) =>
+            act(() => (selection ? api.computerApprove(task.approval!.id, selection) : api.computerApprove(task.approval!.id)))
+          }
           onTakeControl={takeControl}
           onCancel={() => act(() => api.computerCancelApproval(task.approval!.id))}
         />

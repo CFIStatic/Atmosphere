@@ -256,6 +256,12 @@ export class PlaywrightDriver implements ComputerDriver {
     return rows.slice(0, 60);
   }
 
+  async visibleText(): Promise<string> {
+    const page = await this.active();
+    const text = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+    return text.slice(0, 50_000);
+  }
+
   async pageSignals(): Promise<PageSignals> {
     const page = await this.active();
     const base = (await page.mainFrame().evaluate(`(${READ_SIGNALS})()`).catch(() => null)) as PageSignals | null;

@@ -8,7 +8,13 @@
 import { buildSiteDigest, formatSiteDigestForContractor } from './siteDigest.js';
 import { ComputerServiceError, startComputerTask } from '../computer/service.js';
 import { computerStore } from '../computer/worker.js';
-import { looksLikeComputerTask, planComputerTask } from './askComputerCommand.js';
+import {
+  looksLikeComputerTask,
+  planComputerTask,
+  planSupplyOrderComputerTask,
+} from './askComputerCommand.js';
+import { looksLikeSupplyOrderAsk, type SupplyCart } from '../computer/supplyOrder.js';
+
 import { sendSms } from './smsProvider.js';
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
@@ -1146,15 +1152,22 @@ export async function executeAskTool(
           } catch {
             companyName = null;
           }
-          const plan = planComputerTask({
-            question: instructions,
-            logins,
-            file: ctx.file,
-            address: ctx.address ?? null,
-            accessPeople,
-            signerName: ctx.authorLabel ?? null,
-            companyName,
-          });
+          const plan = looksLikeSupplyOrderAsk(instructions)
+            ? await planSupplyOrderComputerTask({
+                question: instructions,
+                logins,
+                file: ctx.file,
+                address: ctx.address ?? null,
+              })
+            : planComputerTask({
+                question: instructions,
+                logins,
+                file: ctx.file,
+                address: ctx.address ?? null,
+                accessPeople,
+                signerName: ctx.authorLabel ?? null,
+                companyName,
+              });
           if (!plan.ok) {
             return {
               ok: false,
@@ -1169,6 +1182,22 @@ export async function executeAskTool(
                     : 'computer-task:error',
               },
             };
+          }
+          if ('materialsOnly' in plan && plan.materialsOnly) {
+            return {
+              ok: true,
+              tool: name,
+              summary: plan.summary,
+              data: {
+                channel: 'materials',
+                materialsOnly: true,
+                itemCount: plan.itemCount,
+              },
+              ui: { section: 'computer', path: 'computer-task:materials-list' },
+            };
+          }
+          if ('cart' in plan && plan.cart && 'kind' in plan && plan.kind === 'supply_order') {
+            // Fall through to startComputerTask below, but keep cart on the result data.
           }
           if ('emailDraftPreview' in plan && plan.emailDraftPreview) {
             const draftOnly = Boolean('draftOnly' in plan && plan.draftOnly);
@@ -1234,6 +1263,17 @@ export async function executeAskTool(
             file: ctx.file,
             address: ctx.address ?? null,
           });
+          const cart = (plan as { cart?: SupplyCart }).cart ?? null;
+          const supplyExtra = cart
+              ? {
+                  materialsMarkdown: (plan as { materialsMarkdown?: string }).materialsMarkdown ?? null,
+                  cartMarkdown: (plan as { cartMarkdown?: string }).cartMarkdown ?? null,
+                  vendor: (plan as { vendor?: string }).vendor ?? null,
+                  needsHomeDepotLogin: Boolean((plan as { needsHomeDepotLogin?: boolean }).needsHomeDepotLogin),
+                  cartLines: cart.lines.length,
+                  cartTotalCents: cart.subtotalCents,
+                }
+              : {};
           return {
             ok: true,
             tool: name,
@@ -1244,6 +1284,7 @@ export async function executeAskTool(
               jobFields: task.job_projection.length,
               loginHost: plan.matchedLogin?.login.host ?? null,
               kind: plan.kind,
+              ...supplyExtra,
             },
             ui: { section: 'computer', path: `computer-task:${task.id}` },
           };
@@ -1297,7 +1338,10 @@ export function formatActionsTrailer(results: AskToolResult[]): string {
   for (const r of results) {
     // The Computer card renders its own "not set up" / "not allowed" state.
     if (!r.ok && r.tool !== 'start_computer_task') continue;
-    const maxLabel = r.ui?.path === 'computer-task:sms-approval' ? 4000 : 80;
+    const maxLabel =
+      r.ui?.path === 'computer-task:sms-approval' || r.ui?.path === 'computer-task:materials-list'
+        ? 12000
+        : 80;
     const label = r.summary.replace(/[|,⟦⟧]/g, ' ').slice(0, maxLabel);
     const section = r.ui?.section ?? '';
     const path = r.ui?.path ?? '';
