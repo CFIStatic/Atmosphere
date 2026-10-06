@@ -27,6 +27,12 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
 import { aiBudgetConfig } from './aiBudgetConfig.js';
 import { settleUsageCost } from './aiBudgetService.js';
+import {
+  attributeLedgerRow,
+  ledgerClipHints,
+  loadAttributionLookups,
+  resolveUsageActor,
+} from './usageAttribution.js';
 
 export interface TokenUsageInput {
   orgId: string;
@@ -78,6 +84,8 @@ export interface TokenUsageEventRow {
   cacheWrite1hTokens?: number;
   provider?: string | null;
   pricingStatus?: string | null;
+  /** Ledger metadata (videoId / proofId hints for seat attribution). */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface TokenTotals {
@@ -488,12 +496,37 @@ function tokenCount(input: TokenUsageInput): number {
   return (input.inputTokens ?? 0) + (input.outputTokens ?? 0) + (input.cacheTokens ?? 0);
 }
 
+/**
+ * Video analysis runs in the background as the service role, so a caller can
+ * arrive here with no seat. Before the row is stored, resolve the clip's
+ * uploader → capture-party inviter → job owner → triggering admin (the same
+ * chain By employee and the backfill use). Never throws; a miss stays null.
+ */
+export async function withVideoUsageActor(
+  client: SupabaseClient,
+  input: TokenUsageInput,
+): Promise<TokenUsageInput> {
+  if (input.userId) return input;
+  if (classifyTokenFeature(String(input.feature ?? input.source ?? 'other')) !== 'video_analysis') return input;
+  const hints = ledgerClipHints(input.requestId, input.metadata ?? null);
+  if (!hints.proofId && !hints.videoId && !hints.partyId && !input.jobId && !hints.triggeredBy) return input;
+  const userId = await resolveUsageActor(client, {
+    orgId: input.orgId,
+    proofId: hints.proofId,
+    videoId: hints.videoId,
+    partyId: hints.partyId,
+    jobId: input.jobId ?? null,
+    triggeredBy: hints.triggeredBy,
+  });
+  return userId ? { ...input, userId } : input;
+}
+
 /** Record one token-usage event. Idempotent on requestId. Never throws to the caller of the async variant. */
 export async function recordTokenUsage(
   client: SupabaseClient,
   input: TokenUsageInput,
 ): Promise<{ eventId: string; duplicate: boolean } | null> {
-  const params = toRpcParams(input);
+  const params = toRpcParams(await withVideoUsageActor(client, input));
   const tokenTotal = tokenCount(input);
   if (tokenTotal > 0 && params.p_cost_nanos <= 0) {
     // Health check: tokens were spent but nothing was priced. This is an
@@ -763,6 +796,10 @@ function parseEventRow(raw: Record<string, unknown>): TokenUsageEventRow {
     cacheWrite1hTokens: Number(raw.cache_write_1h_tokens ?? 0),
     provider: (raw.provider as string | null) ?? null,
     pricingStatus: (raw.pricing_status as string | null) ?? null,
+    metadata:
+      raw.metadata && typeof raw.metadata === 'object' && !Array.isArray(raw.metadata)
+        ? (raw.metadata as Record<string, unknown>)
+        : null,
   };
 }
 
@@ -814,7 +851,7 @@ async function resolvePeriodBounds(
 export const TOKEN_USAGE_PAGE = 1000;
 
 const TOKEN_USAGE_SELECT =
-  'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, cost_nanos, price_nanos, created_at, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, provider, pricing_status';
+  'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, cost_nanos, price_nanos, created_at, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, provider, pricing_status, metadata';
 
 export async function collectPaged<T>(
   pageSize: number,
@@ -873,11 +910,12 @@ export async function loadTokenUsageReport(
     periodEnd: bounds.periodEnd,
   });
 
-  const [rows, members, orgName] = await Promise.all([
+  const [storedRows, members, orgName] = await Promise.all([
     loadTokenUsageEvents(client, orgId, window),
     loadMembers(client, orgId),
     loadOrgName(client, orgId),
   ]);
+  const rows = await attributeUnownedRows(client, orgId, storedRows);
   const jobIds = [...new Set(rows.map((r) => r.jobId).filter((id): id is string => Boolean(id)))];
   const [jobs, analysisSecondsByJob] = await Promise.all([
     loadJobMeta(client, orgId, jobIds),
@@ -891,6 +929,26 @@ export async function loadTokenUsageReport(
   };
 }
 
+/**
+ * By employee: rows stored before write-path attribution (or by a path that
+ * could not name a seat) get the same uploader → party inviter → job owner
+ * chain at read time, so video analysis lands on the person who filmed it
+ * instead of Unattributed (System). Rows that already name a seat are left
+ * alone; rows with nothing to join on stay Unattributed.
+ */
+export async function attributeUnownedRows(
+  client: SupabaseClient,
+  orgId: string,
+  rows: TokenUsageEventRow[],
+): Promise<TokenUsageEventRow[]> {
+  if (!rows.some((r) => !r.userId && r.feature === 'video_analysis')) return rows;
+  const lookups = await loadAttributionLookups(client, orgId, rows);
+  return rows.map((row) => {
+    if (row.userId || row.feature !== 'video_analysis') return row;
+    const userId = attributeLedgerRow(row, lookups);
+    return userId ? { ...row, userId } : row;
+  });
+}
 
 async function loadJobMeta(
   client: SupabaseClient,
