@@ -1,6 +1,11 @@
-import { Search } from 'lucide-react';
+import { CircleCheck, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { groupLoginCatalog, type LoginCatalog, type LoginCatalogEntry } from '../../lib/computer';
+import {
+  groupLoginCatalog,
+  type ComputerLogin,
+  type LoginCatalog,
+  type LoginCatalogEntry,
+} from '../../lib/computer';
 
 /** Public favicon for a site host (Google’s favicon service). Falls back to the monogram on error. */
 export function siteLogoUrl(host: string): string {
@@ -114,22 +119,96 @@ export function SiteBadges({ site }: { site: LoginCatalogEntry }) {
   );
 }
 
+/** The small green check on a site that already has a saved login. */
+export function SavedCheck() {
+  return (
+    <CircleCheck
+      role="img"
+      aria-label="Saved"
+      className="h-4 w-4 shrink-0 text-success-600"
+      strokeWidth={2.5}
+      data-testid="logins-saved-check"
+    >
+      <title>Saved</title>
+    </CircleCheck>
+  );
+}
+
+const tileClass =
+  'flex items-start gap-2.5 rounded-lg border border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
+
+function attentionOf(login: ComputerLogin | undefined): boolean {
+  return login?.credential?.status === 'needs_attention';
+}
+
+function AttentionLine() {
+  return (
+    <span className="block text-[11px] font-semibold text-danger-700" data-testid="logins-tile-attention">
+      Password needs attention
+    </span>
+  );
+}
+
+/** A saved login that isn't a catalog site (a custom site): same tile, with the check. */
+export function SavedLoginTile({
+  login,
+  onPick,
+}: {
+  login: ComputerLogin;
+  onPick: (login: ComputerLogin) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(login)}
+      className={tileClass}
+      data-testid={`logins-saved-${login.id}`}
+      data-saved="true"
+    >
+      <HostLogo host={login.host} name={login.label} />
+      <span className="min-w-0">
+        <span className="flex items-center gap-1">
+          <span className="truncate text-sm font-semibold text-ink-900">{login.label}</span>
+          <SavedCheck />
+        </span>
+        <span className="block truncate text-[11px] text-ink-600">{login.host}</span>
+        {attentionOf(login) ? <AttentionLine /> : null}
+      </span>
+    </button>
+  );
+}
+
 export function LoginCatalogPicker({
   catalog,
   onPick,
   onCustom,
-  savedHosts,
+  onPickLogin,
+  saved,
+  otherLogins = [],
+  disabled = false,
 }: {
   catalog: LoginCatalog;
+  /** A site without a saved login: start adding it. */
   onPick: (site: LoginCatalogEntry) => void;
   onCustom: () => void;
-  /** Hosts already saved on this org (shown as "Saved"). */
-  savedHosts: string[];
+  /** A site with a saved login (catalog or custom): open its actions. */
+  onPickLogin: (login: ComputerLogin) => void;
+  /** Saved logins by catalog site id (those sites get the green check). */
+  saved: ReadonlyMap<string, ComputerLogin>;
+  /** Saved logins that match no catalog site, shown as tiles at the end of the grid. */
+  otherLogins?: ComputerLogin[];
+  /** New sign-ins can't start right now; saved sites stay open so they can still be managed. */
+  disabled?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const groups = useMemo(() => groupLoginCatalog(catalog, query), [catalog, query]);
-  const matches = groups.reduce((n, g) => n + g.sites.length, 0);
-  const saved = new Set(savedHosts.map((h) => h.toLowerCase()));
+  const others = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q
+      ? otherLogins.filter((l) => `${l.label} ${l.host}`.toLowerCase().includes(q))
+      : otherLogins;
+  }, [otherLogins, query]);
+  const matches = groups.reduce((n, g) => n + g.sites.length, 0) + others.length;
   return (
     <div data-testid="logins-catalog">
       {/* The search bar sits at the very top and filters every site by name, category or address as you type. */}
@@ -168,31 +247,37 @@ export function LoginCatalogPicker({
               {g.label}
             </h3>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {g.sites.map((site) => (
-                <button
-                  key={site.id}
-                  type="button"
-                  onClick={() => onPick(site)}
-                  className="flex items-start gap-2.5 rounded-lg border border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600"
-                  data-testid={`logins-catalog-${site.id}`}
-                >
-                  <SiteLogo site={site} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-ink-900">
-                      {site.name}
+              {g.sites.map((site) => {
+                const login = saved.get(site.id);
+                return (
+                  <button
+                    key={site.id}
+                    type="button"
+                    onClick={() => (login ? onPickLogin(login) : onPick(site))}
+                    disabled={disabled && !login}
+                    className={tileClass}
+                    data-testid={`logins-catalog-${site.id}`}
+                    data-saved={login ? 'true' : undefined}
+                  >
+                    <SiteLogo site={site} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1">
+                        <span className="truncate text-sm font-semibold text-ink-900">
+                          {site.name}
+                        </span>
+                        {login ? <SavedCheck /> : null}
+                      </span>
+                      <span className="block truncate text-[11px] text-ink-600">{site.host}</span>
+                      {attentionOf(login) ? <AttentionLine /> : null}
+                      <SiteBadges site={site} />
                     </span>
-                    <span className="block truncate text-[11px] text-ink-600">
-                      {site.host}
-                      {saved.has(site.host.toLowerCase()) ? ' · Saved' : ''}
-                    </span>
-                    <SiteBadges site={site} />
-                  </span>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </section>
         ))}
-        {groups.length === 0 ? (
+        {groups.length === 0 && others.length === 0 ? (
           <p className="text-sm text-ink-600" data-testid="logins-catalog-empty">
             No site matches “{query}”. Use Custom website for any other site.
           </p>
@@ -201,25 +286,31 @@ export function LoginCatalogPicker({
           <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-600">
             Any other site
           </h3>
-          <button
-            type="button"
-            onClick={onCustom}
-            className="mt-2 flex w-full items-center gap-2.5 rounded-lg border border-dashed border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600 sm:w-auto"
-            data-testid="logins-catalog-custom"
-          >
-            <span
-              aria-hidden="true"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-paper-50 text-base font-bold text-ink-700"
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {others.map((login) => (
+              <SavedLoginTile key={login.id} login={login} onPick={onPickLogin} />
+            ))}
+            <button
+              type="button"
+              onClick={onCustom}
+              disabled={disabled}
+              className="flex items-center gap-2.5 rounded-lg border border-dashed border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="logins-catalog-custom"
             >
-              +
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-ink-900">Custom website</span>
-              <span className="block text-[11px] text-ink-600">
-                Carrier portals, permit sites, anything with a sign-in page
+              <span
+                aria-hidden="true"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper-50 text-base font-bold text-ink-700"
+              >
+                +
               </span>
-            </span>
-          </button>
+              <span>
+                <span className="block text-sm font-semibold text-ink-900">Custom website</span>
+                <span className="block text-[11px] text-ink-600">
+                  Carrier portals, permit sites, anything with a sign-in page
+                </span>
+              </span>
+            </button>
+          </div>
         </section>
       </div>
     </div>

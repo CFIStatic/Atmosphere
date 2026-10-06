@@ -453,3 +453,64 @@ export function groupLoginCatalog(
     .map((c) => ({ id: c.id, label: c.label, sites: catalog.sites.filter((s) => s.category === c.id && match(s)) }))
     .filter((g) => g.sites.length > 0);
 }
+
+/** Hostname without "www." (lowercase), or '' when it is not a web address. */
+function bareHost(hostOrUrl: string | null | undefined): string {
+  const text = String(hostOrUrl ?? '').trim().toLowerCase();
+  if (!text) return '';
+  try {
+    const host = /^[a-z]+:\/\//.test(text) ? new URL(text).hostname : text.split(/[/?#]/)[0]!;
+    return host.replace(/\.$/, '').replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/** A sign-in address compared loosely: host without "www.", path without a trailing slash, query kept. */
+function sameUrlKey(url: string | null | undefined): string {
+  const text = String(url ?? '').trim();
+  if (!text) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    return `${bareHost(u.hostname)}${u.pathname.replace(/\/+$/, '')}${u.search}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Which catalog sites already have a saved login, and which saved logins match no catalog site.
+ *
+ * Saved logins don't store a catalog id, so a login matches a site by, in order:
+ * 1. its address (or saved sign-in page) being the site's sign-in address — what picking the
+ *    site saves. This tells apart sites that share a sign-in host (Google Calendar, Drive and
+ *    Business Profile all sign in on accounts.google.com).
+ * 2. its host (without "www.") being the site's own host, e.g. a custom "outlook.office.com".
+ *    Only the site's own host counts, never a shared sign-in host, so a custom
+ *    accounts.google.com login doesn't check a Google site.
+ * Several matches are narrowed by the login's name; still ambiguous means no match. A site
+ * holds one login; any other login for it is listed with the unmatched ones so it can still
+ * be managed.
+ */
+export function matchSavedLogins(
+  catalog: LoginCatalog | null,
+  logins: ComputerLogin[],
+): { bySite: Map<string, ComputerLogin>; unmatched: ComputerLogin[] } {
+  const bySite = new Map<string, ComputerLogin>();
+  const unmatched: ComputerLogin[] = [];
+  const sites = catalog?.sites ?? [];
+  for (const login of logins) {
+    const urls = new Set([sameUrlKey(login.url), sameUrlKey(login.credential?.loginUrl)].filter(Boolean));
+    const hosts = new Set([bareHost(login.host), bareHost(login.url)].filter(Boolean));
+    let candidates = sites.filter((s) => urls.has(sameUrlKey(s.signInUrl)));
+    if (candidates.length === 0) candidates = sites.filter((s) => hosts.has(bareHost(s.host)));
+    if (candidates.length > 1) {
+      const name = fold(login.label);
+      candidates = candidates.filter((s) => fold(s.name) === name);
+    }
+    const site = candidates.length === 1 ? candidates[0]! : null;
+    if (site && !bySite.has(site.id)) bySite.set(site.id, login);
+    else unmatched.push(login);
+  }
+  return { bySite, unmatched };
+}
