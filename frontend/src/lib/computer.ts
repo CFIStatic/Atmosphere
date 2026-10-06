@@ -412,9 +412,43 @@ export interface ComputerRemoveLoginResult {
   message: string;
 }
 
-/** Quick picks on Add login. Any https site works; these are just shortcuts. */
-export const LOGIN_QUICK_PICKS: ReadonlyArray<{ label: string; url: string }> = [
-  { label: 'Outlook', url: 'https://outlook.office.com' },
-  { label: 'Gmail', url: 'https://mail.google.com' },
-  { label: 'Xactimate', url: 'https://identity.xactware.com' },
-];
+/** One site in the "Add a login" catalog (served by the backend from its site catalog data). */
+export interface LoginCatalogEntry {
+  id: string;
+  name: string;
+  category: string;
+  signInUrl: string;
+  host: string;
+  aliases: string[];
+  /** 'likely' → the site usually asks for a code at sign-in. */
+  twoStep: 'likely' | 'sometimes' | 'rare';
+  /** Company accounts often sign in through Google, Microsoft or another single sign-on. */
+  sso: boolean;
+  logo: { text: string; color: string };
+  termsNote: string | null;
+  practice: string[];
+  /** How Computer signs in, in plain words (every catalog site is ready right after saving). */
+  signInSteps: string;
+}
+
+export interface LoginCatalog {
+  categories: Array<{ id: string; label: string }>;
+  sites: LoginCatalogEntry[];
+}
+
+const fold = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Sites matching a search (name, aliases, host or category label), grouped in catalog category order. */
+export function groupLoginCatalog(
+  catalog: LoginCatalog,
+  query: string,
+): Array<{ id: string; label: string; sites: LoginCatalogEntry[] }> {
+  const q = fold(query);
+  const labels = new Map(catalog.categories.map((c) => [c.id, c.label]));
+  const match = (s: LoginCatalogEntry) =>
+    !q ||
+    [s.name, s.host, labels.get(s.category) ?? '', ...s.aliases].some((t) => fold(t).includes(q));
+  return catalog.categories
+    .map((c) => ({ id: c.id, label: c.label, sites: catalog.sites.filter((s) => s.category === c.id && match(s)) }))
+    .filter((g) => g.sites.length > 0);
+}

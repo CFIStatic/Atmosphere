@@ -52,6 +52,18 @@ import {
 import { sendSystemMail } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { config } from '../config.js';
+import { computerIqStore } from '../computer/worker.js';
+import {
+  approveDraft,
+  draftView,
+  DraftReviewError,
+  practiceRunDetail,
+  practiceSummary,
+  rejectDraft,
+} from '../computer/iq/staffApi.js';
+import { practiceSchedule } from '../computer/iq/practice/scheduler.js';
+import { PracticeConfigError, practiceOrgId, runPracticeSuite, utcDate } from '../computer/iq/practice/runner.js';
+import { PRACTICE_TASKS } from '../computer/iq/practice/catalog.js';
 
 export const analyticsRouter = Router();
 
@@ -432,6 +444,110 @@ analyticsRouter.get(
     }
   },
 );
+
+/* --------------------------------------------- Computer practice (staff) -- */
+
+function computerIqForStaff(req: Request) {
+  if (!canGrantAiCredits(req.analyticsScope)) {
+    throw forbidden('Only Atmosphere staff can view Computer practice runs.', 'analytics_forbidden');
+  }
+  const iq = computerIqStore();
+  if (!iq) throw new HttpError(503, 'Computer is not configured on this server.', 'no_admin');
+  return iq;
+}
+
+function draftError(err: unknown): never {
+  if (err instanceof DraftReviewError) {
+    throw new HttpError(err.code === 'not_found' ? 404 : err.code === 'conflict' ? 409 : 400, err.message, `draft_${err.code}`);
+  }
+  throw err;
+}
+
+const uuidParam = z.string().uuid();
+
+/** Practice success dashboard: success rate per site and task over time. */
+analyticsRouter.get('/computer-practice', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const iq = computerIqForStaff(req);
+    const days = Math.min(60, Math.max(1, Number.parseInt(String(req.query.days ?? '14'), 10) || 14));
+    const schedule = practiceSchedule();
+    res.json(await practiceSummary({ iq, orgId: practiceOrgId(), days, today: utcDate(), schedule: { enabled: schedule.enabled, hourUtc: schedule.hourUtc } }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+analyticsRouter.get('/computer-practice/runs/:id', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const iq = computerIqForStaff(req);
+    const id = uuidParam.safeParse(req.params.id);
+    if (!id.success) throw new HttpError(400, 'Invalid run id', 'invalid_run');
+    const detail = await practiceRunDetail(iq, id.data);
+    if (!detail) throw new HttpError(404, 'Practice run not found', 'not_found');
+    res.json(detail);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Start practice runs now (practice org only). Runs in the background; poll the dashboard. */
+analyticsRouter.post('/computer-practice/run', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    computerIqForStaff(req);
+    const body = z
+      .object({ keys: z.array(z.string().max(80)).max(PRACTICE_TASKS.length).optional(), force: z.boolean().optional() })
+      .parse(req.body ?? {});
+    const orgId = practiceOrgId();
+    if (!orgId) throw new HttpError(409, 'Set COMPUTER_PRACTICE_ORG_ID to the practice org first.', 'practice_not_configured');
+    const keys = body.keys?.filter((k) => PRACTICE_TASKS.some((t) => t.key === k));
+    void runPracticeSuite({ orgId, keys, force: body.force ?? true }).catch((err) => {
+      if (!(err instanceof PracticeConfigError)) console.error('[computer] practice run failed', err);
+    });
+    res.status(202).json({ started: true, tasks: keys?.length ? keys : PRACTICE_TASKS.map((t) => t.key) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+analyticsRouter.get('/computer-playbooks/drafts', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const iq = computerIqForStaff(req);
+    const status = z.enum(['pending', 'approved', 'rejected']).optional().parse(req.query.status || undefined);
+    res.json({ drafts: (await iq.listDrafts(status, 100)).map(draftView) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+analyticsRouter.post('/computer-playbooks/drafts/:id/approve', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const iq = computerIqForStaff(req);
+    const id = uuidParam.safeParse(req.params.id);
+    if (!id.success) throw new HttpError(400, 'Invalid draft id', 'invalid_draft');
+    const body = z
+      .object({
+        taskType: z.string().trim().max(60).optional(),
+        removeSteps: z.array(z.number().int().min(0).max(100)).max(100).optional(),
+        note: z.string().trim().max(500).optional(),
+      })
+      .parse(req.body ?? {});
+    res.json(await approveDraft(iq, id.data, { reviewerId: req.user?.id ?? null, ...body }).catch(draftError));
+  } catch (err) {
+    next(err);
+  }
+});
+
+analyticsRouter.post('/computer-playbooks/drafts/:id/reject', requireAnalytics('internal'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const iq = computerIqForStaff(req);
+    const id = uuidParam.safeParse(req.params.id);
+    if (!id.success) throw new HttpError(400, 'Invalid draft id', 'invalid_draft');
+    const body = z.object({ note: z.string().trim().max(500).optional() }).parse(req.body ?? {});
+    res.json(await rejectDraft(iq, id.data, { reviewerId: req.user?.id ?? null, note: body.note ?? null }).catch(draftError));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** Manual credit grant. Investors cannot reach this route. */
 analyticsRouter.post(

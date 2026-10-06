@@ -13,6 +13,7 @@ import type {
   ComputerLogin,
   ComputerCredentialInput,
   ComputerLoginsState,
+  LoginCatalog,
   ComputerRemoveLoginResult,
   ComputerSignIn,
   ComputerTaskView,
@@ -6084,6 +6085,9 @@ export const api = {
 
   // Logins: sign in to outside sites ahead of time. No agent runs here.
   computerLogins: () => request<ComputerLoginsState>('/api/chat-computer/logins', { cache: 'no-store' }),
+
+  /** The "Add a login" site catalog (official sign-in URLs, grouped by category). */
+  computerLoginCatalog: () => request<LoginCatalog>('/api/chat-computer/logins/catalog'),
 
   computerStartSignIn: (input: { url?: string; label?: string; loginId?: string; credential?: ComputerCredentialInput }) =>
     request<{ signIn: ComputerSignIn }>('/api/chat-computer/logins/sign-ins', {

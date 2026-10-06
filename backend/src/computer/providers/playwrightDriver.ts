@@ -6,15 +6,35 @@
  */
 import { createHash } from 'node:crypto';
 import type { Browser, BrowserContext, Frame, Locator, Page } from 'playwright-core';
-import { DESCRIBE_AT_POINT, DESCRIBE_FOCUSED, READ_FIELDS, READ_SIGNALS } from '../domScripts.js';
+import {
+  DESCRIBE_AT_POINT,
+  DESCRIBE_FOCUSED,
+  DISMISS_OVERLAYS,
+  FIND_FILE_INPUT,
+  LOCATE_ELEMENT,
+  PAGE_FINGERPRINT,
+  PAGE_OUTLINE,
+  READ_FIELDS,
+  READ_SIGNALS,
+  RECORDER,
+} from '../domScripts.js';
 import type {
   ComputerDriver,
   CookieSnapshot,
+  DismissedOverlay,
+  DownloadedFile,
+  ElementTarget,
   FormFieldReading,
+  LocatedElement,
   MouseButton,
+  PageOutline,
   PageSignals,
+  RecordedAction,
   ScreenshotFormat,
   TargetDescriptor,
+  TaskFile,
+  SignInFill,
+  SignInHints,
 } from '../types.js';
 
 /** xdotool names (what computer use emits) → Playwright key names. */
@@ -75,6 +95,9 @@ const USERNAME_SELECTORS = [
   'input[id*="email" i]:visible',
   'input[id*="user" i]:visible',
   'input[id*="login" i]:visible',
+  // Google's sign-in names its box "identifier" (id identifierId).
+  'input[name="identifier"]:visible',
+  'input[id*="identifier" i]:visible',
 ];
 const PASSWORD_SELECTOR = 'input[type="password"]:visible';
 
@@ -84,6 +107,36 @@ async function firstPresent(page: Page, selectors: string[]): Promise<Locator | 
     if ((await loc.count().catch(() => 0)) > 0) return loc;
   }
   return null;
+}
+
+/**
+ * Click the first visible link or button named exactly one of the names (a
+ * landing page's "Sign in"). Exact, so "Sign in" never hits "Sign in with
+ * Google" and sends the saved password to another account.
+ */
+export async function openSignInForm(page: Page, names: string[]): Promise<boolean> {
+  for (const name of names) {
+    for (const role of ['link', 'button'] as const) {
+      const loc = page.getByRole(role, { name, exact: true });
+      const n = await loc.count().catch(() => 0);
+      for (let i = 0; i < Math.min(n, 5); i += 1) {
+        const el = loc.nth(i);
+        if (await el.isVisible().catch(() => false)) {
+          await el.click({ timeout: 5_000 }).catch(() => undefined);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** Which sign-in fields the page shows now (used by fillSignIn and the readiness check; never types). */
+export async function signInFieldsVisible(page: Page): Promise<{ username: boolean; password: boolean }> {
+  return {
+    username: Boolean(await firstPresent(page, USERNAME_SELECTORS)),
+    password: Boolean(await firstPresent(page, [PASSWORD_SELECTOR])),
+  };
 }
 
 /** Submit the field's form: its submit button if it has one, else Enter. */
@@ -127,7 +180,51 @@ export class PlaywrightDriver implements ComputerDriver {
     // Follow new tabs (target=_blank links, popups) so the model sees them.
     context.on('page', (p) => {
       this.page = p;
+      this.watchDownloads(p);
     });
+    for (const p of context.pages()) this.watchDownloads(p);
+  }
+
+  private downloaded: DownloadedFile[] = [];
+
+  /** Record downloads by name (and size when the browser exposes it); contents are not read. */
+  private watchDownloads(p: Page) {
+    p.on('download', (d) => {
+      const entry: DownloadedFile = { name: d.suggestedFilename().slice(0, 200), bytes: null, at: Date.now() };
+      this.downloaded.push(entry);
+      if (this.downloaded.length > 50) this.downloaded.shift();
+      // Remote browsers may not expose the file; size is best effort.
+      void d
+        .createReadStream()
+        .then(async (stream) => {
+          let n = 0;
+          for await (const chunk of stream) n += (chunk as Buffer).length;
+          entry.bytes = n;
+        })
+        .catch(() => undefined);
+    });
+  }
+
+  async downloads(): Promise<DownloadedFile[]> {
+    return this.downloaded.map((d) => ({ ...d }));
+  }
+
+  async attachFiles(x: number, y: number, files: TaskFile[]): Promise<'attached' | 'no_file_input'> {
+    const page = await this.active();
+    const payload = files.map((f) => ({ name: f.name, mimeType: f.mimeType, buffer: f.bytes }));
+    const handle = await page.evaluateHandle(`(${FIND_FILE_INPUT})(${Math.round(x)}, ${Math.round(y)})`);
+    const input = handle.asElement();
+    if (input) {
+      await input.setInputFiles(payload);
+      return 'attached';
+    }
+    // A styled button that opens the chooser itself.
+    const chooser = await Promise.all([page.waitForEvent('filechooser', { timeout: 4_000 }), page.mouse.click(x, y)])
+      .then(([c]) => c)
+      .catch(() => null);
+    if (!chooser) return 'no_file_input';
+    await chooser.setFiles(payload);
+    return 'attached';
   }
 
   private async active(): Promise<Page> {
@@ -201,7 +298,95 @@ export class PlaywrightDriver implements ComputerDriver {
 
   async navigate(url: string) {
     const page = await this.active();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    } catch (err) {
+      // A slow page that already committed is usable; a page that never started is not.
+      if (page.url() === 'about:blank' || !page.url()) throw err;
+    }
+  }
+
+  async pageOutline(): Promise<PageOutline> {
+    const page = await this.active();
+    const got = (await page.mainFrame().evaluate(`(${PAGE_OUTLINE})()`).catch(() => null)) as PageOutline | null;
+    return got ?? { url: page.url(), title: '', headings: [], dialogs: [], elements: [] };
+  }
+
+  async locate(target: ElementTarget): Promise<LocatedElement | null> {
+    const page = await this.active();
+    return (await page
+      .mainFrame()
+      .evaluate(`(${LOCATE_ELEMENT})(${JSON.stringify(target)})`)
+      .catch(() => null)) as LocatedElement | null;
+  }
+
+  async pageFingerprint(): Promise<string> {
+    const page = await this.active();
+    const fp = (await page.mainFrame().evaluate(`(${PAGE_FINGERPRINT})()`).catch(() => null)) as string | null;
+    return fp ?? `${page.url()}#?`;
+  }
+
+  async dismissOverlays(): Promise<DismissedOverlay[]> {
+    const page = await this.active();
+    const got = (await page.mainFrame().evaluate(`(${DISMISS_OVERLAYS})()`).catch(() => [])) as DismissedOverlay[];
+    if (got.length) await page.waitForTimeout(600);
+    return got;
+  }
+
+  private recording: RecordedAction[] | null = null;
+  private recorderInstalled = false;
+
+  async startRecording(): Promise<void> {
+    this.recording = [];
+    if (!this.recorderInstalled) {
+      this.recorderInstalled = true;
+      // The binding only receives descriptors; the server maps any typed value to a slot and drops it.
+      await this.context
+        .exposeBinding('__atmoRecord', (_source, ev: unknown) => {
+          if (!this.recording || !ev || typeof ev !== 'object') return;
+          const e = ev as Record<string, unknown>;
+          const kind = String(e.kind ?? '');
+          if (!['click', 'type', 'press', 'sign_in'].includes(kind)) return;
+          this.recording.push({
+            kind: kind as RecordedAction['kind'],
+            role: typeof e.role === 'string' ? e.role.slice(0, 40) : null,
+            name: typeof e.name === 'string' ? e.name.slice(0, 120) : null,
+            tag: typeof e.tag === 'string' ? e.tag.slice(0, 20) : null,
+            inputType: typeof e.inputType === 'string' ? e.inputType.slice(0, 20) : null,
+            key: typeof e.key === 'string' ? e.key.slice(0, 20) : null,
+            value: typeof e.value === 'string' ? e.value.slice(0, 500) : null,
+            at: Date.now(),
+          });
+        })
+        .catch(() => undefined);
+      await this.context.addInitScript(RECORDER).catch(() => undefined);
+      this.context.on('page', (p) => this.watchNavigation(p));
+      for (const p of this.context.pages()) this.watchNavigation(p);
+    }
+    for (const p of this.context.pages()) {
+      await p.evaluate(RECORDER).catch(() => undefined);
+      await p.evaluate('window.__atmoRecording = true').catch(() => undefined);
+    }
+  }
+
+  private watched = new WeakSet<Page>();
+  private watchNavigation(p: Page) {
+    if (this.watched.has(p)) return;
+    this.watched.add(p);
+    p.on('framenavigated', (frame) => {
+      if (!this.recording || frame !== p.mainFrame()) return;
+      const url = frame.url();
+      const last = this.recording[this.recording.length - 1];
+      if (last?.kind === 'navigate' && last.url === url) return;
+      this.recording.push({ kind: 'navigate', url, at: Date.now() });
+    });
+  }
+
+  async stopRecording(): Promise<RecordedAction[]> {
+    const got = this.recording ?? [];
+    this.recording = null;
+    for (const p of this.context.pages()) await p.evaluate('window.__atmoRecording = false').catch(() => undefined);
+    return got;
   }
 
   async currentUrl() {
@@ -320,20 +505,38 @@ export class PlaywrightDriver implements ComputerDriver {
     return Math.max(0, before - after);
   }
 
-  async fillSignIn(creds: { username: string; password: string }): Promise<'submitted' | 'username_only' | 'no_form'> {
+  async fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill> {
     try {
       const page = await this.active();
+      const hostNow = () => {
+        try {
+          return new URL(page.url()).host.toLowerCase();
+        } catch {
+          return '';
+        }
+      };
+      const allowed = () => !hints?.allowHost || hints.allowHost(hostNow());
+      if (hints?.openWith?.length && !(await firstPresent(page, [PASSWORD_SELECTOR])) && !(await firstPresent(page, USERNAME_SELECTORS))) {
+        // A landing page: open the sign-in form through its own link first.
+        if (await openSignInForm(page, hints.openWith)) {
+          await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
+          await page.locator(`${PASSWORD_SELECTOR}, ${USERNAME_SELECTORS.join(', ')}`).first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => undefined);
+        }
+      }
       let sentUsername = false;
       for (let round = 0; round < 3; round += 1) {
         const password = await firstPresent(page, [PASSWORD_SELECTOR]);
         const username = await firstPresent(page, USERNAME_SELECTORS);
         if (password) {
+          // Never type a saved password on a page the login doesn't belong to.
+          if (!allowed()) return 'other_site';
           if (username && !sentUsername) await username.fill(creds.username);
           await password.fill(creds.password);
           await submitFrom(page, password);
           return 'submitted';
         }
         if (username && !sentUsername) {
+          if (!allowed()) return 'other_site';
           // A username-first page (Microsoft, Google): send it, then wait for the password page.
           await username.fill(creds.username);
           sentUsername = true;

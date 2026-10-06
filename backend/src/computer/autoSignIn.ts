@@ -11,7 +11,35 @@
 import { CREDENTIALS_OFF_MESSAGE, credentialKeyFingerprint, credentialsEnabled, openCredential } from './credentialCrypto.js';
 import { hostOfUrl, siteOf } from './sites.js';
 import type { ComputerCredentialRow, ComputerLoginRow, ComputerStore } from './store.js';
-import type { ComputerDriver } from './types.js';
+import { catalogSiteForHost, signInHostsFor } from './catalog/sites.js';
+import type { ComputerDriver, SignInHints } from './types.js';
+
+/**
+ * Identity providers a site's own sign-in commonly hands off to. A saved
+ * password may be typed there after the site's official sign-in page sent
+ * the browser over (the login's credential is the account's password there).
+ */
+const COMMON_IDENTITY_SITES = ['microsoftonline.com', 'live.com', 'accounts.google.com', 'okta.com', 'auth0.com', 'b2clogin.com'];
+
+/** Exact link names that open a sign-in form on a landing page, for sites without a catalog recipe. */
+const GENERIC_OPEN_WITH = ['Sign in', 'Sign In', 'Log in', 'Log In', 'Login', 'LOGIN', 'SIGN IN'];
+
+/** How to sign in to this login's site: the catalog recipe's link to open, and where typing is allowed. */
+export function signInHintsFor(saved: SavedSignIn): SignInHints {
+  const trusted = trustedSites(saved);
+  const loginUrlHost = hostOfUrl(saved.credential.login_url);
+  const site = catalogSiteForHost(saved.login.host) ?? catalogSiteForHost(loginUrlHost);
+  const extra = new Set([...signInHostsFor(saved.login.host), ...signInHostsFor(loginUrlHost)].map((h) => h.toLowerCase()));
+  return {
+    openWith: site?.signIn?.flow === 'open_first' && site.signIn.openWith?.length ? site.signIn.openWith : GENERIC_OPEN_WITH,
+    allowHost: (host) => {
+      const h = host.toLowerCase();
+      if (!h) return false;
+      if (trusted.has(siteOf(h)) || extra.has(h)) return true;
+      return COMMON_IDENTITY_SITES.some((d) => h === d || h.endsWith(`.${d}`));
+    },
+  };
+}
 
 export type AutoSignInOutcome =
   | 'signed_in'
@@ -134,15 +162,21 @@ export async function autoSignIn(input: {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
     }
-    filled = await driver.fillSignIn({ username, password });
+    const hints = signInHintsFor(saved);
+    filled = await driver.fillSignIn({ username, password }, hints);
     if (filled === 'no_form' && !navigated) {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
-      filled = await driver.fillSignIn({ username, password });
+      filled = await driver.fillSignIn({ username, password }, hints);
     }
   } catch {
     await record('incomplete');
     return { outcome: 'incomplete', message: `Computer couldn't fill in the sign-in form for ${name}.` };
+  }
+
+  if (filled === 'other_site') {
+    await record('incomplete');
+    return { outcome: 'incomplete', message: `${name} sent the sign-in to a different website, so Computer didn't type the saved password there. Please finish signing in yourself.` };
   }
 
   if (filled === 'no_form') {

@@ -19,7 +19,7 @@ export const BROWSER_MODEL_ID = 'browserbase-browser-time';
 
 export async function meterComputerModelCall(
   client: SupabaseClient | null,
-  input: { orgId: string; taskId: string; jobId: string | null; userId: string | null; step: number; response: ComputerModelResponse },
+  input: { orgId: string; taskId: string; jobId: string | null; userId: string | null; step: number | string; response: ComputerModelResponse },
 ): Promise<number> {
   const usage = tryExtractUsage(input.response.usage, input.response.model);
   const cost = providerCostForUsage(input.response.model, usage).costNanos;

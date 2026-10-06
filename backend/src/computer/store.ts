@@ -21,7 +21,13 @@ export interface ComputerTaskRow {
   job_projection: ProjectedJobField[];
   status: ComputerTaskStatus;
   status_detail: string | null;
-  needs_you: { reason: NeedsYouReason; message: string; since: string } | null;
+  needs_you: {
+    reason: NeedsYouReason;
+    message: string;
+    since: string;
+    /** JPEG of the page when Computer got stuck (shown with the handoff message). */
+    screenshot_jpeg_b64?: string | null;
+  } | null;
   human_control_by: string | null;
   human_control_since: string | null;
   resume_requested_at: string | null;
@@ -41,6 +47,20 @@ export interface ComputerTaskRow {
   finished_at: string | null;
   heartbeat_at: string | null;
   updated_at: string;
+  /** Practice run metadata (null for customer tasks). */
+  practice?: PracticeTaskMeta | null;
+}
+
+/** A practice task never asks a person, never submits, and records a practice run. */
+export interface PracticeTaskMeta {
+  runId: string;
+  taskKey: string;
+  taskType: string;
+  mode: 'read_only' | 'stop_before_submit';
+  /** Named inputs for the task's playbook slots (for example a search phrase). */
+  params?: Record<string, string>;
+  /** What must be on the page when the task is done (downloaded: a file must have arrived). */
+  success?: { urlIncludes?: string; textIncludes?: string; downloaded?: boolean };
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'canceled' | 'expired' | 'consumed';
@@ -158,7 +178,8 @@ export interface ComputerAuditRow {
 export type NewTask = Pick<
   ComputerTaskRow,
   'org_id' | 'job_id' | 'created_by' | 'instructions' | 'start_url' | 'job_projection' | 'model_id' | 'max_steps' | 'budget_nanos'
->;
+> &
+  Partial<Pick<ComputerTaskRow, 'practice'>>;
 
 export type NewApproval = Pick<
   ComputerApprovalRow,
