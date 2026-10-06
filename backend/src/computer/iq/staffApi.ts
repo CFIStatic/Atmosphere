@@ -141,7 +141,7 @@ function siteCoverage(tasks: PracticeTask[], byTask: Array<{ key: string; lastSt
         terms: s.terms.status,
         termsNote: s.terms.note,
         termsUrl: s.terms.url,
-        inPicker: s.terms.status !== 'flagged' && !s.publicTestSite && !s.notInPicker,
+        inPicker: !s.publicTestSite && !s.notInPicker,
         signIn: s.signIn ? { flow: s.signIn.flow, checked: s.signIn.checked } : null,
         twoStep: s.twoStep,
         sso: s.sso,

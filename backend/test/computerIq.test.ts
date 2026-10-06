@@ -114,20 +114,43 @@ test('catalog: Google, Microsoft and Slack are marked for codes and single sign-
   }
 });
 
-test('catalog: sites whose terms ban automation are hidden from the picker and get no practice tasks', () => {
-  const flagged = SITE_CATALOG.filter((s) => s.terms.status === 'flagged').map((s) => s.id);
-  for (const id of ['homedepot', 'lowes', 'abcsupply', 'srs', 'beacon', 'ferguson', 'sherwinwilliams', 'eagleview', 'hover', 'roofr', 'servicetitan', 'greensky', 'hearth', 'box', 'xero', 'square', 'paypal', 'amazonbusiness', 'linkedin', 'meta_business', 'yelp_business', 'angi', 'thumbtack', 'nextdoor', 'indeed', 'adp',
-    'appfolio', 'buildium', 'realpage', 'propertyware', 'entrata', 'servicechannel', 'corrigo', 'latchel', 'procore',
-    'accuserve', 'contractorconnection', 'symbility', 'nextgear', 'allstate', 'matterport']) {
-    assert.ok(flagged.includes(id), id);
-  }
+const TERMS_FLAGGED_41 = ['homedepot', 'lowes', 'abcsupply', 'srs', 'beacon', 'ferguson', 'sherwinwilliams', 'eagleview', 'hover', 'roofr', 'servicetitan', 'greensky', 'hearth', 'box', 'xero', 'square', 'paypal', 'amazonbusiness', 'linkedin', 'meta_business', 'yelp_business', 'angi', 'thumbtack', 'nextdoor', 'indeed', 'adp',
+  'appfolio', 'buildium', 'realpage', 'propertyware', 'entrata', 'servicechannel', 'corrigo', 'latchel', 'procore',
+  'accuserve', 'contractorconnection', 'symbility', 'nextgear', 'allstate', 'matterport'];
+
+test('catalog: sites whose terms ban automation are normal entries (customer decision); the flag is staff data only', () => {
+  const byId = new Map(SITE_CATALOG.map((s) => [s.id, s]));
   const view = loginCatalogView();
-  assert.ok(!view.sites.some((s) => flagged.includes(s.id)));
+  const inView = new Set(view.sites.map((s) => s.id));
+  for (const id of TERMS_FLAGGED_41) {
+    const s = byId.get(id)!;
+    assert.equal(s.terms.status, 'flagged', `${id}: the internal terms flag is kept`);
+    assert.equal(isAutomationRestrictedSite(s.hosts[0]), false, `${id}: a terms flag restricts nothing`);
+    if (id === 'allstate') {
+      // Its only public portal is for roadside/towing providers: no verified contractor sign-in, so not offered.
+      assert.ok(s.notInPicker && !inView.has(id) && s.signIn === null);
+      continue;
+    }
+    assert.ok(inView.has(id), `${id} is in Add a login`);
+    assert.ok(s.signIn, `${id} is ready to go`);
+    assert.ok(PRACTICE_TASKS.some((t) => t.catalogId === id), `${id} has a practice task`);
+    assert.ok(siteGuideFor(s.hosts[0]).length > 0, `${id} has starter hints`);
+  }
+  assert.ok(view.sites.every((s) => s.termsNote === null), 'no terms warnings in the Logins UI');
+  assert.ok(!JSON.stringify(view).includes('flagged'), 'terms verdicts never reach the customer catalog');
   assert.ok(!view.sites.some((s) => s.id.startsWith('practice_')), 'public test sites are practice-only');
-  assert.ok(!PRACTICE_TASKS.some((t) => flagged.includes(t.catalogId)));
-  assert.equal(isAutomationRestrictedSite('www.homedepot.com'), true);
   assert.equal(isAutomationRestrictedSite('outlook.office.com'), false);
   assert.ok(view.categories.every((c) => view.sites.some((s) => s.category === c.id)), 'no empty categories');
+  assert.equal(view.sites.length, 76);
+  assert.ok(view.categories.find((c) => c.id === 'suppliers')!.terms.includes('supply'), '"supply" finds Suppliers in the Logins search');
+  // Sign-in pages that changed hands or sit behind a hub page.
+  assert.equal(byId.get('beacon')!.signInUrl, 'https://www.qxo.com/', 'Beacon is now QXO');
+  assert.equal(byId.get('beacon')!.signIn!.flow, 'open_first', 'QXO: click Login (its home-page email box is a newsletter sign-up)');
+  assert.equal(byId.get('abcsupply')!.signInUrl, 'https://account.abcsupply.com/', 'myABCsupply, not the WordPress login');
+  assert.equal(byId.get('entrata')!.signInUrl, 'https://sso.entrata.com/entrata/login');
+  const hd = PRACTICE_TASKS.find((t) => t.key === 'homedepot.supplier_search')!;
+  assert.equal(hd.mode, 'read_only');
+  assert.match(hd.instructions, /Do not add anything to the cart/);
 });
 
 test('catalog: host lookup and starter guides', () => {
@@ -135,14 +158,14 @@ test('catalog: host lookup and starter guides', () => {
   assert.equal(catalogSiteForHost('my.acculynx.com')?.id, 'acculynx');
   assert.equal(catalogSiteForHost('unknown.example'), null);
   assert.ok(siteGuideFor('app.jobnimbus.com').some((g) => /Jobs/.test(g)));
-  assert.deepEqual(siteGuideFor('www.homedepot.com'), [], 'no guide for flagged sites');
+  assert.match(siteGuideFor('www.homedepot.com')[0], /^Sign-in: Username, then Next, then password/);
   assert.equal(catalogSiteForHost('interiors.app.accuserve.com')?.aliases.includes('code blue'), true, 'Code Blue now runs under Accuserve');
   assert.ok(SITE_CATALOG.find((s) => s.id === 'hover')!.aliases.includes('hover for carriers'));
   assert.ok(SITE_CATALOG.find((s) => s.id === 'eagleview')!.aliases.includes('eagleview assess'));
   assert.ok(siteGuideFor('app.propertymeld.com').some((g) => /work order/i.test(g)));
   assert.ok(siteGuideFor('www.alacrity.net').some((g) => /claim/i.test(g)));
   assert.ok(catalogSiteForHost('www.alacrity.net')!.aliases.includes('accltery'));
-  assert.equal(isAutomationRestrictedSite('login.procore.com'), true);
+  assert.equal(isAutomationRestrictedSite('login.procore.com'), false, 'only Verisk sites are restricted');
 });
 
 test('catalog: restoration tools, Verisk exclusions and sites left out', () => {
@@ -172,7 +195,7 @@ test('ready to go: every picker site has a checked sign-in recipe, steps in plai
     assertNoPii(steps);
     assert.match(siteGuideFor(site.hosts[0])[0], /^Sign-in: /, site.id);
   }
-  for (const s of SITE_CATALOG.filter((x) => x.terms.status === 'flagged')) assert.equal(s.signIn, null, `${s.id}: flagged sites get no sign-in recipe`);
+  for (const s of SITE_CATALOG.filter((x) => x.notInPicker && !x.signIn)) assert.ok(!view.sites.some((e) => e.id === s.id), s.id);
   const m365 = SITE_CATALOG.find((s) => s.id === 'microsoft365')!;
   assert.deepEqual(starterSignInPlaybook(m365)[1], { kind: 'click', target: { role: 'link', name: 'Sign in', tag: null } });
 });

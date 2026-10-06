@@ -127,6 +127,20 @@ const SUMMARY: PracticeSummaryPayload = {
         terms: 'flagged',
         termsNote: 'n',
         termsUrl: 'https://www.homedepot.com/c/Terms_of_Use',
+        inPicker: true,
+        signIn: { flow: 'username_first', checked: 'live_page' },
+        twoStep: 'sometimes',
+        sso: false,
+        practiceTasks: ['homedepot.supplier_search'],
+        needsTestLogin: true,
+      },
+      {
+        id: 'allstate',
+        name: 'Allstate provider portal',
+        category: 'Insurance carriers and claims',
+        terms: 'flagged',
+        termsNote: 'n',
+        termsUrl: 'https://www.allstate.com/terms',
         inPicker: false,
         signIn: null,
         twoStep: 'sometimes',
@@ -165,16 +179,17 @@ beforeEach(() => {
 });
 
 describe('ComputerPracticePage', () => {
-  it('shows success rates, needs-login tasks, playbooks and coverage with flagged sites hidden', async () => {
+  it('shows success rates, needs-login tasks, playbooks and coverage with the terms flag as staff data', async () => {
     render(<ComputerPracticePage />);
     expect(await screen.findByText('50%', { selector: 'p' })).toBeInTheDocument();
     const tasks = screen.getByTestId('practice-tasks');
     expect(within(tasks).getByText('No saved Login for mail.google.com.')).toBeInTheDocument();
     expect(within(screen.getByTestId('practice-playbooks')).getByText('v2')).toBeInTheDocument();
     const cov = screen.getByTestId('practice-coverage');
-    expect(within(cov).getByText('Bans automation')).toBeInTheDocument();
+    expect(within(cov).getAllByText('Bans automation')).toHaveLength(2);
+    expect(within(cov).getAllByText('In picker')).toHaveLength(2);
     expect(within(cov).getByText('Hidden')).toBeInTheDocument();
-    expect(within(cov).getByText('Sign-in: username, then password')).toBeInTheDocument();
+    expect(within(cov).getAllByText('Sign-in: username, then password')).toHaveLength(2);
     expect(within(cov).getByText(/Excluded: Verisk/)).toBeInTheDocument();
   });
 

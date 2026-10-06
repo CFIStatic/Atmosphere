@@ -88,6 +88,8 @@ type RawDescriptor = TargetDescriptor & { frameRect: { x: number; y: number } | 
 /** Username / email inputs, most specific first. */
 const USERNAME_SELECTORS = [
   'input[autocomplete="username"]:visible',
+  // Square and Facebook use autocomplete="username webauthn".
+  'input[autocomplete~="username"]:visible',
   'input[type="email"]:visible',
   'input[name*="email" i]:visible',
   'input[name*="user" i]:visible',
@@ -105,6 +107,42 @@ async function firstPresent(page: Page, selectors: string[]): Promise<Locator | 
   for (const sel of selectors) {
     const loc = page.locator(sel).first();
     if ((await loc.count().catch(() => 0)) > 0) return loc;
+  }
+  return null;
+}
+
+/**
+ * True for an email box that is not a sign-in field: a newsletter, sign-up or
+ * search form (QXO's home page has a "Sign up" email box). Typing the saved
+ * username there and pressing its button would submit someone else's form.
+ */
+async function notASignInField(field: Locator): Promise<boolean> {
+  return field
+    .evaluate((el) => {
+      type El = { getAttribute(n: string): string | null; form?: El | null; querySelector(s: string): El | null; querySelectorAll(s: string): ArrayLike<El>; textContent: string | null };
+      const input = el as unknown as El;
+      const attrs = ['name', 'id', 'placeholder', 'aria-label', 'class'].map((a) => input.getAttribute(a) ?? '').join(' ').toLowerCase();
+      if (/newsletter|subscri|search|promo|coupon|zip/.test(attrs)) return true;
+      const form = input.form;
+      if (!form || form.querySelector('input[type="password"]')) return false;
+      const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]')).map((b) =>
+        ((b.textContent ?? '') + ' ' + (b.getAttribute('value') ?? '') + ' ' + (b.getAttribute('aria-label') ?? '')).trim().toLowerCase(),
+      );
+      const signUpOnly = buttons.length > 0 && buttons.every((t) => /sign ?up|subscribe|join|register|get started|notify|get deals/.test(t) && !/sign ?in|log ?in|next|continue/.test(t));
+      return signUpOnly;
+    })
+    .catch(() => false);
+}
+
+/** The first visible username/email box that belongs to a sign-in form. */
+async function firstUsernameField(page: Page): Promise<Locator | null> {
+  for (const sel of USERNAME_SELECTORS) {
+    const all = page.locator(sel);
+    const n = Math.min(await all.count().catch(() => 0), 5);
+    for (let i = 0; i < n; i += 1) {
+      const loc = all.nth(i);
+      if (!(await notASignInField(loc))) return loc;
+    }
   }
   return null;
 }
@@ -134,7 +172,7 @@ export async function openSignInForm(page: Page, names: string[]): Promise<boole
 /** Which sign-in fields the page shows now (used by fillSignIn and the readiness check; never types). */
 export async function signInFieldsVisible(page: Page): Promise<{ username: boolean; password: boolean }> {
   return {
-    username: Boolean(await firstPresent(page, USERNAME_SELECTORS)),
+    username: Boolean(await firstUsernameField(page)),
     password: Boolean(await firstPresent(page, [PASSWORD_SELECTOR])),
   };
 }
@@ -516,7 +554,7 @@ export class PlaywrightDriver implements ComputerDriver {
         }
       };
       const allowed = () => !hints?.allowHost || hints.allowHost(hostNow());
-      if (hints?.openWith?.length && !(await firstPresent(page, [PASSWORD_SELECTOR])) && !(await firstPresent(page, USERNAME_SELECTORS))) {
+      if (hints?.openWith?.length && !(await firstPresent(page, [PASSWORD_SELECTOR])) && !(await firstUsernameField(page))) {
         // A landing page: open the sign-in form through its own link first.
         if (await openSignInForm(page, hints.openWith)) {
           await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
@@ -526,7 +564,12 @@ export class PlaywrightDriver implements ComputerDriver {
       let sentUsername = false;
       for (let round = 0; round < 3; round += 1) {
         const password = await firstPresent(page, [PASSWORD_SELECTOR]);
-        const username = await firstPresent(page, USERNAME_SELECTORS);
+        let username = await firstUsernameField(page);
+        if (password && !username && !sentUsername) {
+          // Some pages (Square) draw the password box before the username box.
+          await page.locator(USERNAME_SELECTORS.join(', ')).first().waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined);
+          username = await firstUsernameField(page);
+        }
         if (password) {
           // Never type a saved password on a page the login doesn't belong to.
           if (!allowed()) return 'other_site';

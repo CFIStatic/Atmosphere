@@ -572,9 +572,6 @@ export function LoginsPage() {
                   {SSO_LINE} If yours does, you finish that step.
                 </p>
               ) : null}
-              {picked.termsNote ? (
-                <p className="mt-1 text-xs text-ink-600">{picked.termsNote}</p>
-              ) : null}
             </div>
           ) : null}
           {picked === 'custom' || (picked === null && catalogFailed) ? (

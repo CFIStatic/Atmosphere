@@ -10,9 +10,16 @@
  *                   person's own tasks at human pace. Computer works one task at a time.
  * - no_ban_found:   the terms we read have no automation clause.
  * - unverified:     we could not read the full terms; shown with a note.
- * - flagged:        terms prohibit bots or automated access/use of the site. Hidden from the
- *                   Logins picker; no practice runs and no playbooks. Excluded entirely:
- *                   Xactimate and XactAnalysis (Verisk EULA bans AI and automation tools).
+ * - flagged:        terms prohibit bots or automated access/use of the site. Staff-visible
+ *                   data only (the internal coverage page): these sites are listed, practiced
+ *                   and learned like any other, by the customer's choice (2026-10-06), with no
+ *                   warning in the Logins UI. Kept so the decision can be revisited.
+ *
+ * Excluded entirely (EXCLUDED_SITES): Xactimate, XactAnalysis, Restoration Manager and
+ * ClaimXperience, because Verisk's EULA bans AI and automation tools.
+ *
+ * Quoted clauses for every flagged site, and what was read versus inferred:
+ * kept in the staff research notes (site-terms-automation.md, 2026-10-06), outside the repo.
  *
  * To add a site: add an entry here. Nothing in the UI is hardcoded per site.
  */
@@ -56,6 +63,26 @@ export const CATEGORY_LABELS: Record<SiteCategory, string> = {
   marketing_reviews: 'Marketing and reviews',
   hiring: 'Hiring',
   general: 'General web',
+};
+
+/** Extra words that find a category in the Logins search ("supply" finds Suppliers). */
+export const CATEGORY_SEARCH_TERMS: Partial<Record<SiteCategory, string[]>> = {
+  email_calendar: ['email', 'mail', 'inbox', 'calendar'],
+  chat_meetings: ['chat', 'messages', 'video', 'meeting'],
+  crm: ['crm', 'jobs', 'projects', 'pipeline', 'leads', 'field service'],
+  suppliers: ['supply', 'supplies', 'supplier', 'materials', 'distributor', 'lumber', 'roofing supply', 'store'],
+  measurements: ['measure', 'measurement', 'roof report', 'aerial', 'estimate'],
+  permits: ['permit', 'city', 'county', 'inspection'],
+  property_management: ['property', 'landlord', 'rental', 'tenant', 'maintenance'],
+  work_orders: ['work order', 'vendor', 'facility', 'maintenance', 'dispatch'],
+  insurance_claims: ['insurance', 'claim', 'carrier', 'adjuster', 'tpa', 'assignment'],
+  restoration: ['restoration', 'water', 'mitigation', 'fire', 'mold', 'drying'],
+  financing: ['financing', 'loan', 'lender', 'credit'],
+  accounting_payments: ['accounting', 'invoice', 'payment', 'bookkeeping', 'pay'],
+  payroll_hr: ['payroll', 'hr', 'timesheet', 'benefits'],
+  docs_esign: ['documents', 'files', 'storage', 'sign', 'signature', 'contract'],
+  marketing_reviews: ['marketing', 'reviews', 'leads', 'social', 'ads'],
+  hiring: ['hiring', 'jobs', 'recruit', 'applicants'],
 };
 
 export type TermsStatus = 'allowed' | 'restricted' | 'no_ban_found' | 'unverified' | 'flagged';
@@ -137,7 +164,7 @@ export interface CatalogSite {
   publicTestSite?: boolean;
   /** Short hints that seed a starter playbook before Computer has learned the site. */
   guide?: string[];
-  /** How sign-in works (null for flagged sites, which are never automated, and sign-in-free test pages). */
+  /** How sign-in works (null only for sign-in-free test pages and entries kept out of the picker). */
   signIn: SignInRecipe | null;
   /** Kept out of the "Add a login" picker (practice or recognition only), with the reason. */
   notInPicker?: string;
@@ -264,10 +291,10 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
   },
   {
     id: 'servicetitan', name: 'ServiceTitan', category: 'crm', signInUrl: 'https://go.servicetitan.com/',
-    hosts: ['go.servicetitan.com'], aliases: ['servicetitan', 'service titan'],
+    hosts: ['go.servicetitan.com', 'login.servicetitan.com'], aliases: ['servicetitan', 'service titan'],
     twoStep: 'likely', sso: true, logo: { text: 'ST', color: '#0B1F3A' },
     terms: t('flagged', 'ServiceTitan bars letting any third party, including an AI agent, use your login.', 'https://www.servicetitan.com/legal/terms-of-use'),
-    practice: [],
+    practice: ['crm_status'],
   },
   /* -------------------------------------------------------------- suppliers -- */
   {
@@ -278,21 +305,21 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['supplier_search'],
   },
   { id: 'homedepot', name: 'The Home Depot / Pro', category: 'suppliers', signInUrl: 'https://www.homedepot.com/auth/view/signin', hosts: ['www.homedepot.com'], aliases: ['home depot', 'homedepot', 'home depot pro'], twoStep: 'sometimes', sso: false, logo: { text: 'HD', color: '#F96302' },
-    terms: t('flagged', 'Home Depot bans access through any robot, spider or other automated means.', 'https://www.homedepot.com/c/Terms_of_Use'), practice: [] },
+    terms: t('flagged', 'Home Depot reportedly bans access through robots or other automated means (its terms page blocks automated fetches; not verified).', 'https://www.homedepot.com/c/Terms_of_Use'), practice: ['supplier_search'] },
   { id: 'lowes', name: 'Lowe’s / Lowe’s Pro', category: 'suppliers', signInUrl: 'https://www.lowes.com/mylowes/login', hosts: ['www.lowes.com'], aliases: ["lowe's", 'lowes', 'lowes pro'], twoStep: 'sometimes', sso: false, logo: { text: 'L', color: '#004990' },
-    terms: t('flagged', 'Lowe’s bans robots or other automatic processes that retrieve, index or data-mine the site.', 'https://www.lowes.com/l/about/terms-and-conditions-of-use'), practice: [] },
-  { id: 'abcsupply', name: 'ABC Supply', category: 'suppliers', signInUrl: 'https://www.abcsupply.com/', hosts: ['www.abcsupply.com'], aliases: ['abc supply', 'abcsupply'], twoStep: 'rare', sso: false, logo: { text: 'ABC', color: '#C8102E' },
-    terms: t('flagged', 'ABC Supply bans any robot or automatic means to access the website for any purpose.', 'https://www.abcsupply.com/terms-of-use/'), practice: [] },
+    terms: t('flagged', 'Lowe’s reportedly bans robots or automatic processes that retrieve, index or data-mine the site (its terms page blocks automated fetches; not verified).', 'https://www.lowes.com/l/about/terms-and-conditions-of-use'), practice: ['supplier_search'] },
+  { id: 'abcsupply', name: 'ABC Supply (myABCsupply)', category: 'suppliers', signInUrl: 'https://account.abcsupply.com/', hosts: ['account.abcsupply.com', 'www.abcsupply.com'], aliases: ['abc supply', 'abcsupply', 'myabcsupply', 'my abc supply'], twoStep: 'rare', sso: false, logo: { text: 'ABC', color: '#C8102E' },
+    terms: t('flagged', 'ABC Supply bans any robot or automatic means to access the website for any purpose.', 'https://www.abcsupply.com/terms-of-use/'), practice: ['supplier_search'] },
   { id: 'srs', name: 'SRS Distribution / Roof Hub', category: 'suppliers', signInUrl: 'https://www.roofhub.pro/', hosts: ['www.roofhub.pro', 'www.srsdistribution.com'], aliases: ['srs', 'roof hub', 'srs distribution'], twoStep: 'rare', sso: false, logo: { text: 'SRS', color: '#00467F' },
-    terms: t('flagged', 'SRS bans access by any automatic program, electronic agent or bot.', 'https://www.srsdistribution.com/en/terms-of-use/'), practice: [] },
-  { id: 'beacon', name: 'Beacon / Beacon PRO+', category: 'suppliers', signInUrl: 'https://www.becn.com/', hosts: ['www.becn.com'], aliases: ['beacon', 'beacon pro'], twoStep: 'rare', sso: false, logo: { text: 'B', color: '#00A651' },
-    terms: t('flagged', 'Beacon bans accessing the site through any automated means.', 'https://www.becn.com/terms-of-use'), practice: [] },
-  { id: 'ferguson', name: 'Ferguson', category: 'suppliers', signInUrl: 'https://www.ferguson.com/', hosts: ['www.ferguson.com'], aliases: ['ferguson'], twoStep: 'rare', sso: false, logo: { text: 'F', color: '#003A70' },
-    terms: t('flagged', 'Ferguson bans any software agent used to navigate, search or extract from the site.', 'https://www.ferguson.com/content/website-info/terms-of-use'), practice: [] },
-  { id: 'sherwinwilliams', name: 'Sherwin-Williams', category: 'suppliers', signInUrl: 'https://www.sherwin-williams.com/', hosts: ['www.sherwin-williams.com'], aliases: ['sherwin williams', 'sherwin-williams'], twoStep: 'rare', sso: false, logo: { text: 'SW', color: '#0067A0' },
-    terms: t('flagged', 'Sherwin-Williams bans robots, scrapers or other automated means to access its websites.', 'https://www.sherwin-williams.com/terms-of-use'), practice: [] },
-  { id: 'amazonbusiness', name: 'Amazon Business', category: 'suppliers', signInUrl: 'https://www.amazon.com/business', hosts: ['www.amazon.com'], aliases: ['amazon business', 'amazon'], twoStep: 'likely', sso: false, logo: { text: 'a', color: '#232F3E' },
-    terms: t('flagged', 'Amazon bans robots and requires AI agents to identify themselves; it has won a court order against an AI shopping agent.', 'https://www.amazon.com/gp/help/customer/display.html?nodeId=508088'), practice: [] },
+    terms: t('flagged', 'SRS bans access by any automatic program, electronic agent or bot.', 'https://www.srsdistribution.com/en/terms-of-use/'), practice: ['supplier_search'] },
+  { id: 'beacon', name: 'QXO (formerly Beacon PRO+)', category: 'suppliers', signInUrl: 'https://www.qxo.com/', hosts: ['www.qxo.com', 'login.qxo.com', 'www.becn.com'], aliases: ['beacon', 'beacon pro', 'beacon pro+', 'qxo', 'becn'], twoStep: 'rare', sso: false, logo: { text: 'B', color: '#00A651' },
+    terms: t('flagged', 'QXO (formerly Beacon) bans accessing the site through any automated means.', 'https://www.qxo.com/terms-of-use'), practice: ['supplier_search'] },
+  { id: 'ferguson', name: 'Ferguson', category: 'suppliers', signInUrl: 'https://www.ferguson.com/login', hosts: ['www.ferguson.com'], aliases: ['ferguson'], twoStep: 'rare', sso: false, logo: { text: 'F', color: '#003A70' },
+    terms: t('flagged', 'Ferguson bans any software agent used to navigate, search or extract from the site.', 'https://www.ferguson.com/content/website-info/terms-of-sale'), practice: ['supplier_search'] },
+  { id: 'sherwinwilliams', name: 'Sherwin-Williams PRO+', category: 'suppliers', signInUrl: 'https://www.sherwin-williams.com/en-us/auth/login', hosts: ['www.sherwin-williams.com'], aliases: ['sherwin williams', 'sherwin-williams', 'sherwin williams pro', 'pro+'], twoStep: 'rare', sso: false, logo: { text: 'SW', color: '#0067A0' },
+    terms: t('flagged', 'Sherwin-Williams bans robots, scrapers or other automated means to access its websites.', 'https://www.sherwin-williams.com/terms-of-use'), practice: ['supplier_search'] },
+  { id: 'amazonbusiness', name: 'Amazon Business', category: 'suppliers', signInUrl: 'https://www.amazon.com/gp/sign-in.html', hosts: ['www.amazon.com'], aliases: ['amazon business', 'amazon'], twoStep: 'likely', sso: false, logo: { text: 'a', color: '#232F3E' },
+    terms: t('flagged', 'Amazon bans robots and requires AI agents to identify themselves; it has won a court order against an AI shopping agent.', 'https://www.amazon.com/gp/help/customer/display.html?nodeId=508088'), practice: ['supplier_search'] },
   /* ----------------------------------------------------------- measurements -- */
   {
     id: 'gafquickmeasure', name: 'GAF QuickMeasure', category: 'measurements', signInUrl: 'https://quickmeasure.gaf.com/',
@@ -301,12 +328,12 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     terms: t('unverified', 'GAF’s website terms have no automation clause; the QuickMeasure terms were not reviewed in full.', 'https://www.gaf.com/en-us/about-us/privacy-legal/terms-of-use'),
     practice: ['measurement_orders'],
   },
-  { id: 'eagleview', name: 'EagleView', category: 'measurements', signInUrl: 'https://my.eagleview.com/', hosts: ['my.eagleview.com'], aliases: ['eagleview', 'eagle view', 'eagleview assess', 'assess'], twoStep: 'rare', sso: false, logo: { text: 'EV', color: '#00205B' },
-    terms: t('flagged', 'EagleView allows only manual, human-initiated access, not robotic or scripted means.', 'https://www.eagleview.com/terms/'), practice: [] },
-  { id: 'hover', name: 'Hover', category: 'measurements', signInUrl: 'https://hover.to/', hosts: ['hover.to'], aliases: ['hover', 'hover.to', 'hover for carriers'], twoStep: 'rare', sso: false, logo: { text: 'HV', color: '#111111' },
-    terms: t('flagged', 'Hover bans any automatic program that monitors, copies, summarizes or extracts information.', 'https://hover.to/terms-of-use/'), practice: [] },
-  { id: 'roofr', name: 'Roofr', category: 'measurements', signInUrl: 'https://app.roofr.com/', hosts: ['app.roofr.com'], aliases: ['roofr'], twoStep: 'rare', sso: false, logo: { text: 'R', color: '#0F172A' },
-    terms: t('flagged', 'Roofr bans automated crawling or scraping and processes that run while you are not logged in.', 'https://roofr.com/terms'), practice: [] },
+  { id: 'eagleview', name: 'EagleView', category: 'measurements', signInUrl: 'https://my.eagleview.com/', hosts: ['my.eagleview.com', 'signin.eagleview.com'], aliases: ['eagleview', 'eagle view', 'eagleview assess', 'assess'], twoStep: 'rare', sso: false, logo: { text: 'EV', color: '#00205B' },
+    terms: t('flagged', 'Re-checked 2026-10-06: EagleView’s US terms have no bot or automation clause, only a ban on obtaining material “through any means not intentionally made available”. Flag kept for review.', 'https://www.eagleview.com/terms/'), practice: ['measurement_orders'] },
+  { id: 'hover', name: 'Hover', category: 'measurements', signInUrl: 'https://hover.to/onboarding/login', hosts: ['hover.to'], aliases: ['hover', 'hover.to', 'hover for carriers'], twoStep: 'rare', sso: false, logo: { text: 'HV', color: '#111111' },
+    terms: t('flagged', 'Hover bans any automatic program that monitors, copies, summarizes or extracts information.', 'https://hover.to/terms-of-use/'), practice: ['measurement_orders'] },
+  { id: 'roofr', name: 'Roofr', category: 'measurements', signInUrl: 'https://app.roofr.com/login', hosts: ['app.roofr.com'], aliases: ['roofr'], twoStep: 'rare', sso: false, logo: { text: 'R', color: '#0F172A' },
+    terms: t('flagged', 'Roofr bans automated crawling or scraping and processes that run while you are not logged in.', 'https://roofr.com/terms'), practice: ['measurement_orders'] },
   /* ---------------------------------------------------------------- permits -- */
   {
     id: 'accela', name: 'Permit portal (Accela Citizen Access)', category: 'permits', signInUrl: 'https://aca-prod.accela.com/',
@@ -319,15 +346,15 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
   },
   /* ---------------------------------------------------- property management -- */
   { id: 'appfolio', name: 'AppFolio', category: 'property_management', signInUrl: 'https://account.appfolio.com/property/sign-in', hosts: ['account.appfolio.com'], aliases: ['appfolio', 'app folio'], twoStep: 'sometimes', sso: false, logo: { text: 'AF', color: '#0B6CB5' },
-    terms: t('flagged', 'AppFolio bans robots or other automated means to access its services, and scraping or monitoring in its vendor portal.', 'https://www.appfolio.com/terms/listings'), practice: [] },
+    terms: t('flagged', 'AppFolio bans robots or other automated means to access its services, and scraping or monitoring in its vendor portal.', 'https://www.appfolio.com/terms/listings'), practice: ['work_orders_open'] },
   { id: 'buildium', name: 'Buildium', category: 'property_management', signInUrl: 'https://signin.managebuilding.com/manager/public/authentication/login', hosts: ['signin.managebuilding.com'], aliases: ['buildium', 'managebuilding'], twoStep: 'sometimes', sso: false, logo: { text: 'B', color: '#1F8A70' },
-    terms: t('flagged', 'Buildium bans robots or other automatic devices that monitor, copy or gather any part of the site.', 'https://www.buildium.com/website-terms-of-service/'), practice: [] },
-  { id: 'realpage', name: 'RealPage', category: 'property_management', signInUrl: 'https://www.realpage.com/client-login/', hosts: ['www.realpage.com'], aliases: ['realpage', 'real page', 'onesite'], twoStep: 'sometimes', sso: true, logo: { text: 'RP', color: '#E4002B' },
-    terms: t('flagged', 'RealPage bans robots or other automatic devices that monitor, copy or gather any part of the site.', 'https://www.realpage.com/legal/terms-of-use/'), practice: [] },
+    terms: t('flagged', 'Buildium bans robots or other automatic devices that monitor, copy or gather any part of the site.', 'https://www.buildium.com/website-terms-of-service/'), practice: ['work_orders_open'] },
+  { id: 'realpage', name: 'RealPage Vendor Credentialing (Compliance Depot)', category: 'property_management', signInUrl: 'https://vendorcredentialing.realpage.com/webapp/login.aspx', hosts: ['vendorcredentialing.realpage.com'], aliases: ['realpage', 'real page', 'compliance depot', 'realpage vendor'], twoStep: 'sometimes', sso: true, logo: { text: 'RP', color: '#E4002B' },
+    terms: t('flagged', 'RealPage bans robots or other automatic devices that monitor, copy or gather any part of the site.', 'https://www.realpage.com/legal/terms-of-use/'), practice: ['work_orders_open'] },
   { id: 'propertyware', name: 'Propertyware', category: 'property_management', signInUrl: 'https://app.propertyware.com/pw/login.jsp', hosts: ['app.propertyware.com'], aliases: ['propertyware', 'property ware'], twoStep: 'sometimes', sso: false, logo: { text: 'PW', color: '#3A7D44' },
-    terms: t('flagged', 'Propertyware bans any robot or other automatic means to access the services for any purpose.', 'https://www.propertyware.com/terms-of-use/'), practice: [] },
-  { id: 'entrata', name: 'Entrata', category: 'property_management', signInUrl: 'https://www.entrata.com/sign-in', hosts: ['www.entrata.com'], aliases: ['entrata'], twoStep: 'sometimes', sso: true, logo: { text: 'E', color: '#E9582B' },
-    terms: t('flagged', 'Entrata bans robots, scrapers or other automated means not provided by Entrata to access the site.', 'https://legal.entrata.com/entrata-terms-of-use'), practice: [] },
+    terms: t('flagged', 'Propertyware bans any robot or other automatic means to access the services for any purpose.', 'https://www.propertyware.com/terms-of-use/'), practice: ['work_orders_open'] },
+  { id: 'entrata', name: 'Entrata', category: 'property_management', signInUrl: 'https://sso.entrata.com/entrata/login', hosts: ['sso.entrata.com', 'www.entrata.com'], aliases: ['entrata'], twoStep: 'sometimes', sso: true, logo: { text: 'E', color: '#E9582B' },
+    terms: t('flagged', 'Entrata bans robots, scrapers or other automated means not provided by Entrata to access the site.', 'https://legal.entrata.com/entrata-terms-of-use'), practice: ['work_orders_open'] },
   {
     id: 'managecasa', name: 'ManageCasa', category: 'property_management', signInUrl: 'https://app.managecasa.com/',
     hosts: ['app.managecasa.com'], aliases: ['managecasa', 'manage casa'],
@@ -351,13 +378,13 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['work_orders_open'],
   },
   { id: 'servicechannel', name: 'ServiceChannel', category: 'work_orders', signInUrl: 'https://login.servicechannel.com/', hosts: ['login.servicechannel.com'], aliases: ['servicechannel', 'service channel'], twoStep: 'sometimes', sso: true, logo: { text: 'SC', color: '#0072CE' },
-    terms: t('flagged', 'ServiceChannel bans accessing, monitoring or copying its sites with robots or any other automatic device or process.', 'https://servicechannel.com/terms/'), practice: [] },
+    terms: t('flagged', 'ServiceChannel bans accessing, monitoring or copying its sites with robots or any other automatic device or process.', 'https://servicechannel.com/terms/'), practice: ['work_orders_open'] },
   { id: 'corrigo', name: 'CorrigoPro', category: 'work_orders', signInUrl: 'https://am-desktop.corrigopro.com/', hosts: ['am-desktop.corrigopro.com', 'login.corrigo.com'], aliases: ['corrigo', 'corrigopro', 'corrigo pro'], twoStep: 'sometimes', sso: false, logo: { text: 'C', color: '#E30613' },
-    terms: t('flagged', 'JLL, which runs Corrigo, bans automated queries, scraping and systematic data retrieval without written permission.', 'https://www.jll.com/en-us/terms-of-use'), practice: [] },
+    terms: t('flagged', 'CorrigoPro’s own terms have no bot clause but bar giving your user ID or password to third parties without Corrigo’s consent; JLL’s corporate site terms ban automated queries.', 'https://help.corrigopro.com/terms-of-use/?lang=en_ca'), practice: ['work_orders_open'] },
   { id: 'latchel', name: 'Latchel', category: 'work_orders', signInUrl: 'https://app.latchel.com/login', hosts: ['app.latchel.com'], aliases: ['latchel'], twoStep: 'rare', sso: false, logo: { text: 'L', color: '#5B3FD9' },
-    terms: t('flagged', 'Latchel bans any robot, scraper or other automated system that accesses the site or services.', 'https://latchel.com/terms-of-service/'), practice: [] },
+    terms: t('flagged', 'Latchel bans any robot, scraper or other automated system that accesses the site or services.', 'https://latchel.com/terms-of-service/'), practice: ['work_orders_open'] },
   { id: 'procore', name: 'Procore', category: 'work_orders', signInUrl: 'https://login.procore.com/', hosts: ['login.procore.com', 'app.procore.com'], aliases: ['procore'], twoStep: 'sometimes', sso: true, logo: { text: 'P', color: '#F47E42' },
-    terms: t('flagged', 'Procore bans robots, scrapers and other automated devices or processes that access or use its services.', 'https://procore.pactsafe.io/'), practice: [] },
+    terms: t('flagged', 'Procore bans robots, scrapers and other automated devices or processes that access or use its services.', 'https://procore.pactsafe.io/'), practice: ['work_orders_open'] },
   /* ------------------------------------------- insurance carriers and claims -- */
   {
     id: 'alacnet', name: 'AlacNet (Altimeter Solutions, formerly Alacrity)', category: 'insurance_claims', signInUrl: 'https://www.alacrity.net/Login.aspx',
@@ -374,12 +401,12 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['claim_assignments'],
   },
   { id: 'accuserve', name: 'Accuserve (Code Blue)', category: 'insurance_claims', signInUrl: 'https://interiors.app.accuserve.com/login', hosts: ['interiors.app.accuserve.com'], aliases: ['accuserve', 'code blue', 'codeblue'], twoStep: 'sometimes', sso: false, logo: { text: 'AS', color: '#0054A6' },
-    terms: t('flagged', 'Accuserve bans any robot or other automatic means to access or use the website for any purpose.', 'https://www.accuserve.com/terms-and-conditions'), practice: [] },
+    terms: t('flagged', 'Accuserve bans any robot or other automatic means to access or use the website for any purpose.', 'https://www.accuserve.com/terms-and-conditions'), practice: ['claim_assignments'] },
   { id: 'contractorconnection', name: 'Contractor Connection (Crawford)', category: 'insurance_claims', signInUrl: 'https://www.contractorconnection.com/Auth/login', hosts: ['www.contractorconnection.com'], aliases: ['contractor connection', 'crawford'], twoStep: 'sometimes', sso: false, logo: { text: 'CC', color: '#002D72' },
-    terms: t('flagged', 'Crawford & Company, which runs Contractor Connection, bans robots, scrapers or other automated means to access its sites.', 'https://www.crawco.com/legal/terms-of-use'), practice: [] },
+    terms: t('flagged', 'Crawford & Company, which runs Contractor Connection, bans robots, scrapers or other automated means to access its sites.', 'https://www.crawco.com/legal/terms-of-use'), practice: ['claim_assignments'] },
   { id: 'symbility', name: 'Cotality Symbility', category: 'insurance_claims', signInUrl: 'https://www.symbility.net/', hosts: ['www.symbility.net'], aliases: ['symbility', 'corelogic', 'cotality', 'mobile claims'], twoStep: 'sometimes', sso: false, logo: { text: 'Sy', color: '#00A3AD' },
-    terms: t('flagged', 'Cotality bans any robot or other automatic device or process to access, monitor or retrieve any part of its services.', 'https://www.cotality.com/legal/terms-of-use'), practice: [] },
-  { id: 'allstate', name: 'Allstate provider portal', category: 'insurance_claims', signInUrl: 'https://providerportal.allstate.com/', hosts: ['providerportal.allstate.com'], aliases: ['allstate'], twoStep: 'sometimes', sso: false, logo: { text: 'A', color: '#0033A0' },
+    terms: t('flagged', 'Cotality bans any robot or other automatic device or process to access, monitor or retrieve any part of its services.', 'https://www.cotality.com/legal/terms-of-use'), practice: ['claim_assignments'] },
+  { id: 'allstate', name: 'Allstate provider portal', notInPicker: 'Allstate’s public provider portal is for roadside and towing providers; no contractor or claims sign-in URL could be verified.', category: 'insurance_claims', signInUrl: 'https://providerportal.allstate.com/', hosts: ['providerportal.allstate.com'], aliases: ['allstate'], twoStep: 'sometimes', sso: false, logo: { text: 'A', color: '#0033A0' },
     terms: t('flagged', 'Allstate bans bots, scrapers and any automated process that retrieves or gathers content from its site.', 'https://www.allstate.com/terms'), practice: [] },
   /* -------------------------------------------- restoration job management -- */
   {
@@ -411,9 +438,9 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['restoration_jobs'],
   },
   { id: 'nextgear', name: 'DASH by Next Gear Solutions', category: 'restoration', signInUrl: 'https://dash-ngs.net/NextGear/Enterprise/Module/User/Login.aspx', hosts: ['dash-ngs.net', 'www.dash-ngs.net'], aliases: ['dash', 'next gear', 'nextgear', 'next gear solutions', 'nextgen'], twoStep: 'sometimes', sso: false, logo: { text: 'NG', color: '#1D4F91' },
-    terms: t('flagged', 'Next Gear (Cotality) bans robots, crawlers, data mining and systematic retrieval from DASH without written permission.', 'https://www.nextgearsolutions.com/legal/'), practice: [] },
+    terms: t('flagged', 'Next Gear (Cotality) bans robots, crawlers, data mining and systematic retrieval from DASH without written permission.', 'https://www.nextgearsolutions.com/legal/'), practice: ['restoration_jobs'] },
   { id: 'matterport', name: 'Matterport', category: 'restoration', signInUrl: 'https://my.matterport.com/', hosts: ['my.matterport.com', 'authn.matterport.com'], aliases: ['matterport'], twoStep: 'sometimes', sso: false, logo: { text: 'M', color: '#1C1C1C' },
-    terms: t('flagged', 'Matterport bans AI agents, robots, scrapers and any other automated means to access its website or service.', 'https://matterport.com/terms-of-use'), practice: [] },
+    terms: t('flagged', 'Matterport bans AI agents, robots, scrapers and any other automated means to access its website or service.', 'https://matterport.com/terms-of-use'), practice: ['sign_in_check'] },
   /* -------------------------------------------------------------- financing -- */
   {
     id: 'servicefinance', name: 'Service Finance Company', category: 'financing', signInUrl: 'https://apps.svcfin.com/dealerportal/',
@@ -422,10 +449,10 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     terms: t('unverified', 'We found no published website terms with an automation clause.', 'https://www.svcfin.com/'),
     practice: ['financing_status'],
   },
-  { id: 'greensky', name: 'GreenSky', category: 'financing', signInUrl: 'https://www.greensky.com/', hosts: ['www.greensky.com'], aliases: ['greensky'], twoStep: 'sometimes', sso: false, logo: { text: 'GS', color: '#00A859' },
-    terms: t('flagged', 'GreenSky bans robots, scripts or other automatic means to access or collect information.', 'https://www.greensky.com/terms/website_terms_of_use/'), practice: [] },
-  { id: 'hearth', name: 'Hearth', category: 'financing', signInUrl: 'https://app.gethearth.com/', hosts: ['app.gethearth.com'], aliases: ['hearth'], twoStep: 'rare', sso: false, logo: { text: 'He', color: '#F2542D' },
-    terms: t('flagged', 'Hearth bans robots, scrapers and any non-manual access method.', 'https://gethearth.com/terms/'), practice: [] },
+  { id: 'greensky', name: 'GreenSky', category: 'financing', signInUrl: 'https://portal.greensky.com/', hosts: ['portal.greensky.com', 'auth.prod.greensky.com', 'www.greensky.com'], aliases: ['greensky'], twoStep: 'sometimes', sso: false, logo: { text: 'GS', color: '#00A859' },
+    terms: t('flagged', 'GreenSky bans robots, scripts or other automatic means to access or collect information.', 'https://www.greensky.com/terms/website_terms_of_use/'), practice: ['financing_status'] },
+  { id: 'hearth', name: 'Hearth', category: 'financing', signInUrl: 'https://app.gethearth.com/login', hosts: ['app.gethearth.com'], aliases: ['hearth'], twoStep: 'rare', sso: false, logo: { text: 'He', color: '#F2542D' },
+    terms: t('flagged', 'Hearth bans robots, scrapers and any non-manual access method.', 'https://gethearth.com/terms/'), practice: ['financing_status'] },
   /* ------------------------------------------------ accounting and payments -- */
   {
     id: 'quickbooks', name: 'QuickBooks Online', category: 'accounting_payments', signInUrl: 'https://qbo.intuit.com/',
@@ -442,11 +469,11 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['accounting_recent'],
   },
   { id: 'xero', name: 'Xero', category: 'accounting_payments', signInUrl: 'https://login.xero.com/', hosts: ['login.xero.com', 'go.xero.com'], aliases: ['xero'], twoStep: 'likely', sso: false, logo: { text: 'X', color: '#13B5EA' },
-    terms: t('flagged', 'Xero bans browser automation that simulates user actions without its authorization.', 'https://developer.xero.com/xero-developer-platform-terms-conditions'), practice: [] },
-  { id: 'square', name: 'Square', category: 'accounting_payments', signInUrl: 'https://squareup.com/login', hosts: ['squareup.com'], aliases: ['square'], twoStep: 'likely', sso: false, logo: { text: 'Sq', color: '#000000' },
-    terms: t('flagged', 'Square bans accessing or monitoring its systems with robots or other automated means.', 'https://squareup.com/us/en/legal/general/ua'), practice: [] },
+    terms: t('flagged', 'Xero’s developer terms ban browser automation that simulates user actions without its authorization; its subscriber terms have no automation clause.', 'https://developer.xero.com/xero-developer-platform-terms-conditions'), practice: ['accounting_recent'] },
+  { id: 'square', name: 'Square', category: 'accounting_payments', signInUrl: 'https://app.squareup.com/login', hosts: ['app.squareup.com', 'squareup.com'], aliases: ['square'], twoStep: 'likely', sso: false, logo: { text: 'Sq', color: '#000000' },
+    terms: t('flagged', 'Square bans accessing or monitoring its systems with robots or other automated means.', 'https://squareup.com/us/en/legal/general/ua'), practice: ['accounting_recent'] },
   { id: 'paypal', name: 'PayPal', category: 'accounting_payments', signInUrl: 'https://www.paypal.com/signin', hosts: ['www.paypal.com'], aliases: ['paypal'], twoStep: 'likely', sso: false, logo: { text: 'PP', color: '#003087' },
-    terms: t('flagged', 'PayPal bans robots or other automatic devices that monitor or copy its websites.', 'https://www.paypal.com/us/legalhub/paypal/useragreement-full'), practice: [] },
+    terms: t('flagged', 'PayPal bans robots or other automatic devices that monitor or copy its websites.', 'https://www.paypal.com/us/legalhub/paypal/useragreement-full'), practice: ['accounting_recent'] },
   /* ----------------------------------------------------------- payroll / HR -- */
   {
     id: 'gusto', name: 'Gusto', category: 'payroll_hr', signInUrl: 'https://app.gusto.com/login',
@@ -456,7 +483,7 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['payroll_next'],
   },
   { id: 'adp', name: 'ADP', category: 'payroll_hr', signInUrl: 'https://workforcenow.adp.com/', hosts: ['workforcenow.adp.com', 'online.adp.com'], aliases: ['adp', 'adp workforce now', 'adp run'], twoStep: 'likely', sso: true, logo: { text: 'ADP', color: '#D0271D' },
-    terms: t('flagged', 'ADP bars unauthorized third parties from accessing data through scrapers or other automated means.', 'https://www.adp.com/legal.aspx'), practice: [] },
+    terms: t('flagged', 'ADP bars unauthorized third parties from accessing data through scrapers or other automated means.', 'https://www.adp.com/legal.aspx'), practice: ['payroll_next'] },
   /* ------------------------------------------------------ docs and e-sign -- */
   {
     id: 'google_drive', name: 'Google Drive', category: 'docs_esign', signInUrl: 'https://accounts.google.com/ServiceLogin?service=wise&continue=https://drive.google.com/',
@@ -487,7 +514,7 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     practice: ['recent_files'],
   },
   { id: 'box', name: 'Box', category: 'docs_esign', signInUrl: 'https://account.box.com/login', hosts: ['account.box.com', 'app.box.com'], aliases: ['box'], twoStep: 'sometimes', sso: true, logo: { text: 'box', color: '#0061D5' },
-    terms: t('flagged', 'Box bans any automated process or service, such as a bot, to access or use the service.', 'https://www.box.com/legal/termsofservice'), practice: [] },
+    terms: t('flagged', 'Box bans any automated process or service, such as a bot, to access or use the service.', 'https://www.box.com/legal/termsofservice'), practice: ['recent_files'] },
   /* --------------------------------------------------- marketing and reviews -- */
   {
     id: 'google_business', name: 'Google Business Profile', category: 'marketing_reviews', signInUrl: 'https://accounts.google.com/ServiceLogin?continue=https://business.google.com/',
@@ -496,21 +523,21 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     terms: t('restricted', 'Google bans automated access that ignores its robots instructions and abusive use; a person’s own tasks at human pace are fine.', 'https://policies.google.com/terms'),
     practice: ['sign_in_check'],
   },
-  { id: 'meta_business', name: 'Meta Business (Facebook)', category: 'marketing_reviews', signInUrl: 'https://business.facebook.com/', hosts: ['business.facebook.com', 'www.facebook.com'], aliases: ['facebook', 'meta business', 'instagram'], twoStep: 'likely', sso: false, logo: { text: 'f', color: '#0866FF' },
-    terms: t('flagged', 'Meta bans accessing or collecting data with automated means without its permission, even when logged in.', 'https://www.facebook.com/terms'), practice: [] },
+  { id: 'meta_business', name: 'Meta Business (Facebook)', category: 'marketing_reviews', signInUrl: 'https://www.facebook.com/login/?next=https%3A%2F%2Fbusiness.facebook.com%2F', hosts: ['business.facebook.com', 'www.facebook.com'], aliases: ['facebook', 'meta business', 'instagram'], twoStep: 'likely', sso: false, logo: { text: 'f', color: '#0866FF' },
+    terms: t('flagged', 'Meta bans accessing or collecting data with automated means without its permission, even when logged in.', 'https://www.facebook.com/terms'), practice: ['sign_in_check'] },
   { id: 'linkedin', name: 'LinkedIn', category: 'marketing_reviews', signInUrl: 'https://www.linkedin.com/login', hosts: ['www.linkedin.com'], aliases: ['linkedin'], twoStep: 'sometimes', sso: false, logo: { text: 'in', color: '#0A66C2' },
-    terms: t('flagged', 'LinkedIn bans bots, scripts and browser add-ons that access, scrape or copy the service.', 'https://www.linkedin.com/legal/user-agreement'), practice: [] },
+    terms: t('flagged', 'LinkedIn bans bots, scripts and browser add-ons that access, scrape or copy the service.', 'https://www.linkedin.com/legal/user-agreement'), practice: ['sign_in_check'] },
   { id: 'yelp_business', name: 'Yelp for Business', category: 'marketing_reviews', signInUrl: 'https://biz.yelp.com/login', hosts: ['biz.yelp.com'], aliases: ['yelp', 'yelp for business'], twoStep: 'rare', sso: false, logo: { text: 'Y', color: '#D32323' },
-    terms: t('flagged', 'Yelp bans any robot or automated means to access any part of the service.', 'https://terms.yelp.com/tos/en_us/20260101_en_us/'), practice: [] },
-  { id: 'angi', name: 'Angi (Angi Leads)', category: 'marketing_reviews', signInUrl: 'https://pro.angi.com/', hosts: ['pro.angi.com'], aliases: ['angi', 'angies list', 'homeadvisor'], twoStep: 'rare', sso: false, logo: { text: 'An', color: '#FF6153' },
-    terms: t('flagged', 'Angi bans access, monitoring or copying through robots, spiders or other automatic means.', 'https://www.angi.com/terms/'), practice: [] },
+    terms: t('flagged', 'Yelp bans any robot or automated means to access any part of the service.', 'https://terms.yelp.com/tos/en_us/20260101_en_us/'), practice: ['sign_in_check'] },
+  { id: 'angi', name: 'Angi (Angi Leads)', category: 'marketing_reviews', signInUrl: 'https://office.angi.com/', hosts: ['office.angi.com', 'id.angi.com', 'pro.angi.com'], aliases: ['angi', 'angies list', 'homeadvisor'], twoStep: 'rare', sso: false, logo: { text: 'An', color: '#FF6153' },
+    terms: t('flagged', 'Angi bans access, monitoring or copying through robots, spiders or other automatic means.', 'https://www.angi.com/terms/'), practice: ['sign_in_check'] },
   { id: 'thumbtack', name: 'Thumbtack for Pros', category: 'marketing_reviews', signInUrl: 'https://www.thumbtack.com/login', hosts: ['www.thumbtack.com'], aliases: ['thumbtack'], twoStep: 'rare', sso: false, logo: { text: 'Tt', color: '#009FD9' },
-    terms: t('flagged', 'Thumbtack bans robots, spiders or scrapers that access its platform.', 'https://www.thumbtack.com/terms/'), practice: [] },
+    terms: t('flagged', 'Thumbtack bans robots, spiders or scrapers that access its platform.', 'https://www.thumbtack.com/terms/'), practice: ['sign_in_check'] },
   { id: 'nextdoor', name: 'Nextdoor', category: 'marketing_reviews', signInUrl: 'https://nextdoor.com/login/', hosts: ['nextdoor.com'], aliases: ['nextdoor'], twoStep: 'rare', sso: false, logo: { text: 'N', color: '#8ED500' },
-    terms: t('flagged', 'Nextdoor bans scripts, robots and browser add-ons that scrape or copy the service.', 'https://legal.nextdoor.com/us-member-agreement/'), practice: [] },
+    terms: t('flagged', 'Nextdoor bans scripts, robots and browser add-ons that scrape or copy the service.', 'https://nextdoorcrm.my.site.com/s/article/Member-Agreement-2024'), practice: ['sign_in_check'] },
   /* ----------------------------------------------------------------- hiring -- */
-  { id: 'indeed', name: 'Indeed for Employers', category: 'hiring', signInUrl: 'https://employers.indeed.com/', hosts: ['employers.indeed.com', 'secure.indeed.com'], aliases: ['indeed'], twoStep: 'sometimes', sso: false, logo: { text: 'i', color: '#2164F3' },
-    terms: t('flagged', 'Indeed bans bots and scripts outside its official tools, and scraping.', 'https://www.indeed.com/legal'), practice: [] },
+  { id: 'indeed', name: 'Indeed for Employers', category: 'hiring', signInUrl: 'https://secure.indeed.com/auth', hosts: ['secure.indeed.com', 'employers.indeed.com'], aliases: ['indeed'], twoStep: 'sometimes', sso: false, logo: { text: 'i', color: '#2164F3' },
+    terms: t('flagged', 'Indeed bans bots and scripts outside its official tools, and scraping.', 'https://www.indeed.com/legal'), practice: ['sign_in_check'] },
   /* ------------------------------------------------------------ general web -- */
   {
     id: 'practice_signin', name: 'Practice site: sign-in', category: 'general', signInUrl: 'https://the-internet.herokuapp.com/login',
@@ -574,11 +601,52 @@ export const SIGN_IN_RECIPES: Record<string, SignInRecipe> = {
   docusign: live('username_first'),
   adobe: live('username_first', { identityHosts: ['auth.services.adobe.com'] }),
   practice_signin: live('one_page'),
+  // Added back by the customer's decision (2026-10-06); terms flags stay staff-only data.
+  servicetitan: live('username_first', { identityHosts: ['login.servicetitan.com'], note: 'ServiceTitan may ask for a code; that goes to the person.' }),
+  homedepot: live('username_first', { note: 'Home Depot may send a code by text or email; that goes to the person.' }),
+  lowes: live('username_first', { note: 'Lowe’s may send a code by text or email; that goes to the person.' }),
+  abcsupply: live('one_page'),
+  srs: live('one_page', { note: 'Roof Hub signs in from its home page.' }),
+  beacon: live('open_first', { openWith: ['Login', 'Log in', 'Sign in'], identityHosts: ['login.qxo.com'] }),
+  ferguson: live('one_page'),
+  sherwinwilliams: { flow: 'username_first', checked: 'blocked_probe', note: 'Sherwin-Williams blocks automated browsers at times; if it does, Computer hands the sign-in to the person.' },
+  amazonbusiness: { flow: 'username_first', checked: 'blocked_probe', note: 'Amazon often shows automated browsers a stop page or asks for a code; Computer then hands the sign-in to the person.' },
+  eagleview: live('username_first', { identityHosts: ['signin.eagleview.com'] }),
+  hover: live('username_first', { note: 'Hover emails a one-time sign-in link instead of asking for a password; the person opens that link.' }),
+  roofr: live('one_page'),
+  appfolio: live('one_page'),
+  buildium: live('one_page'),
+  realpage: live('one_page'),
+  propertyware: live('one_page'),
+  entrata: live('username_first'),
+  servicechannel: live('one_page'),
+  corrigo: live('one_page', { identityHosts: ['login.corrigo.com'] }),
+  latchel: live('one_page'),
+  procore: live('username_first'),
+  accuserve: live('username_first'),
+  contractorconnection: { flow: 'one_page', checked: 'blocked_probe', note: 'Contractor Connection blocks automated browsers at times; if it does, Computer hands the sign-in to the person.' },
+  symbility: live('one_page'),
+  nextgear: live('one_page'),
+  matterport: live('one_page', { identityHosts: ['authn.matterport.com'] }),
+  greensky: live('one_page', { identityHosts: ['auth.prod.greensky.com'] }),
+  hearth: live('one_page'),
+  xero: live('one_page', { note: 'Xero asks for a code from the person’s authenticator app.' }),
+  square: live('username_first', { note: 'Square may send a code by text; that goes to the person.' }),
+  paypal: { flow: 'username_first', checked: 'blocked_probe', note: 'PayPal blocks automated browsers at times and may send a code; both go to the person.' },
+  adp: live('username_first', { identityHosts: ['online.adp.com'], note: 'ADP may send a code by text or email; that goes to the person.' }),
+  box: live('username_first'),
+  meta_business: live('one_page', { note: 'Facebook may ask for a code or a confirmation on the person’s phone; that goes to the person.' }),
+  linkedin: live('one_page', { note: 'LinkedIn may ask for a code sent by email; that goes to the person.' }),
+  yelp_business: { flow: 'one_page', checked: 'blocked_probe' },
+  angi: live('one_page', { identityHosts: ['id.angi.com'] }),
+  thumbtack: live('one_page'),
+  nextdoor: live('one_page'),
+  indeed: live('username_first', { note: 'Indeed may email a code instead of asking for a password; that code goes to the person.' }),
 };
 
 export const SITE_CATALOG: CatalogSite[] = RAW_SITES.map((s) => ({
   ...s,
-  signIn: s.terms.status === 'flagged' ? null : (SIGN_IN_RECIPES[s.id] ?? null),
+  signIn: SIGN_IN_RECIPES[s.id] ?? null,
 }));
 
 /** Starter playbook hints per category, used until Computer has a learned playbook for the site. */
@@ -655,7 +723,7 @@ export function starterSignInPlaybook(site: CatalogSite): PlaybookStep[] {
 /** Starter hints for a site: how to sign in, its own guide, then its category's. */
 export function siteGuideFor(host: string | null | undefined): string[] {
   const site = catalogSiteForHost(host);
-  if (!site || site.terms.status === 'flagged') return [];
+  if (!site) return [];
   const signIn = site.signIn ? [`Sign-in: ${signInStepsLine(site.signIn)}`] : [];
   return [...signIn, ...(site.guide ?? []), ...CATEGORY_GUIDES[site.category]].slice(0, 6);
 }
@@ -696,19 +764,18 @@ export function catalogSiteForHost(host: string | null | undefined): CatalogSite
 
 /**
  * True when Computer must not practice on or learn playbooks for this site:
- * Verisk sites, and sites whose terms ban automated access.
+ * the Verisk sites (EXCLUDED_SITES). A terms flag in the catalog is
+ * staff-visible data only and does not restrict anything.
  */
 export function isAutomationRestrictedSite(host: string | null | undefined): boolean {
   if (!host) return false;
   const h = host.toLowerCase();
-  if (EXCLUDED_DOMAINS.some((d) => h === d || h.endsWith(`.${d}`))) return true;
-  const site = SITE_CATALOG.find((s) => s.hosts.some((x) => x === h || h.endsWith(`.${x.replace(/^www\./, '')}`)));
-  return site?.terms.status === 'flagged';
+  return EXCLUDED_DOMAINS.some((d) => h === d || h.endsWith(`.${d}`));
 }
 
-/** Entries shown in the Logins picker: every non-flagged site except the practice-only test sites. */
+/** Entries shown in the Logins picker: every catalog site except practice-only test sites and notInPicker entries. */
 export function pickerSites(): CatalogSite[] {
-  return SITE_CATALOG.filter((s) => s.terms.status !== 'flagged' && !s.publicTestSite && !s.notInPicker);
+  return SITE_CATALOG.filter((s) => !s.publicTestSite && !s.notInPicker);
 }
 
 /** One picker entry as the Logins page sees it (no terms internals beyond a short note). */
@@ -722,7 +789,7 @@ export interface LoginCatalogEntry {
   twoStep: CatalogSite['twoStep'];
   sso: boolean;
   logo: CatalogSite['logo'];
-  /** Shown under the entry for sites whose terms we could not fully review. */
+  /** Always null: the Logins UI shows no terms warnings (terms verdicts are staff-only data). Kept for API compatibility. */
   termsNote: string | null;
   /** Practice task keys and playbook task types this site uses. */
   practice: string[];
@@ -731,15 +798,16 @@ export interface LoginCatalogEntry {
 }
 
 export interface LoginCatalogView {
-  categories: Array<{ id: SiteCategory; label: string }>;
+  /** terms: extra search words for the category (data, so the UI has no per-site lists). */
+  categories: Array<{ id: SiteCategory; label: string; terms: string[] }>;
   sites: LoginCatalogEntry[];
 }
 
 /**
- * The "Add a login" catalog. Sites whose terms ban bots or automated access
- * are hidden (the safer choice): Computer would be acting against those
- * terms on the customer's account. People can still add any site with
- * "Custom website".
+ * The "Add a login" catalog: every ready site, each with its sign-in steps.
+ * Terms verdicts (including the "flagged" ones) are not shown to customers;
+ * they stay in the catalog for staff. Verisk sites are never listed. People
+ * can still add any other site with "Custom website".
  */
 export function loginCatalogView(): LoginCatalogView {
   const sites = pickerSites().map((s) => ({
@@ -752,13 +820,13 @@ export function loginCatalogView(): LoginCatalogView {
     twoStep: s.twoStep,
     sso: s.sso,
     logo: s.logo,
-    termsNote: s.terms.status === 'unverified' ? 'We could not fully review this site’s terms for automation.' : null,
+    termsNote: null,
     practice: s.practice.map((p) => `${s.id}.${p}`),
     signInSteps: s.signIn ? signInStepsLine(s.signIn, 'person') : '',
   }));
   const used = new Set(sites.map((s) => s.category));
   const categories = (Object.keys(CATEGORY_LABELS) as SiteCategory[])
     .filter((c) => used.has(c))
-    .map((id) => ({ id, label: CATEGORY_LABELS[id] }));
+    .map((id) => ({ id, label: CATEGORY_LABELS[id], terms: CATEGORY_SEARCH_TERMS[id] ?? [] }));
   return { categories, sites };
 }

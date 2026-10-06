@@ -15,7 +15,8 @@ import { openSignInForm, signInFieldsVisible } from '../src/computer/providers/p
 async function waitForFields(page: import('playwright-core').Page, ms: number) {
   const end = Date.now() + ms;
   let fields = await signInFieldsVisible(page);
-  while (!fields.username && !fields.password && Date.now() < end) {
+  // Keep looking for a username box when only the password shows yet (Square draws it later).
+  while (!fields.username && Date.now() < end) {
     await page.waitForTimeout(1_000);
     fields = await signInFieldsVisible(page);
   }
@@ -67,7 +68,7 @@ async function main() {
     if (!r.ok && !blocked) failed += 1;
     console.log(`${mark.padEnd(12)} ${r.id.padEnd(18)} ${r.detail}`);
   }
-  console.log(`\n${rows.length - failed}/${rows.length} ready (BLOCKS-BOTS: the page refuses automated browsers here; Computer's hosted browser and the site's help pages were used instead).`);
+  console.log(`\n${rows.length - failed}/${rows.length} ready (BLOCKS-BOTS: the page refuses automated browsers here; its URL and steps come from the site's own pages and help pages).`);
   process.exit(failed ? 1 : 0);
 }
 

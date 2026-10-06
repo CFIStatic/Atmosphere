@@ -92,6 +92,7 @@ const CATALOG: LoginCatalog = {
     { id: 'chat_meetings', label: 'Team chat and meetings' },
     { id: 'accounting_payments', label: 'Accounting and payments' },
     { id: 'restoration', label: 'Restoration job management' },
+    { id: 'suppliers', label: 'Suppliers', terms: ['supply', 'materials'] },
   ],
   sites: [
     {
@@ -122,6 +123,12 @@ const CATALOG: LoginCatalog = {
       id: 'encircle', name: 'Encircle', category: 'restoration', signInUrl: 'https://encircleapp.com/login',
       host: 'encircleapp.com', aliases: ['encircle'], twoStep: 'rare', sso: false,
       logo: { text: 'En', color: '#00A88F' }, termsNote: null, practice: ['encircle.restoration_jobs'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+    {
+      id: 'homedepot', name: 'The Home Depot / Pro', category: 'suppliers', signInUrl: 'https://www.homedepot.com/auth/view/signin',
+      host: 'www.homedepot.com', aliases: ['home depot', 'homedepot'], twoStep: 'sometimes', sso: false,
+      logo: { text: 'HD', color: '#F96302' }, termsNote: null, practice: ['homedepot.supplier_search'],
       signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
     },
   ],
@@ -289,7 +296,7 @@ describe('LoginsPage', () => {
     // The search bar is the first thing in the picker, focused and ready to type into.
     expect(screen.getByLabelText('Search sites')).toHaveFocus();
     expect(picker.querySelector('input')).toBe(screen.getByTestId('logins-catalog-search'));
-    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('5 sites');
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('6 sites');
     expect(within(picker).getByRole('region', { name: 'Email and calendar' })).toBeInTheDocument();
     expect(within(picker).getByRole('region', { name: 'Accounting and payments' })).toBeInTheDocument();
     expect(within(picker).getAllByText('Code at sign-in').length).toBeGreaterThan(0);
@@ -304,6 +311,15 @@ describe('LoginsPage', () => {
     await user.type(screen.getByLabelText('Search sites'), 'restoration');
     expect(within(picker).getByTestId('logins-catalog-encircle')).toBeInTheDocument();
     expect(within(picker).queryByTestId('logins-catalog-gmail')).toBeNull();
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('1 site matches');
+    await user.clear(screen.getByLabelText('Search sites'));
+    // Category search words: "supply" finds the Suppliers group.
+    await user.type(screen.getByLabelText('Search sites'), 'supply');
+    expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
+    expect(within(picker).queryByTestId('logins-catalog-encircle')).toBeNull();
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'home depot');
+    expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
     expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('1 site matches');
     await user.clear(screen.getByLabelText('Search sites'));
     await user.type(screen.getByLabelText('Search sites'), 'nothing like this');

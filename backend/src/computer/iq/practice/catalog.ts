@@ -10,10 +10,10 @@
  * sites (built for automation practice) cover sign-in, forms, uploads and
  * downloads without any Login.
  *
- * Not here: sites whose terms ban bots or automated access (flagged in the
- * catalog), and Xactimate / XactAnalysis / ClaimXperience / Restoration Manager, which are
- * excluded because Verisk's EULA prohibits AI and automation tools
- * (pending Verisk's permission).
+ * Not here: Xactimate / XactAnalysis / ClaimXperience / Restoration Manager,
+ * which are excluded because Verisk's EULA prohibits AI and automation tools
+ * (pending Verisk's permission). Sites whose terms flag automation are
+ * practiced like any other, by the customer's choice; the flag is staff data.
  */
 import { SITE_CATALOG, type CatalogSite, type PracticeTemplate } from '../../catalog/sites.js';
 import type { PracticeMode } from '../store.js';
@@ -210,9 +210,8 @@ const hostOf = (url: string) => {
 };
 const siteOfHost = (h: string) => h.split('.').slice(-2).join('.');
 
-/** Practice tasks for one catalog entry (none for flagged sites). */
+/** Practice tasks for one catalog entry (the templates listed on it). */
 export function practiceTasksFor(s: CatalogSite): PracticeTask[] {
-  if (s.terms.status === 'flagged') return [];
   return s.practice.map((tpl) => {
     const spec = TEMPLATES[tpl];
     const startUrl = spec.startUrl ?? s.signInUrl;

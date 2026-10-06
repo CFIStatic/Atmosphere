@@ -221,7 +221,7 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
         const iqStore = d.iq ?? null;
         const practice = task.practice ?? null;
         const startHost = hostOf(task.start_url);
-        // No playbooks are learned or replayed for sites whose terms ban automation (or Verisk sites).
+        // No playbooks are learned or replayed for Verisk sites (EXCLUDED_SITES).
         const site = isAutomationRestrictedSite(startHost) ? null : siteOf(startHost ?? '') || null;
         const trace: TraceEntry[] = [];
         const stepLog = hooks.stepLog ?? [];

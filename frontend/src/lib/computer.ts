@@ -432,7 +432,8 @@ export interface LoginCatalogEntry {
 }
 
 export interface LoginCatalog {
-  categories: Array<{ id: string; label: string }>;
+  /** terms: extra words that find the category ("supply" finds Suppliers). */
+  categories: Array<{ id: string; label: string; terms?: string[] }>;
   sites: LoginCatalogEntry[];
 }
 
@@ -444,10 +445,10 @@ export function groupLoginCatalog(
   query: string,
 ): Array<{ id: string; label: string; sites: LoginCatalogEntry[] }> {
   const q = fold(query);
-  const labels = new Map(catalog.categories.map((c) => [c.id, c.label]));
+  const labels = new Map(catalog.categories.map((c) => [c.id, [c.label, ...(c.terms ?? [])]]));
   const match = (s: LoginCatalogEntry) =>
     !q ||
-    [s.name, s.host, labels.get(s.category) ?? '', ...s.aliases].some((t) => fold(t).includes(q));
+    [s.name, s.host, ...(labels.get(s.category) ?? []), ...s.aliases].some((t) => fold(t).includes(q));
   return catalog.categories
     .map((c) => ({ id: c.id, label: c.label, sites: catalog.sites.filter((s) => s.category === c.id && match(s)) }))
     .filter((g) => g.sites.length > 0);

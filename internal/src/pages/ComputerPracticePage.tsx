@@ -374,7 +374,7 @@ export function ComputerPracticePage() {
         <>
           <SectionHeading
             title="Site coverage and terms"
-            hint="Sites that ban automation are hidden from Add a login and never practiced"
+            hint="Terms verdicts are staff-only. Sites whose terms ban automation are listed and practiced by the customer’s choice; Verisk sites are excluded"
           />
           <table className="w-full text-[12px]" data-testid="practice-coverage">
             <tbody>

@@ -696,7 +696,7 @@ export interface PracticeCoverageSite {
   termsNote: string;
   termsUrl: string;
   inPicker: boolean;
-  /** How Computer signs in (null when the site is flagged and never automated). */
+  /** How Computer signs in (null for entries kept out of Add a login without a verified sign-in). */
   signIn: { flow: 'one_page' | 'username_first' | 'open_first'; checked: 'live_page' | 'blocked_probe' } | null;
   twoStep: 'likely' | 'sometimes' | 'rare';
   sso: boolean;
