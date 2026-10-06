@@ -23,7 +23,7 @@ function isMailBodyField(label: string): boolean {
 }
 
 function isOrderPriorityField(label: string): boolean {
-  return /^(job material|matched product|quantity|unit price|cart total|fulfillment|delivery|stock|payment|substitution)\b/i.test(
+  return /^(job material|matched product|quantity|unit price|line total|cart total|not priced yet|fulfillment|delivery|stock|payment|substitution)\b/i.test(
     label.trim(),
   );
 }
@@ -46,6 +46,20 @@ function linkify(value: string): ReactNode {
       <span key={i}>{part}</span>
     ),
   );
+}
+
+function approvalTitle(approval: ComputerTaskApproval, host: string | null): string {
+  const isOrder =
+    approval.actionKind === 'pay' || /place\s+(?:your\s+)?order/i.test(approval.buttonLabel);
+  if (!isOrder) {
+    return `Click “${approval.buttonLabel}”${host ? ` on ${host}` : ''}?`;
+  }
+  const hay = `${host ?? ''} ${approval.summary ?? ''} ${approval.pageUrl ?? ''}`.toLowerCase();
+  if (/homedepot|home depot/.test(hay)) return 'Place this Home Depot order?';
+  if (/lowe/.test(hay)) return "Place this Lowe's order?";
+  if (/abc\s*supply|abcsupply/.test(hay)) return 'Place this ABC Supply order?';
+  if (/\bsrs\b/.test(hay)) return 'Place this SRS order?';
+  return 'Place this supply order?';
 }
 
 /**
@@ -79,14 +93,15 @@ export function ComputerApprovalCard({
       ? [...orderFields, ...mailFields, ...otherFields]
       : [...mailFields, ...orderFields, ...otherFields];
   const isOrder = approval.actionKind === 'pay' || /place\s+(?:your\s+)?order/i.test(approval.buttonLabel);
+  const title = approvalTitle(approval, host);
   return (
     <div className="space-y-3 rounded-xl border border-caution-600/40 bg-caution-50 p-3" data-testid="computer-approval-card">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wide text-caution-600">
           Needs your approval · {COMPUTER_ACTION_LABEL[approval.actionKind]}
         </p>
-        <p className="mt-0.5 text-[15px] font-semibold text-ink-900">
-          Click “{approval.buttonLabel}”{host ? ` on ${host}` : ''}?
+        <p className="mt-0.5 text-[15px] font-semibold text-ink-900" data-testid="computer-approval-title">
+          {title}
         </p>
         <p className="mt-1 text-sm text-ink-700">{approval.summary}</p>
         {isOrder ? (

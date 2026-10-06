@@ -46,7 +46,7 @@ const UNIT_WORDS =
 
 /** Phrases that look like construction materials (not tools or people). */
 const MATERIAL_HINT =
-  /\b(shingles?|underlayment|felt|ice\s*and\s*water|drip\s*edge|ridge\s*cap|flashing|step\s*flashing|valley\s*metal|plywood|osb|decking|sheathing|nails?|screws?|caulk|sealant|primer|paint|drywall|joint\s*compound|insulation|vapor\s*barrier|house\s*wrap|siding|gutters?|downspouts?|fascia|soffit|vent(?:ilation)?|pipe\s*boots?|pipe\s*collar|pipe\s*jack|starter\s*strip|ridge\s*vent|lumber|2x4|2x6|studs?|joists?|rafters?|membrane|tpo|epdm|mod(?:ified)?\s*bit(?:umen)?|granules?|mortar|grout|tile|concrete|rebar|mesh|tarp|plastic\s*sheeting|poly|tape|adhesive|glue|foam|spray\s*foam|roofing\s*cement|asphalt|composition|architectural\s*shingles?|3[- ]tab|copper|aluminum|galvanized|pvc|abs|pex|copper\s*pipe|fitting|elbow|coupling|valve|filter|register|grille|duct|flex\s*duct|thermostat|wire|cable|conduit|breaker|outlet|switch|box\s*extender|mud|tape\s*and\s*mud|corner\s*bead|trim|casing|baseboard|quarter\s*round|threshold|weatherstrip|lockset|hinge|door\s*slab|window|glass|glazing|screen|blinds?|shade|gasket|o[- ]ring|washer|bolt|nut|anchor|toggle|lag|hanger|strap|hurricane\s*tie|hurricane\s*clip)\b/i;
+  /\b(shingles?|underlayment|felt|ice\s*and\s*water|drip\s*edge|ridge\s*cap|flashing|step\s*flashing|valley\s*metal|plywood|osb|decking|sheathing|nails?|finished\s*nails?|screws?|caulk|sealant|primer|paint|drywall|joint\s*compound|insulation|vapor\s*barrier|house\s*wrap|siding|gutters?|downspouts?|fascia|soffit|vent(?:ilation)?|pipe\s*boots?|pipe\s*collar|pipe\s*jack|starter\s*strip|ridge\s*vent|lumber|2x4|2x6|studs?|joists?|rafters?|membrane|tpo|epdm|mod(?:ified)?\s*bit(?:umen)?|granules?|mortar|grout|tile|concrete|rebar|mesh|tarp|plastic\s*sheeting|poly|tape|adhesive|glue|liquid\s*nails|construction\s*adhesive|foam|spray\s*foam|roofing\s*cement|asphalt|composition|architectural\s*shingles?|3[- ]tab|copper|aluminum|galvanized|pvc|abs|pex|copper\s*pipe|fitting|elbow|coupling|valve|filter|register|grille|duct|flex\s*duct|thermostat|wire|cable|conduit|breaker|outlet|switch|box\s*extender|mud|tape\s*and\s*mud|corner\s*bead|trim|casing|baseboard|quarter\s*round|threshold|weatherstrip|lockset|hinge|door\s*slab|window|glass|glazing|screen|blinds?|shade|gasket|o[- ]ring|washer|bolt|nut|anchor|toggle|lag|hanger|strap|hurricane\s*tie|hurricane\s*clip|laminate|countertops?|cabinets?|base\s*cabinet|upper\s*cabinet|crown\s*molding|molding|drawer\s*slides?|flooring|vinyl\s*flooring|hardwood|soft[- ]?close)\b/i;
 
 const QTY_BEFORE =
   new RegExp(
@@ -58,8 +58,43 @@ const QTY_AFTER =
     `\\b([A-Za-z][A-Za-z0-9 /\\-]{2,60}?)\\s*[:\\-–]?\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_WORDS})\\b`,
     'gi',
   );
+/** Prefer these multi-word phrases when present in a line. */
+const KNOWN_MATERIAL_PHRASES: Array<{ re: RegExp; item: string; spec?: string | null }> = [
+  { re: /\blaminate\s+countertops?\b/i, item: 'laminate countertop' },
+  { re: /\bcountertops?\b/i, item: 'countertop' },
+  { re: /\bbase\s+cabinet\b/i, item: 'base cabinet' },
+  { re: /\bupper\s+cabinet\b/i, item: 'upper cabinet' },
+  { re: /\bmicrowave\s+cabinet\b/i, item: 'microwave cabinet' },
+  { re: /\bcrown\s+molding\b/i, item: 'crown molding' },
+  { re: /\bfinished\s+nails?\b/i, item: 'finished nails' },
+  { re: /\bdrawer\s+slides?\b|\bshim the slides\b|\bthe slides\b/i, item: 'drawer slides' },
+  { re: /\bbirch\s+plywood\b/i, item: 'birch plywood' },
+  { re: /\bplywood\b/i, item: 'plywood' },
+  { re: /\bconstruction\s+adhesive\b|\bliquid\s+nails\b/i, item: 'construction adhesive' },
+  { re: /\b(glue|glued|adhesive)\b/i, item: 'construction adhesive' },
+  { re: /\bcaulk\b/i, item: 'caulk' },
+  { re: /\bflooring\b/i, item: 'flooring' },
+  { re: /\barchitectural\s+shingles?\b/i, item: 'architectural shingles' },
+  { re: /\bice\s+and\s+water\b/i, item: 'ice and water shield' },
+  { re: /\bsynthetic\s+underlayment\b/i, item: 'synthetic underlayment' },
+];
+
+function stripTranscriptNoise(text: string): string {
+  return text
+    .replace(/\[?\d{1,2}:\d{2}(?::\d{2})?\]?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function preferKnownMaterialName(text: string): string | null {
+  for (const row of KNOWN_MATERIAL_PHRASES) {
+    if (row.re.test(text)) return row.item;
+  }
+  return null;
+}
+
 const COLOR_SPEC =
-  /\b(?:color|colour|in)\s+([A-Z][A-Za-z0-9 /-]{2,40})|\b(Weathered Wood|Charcoal|Slate|Driftwood|Estate Gray|Desert Tan|Black|White|Brown|Gray|Grey|Hunter Green|Colonial Slate|Pewter|Shakewood|Barkwood|Onyx Black|Antique Silver)\b/i;
+  /\b(?:color|colour)\s*[:=]?\s*([A-Z][A-Za-z0-9 /-]{2,40})\b|\b(Weathered Wood|Charcoal|Colonial Slate|Estate Gray|Desert Tan|Driftwood|Shakewood|Barkwood|Onyx Black|Antique Silver|Hunter Green|Pewter)\b/i;
 
 const TIME_MARK = /(?:^|\s)(?:\[)?(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\])?\s/;
 
@@ -86,6 +121,9 @@ function looksLikeMaterialName(name: string): boolean {
   if (n.length < 3 || n.length > 80) return false;
   if (/^(the|a|an|and|or|of|to|for|with|from|this|that|they|we|crew|today|need|get|buy|order)$/i.test(n))
     return false;
+  // Verb / place noise from transcripts.
+  if (/\b(screw it|while screw|birch lane|black and white tile|heads up)\b/i.test(n)) return false;
+  if (/^(and|at|while|on|in)\b/i.test(n)) return false;
   if (!MATERIAL_HINT.test(n) && !/\b(material|supply|supplies)\b/i.test(n)) return false;
   return true;
 }
@@ -150,11 +188,15 @@ function harvestLine(
   line: string,
   citation: Omit<MaterialCitation, 'excerpt'> & { excerpt?: string },
 ): void {
-  const text = line.replace(/\s+/g, ' ').trim();
+  const rawLine = line.replace(/\s+/g, ' ').trim();
+  const ts = citation.timestampSeconds ?? parseTimestamp(rawLine);
+  const text = stripTranscriptNoise(rawLine);
   if (!text || text.length < 4) return;
   if (!MATERIAL_HINT.test(text)) return;
+  // Existing floor being covered — not a material to buy.
+  if (/\bold\s+black\s+and\s+white\s+tile\b/i.test(text)) return;
+  if (/\bscrew(?:s|ed)?\s+it\s+into\b/i.test(text) && !/\bscrews?\b.*\b(box|pack|pound)/i.test(text)) return;
 
-  const ts = citation.timestampSeconds ?? parseTimestamp(text);
   const citeBase = {
     kind: citation.kind,
     label: citation.label,
@@ -183,8 +225,9 @@ function harvestLine(
       if (!looksLikeMaterialName(name) && !MATERIAL_HINT.test(name)) continue;
       matchedQty = true;
       const color = text.match(COLOR_SPEC);
+      const preferred = preferKnownMaterialName(name) ?? preferKnownMaterialName(text);
       mergeItem(acc, {
-        item: name,
+        item: preferred ?? name,
         spec: color ? (color[1] || color[2] || null) : null,
         quantity: qty,
         unit,
@@ -194,35 +237,58 @@ function harvestLine(
   }
 
   if (!matchedQty) {
-    // Mention without quantity — still list, quantity unknown.
-    const hint = text.match(MATERIAL_HINT);
-    if (!hint) return;
-    // Prefer a short noun phrase around the hint.
-    const idx = hint.index ?? 0;
-    const start = Math.max(0, text.lastIndexOf(',', idx - 1) + 1, text.lastIndexOf('.', idx - 1) + 1);
-    const end = (() => {
-      const semi = text.indexOf(';', idx);
-      const period = text.indexOf('.', idx);
-      const candidates = [semi, period].filter((n) => n > idx);
-      return candidates.length ? Math.min(...candidates) : Math.min(text.length, idx + 60);
-    })();
-    let name = text.slice(start, end).trim();
-    // Tighten to ~words around the material word.
-    const words = name.split(/\s+/);
-    const matIdx = words.findIndex((w) => MATERIAL_HINT.test(w));
-    if (matIdx >= 0) {
-      name = words.slice(Math.max(0, matIdx - 3), Math.min(words.length, matIdx + 4)).join(' ');
-    }
-    name = trimItem(name.replace(/\b(we|they|need|to|get|buy|order|pick\s*up|for)\b/gi, ' ').replace(/\s+/g, ' '));
-    if (!name || name.length < 3) name = hint[0];
     const color = text.match(COLOR_SPEC);
-    mergeItem(acc, {
-      item: name,
-      spec: color ? (color[1] || color[2] || null) : null,
-      quantity: null,
-      unit: null,
-      citation: { ...citeBase, excerpt: (citation.excerpt ?? text).slice(0, 240) },
-    });
+    const found: string[] = [];
+    for (const row of KNOWN_MATERIAL_PHRASES) {
+      if (row.re.test(text)) found.push(row.item);
+    }
+    if (!found.length) {
+      const hint = text.match(MATERIAL_HINT);
+      if (!hint) return;
+      const idx = hint.index ?? 0;
+      const start = Math.max(0, text.lastIndexOf(',', idx - 1) + 1, text.lastIndexOf('.', idx - 1) + 1);
+      const end = (() => {
+        const semi = text.indexOf(';', idx);
+        const period = text.indexOf('.', idx);
+        const candidates = [semi, period].filter((n) => n > idx);
+        return candidates.length ? Math.min(...candidates) : Math.min(text.length, idx + 60);
+      })();
+      let name = text.slice(start, end).trim();
+      const words = name.split(/\s+/);
+      const matIdx = words.findIndex((w) => MATERIAL_HINT.test(w));
+      if (matIdx >= 0) {
+        name = words.slice(Math.max(0, matIdx - 2), Math.min(words.length, matIdx + 3)).join(' ');
+      }
+      name = trimItem(
+        name
+          .replace(/\b(we|they|need|to|get|buy|order|pick\s*up|for|the|this|that|measuring|cutting)\b/gi, ' ')
+          .replace(/\s+/g, ' '),
+      );
+      if (!name || name.length < 3) name = hint[0];
+      found.push(preferKnownMaterialName(name) ?? name);
+    }
+
+    const singularCabinet =
+      /\bthe\s+(?:laminate\s+)?(?:countertop|base\s+cabinet|upper\s+cabinet|microwave\s+cabinet|cabinet)\b/i.test(
+        text,
+      );
+
+    for (const name of found) {
+      if (!looksLikeMaterialName(name) && !MATERIAL_HINT.test(name)) continue;
+      let quantity: number | null = null;
+      let unit: string | null = null;
+      if (singularCabinet && /\b(cabinet|countertop|laminate)\b/i.test(name)) {
+        quantity = 1;
+        unit = 'each';
+      }
+      mergeItem(acc, {
+        item: name,
+        spec: color ? (color[1] || color[2] || null) : null,
+        quantity,
+        unit,
+        citation: { ...citeBase, excerpt: (citation.excerpt ?? text).slice(0, 240) },
+      });
+    }
   }
 }
 
@@ -318,7 +384,7 @@ export function extractJobMaterials(
   harvestDocuments(acc, file?.documents);
   harvestFacts(acc, file?.facts ?? null);
 
-  const items: JobMaterialItem[] = [];
+  let items: JobMaterialItem[] = [];
   let n = 0;
   for (const row of acc.values()) {
     n += 1;
@@ -331,6 +397,50 @@ export function extractJobMaterials(
       citations: row.citations.slice(0, 6),
     });
   }
+  // Prefer birch plywood over generic plywood when both appear.
+  const birch = items.find((i) => /^birch plywood$/i.test(i.item));
+  if (birch) {
+    items = items.filter((i) => !/^plywood$/i.test(i.item));
+  }
+
+  // Dedupe by normalized item name (keep first, merge citations/qty).
+  {
+    const byName = new Map<string, JobMaterialItem>();
+    for (const it of items) {
+      const key = it.item.toLowerCase();
+      const prev = byName.get(key);
+      if (!prev) {
+        byName.set(key, it);
+        continue;
+      }
+      if (prev.quantity == null && it.quantity != null) {
+        prev.quantity = it.quantity;
+        prev.unit = it.unit ?? prev.unit;
+      }
+      if (!prev.spec && it.spec) prev.spec = it.spec;
+      for (const c of it.citations) {
+        if (!prev.citations.some((x) => x.excerpt === c.excerpt && x.label === c.label)) {
+          prev.citations.push(c);
+        }
+      }
+    }
+    items = [...byName.values()];
+  }
+
+    // Coalesce generic "countertop" into "laminate countertop" when both appear.
+  const lam = items.find((i) => /^laminate countertop$/i.test(i.item));
+  const plain = items.find((i) => /^countertops?$/i.test(i.item));
+  if (lam && plain) {
+    if (lam.quantity == null && plain.quantity != null) {
+      lam.quantity = plain.quantity;
+      lam.unit = plain.unit ?? lam.unit;
+    }
+    for (const c of plain.citations) {
+      if (!lam.citations.some((x) => x.excerpt === c.excerpt)) lam.citations.push(c);
+    }
+    items = items.filter((i) => i !== plain);
+  }
+
   items.sort((a, b) => a.item.localeCompare(b.item));
   return {
     items,
@@ -339,30 +449,105 @@ export function extractJobMaterials(
   };
 }
 
-/** Plain professional markdown for Chat. */
-export function formatMaterialsListForChat(list: JobMaterialsList): string {
+/** Chip-shaped citation for the Chat materials table (same shape as AskSourceChip). */
+export type MaterialsSourceChip = {
+  id: string;
+  label: string;
+  section?: string;
+  jobId?: string;
+  proofId?: string;
+  atSeconds?: number;
+  workDate?: string;
+};
+
+export type MaterialsListRowPayload = {
+  id: string;
+  item: string;
+  spec: string | null;
+  quantity: number | null;
+  unit: string | null;
+  sources: MaterialsSourceChip[];
+};
+
+function formatClock(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function citationToSourceChip(
+  cite: MaterialCitation,
+  opts?: { jobId?: string | null },
+): MaterialsSourceChip {
+  const jobId = String(opts?.jobId ?? '').trim() || undefined;
+  const proofId = cite.clipId ? String(cite.clipId) : undefined;
+  const at =
+    cite.timestampSeconds != null && Number.isFinite(cite.timestampSeconds)
+      ? Math.floor(cite.timestampSeconds)
+      : undefined;
+  const dateMatch = cite.label.match(/(\d{4}-\d{2}-\d{2})/);
+  const workDate = dateMatch?.[1];
+
+  if (jobId && proofId && at != null) {
+    const id = `video/${jobId}/${proofId}@${at}`;
+    return {
+      id,
+      label: `${workDate ? `Clip · ${workDate}` : 'Clip'} · ${formatClock(at)}`,
+      section: 'videos',
+      jobId,
+      proofId,
+      atSeconds: at,
+      workDate,
+    };
+  }
+  if (workDate) {
+    return {
+      id: `clip:${workDate}`,
+      label: at != null ? `Clip · ${workDate} · ${formatClock(at)}` : `Clip · ${workDate}`,
+      section: 'videos',
+      workDate,
+      proofId,
+      atSeconds: at,
+      jobId,
+    };
+  }
+  if (cite.kind === 'scope') {
+    return { id: 'scope', label: cite.label.replace(/^Scope\s*·\s*/i, 'Scope') || 'Scope', section: 'scope' };
+  }
+  if (cite.kind === 'estimate' || cite.kind === 'document') {
+    return { id: 'document', label: cite.label, section: 'setup' };
+  }
+  return { id: 'evidence', label: cite.label || 'Evidence', section: 'evidence' };
+}
+
+/** Structured rows for the materials card (no raw markdown). */
+export function materialsRowsForUi(
+  list: JobMaterialsList,
+  opts?: { jobId?: string | null },
+): MaterialsListRowPayload[] {
+  return list.items.map((it) => ({
+    id: it.id,
+    item: it.item,
+    spec: it.spec,
+    quantity: it.quantity,
+    unit: it.unit,
+    sources: it.citations.slice(0, 3).map((c) => citationToSourceChip(c, opts)),
+  }));
+}
+
+/**
+ * Summary for the Computer action trailer / card.
+ * Human lead text plus MATERIALS_JSON so the UI can render a real table + chips.
+ * Avoids pipe characters so formatActionsTrailer stays intact.
+ */
+export function formatMaterialsListForChat(list: JobMaterialsList, opts?: { jobId?: string | null }): string {
   if (!list.items.length) {
     return 'I could not find materials listed in the clips, transcripts, or scope on this job file yet. Add a scope or estimate, or ask after more field video is on file.';
   }
-  const lines = ['Materials on this job file:', ''];
-  for (const it of list.items) {
-    const qty =
-      it.quantity != null
-        ? `${it.quantity}${it.unit ? ` ${it.unit}` : ''}`
-        : 'quantity unknown';
-    const spec = it.spec ? ` · ${it.spec}` : '';
-    const cite = it.citations[0];
-    const citeBits = [cite?.label];
-    if (cite?.timestampSeconds != null && Number.isFinite(cite.timestampSeconds)) {
-      const m = Math.floor(cite.timestampSeconds / 60);
-      const s = Math.floor(cite.timestampSeconds % 60);
-      citeBits.push(`${m}:${String(s).padStart(2, '0')}`);
-    }
-    lines.push(`- **${it.item}**${spec} — ${qty}${citeBits.filter(Boolean).length ? ` _(source: ${citeBits.filter(Boolean).join(' · ')})_` : ''}`);
-  }
-  lines.push('');
-  lines.push('Quantities marked unknown were not stated in the evidence. I do not guess amounts.');
-  return lines.join('\n');
+  const rows = materialsRowsForUi(list, opts);
+  const lead = `Materials on this job file (${rows.length} item${rows.length === 1 ? '' : 's'}). Quantities marked unknown were not stated in the evidence.`;
+  const payload = JSON.stringify({ rows }).replace(/\|/g, '/');
+  return `${lead}\nMATERIALS_JSON:${payload}`;
 }
 
 /** True when the person is asking to list / find materials (not order yet). */

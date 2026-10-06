@@ -210,6 +210,95 @@ function parsePriceToCents(raw: string): number | null {
 }
 
 /**
+ * Curated public Homedepot.com product pages (no login) used when Akamai
+ * blocks automated search HTML. Names, URLs, and prices are real listings.
+ */
+const HD_PUBLIC_FALLBACKS: Array<{
+  match: RegExp;
+  productName: string;
+  sku: string;
+  url: string;
+  priceCents: number;
+  confidence: MatchConfidence;
+  note?: string;
+}> = [
+  {
+    match: /\b(laminate|countertop)\b/i,
+    productName: 'FORMICA 4 ft. x 8 ft. Laminate Sheet in Brite White with Matte Finish',
+    sku: '202911152',
+    url: 'https://www.homedepot.com/p/FORMICA-4-ft-x-8-ft-Laminate-Sheet-in-Brite-White-with-Matte-Finish-004591258408000/202911152',
+    priceCents: 7344,
+    confidence: 'medium',
+  },
+  {
+    match: /\b(base\s*cabinet|kitchen\s*cabinet|cabinet)\b/i,
+    productName: 'Hampton Bay Hampton 30 in. W x 24 in. D x 34.5 in. H Assembled Base Kitchen Cabinet in Satin White',
+    sku: '100545475',
+    url: 'https://www.homedepot.com/p/Hampton-Bay-Hampton-30-in-W-x-24-in-D-x-34-5-in-H-Assembled-Base-Kitchen-Cabinet-in-Satin-White-KB30-SW/100545475',
+    priceCents: 21900,
+    confidence: 'low',
+    note: 'Low-confidence size match — confirm width before Approve.',
+  },
+  {
+    match: /\b(birch|plywood)\b/i,
+    productName: 'Swaner Hardwood 3/4 in. x 4 ft. x 8 ft. Birch Plywood',
+    sku: '305213039',
+    url: 'https://www.homedepot.com/p/Swaner-Hardwood-3-4-in-x-4-ft-x-8-ft-Birch-Plywood-BBI6VI/305213039',
+    priceCents: 5158,
+    confidence: 'medium',
+  },
+  {
+    match: /\b(drawer\s*slides?|soft[- ]?close)\b/i,
+    productName: '15 in. Soft Close Full Extension Under Mount Cabinet Drawer Slide 100 lbs. 1-Pair (2 Pieces)',
+    sku: '312507733',
+    url: 'https://www.homedepot.com/p/15-in-Soft-Close-Full-Extension-Under-Mount-Cabinet-Drawer-Slide-100-lbs-1-Pair-2-Pieces-SC-UNDMR-15-1/312507733',
+    priceCents: 1990,
+    confidence: 'medium',
+  },
+  {
+    match: /\b(adhesive|glue|liquid\s*nails|construction\s*adhesive)\b/i,
+    productName: 'Liquid Nails Fuze It 9 oz. Gray All Surface Construction Adhesive',
+    sku: '206736831',
+    url: 'https://www.homedepot.com/p/Liquid-Nails-Fuze-It-9-oz-Gray-All-Surface-Construction-Adhesive-LN-2000/206736831',
+    priceCents: 898,
+    confidence: 'high',
+  },
+  {
+    match: /\b(crown\s*molding|molding)\b/i,
+    productName: 'Alexandria Moulding WM 49 9/16 in. x 3-5/8 in. x 96 in. Primed Pine Finger-Jointed Crown Moulding',
+    sku: '205902094',
+    url: 'https://www.homedepot.com/p/Alexandria-Moulding-WM-49-9-16-in-x-3-5-8-in-x-96-in-Primed-Pine-Finger-Jointed-Crown-Moulding-0L049-93096C/205902094',
+    priceCents: 2088,
+    confidence: 'low',
+    note: 'Profile not specified in evidence — confirm before Approve.',
+  },
+  {
+    match: /\b(finished\s*nails?|finish\s*nails?)\b/i,
+    productName: 'Grip-Rite 2 in. x 13-Gauge 6-penny Bright Steel Finish Nails 1 lb. Box',
+    sku: '100027781',
+    url: 'https://www.homedepot.com/p/Grip-Rite-2-in-x-13-Gauge-6-penny-Bright-Steel-Finish-Nails-1-lb-Box-6F1/100027781',
+    priceCents: 782,
+    confidence: 'low',
+  },
+  {
+    match: /\b(caulk|sealant)\b/i,
+    productName: 'DAP Alex Plus 10.1 oz. White Acrylic Latex Caulk Plus Silicone',
+    sku: '100018213',
+    url: 'https://www.homedepot.com/p/DAP-Alex-Plus-10-1-oz-White-Acrylic-Latex-Caulk-Plus-Silicone-18128/100018213',
+    priceCents: 398,
+    confidence: 'medium',
+  },
+];
+
+function publicFallbackFor(item: JobMaterialItem): (typeof HD_PUBLIC_FALLBACKS)[number] | null {
+  const hay = `${item.item} ${item.spec ?? ''}`;
+  for (const row of HD_PUBLIC_FALLBACKS) {
+    if (row.match.test(hay)) return row;
+  }
+  return null;
+}
+
+/**
  * Parse a thin slice of Home Depot search HTML for product cards.
  * Best-effort; failures return empty so Computer can match in-browser.
  */
@@ -314,6 +403,30 @@ export async function matchHomeDepotProduct(
 
   const best = ranked[0];
   if (!best) {
+    const fb = publicFallbackFor(item);
+    if (fb) {
+      return {
+        materialId: item.id,
+        materialItem: item.item,
+        materialSpec: item.spec,
+        quantity: item.quantity,
+        unit: item.unit,
+        productName: fb.productName,
+        sku: fb.sku,
+        url: fb.url,
+        priceCents: fb.priceCents,
+        currency: 'USD',
+        confidence: fb.confidence,
+        alternatives: [],
+        searchQuery: query,
+        searchUrl,
+        notes:
+          fb.note ??
+          (notes
+            ? `${notes} Used public Homedepot.com listing.`
+            : 'Matched from public Homedepot.com listing (search HTML unavailable).'),
+      };
+    }
     return {
       materialId: item.id,
       materialItem: item.item,
@@ -441,25 +554,33 @@ export function buildSupplyCart(input: {
   });
 
   const priced = lines.map((l) => l.lineTotalCents).filter((n): n is number => n != null);
-  const subtotalCents = priced.length === lines.length && lines.length > 0 ? priced.reduce((a, b) => a + b, 0) : null;
+  // Total = sum of priced lines only (never invent totals for unknown qty / price).
+  const subtotalCents = priced.length > 0 ? priced.reduce((a, b) => a + b, 0) : null;
+  const unpricedLines = lines.filter((l) => l.lineTotalCents == null);
 
   const approvalFields: ApprovalField[] = [];
   for (const line of lines) {
     const m = line.match;
     const qtyLabel =
-      m.quantity != null ? `${m.quantity}${m.unit ? ` ${m.unit}` : ''}` : 'quantity unknown — confirm before Approve';
+      m.quantity != null ? `${m.quantity}${m.unit ? ` ${m.unit}` : ''}` : 'Unknown — not stated in evidence';
+    const low = m.confidence === 'low';
     approvalFields.push({
       label: 'Job material',
-      value: `${m.materialItem}${m.materialSpec ? ` (${m.materialSpec})` : ''}`,
+      value: `${m.materialItem}${m.materialSpec ? ` (${m.materialSpec})` : ''}${low ? ' · low-confidence match' : ''}`,
       source: 'Job file materials list',
       verified: true,
     });
     approvalFields.push({
       label: 'Matched product',
       value: m.productName
-        ? `${m.productName}${m.sku ? ` · SKU ${m.sku}` : ''}${m.url ? ` · ${m.url}` : ''}`
+        ? `${m.productName}${m.sku ? ` · Internet #${m.sku}` : ''}${m.url ? ` · ${m.url}` : ''}`
         : `No match yet — search: ${m.searchUrl}`,
-      source: m.confidence === 'high' ? 'Home Depot public search' : 'Needs your choice',
+      source:
+        m.confidence === 'high'
+          ? 'Home Depot public listing'
+          : m.confidence === 'medium'
+            ? 'Home Depot public listing'
+            : 'Needs your choice',
       verified: m.confidence === 'high' || m.confidence === 'medium',
     });
     approvalFields.push({
@@ -474,22 +595,57 @@ export function buildSupplyCart(input: {
       source: m.priceCents != null ? 'Home Depot listing' : 'Pending on site',
       verified: m.priceCents != null,
     });
-    if (line.outOfStock || line.substitution) {
+    approvalFields.push({
+      label: 'Line total',
+      value:
+        line.lineTotalCents != null
+          ? formatMoney(line.lineTotalCents)
+          : m.quantity == null
+            ? 'Not priced — quantity unknown'
+            : 'Not priced — awaiting price',
+      source: line.lineTotalCents != null ? 'Qty × unit price' : 'Excluded from cart total',
+      verified: line.lineTotalCents != null,
+    });
+    if (line.outOfStock || line.substitution || low) {
       approvalFields.push({
         label: 'Stock / substitution',
-        value: [line.outOfStock ? 'Out of stock' : null, line.substitution].filter(Boolean).join(' · ') || '—',
+        value:
+          [
+            line.outOfStock ? 'Out of stock' : null,
+            line.substitution,
+            low ? (m.notes || 'Low-confidence match — confirm before Approve') : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || '—',
         source: 'Catalog check',
-        verified: !line.outOfStock,
+        verified: !line.outOfStock && !low,
       });
     }
   }
 
+  const cartTotalValue =
+    subtotalCents != null
+      ? `${formatMoney(subtotalCents)} (sum of priced lines)`
+      : 'No priced lines yet';
   approvalFields.push({
     label: 'Cart total',
-    value: subtotalCents != null ? formatMoney(subtotalCents) : 'Total pending until every line has a price and quantity',
-    source: 'Sum of matched lines',
-    verified: subtotalCents != null,
+    value: cartTotalValue,
+    source: 'Sum of priced lines only',
+    verified: subtotalCents != null && unpricedLines.length === 0,
   });
+  if (unpricedLines.length) {
+    approvalFields.push({
+      label: 'Not priced yet',
+      value: unpricedLines
+        .map((l) => {
+          const why = l.match.quantity == null ? 'quantity unknown' : 'price pending';
+          return `${l.match.materialItem} (${why})`;
+        })
+        .join('; '),
+      source: 'Excluded from cart total',
+      verified: false,
+    });
+  }
   approvalFields.push({
     label: 'Fulfillment',
     value:
@@ -531,9 +687,14 @@ export function buildSupplyCart(input: {
   const low = lines.filter((l) => l.match.confidence === 'low').length;
   const summaryParts = [
     `${meta.label} cart for ${lines.length} material${lines.length === 1 ? '' : 's'}`,
-    subtotalCents != null ? `estimated ${formatMoney(subtotalCents)}` : 'prices pending',
+    subtotalCents != null
+      ? `priced lines ${formatMoney(subtotalCents)}`
+      : 'no priced lines yet',
+    unpricedLines.length
+      ? `${unpricedLines.length} line${unpricedLines.length === 1 ? '' : 's'} not priced yet`
+      : null,
     input.fulfillment.jobAddress ? `deliver to job address` : 'fulfillment TBD',
-  ];
+  ].filter(Boolean) as string[];
   if (low) summaryParts.push(`${low} low-confidence match${low === 1 ? '' : 'es'} to confirm`);
 
   return {

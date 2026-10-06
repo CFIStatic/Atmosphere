@@ -1338,7 +1338,10 @@ export function formatActionsTrailer(results: AskToolResult[]): string {
   for (const r of results) {
     // The Computer card renders its own "not set up" / "not allowed" state.
     if (!r.ok && r.tool !== 'start_computer_task') continue;
-    const maxLabel = r.ui?.path === 'computer-task:sms-approval' ? 4000 : 80;
+    const maxLabel =
+      r.ui?.path === 'computer-task:sms-approval' || r.ui?.path === 'computer-task:materials-list'
+        ? 12000
+        : 80;
     const label = r.summary.replace(/[|,⟦⟧]/g, ' ').slice(0, maxLabel);
     const section = r.ui?.section ?? '';
     const path = r.ui?.path ?? '';

@@ -14,6 +14,7 @@ import { SpinnerIcon } from '../icons';
 import { ComputerApprovalCard } from './ComputerApprovalCard';
 import { ComputerLiveView } from './ComputerLiveView';
 import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
+import { MaterialsListCard, parseMaterialsSummary } from './MaterialsListCard';
 
 const POLL_MS = 1500;
 
@@ -75,6 +76,11 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
     );
   }
   if (ref.kind === 'materials_list') {
+    const rows = parseMaterialsSummary(summary);
+    if (rows && rows.length) {
+      return <MaterialsListCard rows={rows} />;
+    }
+    // Fallback when the trailer was truncated before MATERIALS_JSON landed.
     return (
       <div data-testid="computer-materials-list" className="rounded-xl border border-line bg-paper-50 p-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Materials</p>

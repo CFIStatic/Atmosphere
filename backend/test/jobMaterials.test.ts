@@ -56,6 +56,7 @@ test('extractJobMaterials cites sources and does not invent quantities', () => {
   assert.equal(list.items.some((i) => /spa/i.test(i.item)), false);
   const md = formatMaterialsListForChat(list);
   assert.match(md, /Materials on this job file/);
+  assert.match(md, /MATERIALS_JSON:/);
   assert.match(md, /unknown|evidence/i);
 });
 

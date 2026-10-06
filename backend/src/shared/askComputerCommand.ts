@@ -14,6 +14,7 @@ import { normalizeSmsNumber, smsProviderConfigured } from './smsProvider.js';
 import {
   extractJobMaterials,
   formatMaterialsListForChat,
+  materialsRowsForUi,
   looksLikeMaterialsListAsk,
 } from './jobMaterials.js';
 import {
@@ -1017,11 +1018,12 @@ export function planComputerTask(input: {
   // ---- Materials list only (no order / no browser) ----
   if (looksLikeMaterialsListAsk(input.question) && !looksLikeSupplyOrderAsk(input.question)) {
     const list = extractJobMaterials(input.file, input.address);
+    const jobId = String((input.file as { job?: { id?: string } } | null | undefined)?.job?.id ?? '').trim() || null;
     return {
       ok: true,
       kind: 'materials_list',
       materialsOnly: true,
-      summary: formatMaterialsListForChat(list),
+      summary: formatMaterialsListForChat(list, { jobId }),
       itemCount: list.items.length,
     };
   }
@@ -1806,4 +1808,4 @@ export async function planSupplyOrderComputerTask(input: {
   };
 }
 
-export { extractJobMaterials, formatMaterialsListForChat, looksLikeMaterialsListAsk };
+export { extractJobMaterials, formatMaterialsListForChat, materialsRowsForUi, looksLikeMaterialsListAsk };

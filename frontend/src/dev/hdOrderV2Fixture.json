@@ -1,0 +1,492 @@
+{
+  "job": {
+    "id": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+    "title": "Birch Lane Kitchen Remodel",
+    "account": "appreview@atmosphereteam.com",
+    "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+    "workDate": "2026-10-04",
+    "clipTitle": "Cabinets, countertop and floors — day 1"
+  },
+  "materialsSummary": "Materials on this job file (9 items). Quantities marked unknown were not stated in the evidence.\nMATERIALS_JSON:{\"rows\":[{\"id\":\"base-cabinet-7\",\"item\":\"base cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16\",\"label\":\"Clip · 2026-10-04 · 0:16\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":16,\"workDate\":\"2026-10-04\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"birch-plywood-3\",\"item\":\"birch plywood\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"caulk-11\",\"item\":\"caulk\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"construction-adhesive-5\",\"item\":\"construction adhesive\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16\",\"label\":\"Clip · 2026-10-04 · 0:16\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":16,\"workDate\":\"2026-10-04\"}]},{\"id\":\"crown-molding-9\",\"item\":\"crown molding\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40\",\"label\":\"Clip · 2026-10-04 · 0:40\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":40,\"workDate\":\"2026-10-04\"}]},{\"id\":\"finished-nails-10\",\"item\":\"finished nails\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"flooring-6\",\"item\":\"flooring\",\"spec\":null,\"quantity\":null,\"unit\":null,\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@47\",\"label\":\"Clip · 2026-10-04 · 0:47\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":47,\"workDate\":\"2026-10-04\"}]},{\"id\":\"laminate-countertop-1\",\"item\":\"laminate countertop\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"},{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@8\",\"label\":\"Clip · 2026-10-04 · 0:08\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":8,\"workDate\":\"2026-10-04\"},{\"id\":\"clip:2026-10-04\",\"label\":\"Clip · 2026-10-04\",\"section\":\"videos\",\"workDate\":\"2026-10-04\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\"}]},{\"id\":\"upper-cabinet-8\",\"item\":\"upper cabinet\",\"spec\":null,\"quantity\":1,\"unit\":\"each\",\"sources\":[{\"id\":\"video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@32\",\"label\":\"Clip · 2026-10-04 · 0:32\",\"section\":\"videos\",\"jobId\":\"058b09a8-3ca0-4d29-b554-4c54de26dea5\",\"proofId\":\"cedca9e4-5f44-4094-bd03-e4289f44e183\",\"atSeconds\":32,\"workDate\":\"2026-10-04\"}]}]}",
+  "materialsRows": [
+    {
+      "id": "base-cabinet-7",
+      "item": "base cabinet",
+      "spec": null,
+      "quantity": 1,
+      "unit": "each",
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16",
+          "label": "Clip · 2026-10-04 · 0:16",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 16,
+          "workDate": "2026-10-04"
+        },
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        }
+      ]
+    },
+    {
+      "id": "birch-plywood-3",
+      "item": "birch plywood",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        }
+      ]
+    },
+    {
+      "id": "caulk-11",
+      "item": "caulk",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        }
+      ]
+    },
+    {
+      "id": "construction-adhesive-5",
+      "item": "construction adhesive",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@16",
+          "label": "Clip · 2026-10-04 · 0:16",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 16,
+          "workDate": "2026-10-04"
+        }
+      ]
+    },
+    {
+      "id": "crown-molding-9",
+      "item": "crown molding",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@40",
+          "label": "Clip · 2026-10-04 · 0:40",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 40,
+          "workDate": "2026-10-04"
+        }
+      ]
+    },
+    {
+      "id": "finished-nails-10",
+      "item": "finished nails",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        }
+      ]
+    },
+    {
+      "id": "flooring-6",
+      "item": "flooring",
+      "spec": null,
+      "quantity": null,
+      "unit": null,
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@47",
+          "label": "Clip · 2026-10-04 · 0:47",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 47,
+          "workDate": "2026-10-04"
+        }
+      ]
+    },
+    {
+      "id": "laminate-countertop-1",
+      "item": "laminate countertop",
+      "spec": null,
+      "quantity": 1,
+      "unit": "each",
+      "sources": [
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        },
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@8",
+          "label": "Clip · 2026-10-04 · 0:08",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 8,
+          "workDate": "2026-10-04"
+        },
+        {
+          "id": "clip:2026-10-04",
+          "label": "Clip · 2026-10-04",
+          "section": "videos",
+          "workDate": "2026-10-04",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5"
+        }
+      ]
+    },
+    {
+      "id": "upper-cabinet-8",
+      "item": "upper cabinet",
+      "spec": null,
+      "quantity": 1,
+      "unit": "each",
+      "sources": [
+        {
+          "id": "video/058b09a8-3ca0-4d29-b554-4c54de26dea5/cedca9e4-5f44-4094-bd03-e4289f44e183@32",
+          "label": "Clip · 2026-10-04 · 0:32",
+          "section": "videos",
+          "jobId": "058b09a8-3ca0-4d29-b554-4c54de26dea5",
+          "proofId": "cedca9e4-5f44-4094-bd03-e4289f44e183",
+          "atSeconds": 32,
+          "workDate": "2026-10-04"
+        }
+      ]
+    }
+  ],
+  "approve": {
+    "actionKind": "pay",
+    "buttonLabel": "Place Order",
+    "summary": "Home Depot cart for 5 materials · priced lines $292.44 · 3 lines not priced yet · fulfillment TBD · 2 low-confidence matches to confirm. Nothing is purchased until you press Approve.",
+    "pageUrl": "https://www.homedepot.com/checkout/review-order",
+    "fields": [
+      {
+        "label": "Job material",
+        "value": "laminate countertop",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "FORMICA 4 ft. x 8 ft. Laminate Sheet in Brite White with Matte Finish · Internet #202911152 · https://www.homedepot.com/p/FORMICA-4-ft-x-8-ft-Laminate-Sheet-in-Brite-White-with-Matte-Finish-004591258408000/202911152",
+        "source": "Home Depot public listing",
+        "verified": true
+      },
+      {
+        "label": "Quantity",
+        "value": "1 each",
+        "source": "Job file evidence",
+        "verified": true
+      },
+      {
+        "label": "Unit price",
+        "value": "$73.44",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "$73.44",
+        "source": "Qty × unit price",
+        "verified": true
+      },
+      {
+        "label": "Job material",
+        "value": "base cabinet · low-confidence match",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "Hampton Bay Hampton 30 in. W x 24 in. D x 34.5 in. H Assembled Base Kitchen Cabinet in Satin White · Internet #100545475 · https://www.homedepot.com/p/Hampton-Bay-Hampton-30-in-W-x-24-in-D-x-34-5-in-H-Assembled-Base-Kitchen-Cabinet-in-Satin-White-KB30-SW/100545475",
+        "source": "Needs your choice",
+        "verified": false
+      },
+      {
+        "label": "Quantity",
+        "value": "1 each",
+        "source": "Job file evidence",
+        "verified": true
+      },
+      {
+        "label": "Unit price",
+        "value": "$219.00",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "$219.00",
+        "source": "Qty × unit price",
+        "verified": true
+      },
+      {
+        "label": "Stock / substitution",
+        "value": "Low-confidence size match — confirm width before Approve.",
+        "source": "Catalog check",
+        "verified": false
+      },
+      {
+        "label": "Job material",
+        "value": "birch plywood",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "Swaner Hardwood 3/4 in. x 4 ft. x 8 ft. Birch Plywood · Internet #305213039 · https://www.homedepot.com/p/Swaner-Hardwood-3-4-in-x-4-ft-x-8-ft-Birch-Plywood-BBI6VI/305213039",
+        "source": "Home Depot public listing",
+        "verified": true
+      },
+      {
+        "label": "Quantity",
+        "value": "Unknown — not stated in evidence",
+        "source": "Unknown in evidence — do not guess",
+        "verified": false
+      },
+      {
+        "label": "Unit price",
+        "value": "$51.58",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "Not priced — quantity unknown",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Job material",
+        "value": "construction adhesive",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "Liquid Nails Fuze It 9 oz. Gray All Surface Construction Adhesive · Internet #206736831 · https://www.homedepot.com/p/Liquid-Nails-Fuze-It-9-oz-Gray-All-Surface-Construction-Adhesive-LN-2000/206736831",
+        "source": "Home Depot public listing",
+        "verified": true
+      },
+      {
+        "label": "Quantity",
+        "value": "Unknown — not stated in evidence",
+        "source": "Unknown in evidence — do not guess",
+        "verified": false
+      },
+      {
+        "label": "Unit price",
+        "value": "$8.98",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "Not priced — quantity unknown",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Job material",
+        "value": "crown molding · low-confidence match",
+        "source": "Job file materials list",
+        "verified": true
+      },
+      {
+        "label": "Matched product",
+        "value": "Alexandria Moulding WM 49 9/16 in. x 3-5/8 in. x 96 in. Primed Pine Finger-Jointed Crown Moulding · Internet #205902094 · https://www.homedepot.com/p/Alexandria-Moulding-WM-49-9-16-in-x-3-5-8-in-x-96-in-Primed-Pine-Finger-Jointed-Crown-Moulding-0L049-93096C/205902094",
+        "source": "Needs your choice",
+        "verified": false
+      },
+      {
+        "label": "Quantity",
+        "value": "Unknown — not stated in evidence",
+        "source": "Unknown in evidence — do not guess",
+        "verified": false
+      },
+      {
+        "label": "Unit price",
+        "value": "$20.88",
+        "source": "Home Depot listing",
+        "verified": true
+      },
+      {
+        "label": "Line total",
+        "value": "Not priced — quantity unknown",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Stock / substitution",
+        "value": "Profile not specified in evidence — confirm before Approve.",
+        "source": "Catalog check",
+        "verified": false
+      },
+      {
+        "label": "Cart total",
+        "value": "$292.44 (sum of priced lines)",
+        "source": "Sum of priced lines only",
+        "verified": false
+      },
+      {
+        "label": "Not priced yet",
+        "value": "birch plywood (quantity unknown); construction adhesive (quantity unknown); crown molding (quantity unknown)",
+        "source": "Excluded from cart total",
+        "verified": false
+      },
+      {
+        "label": "Fulfillment",
+        "value": "Confirm delivery or pickup on the site",
+        "source": "Needs confirmation",
+        "verified": false
+      },
+      {
+        "label": "Payment",
+        "value": "Use the card already saved on the Home Depot account. Atmosphere never handles raw card numbers.",
+        "source": "Account on file",
+        "verified": true
+      }
+    ],
+    "screenshot": null
+  },
+  "cart": {
+    "subtotalCents": 29244,
+    "lineCount": 5,
+    "lines": [
+      {
+        "item": "laminate countertop",
+        "product": "FORMICA 4 ft. x 8 ft. Laminate Sheet in Brite White with Matte Finish",
+        "sku": "202911152",
+        "url": "https://www.homedepot.com/p/FORMICA-4-ft-x-8-ft-Laminate-Sheet-in-Brite-White-with-Matte-Finish-004591258408000/202911152",
+        "qty": 1,
+        "unit": "each",
+        "unitPriceCents": 7344,
+        "lineTotalCents": 7344,
+        "confidence": "medium"
+      },
+      {
+        "item": "base cabinet",
+        "product": "Hampton Bay Hampton 30 in. W x 24 in. D x 34.5 in. H Assembled Base Kitchen Cabinet in Satin White",
+        "sku": "100545475",
+        "url": "https://www.homedepot.com/p/Hampton-Bay-Hampton-30-in-W-x-24-in-D-x-34-5-in-H-Assembled-Base-Kitchen-Cabinet-in-Satin-White-KB30-SW/100545475",
+        "qty": 1,
+        "unit": "each",
+        "unitPriceCents": 21900,
+        "lineTotalCents": 21900,
+        "confidence": "low"
+      },
+      {
+        "item": "birch plywood",
+        "product": "Swaner Hardwood 3/4 in. x 4 ft. x 8 ft. Birch Plywood",
+        "sku": "305213039",
+        "url": "https://www.homedepot.com/p/Swaner-Hardwood-3-4-in-x-4-ft-x-8-ft-Birch-Plywood-BBI6VI/305213039",
+        "qty": null,
+        "unit": null,
+        "unitPriceCents": 5158,
+        "lineTotalCents": null,
+        "confidence": "medium"
+      },
+      {
+        "item": "construction adhesive",
+        "product": "Liquid Nails Fuze It 9 oz. Gray All Surface Construction Adhesive",
+        "sku": "206736831",
+        "url": "https://www.homedepot.com/p/Liquid-Nails-Fuze-It-9-oz-Gray-All-Surface-Construction-Adhesive-LN-2000/206736831",
+        "qty": null,
+        "unit": null,
+        "unitPriceCents": 898,
+        "lineTotalCents": null,
+        "confidence": "high"
+      },
+      {
+        "item": "crown molding",
+        "product": "Alexandria Moulding WM 49 9/16 in. x 3-5/8 in. x 96 in. Primed Pine Finger-Jointed Crown Moulding",
+        "sku": "205902094",
+        "url": "https://www.homedepot.com/p/Alexandria-Moulding-WM-49-9-16-in-x-3-5-8-in-x-96-in-Primed-Pine-Finger-Jointed-Crown-Moulding-0L049-93096C/205902094",
+        "qty": null,
+        "unit": null,
+        "unitPriceCents": 2088,
+        "lineTotalCents": null,
+        "confidence": "low"
+      }
+    ]
+  }
+}
