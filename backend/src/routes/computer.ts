@@ -12,6 +12,7 @@
  *
  * Logins page (sign in to outside sites ahead of time; no AI runs):
  *   GET    /api/chat-computer/logins                     saved sites + any sign-in in progress
+ *   GET    /api/chat-computer/logins/catalog             the Add-a-login site catalog
  *   POST   /api/chat-computer/logins/sign-ins            { url, label? } or { loginId } → open the site
  *   POST   /api/chat-computer/logins/sign-ins/:id/live   → short-lived live-view URL (control)
  *   POST   /api/chat-computer/logins/sign-ins/:id/done   "Done, I'm signed in" → save the site
@@ -52,6 +53,7 @@ import {
   signInLiveView,
   startSignIn,
 } from '../computer/logins.js';
+import { loginCatalogView } from '../computer/catalog/sites.js';
 import { HttpError } from '../lib/errors.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -204,6 +206,16 @@ computerRouter.get(
     const ctx = await requireOrgContext(req);
     res.setHeader('Cache-Control', 'no-store');
     res.json(await loginsState(ctx.orgId, ctx.userId, isAdmin(ctx)));
+  }),
+);
+
+/** The "Add a login" site catalog (data, from computer/catalog/sites.ts). */
+computerRouter.get(
+  '/logins/catalog',
+  wrap(async (req, res) => {
+    await requireOrgContext(req);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.json(loginCatalogView());
   }),
 );
 

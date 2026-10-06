@@ -27,6 +27,9 @@ import type {
   CampaignDraft,
   CampaignSendingState,
   AudienceCount,
+  PracticeSummaryPayload,
+  PracticeRunDetail,
+  PlaybookDraft,
 } from './types';
 import { normalizeProductHealth } from './productHealth';
 
@@ -165,6 +168,25 @@ export const api = {
 
   tokenUsage: (range: RangeParams) =>
     request<TokenUsageAnalyticsPayload>(`/api/analytics/token-usage?${rangeQuery(range)}`),
+
+  computerPractice: (days = 14) => request<PracticeSummaryPayload>(`/api/analytics/computer-practice?days=${days}`),
+
+  computerPracticeRun: (id: string) => request<PracticeRunDetail>(`/api/analytics/computer-practice/runs/${encodeURIComponent(id)}`),
+
+  computerPracticeRunNow: (keys?: string[]) =>
+    request<{ started: boolean; tasks: string[] }>('/api/analytics/computer-practice/run', {
+      method: 'POST',
+      body: JSON.stringify({ ...(keys?.length ? { keys } : {}), force: true }),
+    }),
+
+  computerPlaybookDrafts: (status: 'pending' | 'approved' | 'rejected' = 'pending') =>
+    request<{ drafts: PlaybookDraft[] }>(`/api/analytics/computer-playbooks/drafts?status=${status}`),
+
+  approvePlaybookDraft: (id: string, body: { taskType?: string; removeSteps?: number[]; note?: string }) =>
+    request<unknown>(`/api/analytics/computer-playbooks/drafts/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify(body) }),
+
+  rejectPlaybookDraft: (id: string, note?: string) =>
+    request<unknown>(`/api/analytics/computer-playbooks/drafts/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
 
   aiReconciliation: (range: RangeParams) =>
     request<AiReconciliationPayload>(`/api/analytics/ai-reconciliation?${rangeQuery(range)}`),

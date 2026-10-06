@@ -25,6 +25,7 @@ import { ContactsPage } from './pages/ContactsPage';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { CampaignBuilderPage } from './pages/CampaignBuilderPage';
 import { RequireInternal } from './components/RequireInternal';
+import { ComputerPracticePage } from './pages/ComputerPracticePage';
 
 export function App() {
   return (
@@ -63,6 +64,7 @@ export function App() {
             <Route path="motion-clips" element={<MotionClipsPage />} />
             <Route path="legal/jobs/:jobId" element={<JobLegalPage />} />
             <Route path="system" element={<SystemPage />} />
+            <Route path="computer-practice" element={<RequireInternal><ComputerPracticePage /></RequireInternal>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -13,6 +13,7 @@ import { startVerificationLeaseSweep, stopVerificationLeaseSweep } from './verif
 import { startDailyJobReportSweep, stopDailyJobReportSweep } from './dailyReport/index.js';
 import { computerConfigured } from './computer/providers/index.js';
 import { startComputerTaskSweep, stopComputerTaskSweep } from './computer/worker.js';
+import { startPracticeScheduler, stopPracticeScheduler } from './computer/iq/practice/scheduler.js';
 import { askProviderLabel } from './lib/askModel.js';
 import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
@@ -64,7 +65,11 @@ const server = app.listen(config.port, host, () => {
     startSoldPathOutboxWorkers();
     startDailyJobReportSweep();
     // Chat's browser agent. Off until BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID are set.
-    if (computerConfigured()) startComputerTaskSweep();
+    if (computerConfigured()) {
+      startComputerTaskSweep();
+      // Daily practice runs on the practice org (off unless COMPUTER_PRACTICE_ENABLED=1).
+      startPracticeScheduler();
+    }
     else logger.info('computer_not_set_up', { detail: 'Set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID to turn on Computer.' });
   }
 });
@@ -83,6 +88,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();
     stopComputerTaskSweep();
+    stopPracticeScheduler();
     liveSignalHub.close();
     server.close(() => process.exit(0));
   });

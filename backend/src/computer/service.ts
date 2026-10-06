@@ -125,7 +125,13 @@ export interface ComputerTaskView {
   statusDetail: string | null;
   instructions: string;
   startUrl: string | null;
-  needsYou: ComputerTaskRow['needs_you'];
+  needsYou: null | {
+    reason: NonNullable<ComputerTaskRow['needs_you']>['reason'];
+    message: string;
+    since: string;
+    /** Data URL of the page when Computer got stuck (handoff), else null. */
+    screenshot: string | null;
+  };
   humanControl: boolean;
   youHaveControl: boolean;
   stepCount: number;
@@ -183,7 +189,15 @@ export function taskView(
     statusDetail: task.status_detail,
     instructions: task.instructions,
     startUrl: task.start_url,
-    needsYou: task.status === 'needs_you' ? task.needs_you : null,
+    needsYou:
+      task.status === 'needs_you' && task.needs_you
+        ? {
+            reason: task.needs_you.reason,
+            message: task.needs_you.message,
+            since: task.needs_you.since,
+            screenshot: task.needs_you.screenshot_jpeg_b64 ? `data:image/jpeg;base64,${task.needs_you.screenshot_jpeg_b64}` : null,
+          }
+        : null,
     humanControl: Boolean(task.human_control_by),
     youHaveControl: Boolean(viewerId && task.human_control_by === viewerId),
     stepCount: task.step_count,

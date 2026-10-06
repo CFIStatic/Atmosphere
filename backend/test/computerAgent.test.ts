@@ -142,7 +142,8 @@ test('only the allowlisted job projection reaches the agent', async () => {
   assert.doesNotMatch(first, /4321/, 'lockbox code never goes to the agent');
   assert.doesNotMatch(first, /9999|private note/, 'notes never go to the agent');
   assert.match(h.seen[0].system[0].text, /untrusted/i);
-  assert.equal(h.seen[0].model, 'claude-sonnet-5-5');
+  // Model routing: the first (planning) step goes to the strong model; routine steps go to the fast one.
+  assert.equal(h.seen[0].model, 'claude-opus-5-5');
   assert.ok((h.seen[0].tools as Array<{ type?: string }>).some((t) => t.type === 'computer_toolset_20260801'));
 });
 

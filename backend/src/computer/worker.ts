@@ -11,13 +11,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../lib/logger.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { assertAiFeatureAllowed, isAiPaused } from '../metering/aiBudgetService.js';
-import { runComputerAgent, type AgentOutcome, type ComputerModel } from './agent.js';
+import { runComputerAgent, type AgentIq, type AgentOutcome, type AgentPlaybook, type ComputerModel } from './agent.js';
+import { siteOf } from './sites.js';
+import { describeStep, stepsFromRecording, stepsFromTrace, type PlaybookStep, type TraceEntry } from './iq/playbookSteps.js';
+import { replayPlaybook } from './iq/replay.js';
+import { routingConfig } from './iq/routing.js';
+import { SupabaseIqStore, type IqStore, type PracticeStepLog } from './iq/store.js';
+import { unmetExpectation } from './iq/verify.js';
 import { computerSettings, helperSessionStale, NOT_SET_UP_MESSAGE, type ComputerSettings } from './config.js';
 import { browserCostSoFar, meterBrowserTime, meterComputerModelCall } from './metering.js';
 import { anthropicComputerModel } from './model.js';
 import { computerProvider } from './providers/index.js';
 import { SupabaseComputerStore, type ComputerStore, type ComputerTaskRow } from './store.js';
-import type { ComputerDriver, ComputerProvider, ComputerSessionHandle } from './types.js';
+import type { ComputerDriver, ComputerProvider, ComputerSessionHandle, TaskFile } from './types.js';
+import { isAutomationRestrictedSite, siteGuideFor } from './catalog/sites.js';
 
 export interface ComputerWorkerDeps {
   store: ComputerStore;
@@ -29,6 +36,28 @@ export interface ComputerWorkerDeps {
   sleep(ms: number): Promise<void>;
   now(): number;
   settings: ComputerSettings;
+  /** Computer IQ storage (practice runs, playbooks, drafts, routing). null = off. */
+  iq?: IqStore | null;
+  /**
+   * Model for the independent pre-action check. undefined = the task's model
+   * (production). Tests that inject a scripted model pass one explicitly or
+   * get no check.
+   */
+  verifyModel?: ComputerModel | null;
+  /** Files the person gave a task for uploads. Not wired to job documents yet. */
+  taskFiles?(task: ComputerTaskRow): Promise<TaskFile[]>;
+}
+
+/** The harmless text file the upload practice task attaches (it never gets uploaded: the run stops at approval). */
+export function practiceUploadFile(): TaskFile {
+  return { id: 'practice-1', name: 'atmosphere-practice.txt', mimeType: 'text/plain', bytes: Buffer.from('Atmosphere Computer practice upload. Safe to ignore.\n') };
+}
+
+/** What a caller (the practice runner) wants back from a run beyond the outcome. */
+export interface TaskRunHooks {
+  stepLog?: PracticeStepLog[];
+  /** Filled with what happened to a practice task's playbook. */
+  playbook?: { id: string | null; version: number | null; used: boolean };
 }
 
 /** Test seams beyond the worker: the admin client and the AI allowance gate. */
@@ -80,7 +109,38 @@ export function computerWorkerDeps(): ComputerWorkerDeps | null {
     sleep: o.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms))),
     now: o.now ?? (() => Date.now()),
     settings: o.settings ?? computerSettings(),
+    iq: 'iq' in o ? (o.iq ?? null) : computerIqStore(),
+    ...('verifyModel' in o ? { verifyModel: o.verifyModel ?? null } : {}),
+    ...(o.taskFiles ? { taskFiles: o.taskFiles } : {}),
   };
+}
+
+export function computerIqStore(): IqStore | null {
+  if (overrides && 'iq' in overrides) return overrides.iq ?? null;
+  const admin = computerAdmin();
+  return admin ? new SupabaseIqStore(admin) : null;
+}
+
+function hostOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** Plain recap of a person's recorded steps for the model (no values). */
+function demoSummary(steps: PlaybookStep[], drafted: boolean): string {
+  const lines = steps.slice(0, 8).map((s, i) => `${i + 1}. ${describeStep(s)}`);
+  return [
+    'While the person had control they did:',
+    ...lines,
+    drafted ? 'These steps were saved as a draft playbook for review. Nothing they typed was saved.' : '',
+    'Take a screenshot and continue from here.',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function safeError(err: unknown): string {
@@ -92,7 +152,7 @@ function safeError(err: unknown): string {
 const inFlight = new Set<string>();
 
 /** Claim and run one task to completion. Resolves when the task has a final status. */
-export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps): Promise<AgentOutcome | null> {
+export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps, hooks: TaskRunHooks = {}): Promise<AgentOutcome | null> {
   const d = given ?? computerWorkerDeps();
   if (!d) return null;
   const { store, provider, settings } = d;
@@ -158,12 +218,108 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
         }
         await store.updateTask(task.id, { status_detail: null });
         const sessionStart = handle.startedAt.getTime();
-        outcome = await runComputerAgent({
+        const iqStore = d.iq ?? null;
+        const practice = task.practice ?? null;
+        const startHost = hostOf(task.start_url);
+        // No playbooks are learned or replayed for Verisk sites (EXCLUDED_SITES).
+        const site = isAutomationRestrictedSite(startHost) ? null : siteOf(startHost ?? '') || null;
+        const trace: TraceEntry[] = [];
+        const stepLog = hooks.stepLog ?? [];
+        const slots = { projection: task.job_projection ?? [], params: practice?.params ?? {}, instructions: task.instructions };
+        const sites = new Set(site ? [site] : []);
+        const iqAudit = (event: string, detail: Record<string, unknown> = {}) =>
+          store
+            .appendAudit({ org_id: task.org_id, task_id: task.id, session_id: running.session_id, job_id: task.job_id, actor_kind: 'agent', event, detail })
+            .catch(() => undefined);
+        let screenIndex = 0;
+        const keepScreen = async (label: string) => {
+          if (!practice || !iqStore || !driver) return;
+          const jpeg = await driver.screenshot('jpeg').catch(() => null);
+          if (jpeg) await iqStore.insertPracticeScreen({ run_id: practice.runId, step_index: screenIndex++, label, jpeg_b64: jpeg }).catch(() => undefined);
+        };
+        await keepScreen('Start page');
+
+        // Practice tasks have a known task type: follow the saved playbook first, then fall back to the model.
+        let replayOutcome: AgentOutcome | null = null;
+        let promptNote: string | null = null;
+        let afterReplayFailure = false;
+        const playbook = practice && iqStore && site ? await iqStore.loadPlaybook(site, practice.taskType).catch(() => null) : null;
+        if (hooks.playbook) hooks.playbook = { id: playbook?.id ?? null, version: playbook?.version ?? null, used: false };
+        if (practice && playbook && playbook.status === 'active' && playbook.steps.length && iqStore) {
+          if (hooks.playbook) hooks.playbook.used = true;
+          await iqStore.logRoute({ org_id: task.org_id, task_id: task.id, step: 0, route: 'replay', model: 'none', reason: `Following saved playbook ${playbook.task_type} v${playbook.version}.` }).catch(() => undefined);
+          const replay = await replayPlaybook({ driver, sleep: d.sleep, audit: iqAudit }, { steps: playbook.steps, slots, sites });
+          trace.push(...replay.trace);
+          for (const l of replay.log) stepLog.push({ index: stepLog.length, label: l.label, ok: l.ok, via: 'playbook', ...(l.note ? { note: l.note } : {}) });
+          await keepScreen('After playbook');
+          const met = practice.success ? (await unmetExpectation(driver, practice.success)) == null : true;
+          if (replay.status === 'completed' && met && practice.mode === 'read_only') {
+            replayOutcome = { status: 'succeeded', summary: `Followed playbook v${playbook.version}; every step was verified.`, modelCalls: 0 };
+          } else if (replay.status === 'stopped_at_consequential' && replay.stoppedAt && practice.mode === 'stop_before_submit') {
+            replayOutcome = {
+              status: 'succeeded',
+              summary: `Followed playbook v${playbook.version} to “${replay.stoppedAt.label}” and stopped before it. Nothing was submitted.`,
+              practice: { stoppedAt: replay.stoppedAt },
+              modelCalls: 0,
+            };
+          }
+          if (replayOutcome) {
+            await iqStore.recordPlaybookReplay(playbook.id, true).catch(() => undefined);
+          } else {
+            const where = replay.failedStep != null ? `step ${replay.failedStep + 1} of ${playbook.steps.length}` : 'the end';
+            if (replay.status === 'failed' || (replay.status === 'completed' && !met)) {
+              await iqStore.recordPlaybookReplay(playbook.id, false).catch(() => undefined);
+              afterReplayFailure = true;
+            }
+            promptNote = `A saved playbook for this task ran first and completed ${replay.done} of ${playbook.steps.length} steps, stopping at ${where}${replay.reason ? `: ${replay.reason}` : '.'} Continue from the current page.`;
+            await iqAudit('playbook_replayed', { kind: playbook.task_type, status: replay.status, outcome: `${replay.done}/${playbook.steps.length}` });
+          }
+        }
+
+        const playbooks: AgentPlaybook[] =
+          !practice && iqStore && site
+            ? (await iqStore.listPlaybooks(site).catch(() => []))
+                .filter((pb) => pb.status === 'active' && pb.steps.some((s) => s.kind !== 'explore'))
+                .sort((a, b) => b.success_count + b.replay_success_count - (a.success_count + a.replay_success_count))
+                .slice(0, 5)
+                .map((pb) => ({ id: pb.id, taskType: pb.task_type, version: pb.version, steps: pb.steps }))
+            : [];
+        const routing = routingConfig(task.model_id);
+        const verifyModel = d.verifyModel !== undefined ? d.verifyModel : d.model ? null : model;
+        const iq: AgentIq = {
+          store: iqStore,
+          routing,
+          verifier: verifyModel ? { model: verifyModel, modelId: routing.enabled ? routing.verify : task.model_id } : null,
+          practice: practice ? { mode: practice.mode } : null,
+          playbooks,
+          promptNote,
+          afterReplayFailure,
+          trace,
+          stepLog,
+          onTurn: async (step) => {
+            if (practice && step % 4 === 0) await keepScreen(`After step ${step}`);
+          },
+          onDemonstration: async (actions, source) => {
+            const steps = stepsFromRecording(actions, slots);
+            if (!steps.some((s) => s.kind !== 'explore')) return { draftId: null, steps: 0, summary: demoSummary(steps, false) };
+            const draftSite = siteOf(hostOf(await driver!.currentUrl().catch(() => null)) ?? '') || site;
+            let draftId: string | null = null;
+            if (iqStore && draftSite) {
+              const draft = await iqStore
+                .insertDraft({ org_id: task.org_id, task_id: task.id, site: draftSite, task_type: practice?.taskType ?? 'demonstration', source, steps })
+                .catch(() => null);
+              draftId = draft?.id ?? null;
+            }
+            return { draftId, steps: steps.length, summary: demoSummary(steps, Boolean(draftId)) };
+          },
+        };
+        outcome = replayOutcome ?? await runComputerAgent({
           task: running,
           driver,
           model,
           store,
           settings,
+          iq,
           meterModel: (step, response) =>
             meterComputerModelCall(d.meteringClient, {
               orgId: task.org_id,
@@ -177,7 +333,39 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
           isPaused: () => d.isPaused(task.org_id),
           sleep: d.sleep,
           now: d.now,
+          files: practice?.taskType === 'upload_file' ? [practiceUploadFile()] : await (d.taskFiles?.(task) ?? Promise.resolve([])).catch(() => []),
+          siteGuide: siteGuideFor(startHost),
         });
+
+        // A practice task that says it finished must leave the expected result on the page.
+        if (practice?.success && outcome.status === 'succeeded' && !outcome.practice?.stoppedAt && !replayOutcome) {
+          const unmet = await unmetExpectation(driver, practice.success);
+          if (unmet) outcome = { ...outcome, status: 'failed', error: `Finished, but ${unmet}.` };
+          else if (practice.success.downloaded && !((await driver.downloads?.().catch(() => [])) ?? []).length) {
+            outcome = { ...outcome, status: 'failed', error: 'Finished, but no file was downloaded.' };
+          }
+        }
+        if (practice) await keepScreen(outcome.status === 'succeeded' ? 'Finished' : 'Where it stopped');
+
+        // Playbook capture: a verified success refreshes the shared steps (PII-scrubbed).
+        if (outcome.status === 'succeeded' && iqStore && site) {
+          const taskType = practice?.taskType ?? outcome.usedPlaybook?.taskType ?? outcome.approvedKind ?? null;
+          if (outcome.usedPlaybook && !practice) await iqStore.recordPlaybookReplay(outcome.usedPlaybook.id, true).catch(() => undefined);
+          let steps = stepsFromTrace(trace, slots);
+          const stop = outcome.practice?.stoppedAt;
+          if (stop && !/^Enter in /.test(stop.label)) {
+            steps = [...steps, { kind: 'click', target: { role: 'button', name: stop.label.slice(0, 80), tag: null }, consequential: stop.kind }];
+          }
+          if (taskType && !replayOutcome && steps.some((s) => s.kind === 'click' || s.kind === 'type')) {
+            try {
+              const saved = await iqStore.savePlaybookSteps({ site, taskType, steps, source: 'success' });
+              await audit('playbook_saved', { kind: taskType, status: saved.changed ? 'updated' : 'confirmed' });
+              if (hooks.playbook) hooks.playbook = { ...hooks.playbook, id: saved.id, version: saved.version };
+            } catch (err) {
+              logger.warn('computer playbook capture skipped', { taskId: task.id, error: safeError(err) });
+            }
+          }
+        }
       }
     }
   } catch (err) {
@@ -257,6 +445,8 @@ export async function sweepComputerTasksOnce(): Promise<void> {
   const queued = await d.store.listQueuedTasks(10);
   for (const t of queued) {
     if (inFlight.has(t.id)) continue;
+    // The practice runner runs its own tasks; the sweep only picks up one it left behind.
+    if (t.practice && d.now() - Date.parse(t.created_at) < 2 * 60_000) continue;
     inFlight.add(t.id);
     void runComputerTask(t.id, d)
       .catch((err) => logger.error('computer task crashed', { taskId: t.id, error: safeError(err) }))

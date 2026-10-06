@@ -646,3 +646,123 @@ export interface AiReconciliationPayload {
   flaggedCount: number;
   providers: AiReconciliationProvider[];
 }
+
+/* ---------------------------------------------------------- Computer IQ -- */
+
+export type PracticeStatus = 'running' | 'succeeded' | 'failed' | 'needs_login' | 'skipped';
+
+export interface PracticeRunItem {
+  id: string;
+  date: string;
+  taskKey: string;
+  site: string;
+  mode: 'read_only' | 'stop_before_submit';
+  status: PracticeStatus;
+  failedStep: number | null;
+  failureReason: string | null;
+  usedPlaybook: boolean;
+  playbookVersion: number | null;
+  modelCalls: number;
+  costUsd: number;
+  durationSec: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface PracticeTaskSummary {
+  key: string;
+  site: string;
+  label: string;
+  mode: string;
+  loginHost: string | null;
+  runs: number;
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  needsLogin: number;
+  successRate: number | null;
+  lastStatus: PracticeStatus | null;
+  lastRunAt: string | null;
+  lastRunId: string | null;
+  lastFailure: string | null;
+  days: Array<{ date: string; status: PracticeStatus | null; runId: string | null }>;
+}
+
+export interface PracticeCoverageSite {
+  id: string;
+  name: string;
+  category: string;
+  terms: 'allowed' | 'restricted' | 'no_ban_found' | 'unverified' | 'flagged';
+  termsNote: string;
+  termsUrl: string;
+  inPicker: boolean;
+  /** How Computer signs in (null for entries kept out of Add a login without a verified sign-in). */
+  signIn: { flow: 'one_page' | 'username_first' | 'open_first'; checked: 'live_page' | 'blocked_probe' } | null;
+  twoStep: 'likely' | 'sometimes' | 'rare';
+  sso: boolean;
+  practiceTasks: string[];
+  needsTestLogin: boolean;
+}
+
+export interface PracticeSummaryPayload {
+  generatedAt: string;
+  days: number;
+  today: string;
+  orgConfigured: boolean;
+  schedule: { enabled: boolean; hourUtc: number };
+  totals: {
+    runs: number;
+    attempted: number;
+    succeeded: number;
+    failed: number;
+    needsLogin: number;
+    successRate: number | null;
+    costUsd: number;
+    modelCalls: number;
+    playbookRuns: number;
+    avgDurationSec: number | null;
+  };
+  tasks: PracticeTaskSummary[];
+  daily: Array<{ date: string; attempted: number; succeeded: number; needsLogin: number; successRate: number | null }>;
+  recent: PracticeRunItem[];
+  playbooks: Array<{
+    id: string;
+    site: string;
+    taskType: string;
+    version: number;
+    source: string;
+    status: string;
+    steps: number;
+    successCount: number;
+    replaySuccessCount: number;
+    failureCount: number;
+    lastSuccessAt: string | null;
+    updatedAt: string;
+  }>;
+  pendingDrafts: number;
+  coverage?: { sites: PracticeCoverageSite[]; excluded: Array<{ name: string; reason: string }> };
+}
+
+export interface PracticeRunDetail extends PracticeRunItem {
+  label: string;
+  instructions: string | null;
+  taskType: string;
+  taskId: string | null;
+  steps: Array<{ index: number; label: string; ok: boolean; via: string; note?: string }>;
+  screens: Array<{ index: number; label: string; src: string }>;
+  routes: Array<{ step: number; route: string; model: string; reason: string }>;
+}
+
+export interface PlaybookDraft {
+  id: string;
+  site: string;
+  taskType: string;
+  source: 'demonstration' | 'handoff';
+  status: 'pending' | 'approved' | 'rejected';
+  stepCount: number;
+  steps: Array<{ index: number; kind: string; text: string; slot: string | null }>;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  playbookId: string | null;
+  createdAt: string;
+}

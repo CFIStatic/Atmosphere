@@ -9,12 +9,21 @@ import type {
   ComputerDriver,
   ComputerProvider,
   ComputerSessionHandle,
+  DismissedOverlay,
+  DownloadedFile,
+  ElementTarget,
   FormFieldReading,
+  LocatedElement,
   LiveViewLink,
   MouseButton,
+  PageOutline,
   PageSignals,
+  RecordedAction,
   ScreenshotFormat,
   TargetDescriptor,
+  TaskFile,
+  SignInFill,
+  SignInHints,
 } from '../types.js';
 
 // 1×1 PNG / JPEG. The model in tests never looks at pixels.
@@ -39,7 +48,7 @@ interface MockElement {
   otp?: boolean;
   captcha?: boolean;
   /** What a click does. */
-  action?: 'submit' | 'save_draft' | 'sign_in' | 'verify' | 'upload';
+  action?: 'submit' | 'save_draft' | 'sign_in' | 'verify' | 'upload' | 'dismiss_banner';
 }
 
 const PAGES: Record<MockPageId, { url: string; elements: MockElement[]; text: string }> = {
@@ -97,6 +106,10 @@ export class MockSite {
   submitted = false;
   draftSaved = 0;
   uploads = 0;
+  /** Names of files attached through attachFiles (bytes are not kept). */
+  attached: string[] = [];
+  /** Files the scripted page "downloaded". */
+  downloaded: DownloadedFile[] = [];
   captcha: boolean;
   readonly actions: string[] = [];
   /** The org profile's cookies: domain → fingerprints. Survives sessions, like a persistent context. */
@@ -110,10 +123,59 @@ export class MockSite {
   /** Sign-ins the site saw (password redacted to its length). */
   readonly signInAttempts: Array<{ username: string; passwordLength: number; ok: boolean }> = [];
 
-  constructor(opts: { start?: MockPageId; captcha?: boolean; account?: MockSite['account'] } = {}) {
+  /** A cookie-consent banner covering the page until dismissed. */
+  cookieBanner: boolean;
+  /**
+   * The sign-in form sits behind a link on a landing page (open it with
+   * fillSignIn hints.openWith). leadsTo is the host the link opens.
+   */
+  signInBehind: { link: string; leadsTo?: string; opened: boolean } | null;
+  /** The host of the last navigate() (the scripted pages keep their own URLs). */
+  navigatedHost: string | null = null;
+  /** Set while a Take control session is being recorded. */
+  recording: RecordedAction[] | null = null;
+
+  constructor(
+    opts: { start?: MockPageId; captcha?: boolean; account?: MockSite['account']; cookieBanner?: boolean; signInBehind?: { link: string; leadsTo?: string } } = {},
+  ) {
     this.page = opts.start ?? 'form';
+    this.signInBehind = opts.signInBehind ? { ...opts.signInBehind, opened: false } : null;
     this.captcha = Boolean(opts.captcha);
     this.account = opts.account ?? null;
+    this.cookieBanner = Boolean(opts.cookieBanner);
+  }
+
+  /** What a person would notice changing. */
+  fingerprint(): string {
+    return JSON.stringify([this.page, this.values, this.checked, this.focused, this.submitted, this.draftSaved, this.uploads, this.cookieBanner, this.attached.length, this.downloaded.length]);
+  }
+
+  /**
+   * A person acting in the live view (Take control). Applies the action to the
+   * page and, when recording, reports it the way the in-page recorder would.
+   */
+  personDoes(action: { click?: string; type?: { id: string; value: string }; press?: 'Enter' }) {
+    const els = this.elements();
+    if (action.click) {
+      const el = els.find((e) => e.id === action.click);
+      if (!el) throw new Error(`no element ${action.click} on ${this.page}`);
+      if (this.recording && !el.field) this.recording.push({ kind: 'click', role: el.tag === 'button' ? 'button' : el.checkbox ? 'checkbox' : 'generic', name: el.label, tag: el.tag, at: Date.now() });
+      this.activate(el);
+    }
+    if (action.type) {
+      const el = els.find((e) => e.id === action.type!.id);
+      if (!el) throw new Error(`no field ${action.type.id}`);
+      this.focused = el.id;
+      this.values[el.id] = action.type.value;
+      if (this.recording) {
+        if (el.password || el.otp) this.recording.push({ kind: 'sign_in', at: Date.now() });
+        else this.recording.push({ kind: 'type', role: 'textbox', name: el.label, tag: el.tag, inputType: el.type, value: action.type.value, at: Date.now() });
+      }
+    }
+    if (action.press) {
+      if (this.recording) this.recording.push({ kind: 'press', key: 'Enter', at: Date.now() });
+      this.pressEnter();
+    }
   }
 
   get url() {
@@ -131,6 +193,10 @@ export class MockSite {
     const els = [...PAGES[this.page].elements];
     if (this.captcha) {
       els.push({ id: 'captcha', rect: [300, 640, 300, 78], tag: 'iframe', type: null, label: 'reCAPTCHA', captcha: true });
+    }
+    if (this.cookieBanner) {
+      // The banner sits on top: the first element hit-testing finds.
+      els.unshift({ id: 'cookie_reject', rect: [0, 700, 1280, 100], tag: 'button', type: 'button', label: 'Reject all', action: 'dismiss_banner' });
     }
     return els;
   }
@@ -183,6 +249,9 @@ export class MockSite {
         break;
       case 'upload':
         this.uploads += 1;
+        break;
+      case 'dismiss_banner':
+        this.cookieBanner = false;
         break;
       case 'sign_in': {
         this.focused = null;
@@ -272,6 +341,12 @@ export class MockDriver implements ComputerDriver {
 
   async navigate(url: string) {
     this.site.actions.push(`navigate:${url}`);
+    try {
+      // The scripted pages keep their own URLs; remember which host the browser was sent to.
+      this.site.navigatedHost = new URL(url).host;
+    } catch {
+      /* not a URL */
+    }
   }
 
   async currentUrl() {
@@ -341,14 +416,91 @@ export class MockDriver implements ComputerDriver {
     return n;
   }
 
-  async fillSignIn(creds: { username: string; password: string }) {
-    if (this.site.page !== 'login') return 'no_form' as const;
+  async fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill> {
+    if (this.site.page !== 'login') return 'no_form';
+    const behind = this.site.signInBehind;
+    if (behind && !behind.opened) {
+      if (!hints?.openWith?.some((t) => t.toLowerCase() === behind.link.toLowerCase())) return 'no_form';
+      behind.opened = true;
+      this.site.actions.push(`open_sign_in:${behind.link}`);
+    }
+    const host = behind?.leadsTo ?? this.site.navigatedHost ?? new URL(this.site.url).host;
+    if (hints?.allowHost && !hints.allowHost(host)) return 'other_site';
     this.site.actions.push('fill_sign_in');
     this.site.values.email = creds.username;
     this.site.values.password = creds.password;
     const button = this.site.elements().find((e) => e.action === 'sign_in');
     if (button) this.site.activate(button);
-    return 'submitted' as const;
+    return 'submitted';
+  }
+
+  async pageOutline(): Promise<PageOutline> {
+    const els = this.site.elements();
+    return {
+      url: this.site.url,
+      title: PAGES[this.site.page]?.text ?? '',
+      headings: [PAGES[this.site.page]?.text ?? ''],
+      dialogs: this.site.cookieBanner ? ['We use cookies'] : [],
+      elements: els.map((e, ref) => ({
+        ref,
+        role: e.tag === 'button' ? 'button' : e.checkbox ? 'checkbox' : e.field ? 'textbox' : 'generic',
+        name: e.label,
+        tag: e.tag,
+        type: e.type,
+        x: e.rect[0] + Math.round(e.rect[2] / 2),
+        y: e.rect[1] + Math.round(e.rect[3] / 2),
+        w: e.rect[2],
+        h: e.rect[3],
+        disabled: false,
+        checked: e.checkbox ? Boolean(this.site.checked[e.id]) : null,
+        inForm: this.site.page !== 'done',
+        isPassword: Boolean(e.password),
+        hasValue: Boolean(this.site.values[e.id]),
+      })),
+    };
+  }
+
+  async locate(target: ElementTarget): Promise<LocatedElement | null> {
+    const outline = await this.pageOutline();
+    const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const hit =
+      (typeof target.ref === 'number' ? outline.elements[target.ref] : undefined) ??
+      outline.elements.find((e) => norm(e.name) === norm(target.name) && (!target.role || e.role === target.role)) ??
+      outline.elements.find((e) => norm(target.name).length >= 4 && norm(e.name).includes(norm(target.name)));
+    return hit ? { x: hit.x, y: hit.y, w: hit.w, h: hit.h, role: hit.role, name: hit.name, tag: hit.tag } : null;
+  }
+
+  async pageFingerprint(): Promise<string> {
+    return this.site.fingerprint();
+  }
+
+  async dismissOverlays(): Promise<DismissedOverlay[]> {
+    if (!this.site.cookieBanner) return [];
+    this.site.cookieBanner = false;
+    this.site.actions.push('dismiss:cookie');
+    return [{ kind: 'cookie', label: 'Reject all' }];
+  }
+
+  async startRecording(): Promise<void> {
+    this.site.recording = [];
+  }
+
+  async stopRecording(): Promise<RecordedAction[]> {
+    const got = this.site.recording ?? [];
+    this.site.recording = null;
+    return got;
+  }
+
+  async attachFiles(x: number, y: number, files: TaskFile[]): Promise<'attached' | 'no_file_input'> {
+    const el = this.site.at(x, y);
+    if (!el?.file) return 'no_file_input';
+    this.site.attached.push(...files.map((f) => f.name));
+    this.site.actions.push(`attach:${files.map((f) => f.name).join(',')}`);
+    return 'attached';
+  }
+
+  async downloads(): Promise<DownloadedFile[]> {
+    return this.site.downloaded.map((d) => ({ ...d }));
   }
 
   async close() {

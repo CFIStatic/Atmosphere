@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ComputerLogin, ComputerLoginsState, ComputerSignIn } from '../lib/computer';
+import type { ComputerLogin, ComputerLoginsState, ComputerSignIn, LoginCatalog } from '../lib/computer';
 import { LoginsPage } from './LoginsPage';
 
 const computerLogins = vi.fn();
@@ -12,6 +12,7 @@ const computerSignInCancel = vi.fn();
 const computerRemoveLogin = vi.fn();
 const computerSaveCredential = vi.fn();
 const computerDeleteCredential = vi.fn();
+const computerLoginCatalog = vi.fn();
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -27,6 +28,7 @@ vi.mock('../lib/api', async () => {
       computerRemoveLogin: (...a: unknown[]) => computerRemoveLogin(...a),
       computerSaveCredential: (...a: unknown[]) => computerSaveCredential(...a),
       computerDeleteCredential: (...a: unknown[]) => computerDeleteCredential(...a),
+      computerLoginCatalog: (...a: unknown[]) => computerLoginCatalog(...a),
     },
   };
 });
@@ -84,8 +86,57 @@ const signIn: ComputerSignIn = {
   expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
 };
 
+const CATALOG: LoginCatalog = {
+  categories: [
+    { id: 'email_calendar', label: 'Email and calendar' },
+    { id: 'chat_meetings', label: 'Team chat and meetings' },
+    { id: 'accounting_payments', label: 'Accounting and payments' },
+    { id: 'restoration', label: 'Restoration job management' },
+    { id: 'suppliers', label: 'Suppliers', terms: ['supply', 'materials'] },
+  ],
+  sites: [
+    {
+      id: 'outlook', name: 'Outlook (Microsoft 365)', category: 'email_calendar', signInUrl: 'https://outlook.office.com/mail/',
+      host: 'outlook.office.com', aliases: ['outlook', 'office 365'], twoStep: 'likely', sso: true,
+      logo: { text: 'O', color: '#0F6CBD' }, termsNote: null, practice: ['outlook.read_inbox'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+    {
+      id: 'gmail', name: 'Gmail (Google)', category: 'email_calendar', signInUrl: 'https://mail.google.com/',
+      host: 'mail.google.com', aliases: ['gmail', 'google workspace'], twoStep: 'likely', sso: true,
+      logo: { text: 'G', color: '#EA4335' }, termsNote: null, practice: ['gmail.read_inbox'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself. Google may ask for a code.',
+    },
+    {
+      id: 'slack', name: 'Slack', category: 'chat_meetings', signInUrl: 'https://slack.com/signin',
+      host: 'slack.com', aliases: ['slack'], twoStep: 'likely', sso: true,
+      logo: { text: 'S', color: '#4A154B' }, termsNote: null, practice: ['slack.read_channels'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+    {
+      id: 'quickbooks', name: 'QuickBooks Online', category: 'accounting_payments', signInUrl: 'https://qbo.intuit.com/',
+      host: 'qbo.intuit.com', aliases: ['quickbooks', 'qbo'], twoStep: 'likely', sso: false,
+      logo: { text: 'QB', color: '#2CA01C' }, termsNote: null, practice: ['quickbooks.accounting_recent'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+    {
+      id: 'encircle', name: 'Encircle', category: 'restoration', signInUrl: 'https://encircleapp.com/login',
+      host: 'encircleapp.com', aliases: ['encircle'], twoStep: 'rare', sso: false,
+      logo: { text: 'En', color: '#00A88F' }, termsNote: null, practice: ['encircle.restoration_jobs'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+    {
+      id: 'homedepot', name: 'The Home Depot / Pro', category: 'suppliers', signInUrl: 'https://www.homedepot.com/auth/view/signin',
+      host: 'www.homedepot.com', aliases: ['home depot', 'homedepot'], twoStep: 'sometimes', sso: false,
+      logo: { text: 'HD', color: '#F96302' }, termsNote: null, practice: ['homedepot.supplier_search'],
+      signInSteps: 'Username, then Next, then password. Computer fills in the saved login itself.',
+    },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  computerLoginCatalog.mockResolvedValue(CATALOG);
   computerSignInLive.mockResolvedValue({ url: LIVE, expiresAt: new Date(Date.now() + 600_000).toISOString(), mode: 'control' });
 });
 
@@ -108,17 +159,19 @@ describe('LoginsPage', () => {
     expect(screen.queryByRole('button', { name: 'Add login' })).toBeNull();
   });
 
-  it('adds a login from a quick pick: opens the live view in control mode, then saves on Done', async () => {
+  it('adds a login from the catalog: opens the live view in control mode, then saves on Done', async () => {
     const user = userEvent.setup();
     computerLogins.mockResolvedValueOnce(state());
     computerStartSignIn.mockResolvedValue({ signIn });
     computerSignInDone.mockResolvedValue({ login: outlook });
     render(<LoginsPage />);
     await user.click(await screen.findByRole('button', { name: 'Add login' }));
-    await user.click(screen.getByRole('button', { name: 'Outlook' }));
-    expect(screen.getByLabelText('Website address')).toHaveValue('https://outlook.office.com');
+    await user.click(await screen.findByTestId('logins-catalog-outlook'));
+    const picked = screen.getByTestId('logins-picked-site');
+    expect(within(picked).getByText('https://outlook.office.com/mail/')).toBeInTheDocument();
+    expect(screen.getByTestId('logins-two-step-note')).toHaveTextContent('You’ll be asked for a code when signing in.');
     await user.click(screen.getByRole('button', { name: 'Open sign-in page' }));
-    expect(computerStartSignIn).toHaveBeenCalledWith({ url: 'https://outlook.office.com', label: 'Outlook' });
+    expect(computerStartSignIn).toHaveBeenCalledWith({ url: 'https://outlook.office.com/mail/', label: 'Outlook (Microsoft 365)' });
 
     const panel = await screen.findByTestId('logins-signing-in');
     expect(within(panel).getByText('Signing in to Outlook')).toBeInTheDocument();
@@ -181,24 +234,25 @@ describe('LoginsPage', () => {
     await waitFor(() => expect(screen.getByTestId('logins-empty')).toBeInTheDocument());
   });
 
-  it('Add login: an admin can save a username and password; Computer signs in with it', async () => {
+  it('Add login: an admin can save a username and password for a custom site; Computer signs in with it', async () => {
     const user = userEvent.setup();
-    const started = { ...signIn, label: 'Xactimate' };
+    const started = { ...signIn, label: 'Carrier portal' };
     computerLogins.mockResolvedValueOnce(state({ passwords: ADMIN }));
     computerLogins.mockResolvedValue(state({ passwords: ADMIN, signingIn: started }));
     computerStartSignIn.mockResolvedValue({
-      signIn: { ...started, autoSignIn: { outcome: 'two_factor', message: 'The saved password worked. Xactimate is asking for a verification code.' } },
+      signIn: { ...started, autoSignIn: { outcome: 'two_factor', message: 'The saved password worked. The portal is asking for a verification code.' } },
     });
     render(<LoginsPage />);
     await user.click(await screen.findByRole('button', { name: 'Add login' }));
-    await user.type(screen.getByLabelText('Website address'), 'https://identity.xactware.com');
+    await user.click(await screen.findByTestId('logins-catalog-custom'));
+    await user.type(screen.getByLabelText('Website address'), 'https://portal.carrier.example');
     await user.click(screen.getByRole('checkbox', { name: /Save a username and password/ }));
     await user.type(screen.getByLabelText('Username or email'), 'estimates@example.test');
     await user.type(screen.getByLabelText('Password'), PASSWORD);
     expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
     await user.click(screen.getByRole('button', { name: 'Save and sign in' }));
     expect(computerStartSignIn).toHaveBeenCalledWith({
-      url: 'https://identity.xactware.com',
+      url: 'https://portal.carrier.example',
       label: undefined,
       credential: { username: 'estimates@example.test', password: PASSWORD, loginUrl: null },
     });
@@ -211,6 +265,7 @@ describe('LoginsPage', () => {
     computerLogins.mockResolvedValue(state({ passwords: ADMIN }));
     render(<LoginsPage />);
     await user.click(await screen.findByRole('button', { name: 'Add login' }));
+    await user.click(await screen.findByTestId('logins-catalog-custom'));
     await user.type(screen.getByLabelText('Website address'), 'https://portal.example.test');
     await user.click(screen.getByRole('checkbox', { name: /Save a username and password/ }));
     await user.type(screen.getByLabelText('Username or email'), 'someone');
@@ -225,10 +280,84 @@ describe('LoginsPage', () => {
     computerLogins.mockResolvedValue(state({ passwords: { enabled: false, message, canManage: true } }));
     render(<LoginsPage />);
     await user.click(await screen.findByRole('button', { name: 'Add login' }));
+    await user.click(await screen.findByTestId('logins-catalog-custom'));
     expect(screen.getByTestId('logins-password-off')).toHaveTextContent(message);
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByLabelText('Password')).toBeNull();
     expect(screen.getByRole('button', { name: 'Open sign-in page' })).toBeEnabled();
+  });
+
+  it('catalog: grouped by category, searchable, with a Custom website option', async () => {
+    const user = userEvent.setup();
+    computerLogins.mockResolvedValue(state());
+    render(<LoginsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Add login' }));
+    const picker = await screen.findByTestId('logins-catalog');
+    // The search bar is the first thing in the picker, focused and ready to type into.
+    expect(screen.getByLabelText('Search sites')).toHaveFocus();
+    expect(picker.querySelector('input')).toBe(screen.getByTestId('logins-catalog-search'));
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('6 sites');
+    expect(within(picker).getByRole('region', { name: 'Email and calendar' })).toBeInTheDocument();
+    expect(within(picker).getByRole('region', { name: 'Accounting and payments' })).toBeInTheDocument();
+    expect(within(picker).getAllByText('Code at sign-in').length).toBeGreaterThan(0);
+    expect(within(picker).getAllByText('Single sign-on').length).toBeGreaterThan(0);
+    await user.type(screen.getByLabelText('Search sites'), 'qbo');
+    expect(within(picker).getByTestId('logins-catalog-quickbooks')).toBeInTheDocument();
+    expect(within(picker).queryByTestId('logins-catalog-outlook')).toBeNull();
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'team chat');
+    expect(within(picker).getByTestId('logins-catalog-slack')).toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'restoration');
+    expect(within(picker).getByTestId('logins-catalog-encircle')).toBeInTheDocument();
+    expect(within(picker).queryByTestId('logins-catalog-gmail')).toBeNull();
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('1 site matches');
+    await user.clear(screen.getByLabelText('Search sites'));
+    // Category search words: "supply" finds the Suppliers group.
+    await user.type(screen.getByLabelText('Search sites'), 'supply');
+    expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
+    expect(within(picker).queryByTestId('logins-catalog-encircle')).toBeNull();
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'home depot');
+    expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('1 site matches');
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'nothing like this');
+    expect(screen.getByTestId('logins-catalog-empty')).toHaveTextContent('Use Custom website');
+    expect(screen.getByTestId('logins-catalog-custom')).toBeInTheDocument();
+  });
+
+  it('catalog pick as admin: URL filled in, password fields ready, the code note shown; password never rendered', async () => {
+    const user = userEvent.setup();
+    computerLogins.mockResolvedValueOnce(state({ passwords: ADMIN }));
+    computerLogins.mockResolvedValue(state({ passwords: ADMIN, signingIn: { ...signIn, label: 'Gmail (Google)' } }));
+    computerStartSignIn.mockResolvedValue({ signIn: { ...signIn, label: 'Gmail (Google)' } });
+    render(<LoginsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Add login' }));
+    await user.click(await screen.findByTestId('logins-catalog-gmail'));
+    expect(screen.getByTestId('logins-ready-steps')).toHaveTextContent('Ready to go. Username, then Next, then password.');
+    expect(screen.getByTestId('logins-two-step-note')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Save a username and password/ })).toBeChecked();
+    expect(screen.getByLabelText('Sign-in page (optional)')).toHaveValue('https://mail.google.com/');
+    await user.type(screen.getByLabelText('Username or email'), 'office@example.test');
+    await user.type(screen.getByLabelText('Password'), PASSWORD);
+    await user.click(screen.getByRole('button', { name: 'Save and sign in' }));
+    expect(computerStartSignIn).toHaveBeenCalledWith({
+      url: 'https://mail.google.com/',
+      label: 'Gmail (Google)',
+      credential: { username: 'office@example.test', password: PASSWORD, loginUrl: 'https://mail.google.com/' },
+    });
+    expect(document.body.innerHTML).not.toContain(PASSWORD);
+  });
+
+  it('catalog unavailable: falls back to the custom website form', async () => {
+    const user = userEvent.setup();
+    computerLoginCatalog.mockRejectedValue(new Error('offline'));
+    computerLogins.mockResolvedValue(state());
+    render(<LoginsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Add login' }));
+    expect(await screen.findByLabelText('Website address')).toBeInTheDocument();
+    expect(screen.queryByTestId('logins-catalog')).toBeNull();
   });
 
   it('members see "Password saved" but no username, and cannot change or remove it', async () => {

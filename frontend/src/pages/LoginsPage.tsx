@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError, timeAgo } from '../lib/api';
 import {
-  LOGIN_QUICK_PICKS,
   type ComputerCredentialInput,
   type ComputerLogin,
   type ComputerLoginsState,
   type ComputerSignIn,
+  type LoginCatalog,
+  type LoginCatalogEntry,
 } from '../lib/computer';
+import {
+  LoginCatalogPicker,
+  SiteBadges,
+  SiteLogo,
+  SSO_LINE,
+  TWO_STEP_LINE,
+} from '../components/computer/LoginCatalogPicker';
 import { ComputerLiveView } from '../components/computer/ComputerLiveView';
 import { ErrorNote, PanelSpinner } from '../components/AppShell';
 
@@ -156,7 +164,7 @@ function errorText(err: unknown, fallback: string): string {
 
 /**
  * Logins: sign the company's Computer browser in to outside sites ahead of
- * time (Outlook, carrier portals, Xactimate, permit sites). The person signs
+ * time (Outlook, Gmail, QuickBooks, CRMs, carrier and permit portals). The person signs
  * in themselves in the live browser; the sign-in is kept in the company's
  * browser profile so Chat's Computer tasks start signed in. No AI runs here.
  */
@@ -176,6 +184,11 @@ export function LoginsPage() {
     null,
   );
   const [confirmForget, setConfirmForget] = useState<string | null>(null);
+  /** The Add-a-login site catalog (loaded when Add login opens). */
+  const [catalog, setCatalog] = useState<LoginCatalog | null>(null);
+  const [catalogFailed, setCatalogFailed] = useState(false);
+  /** What the person picked in the catalog: a site, Custom website, or nothing yet. */
+  const [picked, setPicked] = useState<LoginCatalogEntry | 'custom' | null>(null);
   /** The auto sign-in result for the sign-in you just started (by session). */
   const [autoNote, setAutoNote] = useState<{
     sessionId: string;
@@ -210,7 +223,9 @@ export function LoginsPage() {
 
   // Someone else is signing in (or a task is running): check back so the
   // page frees up when they finish.
-  const othersBusy = Boolean(state && (state.busy || (state.signingIn && !state.signingIn.startedByYou)));
+  const othersBusy = Boolean(
+    state && (state.busy || (state.signingIn && !state.signingIn.startedByYou)),
+  );
   useEffect(() => {
     if (!othersBusy) return;
     const id = window.setInterval(() => void load(), 15_000);
@@ -244,6 +259,7 @@ export function LoginsPage() {
           : null,
       );
       setAdding(false);
+      setPicked(null);
       setRowPanel(null);
       setUrl('');
       setLabel('');
@@ -338,6 +354,40 @@ export function LoginsPage() {
     }
   }
 
+  function openAdd() {
+    setAdding(true);
+    setPicked(null);
+    setRowPanel(null);
+    setDraft(EMPTY_DRAFT);
+    setUrl('');
+    setLabel('');
+    setActionError(null);
+    setNotice(null);
+    if (!catalog) {
+      setCatalogFailed(false);
+      api
+        .computerLoginCatalog()
+        .then(setCatalog)
+        .catch(() => setCatalogFailed(true));
+    }
+  }
+
+  function pickSite(site: LoginCatalogEntry) {
+    setPicked(site);
+    setUrl(site.signInUrl);
+    setLabel(site.name);
+    // Pick a site, enter a username and password, done: the password option starts checked.
+    setDraft({ ...EMPTY_DRAFT, save: canManagePasswords, loginUrl: site.signInUrl });
+    setActionError(null);
+  }
+
+  function pickCustom() {
+    setPicked('custom');
+    setUrl('');
+    setLabel('');
+    setDraft(EMPTY_DRAFT);
+  }
+
   function submitAdd(e: FormEvent) {
     e.preventDefault();
     const trimmed = url.trim();
@@ -388,7 +438,8 @@ export function LoginsPage() {
     );
   }
 
-  const canStart = Boolean(state?.configured) && !state?.busy && !state?.signingIn && working === null;
+  const canStart =
+    Boolean(state?.configured) && !state?.busy && !state?.signingIn && working === null;
   const logins = state?.logins ?? [];
 
   return (
@@ -397,8 +448,8 @@ export function LoginsPage() {
         <div>
           <h1 className="text-xl font-semibold text-ink-900">Logins</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-600">
-            Sign in once to the websites your company uses, like Outlook, carrier portals or Xactimate. Computer
-            stays signed in, so Chat tasks on those sites start ready to go.
+            Sign in once to the websites your company uses, like Outlook, Gmail, QuickBooks or your
+            CRM. Computer stays signed in, so Chat tasks on those sites start ready to go.
           </p>
           <p className="mt-2 text-sm font-medium text-ink-800" data-testid="logins-password-line">
             {PASSWORD_LINE}
@@ -407,13 +458,7 @@ export function LoginsPage() {
         {state?.configured && !adding && !mySignIn ? (
           <button
             type="button"
-            onClick={() => {
-              setAdding(true);
-              setRowPanel(null);
-              setDraft(EMPTY_DRAFT);
-              setActionError(null);
-              setNotice(null);
-            }}
+            onClick={openAdd}
             disabled={!canStart}
             className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -429,7 +474,10 @@ export function LoginsPage() {
       ) : null}
 
       {state && !state.configured ? (
-        <p className="mt-4 rounded-xl border border-line bg-paper-50 px-4 py-3 text-sm text-ink-700" data-testid="logins-not-set-up">
+        <p
+          className="mt-4 rounded-xl border border-line bg-paper-50 px-4 py-3 text-sm text-ink-700"
+          data-testid="logins-not-set-up"
+        >
           {state.message ?? 'Computer is not set up for your company yet.'}
         </p>
       ) : null}
@@ -445,7 +493,10 @@ export function LoginsPage() {
       ) : null}
 
       {notice ? (
-        <p className="mt-4 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-sm text-ink-800" role="status">
+        <p
+          className="mt-4 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-sm text-ink-800"
+          role="status"
+        >
           {notice}
         </p>
       ) : null}
@@ -464,68 +515,127 @@ export function LoginsPage() {
           aria-label="Add login"
         >
           <h2 className="text-sm font-semibold text-ink-900">Add login</h2>
-          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Quick picks">
-            {LOGIN_QUICK_PICKS.map((pick) => (
-              <button
-                key={pick.url}
-                type="button"
-                onClick={() => {
-                  setUrl(pick.url);
-                  setLabel(pick.label);
-                }}
-                aria-pressed={url === pick.url}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                  url === pick.url
-                    ? 'border-brand-600 bg-brand-50 text-ink-900'
-                    : 'border-line bg-paper-0 text-ink-700 hover:border-brand-200'
-                }`}
-              >
-                {pick.label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-[2fr_1fr]">
-            <label className="block text-xs font-medium text-ink-700">
-              Website address
-              <input
-                type="url"
-                inputMode="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://portal.example.com"
-                className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-600"
-                autoComplete="off"
-              />
-            </label>
-            <label className="block text-xs font-medium text-ink-700">
-              Name (optional)
-              <input
-                type="text"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Carrier portal"
-                maxLength={80}
-                className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-600"
-                autoComplete="off"
-              />
-            </label>
-          </div>
-          <CredentialFields draft={draft} onChange={setDraft} passwords={passwords} />
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              disabled={working !== null}
-              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+          {picked === null && !catalogFailed ? (
+            <div className="mt-3">
+              {catalog ? (
+                <LoginCatalogPicker
+                  catalog={catalog}
+                  onPick={pickSite}
+                  onCustom={pickCustom}
+                  savedHosts={logins.map((l) => l.host)}
+                />
+              ) : (
+                <PanelSpinner label="Loading sites" />
+              )}
+            </div>
+          ) : null}
+          {picked && picked !== 'custom' ? (
+            <div
+              className="mt-3 rounded-lg border border-line bg-paper-50 p-3"
+              data-testid="logins-picked-site"
             >
-              {working === 'start'
-                ? 'Opening…'
-                : draft.save && canManagePasswords
-                  ? 'Save and sign in'
-                  : 'Open sign-in page'}
-            </button>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <SiteLogo site={picked} size="lg" />
+                  <div>
+                    <p className="text-sm font-semibold text-ink-900">{picked.name}</p>
+                    <p className="text-xs text-ink-600">{picked.signInUrl}</p>
+                    <SiteBadges site={picked} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPicked(null)}
+                  className="shrink-0 text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Change site
+                </button>
+              </div>
+              {picked.signInSteps ? (
+                <p
+                  className="mt-2 rounded-md bg-success-50 px-2 py-1.5 text-xs text-ink-800"
+                  data-testid="logins-ready-steps"
+                >
+                  <span className="font-semibold">Ready to go.</span> {picked.signInSteps}
+                </p>
+              ) : null}
+              {picked.twoStep === 'likely' ? (
+                <p
+                  className="mt-2 text-xs font-medium text-ink-800"
+                  data-testid="logins-two-step-note"
+                >
+                  {TWO_STEP_LINE} Computer asks you for it; it never guesses a code.
+                </p>
+              ) : null}
+              {picked.sso ? (
+                <p className="mt-1 text-xs text-ink-700">
+                  {SSO_LINE} If yours does, you finish that step.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {picked === 'custom' || (picked === null && catalogFailed) ? (
+            <>
+              {catalog ? (
+                <button
+                  type="button"
+                  onClick={() => setPicked(null)}
+                  className="mt-2 text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Back to the site list
+                </button>
+              ) : null}
+              <div className="mt-3 grid gap-3 sm:grid-cols-[2fr_1fr]">
+                <label className="block text-xs font-medium text-ink-700">
+                  Website address
+                  <input
+                    type="url"
+                    inputMode="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://portal.example.com"
+                    className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-600"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-ink-700">
+                  Name (optional)
+                  <input
+                    type="text"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="Carrier portal"
+                    maxLength={80}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-600"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+            </>
+          ) : null}
+          {picked !== null || catalogFailed ? (
+            <CredentialFields draft={draft} onChange={setDraft} passwords={passwords} />
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {picked !== null || catalogFailed ? (
+              <button
+                type="submit"
+                disabled={working !== null}
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+              >
+                {working === 'start'
+                  ? 'Opening…'
+                  : draft.save && canManagePasswords
+                    ? 'Save and sign in'
+                    : 'Open sign-in page'}
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => setAdding(false)}
+              onClick={() => {
+                setAdding(false);
+                setPicked(null);
+              }}
               className="rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:border-brand-200"
             >
               Cancel
@@ -535,7 +645,10 @@ export function LoginsPage() {
       ) : null}
 
       {mySignIn ? (
-        <section className="mt-5 rounded-xl border border-brand-200 bg-paper-0 p-4" data-testid="logins-signing-in">
+        <section
+          className="mt-5 rounded-xl border border-brand-200 bg-paper-0 p-4"
+          data-testid="logins-signing-in"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-ink-900">Signing in to {mySignIn.label}</h2>
@@ -590,7 +703,10 @@ export function LoginsPage() {
       <section className="mt-6" aria-label="Saved logins">
         {logins.length === 0 ? (
           state?.configured && !mySignIn ? (
-            <div className="rounded-xl border border-dashed border-line bg-paper-50 px-4 py-8 text-center" data-testid="logins-empty">
+            <div
+              className="rounded-xl border border-dashed border-line bg-paper-50 px-4 py-8 text-center"
+              data-testid="logins-empty"
+            >
               <p className="text-sm font-medium text-ink-800">No logins yet</p>
               <p className="mt-1 text-sm text-ink-600">
                 Add the sites Computer should be signed in to, like Outlook or a carrier portal.

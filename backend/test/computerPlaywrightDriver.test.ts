@@ -105,6 +105,41 @@ test('fillSignIn types a saved login into a username-first sign-in, then the pas
   }
 });
 
+test('fillSignIn never types into a newsletter or sign-up box, and finds "username webauthn" boxes', { skip: browser ? false : 'no local Chromium' }, async () => {
+  const PASSWORD = 'PW-SECRET-zq9-Atmosphere-TEST-7781-newsletter';
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 800 } });
+  const posted: string[] = [];
+  await context.route('https://shop.example-supplier.test/**', async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (req.method() === 'POST') posted.push(`${path}?${req.postData() ?? ''}`);
+    const html =
+      path === '/home'
+        ? '<a href="/login">Login</a><form method="post" action="/subscribe"><input type="email" name="email" placeholder="Email address"><button>Sign up</button></form>'
+        : path === '/login'
+          ? '<form method="post" action="/done"><input name="username"><input type="password" name="password"><button type="submit">Log in</button></form>'
+          : path === '/square'
+            ? '<form method="post" action="/done"><input id="mpui-combo-field-input" name="ident" autocomplete="username webauthn"><input type="password" name="pw"><button type="submit">Sign in</button></form>'
+            : '<p>Welcome back</p>';
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><body>${html}</body></html>` });
+  });
+  const page = await context.newPage();
+  const driver = new PlaywrightDriver(browser!, context, page, { width: 1280, height: 800 });
+  try {
+    await page.goto('https://shop.example-supplier.test/home');
+    assert.deepEqual(await (await import('../src/computer/providers/playwrightDriver.js')).signInFieldsVisible(page), { username: false, password: false });
+    assert.equal(await driver.fillSignIn({ username: 'saved@example.test', password: PASSWORD }, { openWith: ['Login'] }), 'submitted');
+    assert.deepEqual(posted, [`/done?username=saved%40example.test&password=${PASSWORD}`], 'the newsletter form is never submitted');
+
+    posted.length = 0;
+    await page.goto('https://shop.example-supplier.test/square');
+    assert.equal(await driver.fillSignIn({ username: 'owner@example.test', password: PASSWORD }), 'submitted');
+    assert.deepEqual(posted, [`/done?ident=owner%40example.test&pw=${PASSWORD}`], 'the "username webauthn" box gets the username');
+  } finally {
+    await context.close();
+  }
+});
+
 test.after(async () => {
   await browser?.close();
 });

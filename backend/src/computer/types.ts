@@ -133,8 +133,118 @@ export interface ComputerDriver {
    * error message. 'no_form' = no sign-in fields on the page;
    * 'username_only' = the username was sent but no password field followed.
    */
-  fillSignIn(creds: { username: string; password: string }): Promise<'submitted' | 'username_only' | 'no_form'>;
+  /**
+   * Type a saved login into the page's sign-in form. hints.openWith opens a
+   * form that sits behind a link; hints.allowHost is checked before the
+   * password is typed ('other_site' when the page moved somewhere else).
+   */
+  fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill>;
+  /**
+   * DOM / accessibility outline of the interactive elements in view (refs,
+   * roles, accessible names, boxes). Preferred over pixels for targeting.
+   * Field values are never included; only whether a field has one.
+   */
+  pageOutline?(): Promise<PageOutline>;
+  /** Find an element by outline ref or role + accessible name. Scrolls it into view. */
+  locate?(target: ElementTarget): Promise<LocatedElement | null>;
+  /** Cheap fingerprint of what the person would see (URL, text, focus, field state). */
+  pageFingerprint?(): Promise<string>;
+  /** Close cookie-consent banners and promo pop-ups (never sign-in, payment or form dialogs). */
+  dismissOverlays?(): Promise<DismissedOverlay[]>;
+  /** Start recording what a person does in Take control (no values for password or code fields). */
+  startRecording?(): Promise<void>;
+  /** Stop recording and return the person's actions since startRecording. */
+  stopRecording?(): Promise<RecordedAction[]>;
+  /**
+   * Put files into the file input (or the button that opens a file chooser)
+   * at this point. Callers gate this as an upload: it needs an approval.
+   */
+  attachFiles?(x: number, y: number, files: TaskFile[]): Promise<'attached' | 'no_file_input'>;
+  /** Files the browser downloaded in this session (names and sizes only). */
+  downloads?(): Promise<DownloadedFile[]>;
   close(): Promise<void>;
+}
+
+/** A file the task supplies for an upload (bytes stay server-side; the model sees only the name). */
+export interface TaskFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  bytes: Buffer;
+}
+
+export interface DownloadedFile {
+  name: string;
+  bytes: number | null;
+  at: number;
+}
+
+/** One interactive element in the page outline. */
+export interface OutlineElement {
+  ref: number;
+  role: string;
+  name: string;
+  tag: string;
+  type: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  disabled: boolean;
+  checked: boolean | null;
+  inForm: boolean;
+  isPassword: boolean;
+  hasValue: boolean;
+}
+
+export interface PageOutline {
+  url: string;
+  title: string;
+  headings: string[];
+  dialogs: string[];
+  elements: OutlineElement[];
+}
+
+/** How a step names its element: an outline ref (this page only) or role + accessible name. */
+export interface ElementTarget {
+  ref?: number | null;
+  role?: string | null;
+  name?: string | null;
+  tag?: string | null;
+}
+
+export interface LocatedElement {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  role: string;
+  name: string;
+  tag: string;
+}
+
+export interface DismissedOverlay {
+  kind: 'cookie' | 'popup';
+  label: string;
+}
+
+/**
+ * A person's action recorded during Take control. Values are never kept:
+ * a typed value is mapped to a slot (a job field or the task's own text) by
+ * the server and then dropped. Password and code fields are recorded only as
+ * "the person handled sign-in".
+ */
+export interface RecordedAction {
+  kind: 'click' | 'type' | 'press' | 'navigate' | 'sign_in';
+  role?: string | null;
+  name?: string | null;
+  tag?: string | null;
+  inputType?: string | null;
+  key?: string | null;
+  url?: string | null;
+  /** Typed value, held in memory only long enough to map it to a slot. Never stored. */
+  value?: string | null;
+  at: number;
 }
 
 export type CookieSnapshot = Record<string, string[]>;
@@ -166,7 +276,7 @@ export const OPEN_TASK_STATUSES: readonly ComputerTaskStatus[] = ['queued', ...A
 export const CONSEQUENTIAL_KINDS = ['submit', 'send', 'pay', 'delete', 'sign', 'accept_terms', 'upload'] as const;
 export type ConsequentialKind = (typeof CONSEQUENTIAL_KINDS)[number];
 
-export type NeedsYouReason = 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'other';
+export type NeedsYouReason = 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'stuck' | 'other';
 
 /** One allowlisted job value the agent may type, with where it came from. */
 export interface ProjectedJobField {
@@ -182,4 +292,13 @@ export interface ApprovalField {
   /** Where the value came from, as checked in code: a job field, the user's message, or unverified. */
   source: string;
   verified: boolean;
+}
+
+export type SignInFill = 'submitted' | 'username_only' | 'no_form' | 'other_site';
+
+export interface SignInHints {
+  /** Link or button text that opens the sign-in form on a landing page. */
+  openWith?: string[];
+  /** Where the password may be typed. Checked right before typing it. */
+  allowHost?: (host: string) => boolean;
 }
