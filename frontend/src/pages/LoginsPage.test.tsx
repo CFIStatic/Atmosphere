@@ -141,21 +141,23 @@ beforeEach(() => {
 });
 
 describe('LoginsPage', () => {
-  it('shows the empty state and the password line', async () => {
+  it('shows the site catalog on the page with the password line and empty saved list', async () => {
     computerLogins.mockResolvedValue(state());
     render(<LoginsPage />);
-    expect(await screen.findByTestId('logins-empty')).toHaveTextContent('No logins yet');
+    expect(await screen.findByTestId('logins-catalog')).toBeInTheDocument();
+    expect(screen.getByTestId('logins-empty')).toHaveTextContent('No saved logins yet');
     expect(screen.getByTestId('logins-password-line')).toHaveTextContent(
       'Passwords are encrypted and only used to sign Computer in. Atmosphere’s AI never sees them.',
     );
     expect(screen.queryByText(/We never see or store/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Add login' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Add login' })).toBeNull();
   });
 
-  it('says when Computer is not set up and offers no Add login', async () => {
+  it('says when Computer is not set up and hides the site catalog', async () => {
     computerLogins.mockResolvedValue(state({ configured: false, message: 'Computer is not set up yet.' }));
     render(<LoginsPage />);
     expect(await screen.findByTestId('logins-not-set-up')).toHaveTextContent('not set up');
+    expect(screen.queryByTestId('logins-catalog')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add login' })).toBeNull();
   });
 
@@ -165,7 +167,6 @@ describe('LoginsPage', () => {
     computerStartSignIn.mockResolvedValue({ signIn });
     computerSignInDone.mockResolvedValue({ login: outlook });
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     await user.click(await screen.findByTestId('logins-catalog-outlook'));
     const picked = screen.getByTestId('logins-picked-site');
     expect(within(picked).getByText('https://outlook.office.com/mail/')).toBeInTheDocument();
@@ -202,7 +203,7 @@ describe('LoginsPage', () => {
     );
     render(<LoginsPage />);
     expect(await screen.findByTestId('logins-busy')).toHaveTextContent('working on a task');
-    expect(screen.getByRole('button', { name: 'Add login' })).toBeDisabled();
+    expect(screen.getByTestId('logins-catalog-section')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('button', { name: 'Sign in again' })).toBeDisabled();
   });
 
@@ -243,7 +244,6 @@ describe('LoginsPage', () => {
       signIn: { ...started, autoSignIn: { outcome: 'two_factor', message: 'The saved password worked. The portal is asking for a verification code.' } },
     });
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     await user.click(await screen.findByTestId('logins-catalog-custom'));
     await user.type(screen.getByLabelText('Website address'), 'https://portal.carrier.example');
     await user.click(screen.getByRole('checkbox', { name: /Save a username and password/ }));
@@ -264,7 +264,6 @@ describe('LoginsPage', () => {
     const user = userEvent.setup();
     computerLogins.mockResolvedValue(state({ passwords: ADMIN }));
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     await user.click(await screen.findByTestId('logins-catalog-custom'));
     await user.type(screen.getByLabelText('Website address'), 'https://portal.example.test');
     await user.click(screen.getByRole('checkbox', { name: /Save a username and password/ }));
@@ -279,7 +278,6 @@ describe('LoginsPage', () => {
     const message = "Saving passwords isn't turned on for your account yet. You can still sign in yourself in the browser.";
     computerLogins.mockResolvedValue(state({ passwords: { enabled: false, message, canManage: true } }));
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     await user.click(await screen.findByTestId('logins-catalog-custom'));
     expect(screen.getByTestId('logins-password-off')).toHaveTextContent(message);
     expect(screen.queryByRole('checkbox')).toBeNull();
@@ -291,7 +289,6 @@ describe('LoginsPage', () => {
     const user = userEvent.setup();
     computerLogins.mockResolvedValue(state());
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     const picker = await screen.findByTestId('logins-catalog');
     // The search bar is the first thing in the picker, focused and ready to type into.
     expect(screen.getByLabelText('Search sites')).toHaveFocus();
@@ -333,7 +330,6 @@ describe('LoginsPage', () => {
     computerLogins.mockResolvedValue(state({ passwords: ADMIN, signingIn: { ...signIn, label: 'Gmail (Google)' } }));
     computerStartSignIn.mockResolvedValue({ signIn: { ...signIn, label: 'Gmail (Google)' } });
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
     await user.click(await screen.findByTestId('logins-catalog-gmail'));
     expect(screen.getByTestId('logins-ready-steps')).toHaveTextContent('Ready to go. Username, then Next, then password.');
     expect(screen.getByTestId('logins-two-step-note')).toBeInTheDocument();
@@ -355,9 +351,10 @@ describe('LoginsPage', () => {
     computerLoginCatalog.mockRejectedValue(new Error('offline'));
     computerLogins.mockResolvedValue(state());
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Add login' }));
-    expect(await screen.findByLabelText('Website address')).toBeInTheDocument();
+    expect(await screen.findByTestId('logins-catalog-failed')).toBeInTheDocument();
     expect(screen.queryByTestId('logins-catalog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Add a custom website' }));
+    expect(await screen.findByLabelText('Website address')).toBeInTheDocument();
   });
 
   it('members see "Password saved" but no username, and cannot change or remove it', async () => {
