@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import type { ComputerTaskView } from '../../lib/computer';
 import { isAllowedLiveViewUrl } from '../../lib/computer';
 import { ComputerTaskCard } from './ComputerTaskCard';
+import { extractAskSources } from '../../lib/askSources';
 
 const computerTask = vi.fn();
 const computerLiveView = vi.fn();
@@ -367,5 +368,20 @@ describe('ComputerTaskCard materials list', () => {
     const card = screen.getByTestId('computer-materials-list');
     expect(card.textContent).not.toMatch(/MATERIALS_JSON/);
     expect(card.textContent).toMatch(/Materials on this job file \(9 items\)/);
+  });
+});
+
+describe('ComputerTaskCard text message approval', () => {
+  it('shows the full message from the actions trailer, not a 120 character cut', () => {
+    const body =
+      'Hi Sam, this is the crew on the sample job. We finished the tear-off, dried in the deck, and photographed every slope. Please let us know a good time to walk the roof, and whether you need anything else for the file. Thanks.';
+    const draft = ['Here is the text for the adjuster. Nothing was sent yet.', '', 'To: +15555550123', '', body].join('\n');
+    const label = `b64:${Buffer.from(draft, 'utf8').toString('base64url')}`;
+    const { actions } = extractAskSources(`Draft ready.\n\n⟦actions: start_computer_task|${label}|computer|computer-task:sms-approval⟧`);
+    render(<ComputerTaskCard path={actions[0].path} summary={actions[0].label} />);
+    const card = screen.getByTestId('computer-sms-approval');
+    expect(card.textContent).toContain(body);
+    expect(card.textContent).toContain('To: +15555550123');
+    expect(card.querySelector('p.whitespace-pre-wrap')?.className).toContain('break-words');
   });
 });

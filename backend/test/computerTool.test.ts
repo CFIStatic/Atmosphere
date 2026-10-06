@@ -517,3 +517,43 @@ test('card payload trailer round-trips commas, pipes, brackets and unicode', () 
   assert.equal(actions[0].path, 'computer-task:materials-list');
   assert.equal(actions[1].label, 'Updated  the job   title');
 });
+
+test('text message approval card carries the whole draft, past 120 characters and with commas', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  const prev = {
+    sid: process.env.TWILIO_ACCOUNT_SID,
+    tok: process.env.TWILIO_AUTH_TOKEN,
+    from: process.env.TWILIO_FROM_NUMBER,
+  };
+  process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+  process.env.TWILIO_AUTH_TOKEN = 'token';
+  process.env.TWILIO_FROM_NUMBER = '+15551234567';
+  try {
+    const base = ctx('org');
+    const file = {
+      job: { claimNumber: 'CLM-T-1' },
+      facts: { Adjuster: 'Sam Adjuster', 'Adjuster phone': '555-010-0001' },
+    };
+    const result = await executeAskTool(
+      'start_computer_task',
+      { instructions: 'text the adjuster for a status update' },
+      { ...base, file } as AskToolContext,
+    );
+    assert.equal(result.ok, true, result.summary);
+    assert.equal(result.ui?.path, 'computer-task:sms-approval');
+    assert.ok(result.cardPayload, 'sms approval rides as a card payload');
+    assert.ok(result.cardPayload!.length > 120, 'draft is longer than the old 120 character cut');
+    assert.ok(result.cardPayload!.includes(','), 'draft keeps its commas');
+    assert.match(result.cardPayload!, /To: \+15550100001/);
+    const [action] = parseActionsTrailer(`answer\n\n${formatActionsTrailer([result])}`);
+    assert.equal(action.path, 'computer-task:sms-approval');
+    assert.equal(action.label, result.cardPayload);
+  } finally {
+    for (const [k, v] of [['TWILIO_ACCOUNT_SID', prev.sid], ['TWILIO_AUTH_TOKEN', prev.tok], ['TWILIO_FROM_NUMBER', prev.from]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
