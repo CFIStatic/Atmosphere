@@ -141,11 +141,13 @@ beforeEach(() => {
 });
 
 describe('LoginsPage', () => {
-  it('shows the site catalog on the page with the password line and empty saved list', async () => {
+  it('shows the site catalog on the page with the password line; no separate saved list', async () => {
     computerLogins.mockResolvedValue(state());
     render(<LoginsPage />);
     expect(await screen.findByTestId('logins-catalog')).toBeInTheDocument();
-    expect(screen.getByTestId('logins-empty')).toHaveTextContent('No saved logins yet');
+    expect(screen.queryByText('Saved logins')).toBeNull();
+    expect(screen.queryByTestId('logins-list')).toBeNull();
+    expect(screen.queryAllByTestId('logins-saved-check')).toHaveLength(0);
     expect(screen.getByTestId('logins-password-line')).toHaveTextContent(
       'Passwords are encrypted and only used to sign Computer in. Atmosphere’s AI never sees them.',
     );
@@ -185,9 +187,11 @@ describe('LoginsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Done, I’m signed in' }));
     expect(computerSignInDone).toHaveBeenCalledWith('s1');
     expect(await screen.findByText('Saved. Computer is signed in to Outlook.')).toBeInTheDocument();
-    const list = await screen.findByTestId('logins-list');
-    expect(within(list).getByText('outlook.office.com')).toBeInTheDocument();
-    expect(within(list).getByText(/Added by Dana Ruiz/)).toBeInTheDocument();
+    // Back on the site grid, Outlook now carries the green check (no reload, no separate list).
+    const tile = await screen.findByTestId('logins-catalog-outlook');
+    await waitFor(() => expect(within(tile).getByRole('img', { name: 'Saved' })).toBeInTheDocument());
+    expect(within(screen.getByTestId('logins-catalog-gmail')).queryByRole('img', { name: 'Saved' })).toBeNull();
+    expect(screen.queryByTestId('logins-list')).toBeNull();
   });
 
   it('resumes your sign-in after a reload', async () => {
@@ -204,7 +208,12 @@ describe('LoginsPage', () => {
     render(<LoginsPage />);
     expect(await screen.findByTestId('logins-busy')).toHaveTextContent('working on a task');
     expect(screen.getByTestId('logins-catalog-section')).toHaveAttribute('aria-disabled', 'true');
+    // New sites can't be started, but a saved site still opens so it can be managed.
+    expect(screen.getByTestId('logins-catalog-gmail')).toBeDisabled();
+    expect(screen.getByTestId('logins-catalog-custom')).toBeDisabled();
+    await userEvent.setup().click(screen.getByTestId('logins-catalog-outlook'));
     expect(screen.getByRole('button', { name: 'Sign in again' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled();
   });
 
   it('signs in again to a saved site', async () => {
@@ -212,7 +221,10 @@ describe('LoginsPage', () => {
     computerLogins.mockResolvedValue(state({ logins: [outlook] }));
     computerStartSignIn.mockResolvedValue({ signIn: { ...signIn, loginId: 'l1' } });
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Sign in again' }));
+    await user.click(await screen.findByTestId('logins-catalog-outlook'));
+    expect(screen.getByTestId('logins-manage')).toHaveAttribute('data-login-id', 'l1');
+    expect(screen.queryByTestId('logins-catalog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Sign in again' }));
     expect(computerStartSignIn).toHaveBeenCalledWith({ loginId: 'l1' });
     expect(await screen.findByTestId('logins-signing-in')).toBeInTheDocument();
   });
@@ -226,13 +238,54 @@ describe('LoginsPage', () => {
       message: 'Removed Outlook. Computer is signed out of it.',
     });
     render(<LoginsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Remove' }));
+    const tile = await screen.findByTestId('logins-catalog-outlook');
+    expect(within(tile).getByRole('img', { name: 'Saved' })).toBeInTheDocument();
+    await user.click(tile);
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.getByText('Remove and sign Computer out of this site?')).toBeInTheDocument();
     computerLogins.mockResolvedValue(state());
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(computerRemoveLogin).toHaveBeenCalledWith('l1');
     expect(await screen.findByText('Removed Outlook. Computer is signed out of it.')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('logins-empty')).toBeInTheDocument());
+    // Back on the grid and the check is gone, without a reload.
+    const after = await screen.findByTestId('logins-catalog-outlook');
+    await waitFor(() => expect(within(after).queryByRole('img', { name: 'Saved' })).toBeNull());
+    expect(screen.queryByTestId('logins-manage')).toBeNull();
+  });
+
+  it('Back to the site list closes a saved site', async () => {
+    const user = userEvent.setup();
+    computerLogins.mockResolvedValue(state({ logins: [outlook] }));
+    render(<LoginsPage />);
+    await user.click(await screen.findByTestId('logins-catalog-outlook'));
+    await user.click(screen.getByRole('button', { name: 'Back to the site list' }));
+    expect(screen.queryByTestId('logins-manage')).toBeNull();
+    expect(screen.getByTestId('logins-catalog')).toBeInTheDocument();
+  });
+
+  it('saved sites outside the catalog are tiles in the same grid, with the check, and searchable', async () => {
+    const user = userEvent.setup();
+    computerLogins.mockResolvedValue(state({ logins: [outlook, xactimate], passwords: ADMIN }));
+    render(<LoginsPage />);
+    const picker = await screen.findByTestId('logins-catalog');
+    const other = within(picker).getByRole('region', { name: 'Other' });
+    const tile = within(other).getByTestId('logins-saved-l2');
+    expect(tile).toHaveTextContent('Xactimate');
+    expect(tile).toHaveTextContent('identity.xactware.com');
+    expect(within(tile).getByRole('img', { name: 'Saved' })).toBeInTheDocument();
+    expect(within(other).getByTestId('logins-catalog-custom')).toBeInTheDocument();
+    // Outlook matched its catalog tile, so it isn't repeated at the end.
+    expect(within(picker).queryByTestId('logins-saved-l1')).toBeNull();
+    expect(screen.getAllByTestId('logins-saved-check')).toHaveLength(2);
+    // No "Password saved" pill on the grid.
+    expect(within(picker).queryByText('Password saved')).toBeNull();
+    await user.type(screen.getByLabelText('Search sites'), 'xact');
+    expect(within(picker).getByTestId('logins-saved-l2')).toBeInTheDocument();
+    expect(screen.getByTestId('logins-catalog-count')).toHaveTextContent('1 site matches');
+    expect(screen.queryByTestId('logins-catalog-empty')).toBeNull();
+    await user.clear(screen.getByLabelText('Search sites'));
+    await user.type(screen.getByLabelText('Search sites'), 'gmail');
+    expect(within(picker).queryByTestId('logins-saved-l2')).toBeNull();
   });
 
   it('Add login: an admin can save a username and password for a custom site; Computer signs in with it', async () => {
@@ -357,18 +410,34 @@ describe('LoginsPage', () => {
     expect(await screen.findByLabelText('Website address')).toBeInTheDocument();
   });
 
+  it('catalog unavailable: saved sites still show as checked tiles you can manage', async () => {
+    const user = userEvent.setup();
+    computerLoginCatalog.mockRejectedValue(new Error('offline'));
+    computerLogins.mockResolvedValue(state({ logins: [outlook] }));
+    render(<LoginsPage />);
+    expect(await screen.findByTestId('logins-catalog-failed')).toBeInTheDocument();
+    const tile = screen.getByTestId('logins-saved-l1');
+    expect(within(tile).getByRole('img', { name: 'Saved' })).toBeInTheDocument();
+    await user.click(tile);
+    expect(screen.getByTestId('logins-manage')).toHaveAttribute('data-login-id', 'l1');
+  });
+
   it('members see "Password saved" but no username, and cannot change or remove it', async () => {
     const user = userEvent.setup();
     computerLogins.mockResolvedValue(state({ logins: [outlook, { ...xactimate, credential: { ...xactimate.credential!, username: null } }], passwords: MEMBER }));
     computerStartSignIn.mockResolvedValue({ signIn: { ...signIn, loginId: 'l2' } });
     render(<LoginsPage />);
-    const row = await screen.findByTestId('login-row-l2');
+    await user.click(await screen.findByTestId('logins-catalog-outlook'));
+    // Members can still remove sites without a saved password, and sign in again directly.
+    expect(screen.getByTestId('logins-manage')).toHaveAttribute('data-login-id', 'l1');
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back to the site list' }));
+    await user.click(screen.getByTestId('logins-saved-l2'));
+    const row = screen.getByTestId('logins-manage');
     expect(within(row).getByTestId('login-credential')).toHaveTextContent('Password saved');
     expect(within(row).queryByText(/estimates@/)).toBeNull();
     expect(within(row).queryByRole('button', { name: /password/i })).toBeNull();
     expect(within(row).queryByRole('button', { name: 'Remove' })).toBeNull();
-    // Members can still remove sites without a saved password, and sign in again directly.
-    expect(within(screen.getByTestId('login-row-l1')).getByRole('button', { name: 'Remove' })).toBeInTheDocument();
     await user.click(within(row).getByRole('button', { name: 'Sign in again' }));
     expect(computerStartSignIn).toHaveBeenCalledWith({ loginId: 'l2' });
   });
@@ -379,8 +448,9 @@ describe('LoginsPage', () => {
     computerSaveCredential.mockResolvedValue({ login: xactimate });
     computerDeleteCredential.mockResolvedValue({ deleted: true });
     render(<LoginsPage />);
-    const row = await screen.findByTestId('login-row-l2');
-    expect(within(row).getByTestId('login-credential')).toHaveTextContent('Password saved· estimates@example.test');
+    await user.click(await screen.findByTestId('logins-saved-l2'));
+    const row = screen.getByTestId('logins-manage');
+    expect(within(row).getByTestId('login-credential')).toHaveTextContent('Password saved · estimates@example.test');
     await user.click(within(row).getByRole('button', { name: 'Replace password' }));
     await user.type(within(row).getByLabelText('Username or email'), 'new@example.test');
     await user.type(within(row).getByLabelText('Password'), PASSWORD);
@@ -399,7 +469,8 @@ describe('LoginsPage', () => {
     computerLogins.mockResolvedValue(state({ logins: [outlook], passwords: ADMIN }));
     computerStartSignIn.mockResolvedValue({ signIn: { ...signIn, loginId: 'l1' } });
     render(<LoginsPage />);
-    const row = await screen.findByTestId('login-row-l1');
+    await user.click(await screen.findByTestId('logins-catalog-outlook'));
+    const row = screen.getByTestId('logins-manage');
     await user.click(within(row).getByRole('button', { name: 'Sign in again' }));
     expect(within(row).getByRole('checkbox', { name: /Save a username and password/ })).not.toBeChecked();
     await user.click(within(row).getByRole('button', { name: 'Open sign-in page' }));
@@ -407,6 +478,7 @@ describe('LoginsPage', () => {
   });
 
   it('shows "Needs attention" with the reason when the saved password stopped working', async () => {
+    const user = userEvent.setup();
     computerLogins.mockResolvedValue(
       state({
         logins: [{ ...xactimate, credential: { ...xactimate.credential!, status: 'needs_attention', attentionReason: 'The saved password didn’t work on Oct 3.' } }],
@@ -414,7 +486,10 @@ describe('LoginsPage', () => {
       }),
     );
     render(<LoginsPage />);
-    const row = await screen.findByTestId('login-row-l2');
+    const tile = await screen.findByTestId('logins-saved-l2');
+    expect(within(tile).getByTestId('logins-tile-attention')).toHaveTextContent('Password needs attention');
+    await user.click(tile);
+    const row = screen.getByTestId('logins-manage');
     expect(within(row).getByTestId('login-needs-attention')).toHaveTextContent('Needs attention');
     expect(row).toHaveTextContent('The saved password didn’t work on Oct 3. Replace the password or sign in again.');
   });

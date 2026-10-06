@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, ApiError, timeAgo } from '../lib/api';
 import {
   type ComputerCredentialInput,
@@ -7,10 +7,13 @@ import {
   type ComputerSignIn,
   type LoginCatalog,
   type LoginCatalogEntry,
+  matchSavedLogins,
 } from '../lib/computer';
 import {
   HostLogo,
   LoginCatalogPicker,
+  SavedCheck,
+  SavedLoginTile,
   SiteBadges,
   SiteLogo,
   SSO_LINE,
@@ -190,6 +193,8 @@ export function LoginsPage() {
   const [catalogFailed, setCatalogFailed] = useState(false);
   /** What the person picked in the catalog: a site, Custom website, or nothing yet. */
   const [picked, setPicked] = useState<LoginCatalogEntry | 'custom' | null>(null);
+  /** The saved site whose actions are open (picked from the site grid), by login id. */
+  const [managing, setManaging] = useState<string | null>(null);
   /** The auto sign-in result for the sign-in you just started (by session). */
   const [autoNote, setAutoNote] = useState<{
     sessionId: string;
@@ -272,6 +277,7 @@ export function LoginsPage() {
       );
       setAdding(false);
       setPicked(null);
+      setManaging(null);
       setRowPanel(null);
       setUrl('');
       setLabel('');
@@ -320,6 +326,7 @@ export function LoginsPage() {
       const result = await api.computerRemoveLogin(login.id);
       setNotice(result.message);
       setConfirmRemove(null);
+      setManaging(null);
     } catch (err) {
       setActionError(errorText(err, 'Could not remove this login.'));
     } finally {
@@ -368,6 +375,7 @@ export function LoginsPage() {
 
   function beginAdd() {
     setAdding(true);
+    setManaging(null);
     setRowPanel(null);
     setActionError(null);
     setNotice(null);
@@ -385,6 +393,27 @@ export function LoginsPage() {
     setLabel(site.name);
     // Pick a site, enter a username and password, done: the password option starts checked.
     setDraft({ ...EMPTY_DRAFT, save: canManagePasswords, loginUrl: site.signInUrl });
+  }
+
+  /** A saved site (checked) in the grid: open its actions instead of adding it again. */
+  function manage(login: ComputerLogin) {
+    setAdding(false);
+    setPicked(null);
+    setActionError(null);
+    setNotice(null);
+    setConfirmRemove(null);
+    setConfirmForget(null);
+    setRowPanel(null);
+    setDraft(EMPTY_DRAFT);
+    setManaging(login.id);
+  }
+
+  function stopManaging() {
+    setManaging(null);
+    setConfirmRemove(null);
+    setConfirmForget(null);
+    setRowPanel(null);
+    setDraft(EMPTY_DRAFT);
   }
 
   function pickCustom() {
@@ -446,6 +475,10 @@ export function LoginsPage() {
     setRowPanel({ id: login.id, mode });
   }
 
+  const logins = useMemo(() => state?.logins ?? [], [state]);
+  const savedMatch = useMemo(() => matchSavedLogins(catalog, logins), [catalog, logins]);
+  const managedLogin = managing ? (logins.find((l) => l.id === managing) ?? null) : null;
+
   if (!state && !loadError) {
     return (
       <div className="flex justify-center py-16">
@@ -456,7 +489,6 @@ export function LoginsPage() {
 
   const canStart =
     Boolean(state?.configured) && !state?.busy && !state?.signingIn && working === null;
-  const logins = state?.logins ?? [];
 
   return (
     <div className="mx-auto w-full max-w-4xl" data-testid="logins-page">
@@ -513,7 +545,7 @@ export function LoginsPage() {
         </div>
       ) : null}
 
-      {state?.configured && !mySignIn && !adding ? (
+      {state?.configured && !mySignIn && !adding && !managedLogin ? (
         <section
           className="mt-5"
           aria-label="Ready-to-go sites"
@@ -522,13 +554,12 @@ export function LoginsPage() {
         >
           <h2 className="text-sm font-semibold text-ink-900">Websites</h2>
           <p className="mt-1 text-sm text-ink-600">
-            Pick a site to sign Computer in. Sign-in addresses are already filled in.
+            Pick a site to sign Computer in. Sign-in addresses are already filled in. A green
+            check means the site is saved; pick it to sign in again or change its password.
           </p>
-          <div
-            className={`mt-3 rounded-xl border border-line bg-paper-0 p-4 ${canStart ? '' : 'pointer-events-none opacity-50'}`}
-            aria-disabled={!canStart}
-          >
+          <div className="mt-3 rounded-xl border border-line bg-paper-0 p-4" aria-disabled={!canStart}>
             {catalogFailed ? (
+              <>
               <p className="text-sm text-ink-700" data-testid="logins-catalog-failed">
                 Could not load the site list.{' '}
                 <button
@@ -540,12 +571,23 @@ export function LoginsPage() {
                   Add a custom website
                 </button>
               </p>
+              {logins.length > 0 ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {logins.map((login) => (
+                    <SavedLoginTile key={login.id} login={login} onPick={manage} />
+                  ))}
+                </div>
+              ) : null}
+              </>
             ) : catalog ? (
               <LoginCatalogPicker
                 catalog={catalog}
                 onPick={pickSite}
                 onCustom={pickCustom}
-                savedHosts={logins.map((l) => l.host)}
+                onPickLogin={manage}
+                saved={savedMatch.bySite}
+                otherLogins={savedMatch.unmatched}
+                disabled={!canStart}
               />
             ) : (
               <PanelSpinner label="Loading sites" />
@@ -728,37 +770,36 @@ export function LoginsPage() {
         </section>
       ) : null}
 
-      <section className="mt-6" aria-label="Saved logins">
-        {state?.configured && !mySignIn ? (
-          <h2 className="mb-3 text-sm font-semibold text-ink-900">Saved logins</h2>
-        ) : null}
-        {logins.length === 0 ? (
-          state?.configured && !mySignIn ? (
-            <p
-              className="rounded-xl border border-dashed border-line bg-paper-50 px-4 py-3 text-sm text-ink-600"
-              data-testid="logins-empty"
-            >
-              No saved logins yet. Pick a website above to sign Computer in.
-            </p>
-          ) : null
-        ) : (
-          <ul
-            className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-paper-0"
-            data-testid="logins-list"
-          >
-            {logins.map((login) => {
-              const cred = login.credential;
-              const attention = cred?.status === 'needs_attention';
-              const panel = rowPanel?.id === login.id ? rowPanel.mode : null;
-              // Removing a site deletes its saved password, so that takes a Global Admin.
-              const canRemove = !cred || Boolean(passwords?.canManage);
-              return (
-                <li key={login.id} className="px-4 py-3" data-testid={`login-row-${login.id}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <HostLogo host={login.host} name={login.label} size="md" />
-                      <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink-900">{login.label}</p>
+      {managedLogin && !mySignIn
+        ? (() => {
+            const login = managedLogin;
+            const cred = login.credential;
+            const attention = cred?.status === 'needs_attention';
+            const panel = rowPanel?.id === login.id ? rowPanel.mode : null;
+            // Removing a site deletes its saved password, so that takes a Global Admin.
+            const canRemove = !cred || Boolean(passwords?.canManage);
+            return (
+              <section
+                className="mt-5 rounded-xl border border-line bg-paper-0 p-4"
+                aria-label={`Saved site: ${login.label}`}
+                data-testid="logins-manage"
+                data-login-id={login.id}
+              >
+                <button
+                  type="button"
+                  onClick={stopManaging}
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Back to the site list
+                </button>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <HostLogo host={login.host} name={login.label} size="lg" />
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1 text-sm font-semibold text-ink-900">
+                        <span className="truncate">{login.label}</span>
+                        <SavedCheck />
+                      </p>
                       <p className="truncate text-xs text-ink-600">{login.host}</p>
                       <p className="mt-0.5 text-xs text-ink-500">
                         Added by {login.addedBy ?? 'a former teammate'} · Last signed in{' '}
@@ -768,28 +809,16 @@ export function LoginsPage() {
                           : ''}
                       </p>
                       {cred ? (
-                        <p
-                          className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"
-                          data-testid="login-credential"
-                        >
+                        <p className="mt-1 text-xs text-ink-700" data-testid="login-credential">
                           {attention ? (
-                            <span
-                              className="rounded-full border border-danger-200 bg-danger-50 px-2 py-0.5 font-semibold text-danger-700"
-                              data-testid="login-needs-attention"
-                            >
-                              Needs attention
+                            <span className="font-semibold text-danger-700" data-testid="login-needs-attention">
+                              Needs attention ·{' '}
                             </span>
-                          ) : (
-                            <span className="rounded-full border border-success-200 bg-success-50 px-2 py-0.5 font-semibold text-success-600">
-                              Password saved
-                            </span>
-                          )}
-                          {attention ? <span className="text-ink-700">Password saved</span> : null}
-                          {cred.username ? (
-                            <span className="text-ink-700">· {cred.username}</span>
                           ) : null}
+                          Password saved
+                          {cred.username ? ` · ${cred.username}` : ''}
                           {!attention && cred.lastUsedAt ? (
-                            <span className="text-ink-500">· used {timeAgo(cred.lastUsedAt)}</span>
+                            <span className="text-ink-500"> · used {timeAgo(cred.lastUsedAt)}</span>
                           ) : null}
                         </p>
                       ) : null}
@@ -801,162 +830,160 @@ export function LoginsPage() {
                             : 'Ask a Global Admin to update it.'}
                         </p>
                       ) : null}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {confirmForget === login.id ? (
-                        <>
-                          <span className="text-xs text-ink-700">
-                            Delete the saved password? Computer stays signed in for now.
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void forgetPassword(login)}
-                            disabled={working !== null}
-                            className="rounded-lg bg-danger-600 px-3 py-1.5 text-xs font-semibold text-paper-0 transition hover:bg-danger-700 disabled:opacity-50"
-                          >
-                            {working === `forget:${login.id}` ? 'Deleting…' : 'Delete password'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmForget(null)}
-                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700"
-                          >
-                            Keep
-                          </button>
-                        </>
-                      ) : confirmRemove === login.id ? (
-                        <>
-                          <span className="text-xs text-ink-700">
-                            {cred
-                              ? 'Remove, delete its saved password and sign Computer out?'
-                              : login.canClearCookies
-                                ? 'Remove and sign Computer out of this site?'
-                                : 'Remove from the list? Computer may stay signed in.'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void remove(login)}
-                            disabled={working !== null}
-                            className="rounded-lg bg-danger-600 px-3 py-1.5 text-xs font-semibold text-paper-0 transition hover:bg-danger-700 disabled:opacity-50"
-                          >
-                            {working === `remove:${login.id}` ? 'Removing…' : 'Remove'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmRemove(null)}
-                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700"
-                          >
-                            Keep
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              canManagePasswords
-                                ? openRow(login, 'sign_in')
-                                : void start({ loginId: login.id })
-                            }
-                            disabled={!canStart}
-                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-800 transition hover:border-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Sign in again
-                          </button>
-                          {canManagePasswords ? (
-                            <button
-                              type="button"
-                              onClick={() => openRow(login, 'password')}
-                              disabled={working !== null}
-                              className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-brand-200 disabled:opacity-50"
-                            >
-                              {cred ? 'Replace password' : 'Save password'}
-                            </button>
-                          ) : null}
-                          {cred && passwords?.canManage ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConfirmRemove(null);
-                                setConfirmForget(login.id);
-                              }}
-                              disabled={working !== null}
-                              className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:border-danger-200 hover:text-danger-700 disabled:opacity-50"
-                            >
-                              Delete password
-                            </button>
-                          ) : null}
-                          {canRemove ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConfirmForget(null);
-                                setConfirmRemove(login.id);
-                              }}
-                              disabled={working !== null}
-                              className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:border-danger-200 hover:text-danger-700 disabled:opacity-50"
-                            >
-                              Remove
-                            </button>
-                          ) : null}
-                        </>
-                      )}
                     </div>
                   </div>
-                  {panel ? (
-                    <form
-                      onSubmit={(e) => submitRow(e, login, panel)}
-                      className="mt-3 rounded-lg border border-line bg-paper-0 p-3"
-                      aria-label={
-                        panel === 'password'
-                          ? `Save password for ${login.label}`
-                          : `Sign in again to ${login.label}`
-                      }
-                      data-testid="login-row-panel"
-                    >
-                      <CredentialFields
-                        draft={draft}
-                        onChange={setDraft}
-                        passwords={passwords}
-                        alwaysOn={panel === 'password'}
-                        existingUsername={cred?.username}
-                      />
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {confirmForget === login.id ? (
+                      <>
+                        <span className="text-xs text-ink-700">
+                          Delete the saved password? Computer stays signed in for now.
+                        </span>
                         <button
-                          type="submit"
-                          disabled={working !== null || (panel === 'sign_in' && !canStart)}
-                          className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+                          type="button"
+                          onClick={() => void forgetPassword(login)}
+                          disabled={working !== null}
+                          className="rounded-lg bg-danger-600 px-3 py-1.5 text-xs font-semibold text-paper-0 transition hover:bg-danger-700 disabled:opacity-50"
                         >
-                          {panel === 'password'
-                            ? working === `password:${login.id}`
-                              ? 'Saving…'
-                              : 'Save password'
-                            : working === 'start'
-                              ? 'Opening…'
-                              : draft.save
-                                ? 'Save and sign in'
-                                : 'Open sign-in page'}
+                          {working === `forget:${login.id}` ? 'Deleting…' : 'Delete password'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setRowPanel(null);
-                            setDraft(EMPTY_DRAFT);
-                          }}
+                          onClick={() => setConfirmForget(null)}
                           className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700"
                         >
-                          Cancel
+                          Keep
                         </button>
-                      </div>
-                    </form>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                      </>
+                    ) : confirmRemove === login.id ? (
+                      <>
+                        <span className="text-xs text-ink-700">
+                          {cred
+                            ? 'Remove, delete its saved password and sign Computer out?'
+                            : login.canClearCookies
+                              ? 'Remove and sign Computer out of this site?'
+                              : 'Remove from the list? Computer may stay signed in.'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void remove(login)}
+                          disabled={working !== null}
+                          className="rounded-lg bg-danger-600 px-3 py-1.5 text-xs font-semibold text-paper-0 transition hover:bg-danger-700 disabled:opacity-50"
+                        >
+                          {working === `remove:${login.id}` ? 'Removing…' : 'Remove'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemove(null)}
+                          className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700"
+                        >
+                          Keep
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            canManagePasswords
+                              ? openRow(login, 'sign_in')
+                              : void start({ loginId: login.id })
+                          }
+                          disabled={!canStart}
+                          className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-800 transition hover:border-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Sign in again
+                        </button>
+                        {canManagePasswords ? (
+                          <button
+                            type="button"
+                            onClick={() => openRow(login, 'password')}
+                            disabled={working !== null}
+                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-brand-200 disabled:opacity-50"
+                          >
+                            {cred ? 'Replace password' : 'Save password'}
+                          </button>
+                        ) : null}
+                        {cred && passwords?.canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmRemove(null);
+                              setConfirmForget(login.id);
+                            }}
+                            disabled={working !== null}
+                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:border-danger-200 hover:text-danger-700 disabled:opacity-50"
+                          >
+                            Delete password
+                          </button>
+                        ) : null}
+                        {canRemove ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmForget(null);
+                              setConfirmRemove(login.id);
+                            }}
+                            disabled={working !== null}
+                            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:border-danger-200 hover:text-danger-700 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+                {panel ? (
+                  <form
+                    onSubmit={(e) => submitRow(e, login, panel)}
+                    className="mt-3 rounded-lg border border-line bg-paper-0 p-3"
+                    aria-label={
+                      panel === 'password'
+                        ? `Save password for ${login.label}`
+                        : `Sign in again to ${login.label}`
+                    }
+                    data-testid="login-row-panel"
+                  >
+                    <CredentialFields
+                      draft={draft}
+                      onChange={setDraft}
+                      passwords={passwords}
+                      alwaysOn={panel === 'password'}
+                      existingUsername={cred?.username}
+                    />
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={working !== null || (panel === 'sign_in' && !canStart)}
+                        className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {panel === 'password'
+                          ? working === `password:${login.id}`
+                            ? 'Saving…'
+                            : 'Save password'
+                          : working === 'start'
+                            ? 'Opening…'
+                            : draft.save
+                              ? 'Save and sign in'
+                              : 'Open sign-in page'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRowPanel(null);
+                          setDraft(EMPTY_DRAFT);
+                        }}
+                        className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </section>
+            );
+          })()
+        : null}
 
       {state?.signingIn && !state.signingIn.startedByYou ? (
         <p className="mt-4 text-xs text-ink-600">
