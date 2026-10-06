@@ -203,3 +203,23 @@ describe('document quotes', () => {
     expect(sources[0]?.atSeconds).toBe(9);
     expect(sources[0]?.proofId).toBe(proof);
   });
+
+describe('actions trailer card payloads (b64:)', () => {
+  it('decodes a materials payload whole, with commas, pipes and unicode intact', async () => {
+    const { default: fixture } = await import('../dev/hdOrderV2Fixture.json');
+    const payload = `${fixture.materialsSummary as string} ⟦x⟧ a | b`;
+    const label = `b64:${Buffer.from(payload, 'utf8').toString('base64url')}`;
+    const answer = `Materials on this job file (9 items).\n\n⟦actions: start_computer_task|${label}|computer|computer-task:materials-list⟧`;
+    const { body, actions } = extractAskSources(answer);
+    expect(body).toBe('Materials on this job file (9 items).');
+    expect(actions).toHaveLength(1);
+    expect(actions[0].label).toBe(payload);
+    expect(actions[0].path).toBe('computer-task:materials-list');
+  });
+
+  it('keeps plain chip labels short', () => {
+    const long = 'x'.repeat(300);
+    const { actions } = extractAskSources(`ok\n\n⟦actions: update_job|${long}|setup|⟧`);
+    expect(actions[0].label).toHaveLength(120);
+  });
+});

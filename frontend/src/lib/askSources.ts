@@ -498,6 +498,20 @@ export function stripAskWebTrailer(answer: string): string {
 }
 
 
+/** Decode a `b64:` (base64url, UTF-8) card payload label; null when not encoded or invalid. */
+export function decodeActionLabel(label: string): string | null {
+  if (!label.startsWith('b64:')) return null;
+  try {
+    const b64 = label.slice(4).replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const bin = atob(padded);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 export function parseAskActionsTrailer(raw: string): AskActionChip[] {
   const match = trim(raw).match(ACTIONS_TRAILER_RE);
   if (!match) return [];
@@ -505,9 +519,11 @@ export function parseAskActionsTrailer(raw: string): AskActionChip[] {
   for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
     const [tool, label, section, path] = part.split('|');
     if (!trim(tool) || !trim(label)) continue;
+    const decoded = decodeActionLabel(trim(label));
     out.push({
       tool: trim(tool),
-      label: trim(label).slice(0, 120),
+      // Card payloads (b64:) arrive whole; plain chip labels stay short.
+      label: decoded ?? trim(label).slice(0, 120),
       section: trim(section) || undefined,
       path: trim(path) || undefined,
     });

@@ -483,3 +483,37 @@ test('build estimate in Xactimate queues a task that enters line items inside Xa
   assert.match(task.instructions, /request_approval/);
   assert.match(result.summary, /sketch|Xactimate/i);
 });
+
+test('materials list: reply text is the lead only; the card payload survives the trailer intact', async () => {
+  const store = new MemoryComputerStore();
+  setComputerProviderForTests(new MockComputerProvider());
+  setComputerWorkerDepsForTests({ store, admin: null });
+  const base = ctx('org');
+  const file = {
+    ...(base.file as object),
+    documents: [{ filename: 'estimate.pdf', kind: 'estimate', attached: true, summary: 'Materials: 3 boxes of roofing nails, 12 sheets of plywood.' }],
+  };
+  const result = await executeAskTool('start_computer_task', { instructions: 'list the materials for this job' }, { ...base, file } as AskToolContext);
+  assert.equal(result.ok, true, result.summary);
+  assert.equal(result.ui?.path, 'computer-task:materials-list');
+  assert.match(result.summary, /^Materials on this job file \(\d+ items?\)/);
+  assert.ok(!result.summary.includes('MATERIALS_JSON'), 'no raw JSON in the reply text');
+  assert.ok(result.cardPayload?.includes('MATERIALS_JSON:'), 'card payload carries the table');
+  const [action] = parseActionsTrailer(`answer\n\n${formatActionsTrailer([result])}`);
+  assert.equal(action.label, result.cardPayload);
+});
+
+test('card payload trailer round-trips commas, pipes, brackets and unicode', () => {
+  const payload =
+    'Materials on this job file (2 items).\nMATERIALS_JSON:{"rows":[{"item":"a, b | c ;; d ⟦x⟧","spec":"9/16 in. × 3-5/8 in.","sources":[]}]}';
+  const trailer = formatActionsTrailer([
+    { ok: true, tool: 'start_computer_task', summary: 'Materials on this job file (2 items).', cardPayload: payload, ui: { section: 'computer', path: 'computer-task:materials-list' } },
+    { ok: true, tool: 'update_job', summary: 'Updated, the job | title', ui: { section: 'setup' } },
+  ]);
+  const actions = parseActionsTrailer(`text\n\n${trailer}`);
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].label, payload);
+  assert.equal(JSON.parse(actions[0].label.split('MATERIALS_JSON:')[1]).rows[0].item, 'a, b | c ;; d ⟦x⟧');
+  assert.equal(actions[0].path, 'computer-task:materials-list');
+  assert.equal(actions[1].label, 'Updated  the job   title');
+});
