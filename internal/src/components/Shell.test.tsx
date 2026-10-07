@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -83,6 +83,28 @@ describe('Shell', () => {
     await user.click(screen.getByRole('button', { name: 'Expand sidebar' }));
     expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('expanded');
     expect(within(sidebar()).getByText('Revenue & customers')).toBeInTheDocument();
+  });
+
+  it('puts an icon-only collapse toggle at the top of the sidebar, before the first group', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const toggle = within(sidebar()).getByRole('button', { name: 'Collapse sidebar' });
+    const nav = within(sidebar()).getByRole('navigation', { name: 'Reports' });
+    // Document order: the toggle comes before the navigation in both states.
+    expect(toggle.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle).toHaveTextContent('');
+    expect(toggle).toHaveAttribute('aria-controls', 'analytics-sidebar');
+
+    // Tooltip on keyboard focus; Enter toggles.
+    act(() => toggle.focus());
+    expect(screen.getByTestId('nav-tooltip')).toHaveTextContent('Collapse sidebar');
+    await user.keyboard('{Enter}');
+    expect(sidebar()).toHaveAttribute('data-collapsed', 'true');
+    const expand = within(sidebar()).getByRole('button', { name: 'Expand sidebar' });
+    expect(expand.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(expand).toHaveTextContent('');
+    await user.keyboard(' ');
+    expect(sidebar()).toHaveAttribute('data-collapsed', 'false');
   });
 
   it('opens the navigation drawer on narrow screens and closes it with Escape', async () => {

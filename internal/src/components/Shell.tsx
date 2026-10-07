@@ -46,7 +46,7 @@ function SideNav({
   const hide = () => onHint?.(null);
 
   return (
-    <nav aria-label="Reports" className={collapsed ? 'space-y-2' : 'space-y-5'}>
+    <nav aria-label="Reports" className={collapsed ? 'space-y-2' : 'space-y-3.5'}>
       {groups.map((group, index) => (
         <div key={group.title} role="group" aria-label={group.title}>
           {collapsed ? (
@@ -193,6 +193,10 @@ export function Shell() {
 
   const top = testData ? 'top-[79px] h-[calc(100vh-79px)]' : 'top-[56px] h-[calc(100vh-56px)]';
   const toggleLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  const hintFor = (label: string) => (event: { currentTarget: HTMLElement }) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setHint({ label, top: rect.top + rect.height / 2, left: rect.right + 8 });
+  };
 
   return (
     <div className="min-h-screen bg-paper-100 text-ink-900">
@@ -286,43 +290,35 @@ export function Shell() {
           }`}
         >
           <div
-            className={`flex-1 overflow-y-auto overflow-x-hidden py-5 ${collapsed ? 'px-2' : 'px-3'}`}
-            onScroll={() => setHint(null)}
+            className={`flex h-10 shrink-0 items-center ${collapsed ? 'justify-center px-2' : 'justify-end px-3'}`}
+            data-testid="sidebar-top"
           >
-            <SideNav groups={groups} collapsed={collapsed} pending={pending} onHint={setHint} />
-          </div>
-          <div className={`shrink-0 border-t border-line py-2 ${collapsed ? 'px-2' : 'px-3'}`}>
             <button
               type="button"
               onClick={toggleCollapsed}
               aria-expanded={!collapsed}
               aria-controls="analytics-sidebar"
               aria-label={toggleLabel}
-              title={collapsed ? undefined : `${toggleLabel}`}
-              onMouseEnter={(e) => {
-                if (!collapsed) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                setHint({ label: toggleLabel, top: rect.top + rect.height / 2, left: rect.right + 8 });
-              }}
+              onMouseEnter={hintFor(toggleLabel)}
               onMouseLeave={() => setHint(null)}
-              onFocus={(e) => {
-                if (!collapsed) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                setHint({ label: toggleLabel, top: rect.top + rect.height / 2, left: rect.right + 8 });
-              }}
+              onFocus={hintFor(toggleLabel)}
               onBlur={() => setHint(null)}
-              className={`nav-item w-full text-ink-500 hover:bg-paper-200 hover:text-ink-900 ${collapsed ? 'justify-center px-0' : 'px-3'}`}
+              className="grid h-8 w-8 place-items-center text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
               data-testid="sidebar-toggle"
             >
               {collapsed ? (
-                <PanelLeftOpen aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+                <PanelLeftOpen aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.75} />
               ) : (
-                <>
-                  <PanelLeftClose aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
-                  <span className="text-[12.5px]">Collapse</span>
-                </>
+                <PanelLeftClose aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.75} />
               )}
             </button>
+          </div>
+          <div
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4 pt-0.5 [scrollbar-width:thin] ${collapsed ? 'px-2' : 'px-3'}`}
+            onScroll={() => setHint(null)}
+            data-testid="sidebar-scroll"
+          >
+            <SideNav groups={groups} collapsed={collapsed} pending={pending} onHint={setHint} />
           </div>
         </aside>
 

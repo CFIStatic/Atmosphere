@@ -11,8 +11,9 @@ Verification is the sold activity; Platform / Field Capture are the office and
 crew apps. Integrity agent / computer-use / estimator are not live surfaces.
 
 Navigation is grouped like a report's table of contents. On wide screens the
-left sidebar can be collapsed to an icon rail (button at the bottom of the
-sidebar; the choice is remembered in `localStorage` under
+left sidebar can be collapsed to an icon rail with the panel icon button at
+the top of the sidebar (top-right when expanded, top of the rail when
+collapsed; the choice is remembered in `localStorage` under
 `atmosphere-analytics.sidebar`, and collapsed icons show their name as a
 tooltip on hover or keyboard focus). Below 1024px the sidebar becomes a
 slide-in drawer opened from the header menu button.

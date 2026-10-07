@@ -150,7 +150,7 @@ h3 {
   }
   /* Sidebar rows: one height, one rhythm, a 2px accent bar on the active page. */
   .nav-item {
-    @apply relative flex h-8 items-center gap-2.5 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500;
+    @apply relative flex h-[30px] items-center gap-2.5 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500;
   }
   .nav-item-active {
     @apply bg-brand-50 font-semibold text-ink-900;
