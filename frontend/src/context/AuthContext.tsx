@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { prefetchBillingOnboarding } from '../lib/billingOnboardingShared';
 import {
   api,
   ApiError,
@@ -82,6 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadMembership = useCallback(async (): Promise<Membership | null> => {
     setMembershipLoading(true);
     let resolved: Membership | null = null;
+    // Profile does not depend on membership — start it now so the two GETs
+    // run side by side instead of one after the other.
+    const profileRequest = api.getProfile();
+    profileRequest.catch(() => {});
     try {
       try {
         const { membership } = await api.getMembership();
@@ -121,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Decorative for the shell — never wipe a photo the user just saved in
     // Settings if this GET is still catching up or fails.
     try {
-      const { profile: incoming } = await api.getProfile();
+      const { profile: incoming } = await profileRequest;
       setProfile((current) => preferFresherProfile(current, incoming));
     } catch {
       /* keep the in-memory profile, including a just-uploaded avatar */
@@ -141,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled && !explicitAuthRef.current) {
           setUser(user);
           setTerms(nextTerms ?? publicTermsStatus());
+          // The billing gate needs this next; start it alongside membership.
+          if (!isFieldEmbedMarked()) prefetchBillingOnboarding(api.getBillingOnboarding);
           await loadMembership();
         }
       } catch (err) {

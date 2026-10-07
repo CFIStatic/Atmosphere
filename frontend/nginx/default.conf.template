@@ -93,6 +93,14 @@ server {
     return 503 '{"error":"Atmosphere API is not reachable. Set API_UPSTREAM on this service to the Atmosphere APIs private HTTP URL.","code":"backend_unreachable"}';
   }
 
+  # Favicons / touch icons. Links carry ?v=N, so a day of caching is safe
+  # and a bumped version still lands immediately.
+  location ^~ /icons/ {
+    add_header Cache-Control "public, max-age=86400";
+    include /etc/nginx/security-headers.conf;
+    try_files $uri =404;
+  }
+
   location /assets/ {
     add_header Cache-Control "public, max-age=31536000, immutable";
     include /etc/nginx/security-headers.conf;
@@ -129,8 +137,11 @@ server {
     try_files $uri $uri/ /verifier/index.html;
   }
 
+  # Verifier HTML is one un-hashed file: the browser may keep it but must
+  # revalidate (ETag) every time, so a deploy is picked up on the next load
+  # and an unchanged page costs a 304 instead of ~100 KB.
   location /verifier/ {
-    add_header Cache-Control "no-store";
+    add_header Cache-Control "no-cache";
     add_header X-Robots-Tag $share_robots_tag always;
     include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /verifier/index.html;

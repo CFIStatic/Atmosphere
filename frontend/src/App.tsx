@@ -17,11 +17,10 @@ import { sessionTermsAcceptedForCurrent } from './lib/terms';
 import { ApiError } from './lib/api';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { api } from './lib/api';
+import { getBillingOnboardingShared } from './lib/billingOnboardingShared';
 import { LoginPage } from './pages/LoginPage';
-import { SignupPage } from './pages/SignupPage';
 import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
 import { isInAppShell } from './lib/appShell';
-import { FirstRunPage } from './pages/FirstRunPage';
 import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
 import { isUnpaidEvaluationLocation } from './lib/unpaidEvaluation';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -32,13 +31,7 @@ import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
-import { SharedDashboardPage } from './pages/SharedDashboardPage';
-import { JobIntakePage } from './pages/JobIntakePage';
 import { OperationsShell } from './layouts/OperationsShell';
-import { JobSharePage } from './pages/JobSharePage';
-import { PlatformHomePage } from './pages/PlatformHomePage';
-import { MyJobsPage } from './pages/MyJobsPage';
-import { MyJobFilesPage } from './pages/MyJobFilesPage';
 import { getPlatform } from './lib/usePlatform';
 import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
 import { packetTimelineLocation } from './components/shared/jobTimeline';
@@ -47,6 +40,14 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
+const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
+const FirstRunPage = lazy(() => import('./pages/FirstRunPage').then((m) => ({ default: m.FirstRunPage })));
+const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
+const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
+const PlatformHomePage = lazy(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
+const MyJobsPage = lazy(() => import('./pages/MyJobsPage').then((m) => ({ default: m.MyJobsPage })));
+const MyJobFilesPage = lazy(() => import('./pages/MyJobFilesPage').then((m) => ({ default: m.MyJobFilesPage })));
+const JobSharePage = lazy(() => import('./pages/JobSharePage').then((m) => ({ default: m.JobSharePage })));
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -179,7 +180,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
           if (!cancelled) setGate('ready');
           return;
         }
-        const status = await api.getBillingOnboarding();
+        const status = await getBillingOnboardingShared(api.getBillingOnboarding);
         if (cancelled) return;
         setGate(status.required && !status.complete ? 'blocked' : 'ready');
       } catch {

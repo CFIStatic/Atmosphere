@@ -8879,9 +8879,12 @@
   }
 
   function setRailOnly(on) {
+    var wasRailOnly = document.body.hasAttribute('data-atm-rail-only');
     RAIL_ONLY = !!on;
     if (on) document.body.setAttribute('data-atm-rail-only', '1');
     else document.body.removeAttribute('data-atm-rail-only');
+    // Back on the library after the paused refresh: catch up once right away.
+    if (wasRailOnly && !on && libraryWatchTimer) loadOrgLibrary({ silent: true });
   }
 
   function setPhoneDrawer(on) {
@@ -9865,12 +9868,17 @@
 
   function startLibraryWatch() {
     if (SHARE_TOKEN || libraryWatchTimer) return;
+    // Only refresh while the library itself is on screen: skip when the tab
+    // is hidden or the office app shows another page beside the rail.
     libraryWatchTimer = setInterval(function () {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (document.body.hasAttribute('data-atm-rail-only')) return;
       loadOrgLibrary({ silent: true });
     }, 10000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') loadOrgLibrary({ silent: true });
+      if (document.visibilityState !== 'visible') return;
+      if (document.body.hasAttribute('data-atm-rail-only')) return;
+      loadOrgLibrary({ silent: true });
     });
   }
 

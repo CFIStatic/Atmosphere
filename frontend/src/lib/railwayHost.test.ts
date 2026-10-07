@@ -73,7 +73,9 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('X-Robots-Tag "noindex, nofollow, noarchive"');
     expect(nginx).toContain('map $request_uri $share_robots_tag');
     expect(nginx).toContain('add_header X-Robots-Tag $share_robots_tag always');
-    expect(nginx).toMatch(/location \/verifier\/ \{\s*add_header Cache-Control "no-store";/);
+    // Verifier HTML revalidates every load (ETag → 304) instead of re-downloading.
+    expect(nginx).toMatch(/location \/verifier\/ \{\s*add_header Cache-Control "no-cache";/);
+    expect(nginx).toMatch(/location \^~ \/icons\/ \{\s*add_header Cache-Control "public, max-age=86400";/);
     expect(nginx).toMatch(/location \/fieldcapture\/ \{\s*add_header Cache-Control "no-store";/);
     expect(nginx).toContain('location = /index.html');
     expect(nginx).toContain('location = /manifest.webmanifest');

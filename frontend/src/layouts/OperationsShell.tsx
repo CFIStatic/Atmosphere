@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
@@ -108,7 +108,11 @@ export function OperationsShell() {
                   : 'px-4 py-6 sm:px-6'
             }
           >
-            <Outlet context={{ chrome: 'operations' as const }} />
+            {/* Pages load on demand; suspend here so the shell and the
+                persistent Verifier iframe stay mounted while a page chunk loads. */}
+            <Suspense fallback={null}>
+              <Outlet context={{ chrome: 'operations' as const }} />
+            </Suspense>
           </div>
         </main>
       )}
