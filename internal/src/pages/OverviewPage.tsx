@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { canManageAccess } from '../lib/access';
 import { count, decimal, duration, moneyCompact, pctChange, percent, shortDate, weekLabel } from '../lib/format';
 import { Delta, ErrorLine, KpiStrip, LineChart, Loading, PageHeader } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import { centsToUsd } from '../lib/excel';
 import type { EvidencePeriod } from '../lib/types';
 
 const evidenceTotal = (e: EvidencePeriod) => e.dailyReportsSent + e.evidenceDownloads + e.shareLinksCreated;
@@ -85,6 +87,27 @@ export function OverviewPage() {
             )}
           </p>
         </div>
+        <div className="min-w-0">
+          <div className="mb-1 flex justify-end">
+            <DownloadButton
+              table="north-star-weekly"
+              label="weekly hours per paying seat"
+              sheets={() => [
+                {
+                  name: 'North star weekly',
+                  columns: [
+                    { header: 'Week of (Mon, UTC)', type: 'date' },
+                    { header: 'Hours per paying seat', type: 'number' },
+                    { header: 'Paying seats', type: 'integer' },
+                    { header: 'Hours filmed, paying', type: 'number' },
+                  ],
+                  rows: (h?.northStar.weekly ?? [])
+                    .filter((w) => !w.partial)
+                    .map((w) => [w.weekStart, w.hoursPerSeat, w.payingSeats, w.hoursPaying]),
+                },
+              ]}
+            />
+          </div>
         <LineChart
           ariaLabel="Hours filmed per paying seat by week"
           height={150}
@@ -92,14 +115,18 @@ export function OverviewPage() {
           xLabel={weekLabel}
           series={[{ label: 'hrs / seat', primary: true, points: trend }]}
         />
+        </div>
       </section>
 
       <KpiStrip
+        download={{ table: 'overview-headline-figures' }}
         items={[
           {
             label: 'MRR',
             unit: `USD, as of ${shortDate(overview.data?.generatedAt ?? null)}`,
             value: moneyCompact(revenue?.mrrCents ?? null),
+            raw: centsToUsd(revenue?.mrrCents ?? null),
+            rawType: 'usd',
             delta: <Delta value={revenue?.mrrGrowthMomPct ?? null} />,
             comparison: 'vs prior month',
             to: '/growth',
@@ -108,6 +135,8 @@ export function OverviewPage() {
             label: 'Paying organizations',
             unit: `count, as of ${shortDate(overview.data?.generatedAt ?? null)}`,
             value: count(customers?.orgsPaying ?? null),
+            raw: customers?.orgsPaying ?? null,
+            rawType: 'integer',
             delta: <Delta value={customers?.orgsGrowthMomPct ?? null} />,
             comparison: 'vs prior month',
             to: '/growth',
@@ -116,6 +145,8 @@ export function OverviewPage() {
             label: 'Upload completion',
             unit: '% of settled, last 4 wks',
             value: percent(h?.uploads.current.completionRatePct ?? null),
+            raw: h?.uploads.current.completionRatePct ?? null,
+            rawType: 'percent',
             delta: (
               <Delta
                 value={ptsChange(h?.uploads.current.completionRatePct, h?.uploads.prior.completionRatePct)}
@@ -129,6 +160,8 @@ export function OverviewPage() {
             label: 'Time to analysis',
             unit: 'median, last 4 wks',
             value: duration(h?.analysis.current.medianSeconds ?? null),
+            raw: h?.analysis.current.medianSeconds ?? null,
+            rawUnit: 'seconds',
             delta: (
               <Delta
                 value={pctChange(h?.analysis.current.medianSeconds, h?.analysis.prior.medianSeconds)}
@@ -142,6 +175,8 @@ export function OverviewPage() {
             label: 'Evidence delivered',
             unit: 'reports, downloads, links; 4 wks',
             value: h ? count(evidenceTotal(h.evidence.current)) : '—',
+            raw: h ? evidenceTotal(h.evidence.current) : null,
+            rawType: 'integer',
             delta: <Delta value={h ? pctChange(evidenceTotal(h.evidence.current), evidenceTotal(h.evidence.prior)) : null} />,
             comparison: 'vs prior 4 wks',
             to: '/capture',
@@ -150,6 +185,8 @@ export function OverviewPage() {
             label: 'Ask error rate',
             unit: '% of turns, last 4 wks',
             value: percent(h?.ask.current.errorRatePct ?? null),
+            raw: h?.ask.current.errorRatePct ?? null,
+            rawType: 'percent',
             delta: (
               <Delta
                 value={ptsChange(h?.ask.current.errorRatePct, h?.ask.prior.errorRatePct)}

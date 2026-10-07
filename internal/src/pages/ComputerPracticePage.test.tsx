@@ -181,7 +181,7 @@ beforeEach(() => {
 describe('ComputerPracticePage', () => {
   it('shows success rates, needs-login tasks, playbooks and coverage with the terms flag as staff data', async () => {
     render(<ComputerPracticePage />);
-    expect(await screen.findByText('50%', { selector: 'p' })).toBeInTheDocument();
+    expect(await screen.findByText('50%', { selector: 'dd' })).toBeInTheDocument();
     const tasks = screen.getByTestId('practice-tasks');
     expect(within(tasks).getByText('No saved Login for mail.google.com.')).toBeInTheDocument();
     expect(within(screen.getByTestId('practice-playbooks')).getByText('v2')).toBeInTheDocument();

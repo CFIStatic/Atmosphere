@@ -9,6 +9,9 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { asOf } from '../lib/format';
+import type { ColumnType } from '../lib/excel';
+import { kpiSheet } from '../lib/exportSheets';
+import { DownloadButton } from './DownloadButton';
 
 export function PageHeader({
   eyebrow,
@@ -49,17 +52,27 @@ export function Section({
   note,
   children,
   id,
+  actions,
+  testId,
 }: {
-  title: string;
+  title: ReactNode;
   note?: ReactNode;
   children: ReactNode;
   id?: string;
+  /** Right-aligned controls, e.g. the Download button for the section's table. */
+  actions?: ReactNode;
+  testId?: string;
 }) {
   return (
-    <section className="mt-10" id={id}>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line-strong pb-1.5">
-        <h2 className="text-[17px] text-ink-900">{title}</h2>
-        {note && <p className="text-[11.5px] text-ink-500">{note}</p>}
+    <section className="mt-10" id={id} data-testid={testId}>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-1.5 border-b border-line-strong pb-1.5">
+        <h2 className="text-[17px] leading-snug text-ink-900">{title}</h2>
+        {(note || actions) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {note && <p className="text-[11.5px] text-ink-500">{note}</p>}
+            {actions}
+          </div>
+        )}
       </div>
       {children}
     </section>
@@ -113,19 +126,60 @@ export interface KpiItem {
   note?: string;
   /** Detail page for this figure; the whole cell becomes the link. */
   to?: string;
+  /** Unformatted value for the Excel download (e.g. dollars, not "$12.4k"). */
+  raw?: number | null;
+  /** How `raw` is typed in Excel. Defaults to a plain number. */
+  rawType?: ColumnType;
+  /** Unit of `raw` when the type does not say it, e.g. "seconds". */
+  rawUnit?: string;
 }
 
-/** The crisp strip at the top of a page: hairline-divided cells, no cards. */
-export function KpiStrip({ items }: { items: KpiItem[] }) {
+const KPI_GRID: Record<number, { grid: string; cell: string }> = {
+  6: {
+    grid: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+    cell: 'first:border-l-0 [&:nth-child(2n+1)]:border-l-0 sm:[&:nth-child(2n+1)]:border-l sm:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(3n+1)]:border-l lg:[&:nth-child(6n+1)]:border-l-0',
+  },
+  4: {
+    grid: 'grid-cols-2 lg:grid-cols-4',
+    cell: '[&:nth-child(2n+1)]:border-l-0 lg:[&:nth-child(2n+1)]:border-l lg:[&:nth-child(4n+1)]:border-l-0',
+  },
+  3: { grid: 'grid-cols-3', cell: 'first:border-l-0' },
+};
+
+/**
+ * The crisp strip at the top of a page: hairline-divided cells, no cards.
+ * With `download`, a caption row carries the Excel download of the figures.
+ */
+export function KpiStrip({
+  items,
+  download,
+  caption = 'Headline figures',
+}: {
+  items: KpiItem[];
+  download?: { table: string; label?: string };
+  caption?: string;
+}) {
+  const layout = KPI_GRID[items.length] ?? KPI_GRID[6]!;
   return (
+    <div className="mt-5">
+      {download && (
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <p className="eyebrow">{caption}</p>
+          <DownloadButton
+            table={download.table}
+            label={download.label ?? caption.toLowerCase()}
+            sheets={() => [kpiSheet(caption, items)]}
+          />
+        </div>
+      )}
     <dl
-      className="mt-5 grid grid-cols-2 border-b border-line-strong sm:grid-cols-3 lg:grid-cols-6"
+      className={`grid border-b border-line-strong ${download ? 'border-t border-t-line' : ''} ${layout.grid}`}
       data-testid="kpi-strip"
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <div
-          key={item.label}
-          className="relative border-l border-line px-3 py-3 first:border-l-0 sm:px-4 [&:nth-child(2n+1)]:border-l-0 sm:[&:nth-child(2n+1)]:border-l sm:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(3n+1)]:border-l lg:[&:nth-child(6n+1)]:border-l-0"
+          key={`${item.label}-${index}`}
+          className={`relative border-l border-line px-3 py-3 sm:px-4 ${layout.cell}`}
         >
           <dt>
             {item.to ? (
@@ -140,7 +194,7 @@ export function KpiStrip({ items }: { items: KpiItem[] }) {
             )}
             <span className="block text-[10.5px] text-ink-500">{item.unit}</span>
           </dt>
-          <dd className="mt-2 text-[24px] font-semibold leading-none tracking-tight text-ink-900 tabular-nums">
+          <dd className="mt-2 text-[20px] font-semibold leading-none tracking-tight text-ink-900 tabular-nums sm:text-[24px]">
             {item.value}
           </dd>
           {(item.delta || item.comparison) && (
@@ -152,6 +206,7 @@ export function KpiStrip({ items }: { items: KpiItem[] }) {
         </div>
       ))}
     </dl>
+    </div>
   );
 }
 

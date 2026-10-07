@@ -1,49 +1,101 @@
 import { useOverview } from '../hooks/useOverview';
 import { count, dateTime, hours, percent } from '../lib/format';
-import { SectionHeading } from '../components/ui';
+import { ErrorLine, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
 
 export function UsagePage() {
-  const { data, error, loading } = useOverview();
-  if (loading && !data) return <p className="text-ink-500">Loading usage…</p>;
+  const { data, error, loading, reload } = useOverview();
+  if (loading && !data) return <Loading label="Loading usage" />;
+  const features = data?.features ?? [];
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
-      <p className="mt-1 text-sm text-ink-500">
-        Foreground time in every instrumented tool. Same numbers as /analytics, hosted here for staff.
-      </p>
-      {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
-      <SectionHeading title="Features" hint="Ranked by hours" />
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Tool</th>
-              <th className="px-4 py-3">Area</th>
-              <th className="px-4 py-3 text-right">Hours</th>
-              <th className="px-4 py-3 text-right">Share</th>
-              <th className="px-4 py-3 text-right">Users</th>
-              <th className="px-4 py-3 text-right">Orgs</th>
-              <th className="px-4 py-3 text-right">AI</th>
-              <th className="px-4 py-3 text-right">Last used</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.features ?? []).map((row) => (
-              <tr key={row.featureKey} className="border-t border-line">
-                <td className="px-4 py-3 font-medium">{row.label}</td>
-                <td className="px-4 py-3 text-ink-600">{row.area}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{hours(row.activeHours)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{percent(row.sharePct)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.users)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.orgs)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.aiRequests)}</td>
-                <td className="px-4 py-3 text-right text-ink-500">{dateTime(row.lastUsedAt)}</td>
+      <PageHeader
+        eyebrow="Product"
+        title="Feature usage"
+        subtitle="Foreground time in every instrumented tool. Same numbers as /analytics, hosted here for staff."
+        asOfValue={data?.generatedAt ?? null}
+      />
+      {error && <ErrorLine message={error} onRetry={() => void reload()} />}
+      <Section
+        title="Features"
+        note="Ranked by hours"
+        actions={
+          <DownloadButton
+            table="feature-usage"
+            label="feature usage"
+            disabled={features.length === 0}
+            sheets={() => [
+              {
+                name: 'Feature usage',
+                columns: [
+                  { header: 'Tool' },
+                  { header: 'Feature key' },
+                  { header: 'Area' },
+                  { header: 'Hours', type: 'number' },
+                  { header: 'Share', type: 'percent' },
+                  { header: 'Sessions', type: 'integer' },
+                  { header: 'Users', type: 'integer' },
+                  { header: 'Orgs', type: 'integer' },
+                  { header: 'AI requests', type: 'integer' },
+                  { header: 'Last used', type: 'datetime' },
+                ],
+                rows: features.map((row) => [
+                  row.label,
+                  row.featureKey,
+                  row.area,
+                  row.activeHours,
+                  row.sharePct,
+                  row.sessions,
+                  row.users,
+                  row.orgs,
+                  row.aiRequests,
+                  row.lastUsedAt,
+                ]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Area</th>
+                <th className="num">Hours</th>
+                <th className="num">Share</th>
+                <th className="num">Users</th>
+                <th className="num">Orgs</th>
+                <th className="num">AI</th>
+                <th className="num">Last used</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {features.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-ink-500">
+                    No feature usage recorded yet.
+                  </td>
+                </tr>
+              ) : (
+                features.map((row) => (
+                  <tr key={row.featureKey}>
+                    <td className="font-medium text-ink-900">{row.label}</td>
+                    <td className="text-ink-600">{row.area}</td>
+                    <td className="num">{hours(row.activeHours)}</td>
+                    <td className="num">{percent(row.sharePct)}</td>
+                    <td className="num">{count(row.users)}</td>
+                    <td className="num">{count(row.orgs)}</td>
+                    <td className="num">{count(row.aiRequests)}</td>
+                    <td className="num whitespace-nowrap text-ink-600">{dateTime(row.lastUsedAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
     </div>
   );
 }

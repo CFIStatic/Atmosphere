@@ -14,6 +14,7 @@ import {
   PageHeader,
   Section,
 } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
 
 export function AiPage() {
   const { access } = useAuth();
@@ -27,7 +28,7 @@ export function AiPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="AI & Ask"
+        eyebrow="Product"
         title="Ask quality"
         subtitle="How often customers ask the job record a question, how fast the answer arrives, and how often it fails."
         asOfValue={h?.generatedAt ?? null}
@@ -37,11 +38,14 @@ export function AiPage() {
       {k && (
         <>
           <KpiStrip
+            download={{ table: 'ask-headline-figures' }}
             items={[
               {
                 label: 'Questions asked',
                 unit: 'count, last 4 wks',
                 value: count(k.questions.current),
+                raw: k.questions.current,
+                rawType: 'integer',
                 delta: <Delta value={pctChange(k.questions.current, k.questions.prior)} />,
                 comparison: 'vs prior 4 wks',
               },
@@ -49,11 +53,15 @@ export function AiPage() {
                 label: 'Organizations asking',
                 unit: 'count, last 4 wks',
                 value: count(k.questions.orgsCurrent),
+                raw: k.questions.orgsCurrent,
+                rawType: 'integer',
               },
               {
                 label: 'Answer latency',
                 unit: 'median, full answer',
                 value: msAsSeconds(k.current.medianMs),
+                raw: k.current.medianMs,
+                rawUnit: 'milliseconds',
                 delta: <Delta value={pctChange(k.current.medianMs, k.prior.medianMs)} goodWhen="down" />,
                 comparison: 'vs prior 4 wks',
               },
@@ -61,6 +69,8 @@ export function AiPage() {
                 label: 'First token',
                 unit: 'median time to first word',
                 value: msAsSeconds(k.current.medianTtftMs),
+                raw: k.current.medianTtftMs,
+                rawUnit: 'milliseconds',
                 delta: <Delta value={pctChange(k.current.medianTtftMs, k.prior.medianTtftMs)} goodWhen="down" />,
                 comparison: 'vs prior 4 wks',
               },
@@ -68,6 +78,8 @@ export function AiPage() {
                 label: 'Error rate',
                 unit: '% of turns, last 4 wks',
                 value: percent(k.current.errorRatePct),
+                raw: k.current.errorRatePct,
+                rawType: 'percent',
                 delta: <Delta value={pts(k.current.errorRatePct, k.prior.errorRatePct)} format="pts" goodWhen="down" />,
                 comparison: 'vs prior 4 wks',
               },
@@ -83,6 +95,41 @@ export function AiPage() {
           <Section
             title="Turn outcomes"
             note={k.trackingSince ? `Tracked since ${shortDate(k.trackingSince)}` : 'Tracking starts with this release'}
+            actions={
+              <DownloadButton
+                table="ask-turn-outcomes"
+                label="turn outcomes"
+                sheets={() => [
+                  {
+                    name: 'Turn outcomes',
+                    columns: [
+                      { header: 'Outcome' },
+                      { header: 'Last 4 wks', type: 'integer' },
+                      { header: 'Share, last 4 wks', type: 'percent' },
+                      { header: 'Prior 4 wks', type: 'integer' },
+                      { header: 'Share, prior 4 wks', type: 'percent' },
+                    ],
+                    rows: [
+                      ...(
+                        [
+                          ['Answered', 'answered'],
+                          ['Error', 'errors'],
+                          ['Refused (limit, access or validation)', 'refused'],
+                          ['Stopped by the user', 'stopped'],
+                        ] as const
+                      ).map(([label, key]) => [
+                        label,
+                        k.current[key],
+                        rate(k.current[key], k.current.turns),
+                        k.prior[key],
+                        rate(k.prior[key], k.prior.turns),
+                      ]),
+                      ['All turns', k.current.turns, null, k.prior.turns, null],
+                    ],
+                  },
+                ]}
+              />
+            }
           >
             <div className="overflow-x-auto">
               <table className="report-table min-w-[560px] max-w-3xl">
@@ -124,7 +171,35 @@ export function AiPage() {
             </div>
           </Section>
 
-          <Section title="Latency" note="Seconds, answered turns">
+          <Section
+            title="Latency"
+            note="Seconds, answered turns"
+            actions={
+              <DownloadButton
+                table="ask-latency"
+                label="latency"
+                sheets={() => {
+                  const secs = (ms: number | null) => (ms === null ? null : ms / 1000);
+                  return [
+                    {
+                      name: 'Latency',
+                      columns: [
+                        { header: 'Measure' },
+                        { header: 'Last 4 wks, seconds', type: 'number' },
+                        { header: 'Prior 4 wks, seconds', type: 'number' },
+                        { header: 'Change', type: 'percent' },
+                      ],
+                      rows: [
+                        ['Full answer, median', secs(k.current.medianMs), secs(k.prior.medianMs), pctChange(k.current.medianMs, k.prior.medianMs)],
+                        ['Full answer, 90th percentile', secs(k.current.p90Ms), secs(k.prior.p90Ms), pctChange(k.current.p90Ms, k.prior.p90Ms)],
+                        ['First token, median', secs(k.current.medianTtftMs), secs(k.prior.medianTtftMs), pctChange(k.current.medianTtftMs, k.prior.medianTtftMs)],
+                      ],
+                    },
+                  ];
+                }}
+              />
+            }
+          >
             <div className="overflow-x-auto max-w-2xl">
             <table className="report-table">
               <thead>

@@ -3,7 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ApiError, defaultRange } from '../lib/api';
 import type { AccountDetail } from '../lib/types';
 import { count, dateTime, hours, money } from '../lib/format';
-import { SectionHeading, StatTile, StatusPill } from '../components/ui';
+import { StatusPill } from '../components/ui';
+import { KpiStrip, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import { centsToUsd } from '../lib/excel';
 
 export function AccountDetailPage() {
   const { orgId } = useParams();
@@ -34,137 +37,213 @@ export function AccountDetailPage() {
     };
   }, [orgId, range]);
 
-  if (loading) return <p className="text-ink-500">Loading account…</p>;
+  if (loading) return <Loading label="Loading account" />;
   if (error || !data) {
     return (
       <div>
-        <p className="text-sm text-danger-600">{error ?? 'Not found'}</p>
-        <Link to="/accounts" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
-          Back to accounts
+        <p className="text-[13px] text-danger-600">{error ?? 'Not found'}</p>
+        <Link to="/accounts" className="mt-3 inline-block text-[13px] text-brand-600 hover:underline">
+          Back to organizations
         </Link>
       </div>
     );
   }
 
   const { account } = data;
+  const slug = account.orgName || account.orgId;
 
   return (
     <div>
-      <p className="text-sm text-ink-500">
-        <Link to="/accounts" className="hover:text-brand-600">
-          Accounts
+      <nav aria-label="Breadcrumb" className="mb-2 text-[12px] text-ink-500">
+        <Link to="/accounts" className="hover:text-brand-600 hover:underline">
+          Organizations
         </Link>
-        <span className="mx-2">/</span>
-        {account.orgName}
-      </p>
-      <div className="mt-2 flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{account.orgName}</h1>
-        <StatusPill status={account.status} />
-      </div>
-      <p className="mt-1 text-sm text-ink-500">
-        {account.planName} · {account.billingInterval} · created {dateTime(account.createdAt)}
-      </p>
+        <span className="mx-1.5" aria-hidden="true">
+          /
+        </span>
+        <span>{account.orgName}</span>
+      </nav>
+      <PageHeader
+        eyebrow="Growth & revenue · Organization"
+        title={account.orgName}
+        subtitle={
+          <>
+            <StatusPill status={account.status} /> <span className="ml-1">{account.planName} · {account.billingInterval} · created {dateTime(account.createdAt)}</span>
+          </>
+        }
+      />
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="MRR" value={money(account.mrrCents)} footnote={`ARR ${money(account.arrCents)}`} />
-        <StatTile
-          label="Seats"
-          value={`${count(account.members)}/${count(account.seats)}`}
-          footnote="members / licensed"
-        />
-        <StatTile label="Hours" value={hours(account.activeHours)} footnote={account.topFeature ?? 'No usage'} />
-        <StatTile
-          label="Collected"
-          value={money(account.revenueInRangeCents)}
-          footnote={`Last active ${dateTime(account.lastActiveAt)}`}
-        />
-      </div>
+      <KpiStrip
+        download={{ table: `${slug}-summary`, label: 'organization summary' }}
+        items={[
+          { label: 'MRR', unit: `USD · ARR ${money(account.arrCents)}`, value: money(account.mrrCents), raw: centsToUsd(account.mrrCents), rawType: 'usd' },
+          { label: 'Seats', unit: 'members / licensed', value: `${count(account.members)}/${count(account.seats)}`, raw: account.seats, rawType: 'integer', note: `${count(account.members)} members` },
+          { label: 'Hours', unit: account.topFeature ? `top tool: ${account.topFeature}` : 'no usage', value: hours(account.activeHours), raw: account.activeHours, rawUnit: 'hours' },
+          { label: 'Collected', unit: `USD, last active ${dateTime(account.lastActiveAt)}`, value: money(account.revenueInRangeCents), raw: centsToUsd(account.revenueInRangeCents), rawType: 'usd' },
+        ]}
+      />
 
-      <SectionHeading title="Members" hint={`${count(data.members.length)} people`} />
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Work</th>
-              <th className="px-4 py-3">Joined</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.members.map((member) => (
-              <tr key={member.userId} className="border-t border-line">
-                <td className="px-4 py-3 font-medium">{member.fullName ?? '—'}</td>
-                <td className="px-4 py-3 font-mono text-ink-600">{member.email ?? '—'}</td>
-                <td className="px-4 py-3">{member.role.replaceAll('_', ' ')}</td>
-                <td className="px-4 py-3 text-ink-600">{member.workType ?? '—'}</td>
-                <td className="px-4 py-3 text-ink-500">{dateTime(member.createdAt)}</td>
+      <Section
+        title="Members"
+        note={`${count(data.members.length)} people`}
+        actions={
+          <DownloadButton
+            table={`${slug}-members`}
+            label="members"
+            disabled={data.members.length === 0}
+            sheets={() => [
+              {
+                name: 'Members',
+                columns: [
+                  { header: 'Name' },
+                  { header: 'Email' },
+                  { header: 'Role' },
+                  { header: 'Work' },
+                  { header: 'Status' },
+                  { header: 'Joined', type: 'date' },
+                  { header: 'User id' },
+                ],
+                rows: data.members.map((m) => [m.fullName, m.email, m.role.replaceAll('_', ' '), m.workType, m.status, m.createdAt, m.userId]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Work</th>
+                <th className="num">Joined</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {data.members.map((member) => (
+                <tr key={member.userId}>
+                  <td className="font-medium text-ink-900">{member.fullName ?? '—'}</td>
+                  <td className="text-ink-600">{member.email ?? '—'}</td>
+                  <td>{member.role.replaceAll('_', ' ')}</td>
+                  <td className="text-ink-600">{member.workType ?? '—'}</td>
+                  <td className="num whitespace-nowrap text-ink-600">{dateTime(member.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
 
-      <SectionHeading title="Jobs" hint={`${count(data.jobs.total)} on file`} />
-      <div className="mb-4 flex flex-wrap gap-2">
-        {data.jobs.byStatus.map((row) => (
-          <span key={row.status} className="border border-line px-3 py-1 text-xs text-ink-600">
-            {row.status} · {row.count}
-          </span>
-        ))}
-      </div>
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Job</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3 text-right">Opened</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.jobs.recent.map((job) => (
-              <tr key={job.id} className="border-t border-line">
-                <td className="px-4 py-3">
-                  {job.jobNumber != null && (
-                    <span className="mr-2 font-mono text-xs text-ink-500">#{job.jobNumber}</span>
-                  )}
-                  {job.title}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusPill status={job.status} />
-                </td>
-                <td className="px-4 py-3 text-ink-600">{job.workType ?? '—'}</td>
-                <td className="px-4 py-3 text-right text-ink-500">{dateTime(job.createdAt)}</td>
+      <Section
+        title="Jobs"
+        note={`${count(data.jobs.total)} on file · most recent shown`}
+        actions={
+          <DownloadButton
+            table={`${slug}-jobs`}
+            label="jobs"
+            sheets={() => [
+              {
+                name: 'Recent jobs',
+                columns: [
+                  { header: 'Job number', type: 'integer' },
+                  { header: 'Title' },
+                  { header: 'Status' },
+                  { header: 'Type' },
+                  { header: 'Opened', type: 'date' },
+                  { header: 'Job id' },
+                ],
+                rows: data.jobs.recent.map((j) => [j.jobNumber, j.title, j.status, j.workType, j.createdAt, j.id]),
+              },
+              {
+                name: 'Jobs by status',
+                columns: [{ header: 'Status' }, { header: 'Jobs', type: 'integer' }],
+                rows: [...data.jobs.byStatus.map((r) => [r.status, r.count]), ['Total', data.jobs.total]],
+              },
+            ]}
+          />
+        }
+      >
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {data.jobs.byStatus.map((row) => (
+            <span key={row.status} className="border border-line px-2 py-0.5 text-[11.5px] text-ink-600">
+              {row.status} · <span className="tabular-nums">{row.count}</span>
+            </span>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[560px]">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th className="num">Opened</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {data.jobs.recent.map((job) => (
+                <tr key={job.id}>
+                  <td>
+                    {job.jobNumber != null && <span className="mr-2 text-[11.5px] tabular-nums text-ink-500">#{job.jobNumber}</span>}
+                    {job.title}
+                  </td>
+                  <td>
+                    <StatusPill status={job.status} />
+                  </td>
+                  <td className="text-ink-600">{job.workType ?? '—'}</td>
+                  <td className="num whitespace-nowrap text-ink-600">{dateTime(job.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
 
-      <SectionHeading title="Product time" hint="This period" />
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Tool</th>
-              <th className="px-4 py-3 text-right">Hours</th>
-              <th className="px-4 py-3 text-right">Sessions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.features.map((feature) => (
-              <tr key={feature.featureKey} className="border-t border-line">
-                <td className="px-4 py-3">{feature.label}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{hours(feature.activeHours)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(feature.sessions)}</td>
+      <Section
+        title="Product time"
+        note="This period"
+        actions={
+          <DownloadButton
+            table={`${slug}-product-time`}
+            label="product time"
+            disabled={data.features.length === 0}
+            sheets={() => [
+              {
+                name: 'Product time',
+                columns: [
+                  { header: 'Tool' },
+                  { header: 'Feature key' },
+                  { header: 'Hours', type: 'number' },
+                  { header: 'Sessions', type: 'integer' },
+                ],
+                rows: data.features.map((f) => [f.label, f.featureKey, f.activeHours, f.sessions]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="max-w-2xl overflow-x-auto">
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th className="num">Hours</th>
+                <th className="num">Sessions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {data.features.map((feature) => (
+                <tr key={feature.featureKey}>
+                  <td>{feature.label}</td>
+                  <td className="num">{hours(feature.activeHours)}</td>
+                  <td className="num">{count(feature.sessions)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
     </div>
   );
 }

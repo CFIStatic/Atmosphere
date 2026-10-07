@@ -6,7 +6,9 @@ import type {
   PracticeStatus,
   PracticeSummaryPayload,
 } from '../lib/types';
-import { EmptyState, SectionHeading, StatTile, StatusPill } from '../components/ui';
+import { EmptyState, SectionHeading, StatusPill } from '../components/ui';
+import { KpiStrip, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
 
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(v % 1 ? 1 : 0)}%`);
 const usd = (v: number) => `$${v.toFixed(v > 0 && v < 1 ? 3 : 2)}`;
@@ -229,57 +231,152 @@ export function ComputerPracticePage() {
   };
 
   if (error) return <EmptyState title="Computer practice" body={error} />;
-  if (!data) return <p className="text-[13px] text-ink-500">Loading…</p>;
+  if (!data) return <Loading label="Loading practice results" />;
   const t = data.totals;
   const coverage = data.coverage;
   return (
     <div data-testid="computer-practice-page">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] text-ink-900">Computer practice</h1>
-          <p className="mt-1 text-[12.5px] text-ink-600">
+      <PageHeader
+        eyebrow="AI cost & usage"
+        title="Computer practice"
+        subtitle={
+          <>
             Daily read-only and stop-before-submit tasks on the demo org, last {data.days} days.{' '}
             {data.schedule.enabled
               ? `Runs daily at ${String(data.schedule.hourUtc).padStart(2, '0')}:00 UTC.`
               : 'The daily schedule is off.'}
             {data.orgConfigured ? '' : ' The practice org is not configured.'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void runNow()}
-          className="border border-line-strong px-3 py-1 text-[12px] font-semibold text-ink-800 hover:border-brand-500"
-        >
-          Run all now
-        </button>
-      </div>
-      {notice ? <p className="mt-2 text-[12.5px] text-ink-700">{notice}</p> : null}
-
-      <div className="mt-6 grid grid-cols-2 gap-x-6 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile
-          label="Success rate"
-          value={pct(t.successRate)}
-          footnote={`${t.succeeded} of ${t.attempted} attempted`}
-        />
-        <StatTile label="Needs login" value={String(t.needsLogin)} footnote="runs skipped" />
-        <StatTile label="Failed" value={String(t.failed)} />
-        <StatTile
-          label="Playbook runs"
-          value={String(t.playbookRuns)}
-          footnote="replayed without guessing"
-        />
-        <StatTile label="Model calls" value={String(t.modelCalls)} />
-        <StatTile
-          label="AI cost (staff only)"
-          value={usd(t.costUsd)}
-          footnote={t.avgDurationSec != null ? `avg ${t.avgDurationSec}s per run` : undefined}
-        />
-      </div>
-
-      <SectionHeading
-        title="Tasks"
-        hint="One dot per day: green succeeded, red failed, amber needs login"
+          </>
+        }
+        asOfValue={data.generatedAt}
+        actions={
+          <button type="button" onClick={() => void runNow()} className="btn">
+            Run all now
+          </button>
+        }
       />
+      {notice ? <p className="mt-3 text-[12.5px] text-ink-700">{notice}</p> : null}
+
+      <KpiStrip
+        download={{ table: 'computer-practice-totals', label: 'practice totals' }}
+        caption={`Last ${data.days} days`}
+        items={[
+          {
+            label: 'Success rate',
+            unit: `${t.succeeded} of ${t.attempted} attempted`,
+            value: pct(t.successRate),
+            raw: t.successRate,
+            rawType: 'percent',
+          },
+          { label: 'Needs login', unit: 'runs skipped', value: String(t.needsLogin), raw: t.needsLogin, rawType: 'integer' },
+          { label: 'Failed', unit: 'runs', value: String(t.failed), raw: t.failed, rawType: 'integer' },
+          { label: 'Playbook runs', unit: 'replayed without guessing', value: String(t.playbookRuns), raw: t.playbookRuns, rawType: 'integer' },
+          { label: 'Model calls', unit: 'count', value: String(t.modelCalls), raw: t.modelCalls, rawType: 'integer' },
+          {
+            label: 'AI cost (staff only)',
+            unit: t.avgDurationSec != null ? `avg ${t.avgDurationSec}s per run` : 'USD',
+            value: usd(t.costUsd),
+            raw: t.costUsd,
+            rawType: 'usd',
+          },
+        ]}
+      />
+
+      <Section
+        title="Tasks"
+        note="One dot per day: green succeeded, red failed, amber needs login"
+        actions={
+          <DownloadButton
+            table="computer-practice-tasks"
+            label="practice tasks"
+            disabled={data.tasks.length === 0}
+            sheets={() => [
+              {
+                name: 'Tasks',
+                columns: [
+                  { header: 'Task' },
+                  { header: 'Task key' },
+                  { header: 'Site' },
+                  { header: 'Mode' },
+                  { header: 'Needs a Login for' },
+                  { header: 'Runs', type: 'integer' },
+                  { header: 'Attempted', type: 'integer' },
+                  { header: 'Succeeded', type: 'integer' },
+                  { header: 'Failed', type: 'integer' },
+                  { header: 'Needs login', type: 'integer' },
+                  { header: 'Success rate', type: 'percent' },
+                  { header: 'Last result' },
+                  { header: 'Last run', type: 'datetime' },
+                  { header: 'Last failure' },
+                ],
+                rows: data.tasks.map((task) => [
+                  task.label,
+                  task.key,
+                  task.site,
+                  task.mode === 'read_only' ? 'Read-only' : 'Stops before submit',
+                  task.loginHost,
+                  task.runs,
+                  task.attempted,
+                  task.succeeded,
+                  task.failed,
+                  task.needsLogin,
+                  task.successRate,
+                  task.lastStatus,
+                  task.lastRunAt,
+                  task.lastFailure,
+                ]),
+              },
+              {
+                name: 'Daily results',
+                columns: [
+                  { header: 'Task' },
+                  { header: 'Date', type: 'date' },
+                  { header: 'Result' },
+                  { header: 'Run id' },
+                ],
+                rows: data.tasks.flatMap((task) => task.days.map((d) => [task.label, d.date, d.status ?? 'no run', d.runId])),
+              },
+              {
+                name: 'Recent runs',
+                columns: [
+                  { header: 'Date', type: 'date' },
+                  { header: 'Task key' },
+                  { header: 'Site' },
+                  { header: 'Mode' },
+                  { header: 'Status' },
+                  { header: 'Failed step', type: 'integer' },
+                  { header: 'Failure reason' },
+                  { header: 'Used playbook' },
+                  { header: 'Playbook version', type: 'integer' },
+                  { header: 'Model calls', type: 'integer' },
+                  { header: 'Cost, USD', type: 'usd', format: '"$"#,##0.000' },
+                  { header: 'Duration, seconds', type: 'integer' },
+                  { header: 'Started', type: 'datetime' },
+                  { header: 'Finished', type: 'datetime' },
+                  { header: 'Run id' },
+                ],
+                rows: data.recent.map((r) => [
+                  r.date,
+                  r.taskKey,
+                  r.site,
+                  r.mode,
+                  r.status,
+                  r.failedStep,
+                  r.failureReason,
+                  r.usedPlaybook,
+                  r.playbookVersion,
+                  r.modelCalls,
+                  r.costUsd,
+                  r.durationSec,
+                  r.startedAt,
+                  r.finishedAt,
+                  r.id,
+                ]),
+              },
+            ]}
+          />
+        }
+      >
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]" data-testid="practice-tasks">
           <thead>
@@ -332,6 +429,7 @@ export function ComputerPracticePage() {
           </tbody>
         </table>
       </div>
+      </Section>
       {openRun ? <RunDetail id={openRun} onClose={() => setOpenRun(null)} /> : null}
 
       <SectionHeading
@@ -344,7 +442,50 @@ export function ComputerPracticePage() {
         <p className="text-[12.5px] text-ink-500">No drafts waiting.</p>
       )}
 
-      <SectionHeading title="Playbooks" hint="Shared, PII-scrubbed steps by site and task" />
+      <Section
+        title="Playbooks"
+        note="Shared, PII-scrubbed steps by site and task"
+        actions={
+          <DownloadButton
+            table="computer-playbooks"
+            label="playbooks"
+            disabled={data.playbooks.length === 0}
+            sheets={() => [
+              {
+                name: 'Playbooks',
+                columns: [
+                  { header: 'Site' },
+                  { header: 'Task type' },
+                  { header: 'Version', type: 'integer' },
+                  { header: 'Source' },
+                  { header: 'Status' },
+                  { header: 'Steps', type: 'integer' },
+                  { header: 'Successes', type: 'integer' },
+                  { header: 'Replay successes', type: 'integer' },
+                  { header: 'Failures', type: 'integer' },
+                  { header: 'Last success', type: 'datetime' },
+                  { header: 'Updated', type: 'datetime' },
+                  { header: 'Playbook id' },
+                ],
+                rows: data.playbooks.map((p) => [
+                  p.site,
+                  p.taskType,
+                  p.version,
+                  p.source,
+                  p.status,
+                  p.steps,
+                  p.successCount,
+                  p.replaySuccessCount,
+                  p.failureCount,
+                  p.lastSuccessAt,
+                  p.updatedAt,
+                  p.id,
+                ]),
+              },
+            ]}
+          />
+        }
+      >
       {data.playbooks.length ? (
         <table className="w-full text-[12.5px]" data-testid="practice-playbooks">
           <tbody>
@@ -369,13 +510,57 @@ export function ComputerPracticePage() {
           No playbooks yet. They are saved after the first verified success.
         </p>
       )}
+      </Section>
 
       {coverage ? (
         <>
-          <SectionHeading
+          <Section
             title="Site coverage and terms"
-            hint="Terms verdicts are staff-only. Sites whose terms ban automation are listed and practiced by the customer’s choice; Verisk sites are excluded"
-          />
+            note="Terms verdicts are staff-only. Sites whose terms ban automation are listed and practiced by the customer’s choice; Verisk sites are excluded"
+            actions={
+              <DownloadButton
+                table="computer-site-coverage"
+                label="site coverage and terms"
+                sheets={() => [
+                  {
+                    name: 'Site coverage',
+                    columns: [
+                      { header: 'Site' },
+                      { header: 'Category' },
+                      { header: 'Terms' },
+                      { header: 'Terms note' },
+                      { header: 'Terms URL' },
+                      { header: 'In picker' },
+                      { header: 'Sign-in' },
+                      { header: 'Two-step' },
+                      { header: 'SSO' },
+                      { header: 'Practice tasks', type: 'integer' },
+                      { header: 'Needs a test Login' },
+                      { header: 'Excluded reason' },
+                    ],
+                    rows: [
+                      ...coverage.sites.map((s) => [
+                        s.name,
+                        s.category,
+                        TERMS_TEXT[s.terms],
+                        s.termsNote,
+                        s.termsUrl,
+                        s.inPicker,
+                        s.signIn ? `${SIGN_IN_TEXT[s.signIn.flow]}${s.signIn.checked === 'blocked_probe' ? ' (help pages)' : ''}` : null,
+                        s.twoStep,
+                        s.sso,
+                        s.practiceTasks.length,
+                        s.needsTestLogin,
+                        null,
+                      ]),
+                      ...coverage.excluded.map((e) => [e.name, null, null, null, null, null, null, null, null, null, null, e.reason]),
+                    ],
+                  },
+                ]}
+              />
+            }
+          >
+          <div className="overflow-x-auto">
           <table className="w-full text-[12px]" data-testid="practice-coverage">
             <tbody>
               {coverage.sites.map((s) => (
@@ -420,6 +605,8 @@ export function ComputerPracticePage() {
               ))}
             </tbody>
           </table>
+          </div>
+          </Section>
         </>
       ) : null}
     </div>

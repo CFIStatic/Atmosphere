@@ -4,6 +4,7 @@ import { useApi } from '../hooks/useApi';
 import { count, shortDate } from '../lib/format';
 import { audienceSummary } from '../lib/contacts';
 import { ErrorLine, Footnotes, Loading, PageHeader, Section, Tag } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
 
 export function CampaignsPage() {
   const { data, error, loading, reload } = useApi(() => api.campaigns(), []);
@@ -39,7 +40,50 @@ export function CampaignsPage() {
             )}
           </p>
 
-          <Section title="All campaigns" note={`${count(data.campaigns.length)} campaigns · ${count(data.suppressed)} addresses unsubscribed`}>
+          <Section
+            title="All campaigns"
+            note={`${count(data.campaigns.length)} campaigns · ${count(data.suppressed)} addresses unsubscribed`}
+            actions={
+              <DownloadButton
+                table="campaigns"
+                label="campaigns"
+                disabled={data.campaigns.length === 0}
+                sheets={() => [
+                  {
+                    name: 'Campaigns',
+                    columns: [
+                      { header: 'Campaign' },
+                      { header: 'Subject' },
+                      { header: 'Audience' },
+                      { header: 'Status' },
+                      { header: 'Recipients', type: 'integer' },
+                      { header: 'Sent', type: 'integer' },
+                      { header: 'Failed', type: 'integer' },
+                      { header: 'Unsubscribed, skipped', type: 'integer' },
+                      { header: 'Created', type: 'datetime' },
+                      { header: 'Updated', type: 'datetime' },
+                      { header: 'Sent at', type: 'datetime' },
+                      { header: 'Campaign id' },
+                    ],
+                    rows: data.campaigns.map((c) => [
+                      c.name,
+                      c.subject,
+                      audienceSummary(c.audience),
+                      c.status,
+                      c.recipientCount,
+                      c.sentCount,
+                      c.failedCount,
+                      c.suppressedCount,
+                      c.createdAt,
+                      c.updatedAt,
+                      c.sentAt,
+                      c.id,
+                    ]),
+                  },
+                ]}
+              />
+            }
+          >
             <div className="overflow-x-auto">
               <table className="report-table min-w-[760px]">
                 <thead>

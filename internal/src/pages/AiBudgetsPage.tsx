@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
-import { nanosToMoney } from '../lib/format';
+import { count, nanosToMoney, percent } from '../lib/format';
+import { ErrorLine, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import { nanosToUsd } from '../lib/excel';
 
 type BudgetRow = {
   orgId: string;
@@ -51,73 +54,117 @@ export function AiBudgetsPage() {
     }
   }
 
+  if (!rows && !error) return <Loading label="Loading AI budgets" />;
+  const list = rows ?? [];
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">AI budgets</h1>
-      <p className="mt-1 text-sm text-ink-500">
-        Provider spend against each account&apos;s included allowance. Staff can grant credits that roll over until used.
-      </p>
-      {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
-      <form onSubmit={(event) => void grant(event)} className="mt-6 flex flex-wrap items-end gap-3">
-        <label className="text-sm text-ink-600">
-          Organization
-          <input
-            value={orgId}
-            onChange={(event) => setOrgId(event.target.value)}
-            placeholder="Org id"
-            className="mt-1 block w-72 border border-line bg-paper-0 px-3 py-2 text-sm"
+      <PageHeader
+        eyebrow="AI cost & usage"
+        title="AI budgets"
+        subtitle="Provider spend against each account's included allowance. Staff can grant credits that roll over until used."
+      />
+      {error && <ErrorLine message={error} />}
+
+      <Section title="Grant credits" note="Credits roll over until used">
+        <form onSubmit={(event) => void grant(event)} className="flex flex-wrap items-end gap-3">
+          <label className="text-[12px] font-medium text-ink-700">
+            Organization
+            <input value={orgId} onChange={(event) => setOrgId(event.target.value)} placeholder="Org id" className="field mt-1 block w-72" />
+          </label>
+          <label className="text-[12px] font-medium text-ink-700">
+            Dollars
+            <input value={dollars} onChange={(event) => setDollars(event.target.value)} inputMode="decimal" className="field mt-1 block w-24" />
+          </label>
+          <label className="text-[12px] font-medium text-ink-700">
+            Note
+            <input value={note} onChange={(event) => setNote(event.target.value)} className="field mt-1 block w-56" />
+          </label>
+          <button type="submit" className="btn-primary">
+            Grant credits
+          </button>
+        </form>
+        {grantMessage && <p className="mt-3 text-[13px] text-success-600">{grantMessage}</p>}
+      </Section>
+
+      <Section
+        title="Allowance by organization"
+        note={`${count(list.length)} organizations`}
+        actions={
+          <DownloadButton
+            table="ai-budgets"
+            label="AI budgets"
+            disabled={list.length === 0}
+            sheets={() => [
+              {
+                name: 'AI budgets',
+                columns: [
+                  { header: 'Organization' },
+                  { header: 'Org id' },
+                  { header: 'State' },
+                  { header: 'Paused' },
+                  { header: 'Used, USD', type: 'usd', format: '"$"#,##0.0000' },
+                  { header: 'Allowance, USD', type: 'usd' },
+                  { header: 'Used of allowance', type: 'percent' },
+                  { header: 'Credits, USD', type: 'usd' },
+                  { header: 'Resets', type: 'date' },
+                ],
+                rows: list.map((row) => [
+                  row.orgName || 'Untitled',
+                  row.orgId,
+                  row.state,
+                  row.paused,
+                  nanosToUsd(row.usedNanos),
+                  nanosToUsd(row.allowanceNanos),
+                  row.usedFraction * 100,
+                  nanosToUsd(row.creditBalanceNanos),
+                  row.resetAt,
+                ]),
+              },
+            ]}
           />
-        </label>
-        <label className="text-sm text-ink-600">
-          Dollars
-          <input
-            value={dollars}
-            onChange={(event) => setDollars(event.target.value)}
-            className="mt-1 block w-24 border border-line bg-paper-0 px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="text-sm text-ink-600">
-          Note
-          <input
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            className="mt-1 block w-56 border border-line bg-paper-0 px-3 py-2 text-sm"
-          />
-        </label>
-        <button type="submit" className="bg-ink-900 px-4 py-2 text-sm font-semibold text-paper-0">
-          Grant credits
-        </button>
-      </form>
-      {grantMessage && <p className="mt-3 text-sm text-success-700">{grantMessage}</p>}
-      <div className="mt-6 overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Organization</th>
-              <th className="px-4 py-3">State</th>
-              <th className="px-4 py-3 text-right">Used</th>
-              <th className="px-4 py-3 text-right">Allowance</th>
-              <th className="px-4 py-3 text-right">Credits</th>
-              <th className="px-4 py-3">Resets</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(rows ?? []).map((row) => (
-              <tr key={row.orgId} className="border-t border-line">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{row.orgName || 'Untitled'}</div>
-                  <div className="font-mono text-[11px] text-ink-400">{row.orgId}</div>
-                </td>
-                <td className="px-4 py-3">{row.paused ? 'Paused' : row.state}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.usedNanos)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.allowanceNanos)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.creditBalanceNanos)}</td>
-                <td className="px-4 py-3">{row.resetAt ? row.resetAt.slice(0, 10) : '—'}</td>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[720px]">
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th>State</th>
+                <th className="num">Used</th>
+                <th className="num">Allowance</th>
+                <th className="num">Used %</th>
+                <th className="num">Credits</th>
+                <th className="num">Resets</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-ink-500">
+                    No organizations have an AI allowance yet.
+                  </td>
+                </tr>
+              ) : (
+                list.map((row) => (
+                  <tr key={row.orgId}>
+                    <td>
+                      <div className="font-medium text-ink-900">{row.orgName || 'Untitled'}</div>
+                      <div className="text-[11px] text-ink-400">{row.orgId}</div>
+                    </td>
+                    <td>{row.paused ? 'Paused' : row.state}</td>
+                    <td className="num">{nanosToMoney(row.usedNanos)}</td>
+                    <td className="num">{nanosToMoney(row.allowanceNanos)}</td>
+                    <td className="num">{percent(row.usedFraction * 100, 0)}</td>
+                    <td className="num">{nanosToMoney(row.creditBalanceNanos)}</td>
+                    <td className="num whitespace-nowrap">{row.resetAt ? row.resetAt.slice(0, 10) : '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
     </div>
   );
 }

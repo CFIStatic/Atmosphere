@@ -10,22 +10,48 @@ This is not customer-facing product marketing. Atmosphere is the product; Work
 Verification is the sold activity; Platform / Field Capture are the office and
 crew apps. Integrity agent / computer-use / estimator are not live surfaces.
 
-Navigation is grouped like a report's table of contents.
+Navigation is grouped like a report's table of contents. On wide screens the
+left sidebar can be collapsed to an icon rail with the panel icon button at
+the top of the sidebar (top-right when expanded, top of the rail when
+collapsed; the choice is remembered in `localStorage` under
+`atmosphere-analytics.sidebar`, and collapsed icons show their name as a
+tooltip on hover or keyboard focus). Below 1024px the sidebar becomes a
+slide-in drawer opened from the header menu button.
 
 | Group | Page | Live source | Who |
 | --- | --- | --- | --- |
 | Summary | Overview (`/overview`) | `GET /api/analytics/overview` + `GET /api/analytics/product-health` | investor + internal |
+| Summary | North star (`/north-star`) | product-health `northStar` | investor + internal |
 | Growth & revenue | Revenue & customers (`/growth`) | overview `summary`, `monthly`, `planMix` | investor + internal |
+| Growth & revenue | Organizations (`/accounts`) | overview `accounts` + `GET /api/analytics/accounts/:orgId` | internal |
 | Growth & revenue | Experiments | `GET /api/analytics/experiments` | internal |
-| Product usage | Feature usage (`/usage`) | overview `features` | investor + internal |
-| Product usage | Motion clips | `GET /api/motion-clips/staff` | internal |
-| Capture pipeline | Uploads, analysis & evidence (`/capture`) | `GET /api/analytics/product-health` | investor + internal |
-| AI & Ask | Ask quality (`/ai`) | `GET /api/analytics/product-health` | investor + internal |
-| AI & Ask | Token usage, AI budgets, Metering | `/api/analytics/token-usage`, `/ai-budgets`, `/metering` | internal |
-| Accounts | Organizations | overview `accounts` + `GET /api/analytics/accounts/:orgId` | internal |
+| Product | Feature usage (`/usage`) | overview `features` | investor + internal |
+| Product | Capture pipeline (`/capture`) | `GET /api/analytics/product-health` | investor + internal |
+| Product | Ask quality (`/ai`) | `GET /api/analytics/product-health` | investor + internal |
+| Product | Motion clips | `GET /api/motion-clips/staff` | internal |
+| AI cost & usage | Token usage, Cost reconciliation, AI budgets, Metering, Computer practice | `/api/analytics/token-usage`, `/ai-reconciliation`, `/ai-budgets`, `/metering`, computer-practice routes | internal |
 | Contacts & campaigns | Contacts (`/contacts`) | `GET /api/analytics/contacts` | internal |
 | Contacts & campaigns | Campaigns (`/campaigns`, `/campaigns/:id`) | `/api/analytics/campaigns*` | internal |
 | System & access | Access, Legal holds, System status | existing routes | internal (System: both) |
+
+### Excel downloads
+
+Every table, chart and headline-figure strip has a **Download** button that
+saves an `.xlsx` workbook named `atmosphere-<table>-YYYY-MM-DD.xlsx`. The
+workbook is built in the browser from the same data the page loaded (all rows,
+not just the visible page, and respecting the current filter/sort). Columns
+have header rows, an autofilter, and real number, currency, percent and date
+cells. Where the page only shows a slice of a longer list (legal user actions,
+motion clips), the export re-fetches the longer list from the API first.
+
+Workbooks are written with SheetJS Community Edition 0.20.3, installed from
+the official SheetJS CDN tarball (`cdn.sheetjs.com`), not the stale npm
+`xlsx@0.18.5`, which has CVE-2023-30533 and CVE-2024-22363. The library is
+only used to write files (never to parse uploads) and is loaded as a separate
+chunk the first time someone clicks Download. Strings are written as text
+cells, so a value such as `=HYPERLINK(...)` is never evaluated as a formula.
+Code: `src/lib/excel.ts`, `src/lib/excelWriter.ts`,
+`src/components/DownloadButton.tsx`.
 
 ### Metrics on the Overview
 
