@@ -51,7 +51,13 @@ export interface ComputerTaskView {
   statusDetail: string | null;
   instructions: string;
   startUrl: string | null;
-  needsYou: { reason: 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'other'; message: string; since: string } | null;
+  needsYou: {
+    reason: 'login' | 'two_factor' | 'number_match' | 'captcha' | 'clarification' | 'stuck' | 'other';
+    message: string;
+    since: string;
+    /** data: URL when the server captured the page at pause time. */
+    screenshot?: string | null;
+  } | null;
   humanControl: boolean;
   youHaveControl: boolean;
   stepCount: number;
@@ -136,6 +142,7 @@ export const NEEDS_YOU_TITLE: Record<NonNullable<ComputerTaskView['needsYou']>['
   number_match: 'Approve on your phone',
   captcha: 'Complete the captcha',
   clarification: 'Quick question',
+  stuck: 'Stuck — take over',
   other: 'Your turn',
 };
 
@@ -180,6 +187,7 @@ const NEEDS_YOU_STEP: Record<string, string> = {
   number_match: 'Paused for you to approve on your phone',
   captcha: 'Paused for you to complete a captcha',
   clarification: 'Asked you a question',
+  stuck: 'Paused because Computer was stuck',
   other: 'Paused for you',
 };
 
@@ -289,6 +297,7 @@ const NEEDS_YOU_SHORT: Record<NonNullable<ComputerTaskView['needsYou']>['reason'
   number_match: 'approve on phone',
   captcha: 'captcha needed',
   clarification: 'question for you',
+  stuck: 'stuck',
   other: 'paused',
 };
 
@@ -339,6 +348,22 @@ export function isAllowedLiveViewUrl(url: string, demo = Boolean(import.meta.env
 }
 
 // ---- Logins: sites the company signs in to ahead of time ----
+
+export type ComputerVerifyLoginStatus =
+  | 'signed_in'
+  | 'needs_sign_in'
+  | 'captcha'
+  | 'two_factor'
+  | 'number_match'
+  | 'unclear';
+
+export interface ComputerVerifyLoginResult {
+  status: ComputerVerifyLoginStatus;
+  message: string;
+  host: string;
+  label: string;
+  url: string | null;
+}
 
 export interface ComputerLogin {
   id: string;

@@ -17,6 +17,7 @@
  *   POST   /api/chat-computer/logins/sign-ins/:id/live   → short-lived live-view URL (control)
  *   POST   /api/chat-computer/logins/sign-ins/:id/done   "Done, I'm signed in" → save the site
  *   POST   /api/chat-computer/logins/sign-ins/:id/cancel close without saving
+ *   POST   /api/chat-computer/logins/:id/verify          Check login: open site, report signed-in vs login page
  *   DELETE /api/chat-computer/logins/:id                 remove the site, its saved password, and its cookies
  *   PUT    /api/chat-computer/logins/:id/credential      { username, password, loginUrl? } save/replace (Global Admin)
  *   DELETE /api/chat-computer/logins/:id/credential      delete the saved password (Global Admin)
@@ -52,6 +53,7 @@ import {
   saveCredential,
   signInLiveView,
   startSignIn,
+  verifyLogin,
 } from '../computer/logins.js';
 import { loginCatalogView } from '../computer/catalog/sites.js';
 import { HttpError } from '../lib/errors.js';
@@ -264,6 +266,16 @@ computerRouter.post(
     const ctx = await requireOrgContext(req);
     await cancelSignIn(ctx.orgId, parseId(req.params.id), ctx.userId);
     res.json({ ok: true });
+  }),
+);
+
+computerRouter.post(
+  '/logins/:id/verify',
+  wrap(async (req, res) => {
+    const ctx = await requireOrgContext(req);
+    const result = await verifyLogin(ctx.orgId, parseId(req.params.id), ctx.userId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ check: result });
   }),
 );
 

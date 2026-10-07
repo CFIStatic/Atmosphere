@@ -6711,6 +6711,16 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20261007010000_computer_session_verify",
+      "file": "20261007010000_computer_session_verify.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "alters computer_sessions purpose check constraint only; no new durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
     }
   ]
 }

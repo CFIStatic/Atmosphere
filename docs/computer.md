@@ -49,9 +49,10 @@ live view can load.
    computer-use model and runs its actions through a Playwright driver over
    CDP. The card polls `/api/chat-computer/tasks/:id` every 1.5 s for status.
 4. When the site wants a sign-in, a verification code, or shows a captcha, the
-   task pauses as **Needs you**. The member takes control in the live view,
-   does it, and presses Resume. Computer never types passwords or codes and
-   never solves captchas (`solveCaptchas: false`).
+   task pauses as **Needs you**. The task card opens the live view for Take
+   control, the member finishes the step, and presses Resume. Computer never
+   types passwords or codes, never solves captchas (`solveCaptchas: false`),
+   and does not rapid-retry while paused.
 5. Before a consequential click, the agent must call `request_approval`. The
    approval card shows a screenshot, each filled field with its value and
    where it came from, and Approve / Take control / Cancel.
@@ -102,10 +103,29 @@ dependencies. Its actions would also bypass the gate, which must see every
 click and keystroke. Claude computer use plus a thin Playwright driver
 already works on any site, and keeps one place where actions are checked.
 
+## Session durability and Check login
+
+- **Browserbase Context** (one per org, `persist: true`) keeps cookies and
+  logins across tasks. After a real sign-in on Logins (or Needs you for MFA),
+  later tasks reuse that profile unless the site logged the org out.
+- **Check login** on a saved site (`POST /api/chat-computer/logins/:id/verify`)
+  opens the site on that profile, classifies signed-in vs login / MFA /
+  captcha from the live page, reports a plain message, and releases the
+  browser. It never invents credentials or types passwords.
+- **connectUrl recovery.** Browserbase session ids are stored on
+  `computer_sessions`. `connect()` re-fetches `connectUrl` from
+  `GET /v1/sessions/{id}` when the in-memory cache is gone (process restart).
+  That only works while the provider session is still RUNNING. Sessions are
+  created with `keepAlive: false`, so a deploy that drops CDP usually ends
+  the browser; the sweep then marks the task **"Interrupted"**.
+- **Not yet durable:** the agent loop (model messages, step cursor) lives in
+  the worker process. Full resume across deploys would need keep-alive plus
+  persisted agent state. This release only hardens reconnect + warm-up + HITL.
+
 ## Phase 1 limits
 
 - A task that is running when the process restarts is marked failed
-  ("Interrupted") by the sweep. It is not resumed.
+  ("Interrupted") by the sweep. It is not resumed (see above).
 - Status updates come from polling, not a push stream.
 - If the request names no site, `open_url` may go to any http(s) URL. The
   gate still applies.

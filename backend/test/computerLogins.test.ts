@@ -10,12 +10,14 @@ import assert from 'node:assert/strict';
 import { computerSettings } from '../src/computer/config.js';
 import {
   cancelSignIn,
+  classifyWarmup,
   finishSignIn,
   loginsState,
   removeLogin,
   resetSignInsForTests,
   signInLiveView,
   startSignIn,
+  verifyLogin,
 } from '../src/computer/logins.js';
 import { MockComputerProvider, MockSite } from '../src/computer/providers/mock.js';
 import { setComputerProviderForTests } from '../src/computer/providers/index.js';
@@ -245,4 +247,84 @@ test('bad addresses are refused', async () => {
   setup();
   await rejectsWith(startSignIn({ orgId: ORG, userId: USER, url: 'not a url' }), 'bad_request');
   await rejectsWith(startSignIn({ orgId: ORG, userId: USER, url: 'javascript:alert(1)' }), 'bad_request');
+});
+
+test('classifyWarmup: signed-in vs login / MFA / captcha without inventing credentials', () => {
+  const login = { label: 'Outlook', host: 'outlook.office.com' };
+  assert.equal(classifyWarmup(login, {
+    url: 'https://outlook.office.com/mail',
+    hasPasswordField: false,
+    hasOneTimeCodeField: false,
+    hasCaptcha: false,
+    mentionsVerificationCode: false,
+    approvalNumber: null,
+    visibleOtpCode: null,
+  }, 'https://outlook.office.com/mail').status, 'signed_in');
+  assert.equal(classifyWarmup(login, {
+    url: 'https://login.microsoftonline.com/',
+    hasPasswordField: true,
+    hasOneTimeCodeField: false,
+    hasCaptcha: false,
+    mentionsVerificationCode: false,
+    approvalNumber: null,
+    visibleOtpCode: null,
+  }, null).status, 'needs_sign_in');
+  assert.equal(classifyWarmup(login, {
+    url: 'https://login.microsoftonline.com/verify',
+    hasPasswordField: false,
+    hasOneTimeCodeField: true,
+    hasCaptcha: false,
+    mentionsVerificationCode: true,
+    approvalNumber: null,
+    visibleOtpCode: null,
+  }, null).status, 'two_factor');
+  assert.match(classifyWarmup(login, {
+    url: 'https://x',
+    hasPasswordField: false,
+    hasOneTimeCodeField: false,
+    hasCaptcha: true,
+    mentionsVerificationCode: false,
+    approvalNumber: null,
+    visibleOtpCode: null,
+  }, null).message, /never solves captchas/i);
+  assert.equal(classifyWarmup(login, {
+    url: 'https://x',
+    hasPasswordField: false,
+    hasOneTimeCodeField: false,
+    hasCaptcha: false,
+    mentionsVerificationCode: false,
+    approvalNumber: '47',
+    visibleOtpCode: null,
+  }, null).status, 'number_match');
+});
+
+test('Check login: opens the org profile, reports signed-in on the form page, releases the browser', async () => {
+  const h = setup();
+  h.site.page = 'form';
+  const s = await startSignIn({ orgId: ORG, userId: USER, url: 'portal.example-carrier.test', label: 'Carrier' });
+  const saved = await finishSignIn(ORG, s.sessionId, USER);
+  const check = await verifyLogin(ORG, saved.id, USER);
+  assert.equal(check.status, 'signed_in');
+  assert.match(check.message, /signed in/i);
+  assert.ok(h.site.actions.some((a) => a.startsWith('navigate:')));
+  assert.equal(await h.store.liveSession(ORG), null);
+  assert.ok(h.provider.ended.length >= 2);
+});
+
+test('Check login: login page reports needs_sign_in', async () => {
+  const h = setup();
+  const s = await startSignIn({ orgId: ORG, userId: USER, url: 'portal.example-carrier.test', label: 'Carrier' });
+  const saved = await finishSignIn(ORG, s.sessionId, USER);
+  h.site.page = 'login';
+  const check = await verifyLogin(ORG, saved.id, USER);
+  assert.equal(check.status, 'needs_sign_in');
+  assert.match(check.message, /Sign in again/);
+});
+
+test('Check login refuses when a task or sign-in holds the browser', async () => {
+  const h = setup();
+  const s = await startSignIn({ orgId: ORG, userId: USER, url: 'gmail.com', label: 'Gmail' });
+  const saved = await finishSignIn(ORG, s.sessionId, USER);
+  await startSignIn({ orgId: ORG, userId: USER, url: 'outlook.office.com' });
+  await rejectsWith(verifyLogin(ORG, saved.id, USER), 'conflict');
 });

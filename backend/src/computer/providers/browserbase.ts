@@ -7,9 +7,15 @@
  *   default; Computer never does. A captcha pauses the task for a person.
  * - Live-view links come from /debug with a short expiresIn, minted per
  *   viewer. They are returned to that viewer and never stored or logged.
+ * - connectUrl is cached in memory after createSession. On connect, if the
+ *   cache miss (process restart), we re-fetch it from GET /v1/sessions/{id}.
+ *   That only helps while the provider session is still RUNNING (e.g. before
+ *   CDP inactivity ends it). Full task resume across deploys still needs the
+ *   agent loop to be durable; see docs/computer.md.
  *
  * Docs: https://docs.browserbase.com/reference/api/create-a-session,
- * /reference/api/session-live-urls, /features/contexts.
+ * /reference/api/session-live-urls, /features/contexts,
+ * /reference/api/get-a-session.
  */
 import { chromium } from 'playwright-core';
 import { browserbaseCredentials } from '../config.js';
@@ -86,6 +92,9 @@ export class BrowserbaseProvider implements ComputerProvider {
           recordSession: true,
         },
         timeout: Math.min(21_600, Math.max(60, Math.round(input.timeoutSec))),
+        // keepAlive stays false: a deploy still ends the CDP connection and the
+        // agent loop is not durable yet. We re-fetch connectUrl on miss so a
+        // same-process reconnect (or a future keepAlive path) works.
         keepAlive: false,
         userMetadata: { app: 'atmosphere-computer', org: input.orgId },
       },
@@ -100,9 +109,30 @@ export class BrowserbaseProvider implements ComputerProvider {
     };
   }
 
+  /**
+   * Resolve the CDP connect URL: memory cache first, then GET the session.
+   * Never logs or returns the URL to callers outside connect().
+   */
+  private async resolveConnectUrl(providerSessionId: string): Promise<string> {
+    const cached = this.connectUrls.get(providerSessionId);
+    if (cached) return cached;
+    const out = await this.call<{ connectUrl?: string; status?: string }>(
+      'GET',
+      `/v1/sessions/${encodeURIComponent(providerSessionId)}`,
+    );
+    if (!out.connectUrl) {
+      const status = out.status ? ` (status ${out.status})` : '';
+      throw new BrowserbaseError(
+        `Browserbase session connect URL is unavailable${status}. The browser session likely ended when the server restarted.`,
+        410,
+      );
+    }
+    this.connectUrls.set(providerSessionId, out.connectUrl);
+    return out.connectUrl;
+  }
+
   async connect(session: ComputerSessionHandle): Promise<ComputerDriver> {
-    const connectUrl = this.connectUrls.get(session.providerSessionId);
-    if (!connectUrl) throw new BrowserbaseError('Session connect URL is gone (process restarted)', 410);
+    const connectUrl = await this.resolveConnectUrl(session.providerSessionId);
     const browser = await chromium.connectOverCDP(connectUrl, { timeout: 30_000 });
     const context = browser.contexts()[0] ?? (await browser.newContext());
     const page = context.pages()[0] ?? (await context.newPage());
@@ -128,5 +158,15 @@ export class BrowserbaseProvider implements ComputerProvider {
       projectId,
       status: 'REQUEST_RELEASE',
     });
+  }
+
+  /** Tests: drop the in-memory connectUrl cache (simulates a process restart). */
+  clearConnectUrlCacheForTests(): void {
+    this.connectUrls.clear();
+  }
+
+  /** Tests: resolve connectUrl the same way connect() does (cache, then GET session). */
+  resolveConnectUrlForTests(providerSessionId: string): Promise<string> {
+    return this.resolveConnectUrl(providerSessionId);
   }
 }

@@ -99,7 +99,7 @@ export interface ComputerSessionRow {
   browser_seconds: number | null;
   metered_at: string | null;
   created_at: string;
-  /** 'task' = an agent task; 'login' = a person signing in on the Logins page; 'logout' = clearing a removed site. */
+  /** 'task' = agent; 'login' = Logins sign-in; 'logout' = Remove clears cookies; 'verify' = Check login warm-up. */
   purpose: SessionPurpose;
   login_id: string | null;
   target_url: string | null;
@@ -107,7 +107,7 @@ export interface ComputerSessionRow {
   started_by: string | null;
 }
 
-export type SessionPurpose = 'task' | 'login' | 'logout';
+export type SessionPurpose = 'task' | 'login' | 'logout' | 'verify';
 
 export interface ComputerLoginRow {
   id: string;
