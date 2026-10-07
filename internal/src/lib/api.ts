@@ -225,11 +225,12 @@ export const api = {
 
   staffJobLegal: (jobId: string) => request<any>(`/api/legal/jobs/${jobId}`),
 
-  legalActivity: (query?: { q?: string; orgId?: string; actorUserId?: string }) => {
+  legalActivity: (query?: { q?: string; orgId?: string; actorUserId?: string; limit?: number }) => {
     const params = new URLSearchParams();
     if (query?.q) params.set('q', query.q);
     if (query?.orgId) params.set('orgId', query.orgId);
     if (query?.actorUserId) params.set('actorUserId', query.actorUserId);
+    if (query?.limit) params.set('limit', String(query.limit));
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request<{ events: UserActivityEvent[]; count: number }>(`/api/legal/activity${suffix}`);
   },
@@ -244,7 +245,7 @@ export const api = {
     return request<MotionClipsStaffResponse>(`/api/motion-clips/staff${suffix}`);
   },
 
-    exportUrl: (range: RangeParams, dataset = 'all') =>
+  exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
 
   productHealth: (weeks = 12): Promise<ProductHealth> =>

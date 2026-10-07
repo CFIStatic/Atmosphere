@@ -144,6 +144,25 @@ h3 {
   .btn-primary {
     @apply inline-flex items-center justify-center gap-1.5 border border-ink-900 bg-ink-900 px-3 py-1.5 text-[13px] font-medium text-paper-0 transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40;
   }
+  /* Compact secondary action, e.g. Download on a table header. */
+  .btn-quiet {
+    @apply inline-flex items-center justify-center gap-1.5 border border-line bg-paper-0 px-2 py-[3px] text-[12px] font-medium text-ink-700 transition hover:border-line-strong hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  /* Sidebar rows: one height, one rhythm, a 2px accent bar on the active page. */
+  .nav-item {
+    @apply relative flex h-8 items-center gap-2.5 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500;
+  }
+  .nav-item-active {
+    @apply bg-brand-50 font-semibold text-ink-900;
+  }
+  .nav-item-active::before {
+    content: '';
+    @apply absolute bottom-1 left-0 top-1 w-[2px] bg-brand-500;
+  }
+  .btn:focus-visible,
+  .btn-primary:focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-1 ring-offset-paper-0;
+  }
   .field {
     @apply w-full border border-line-strong bg-paper-0 px-2.5 py-1.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
   }

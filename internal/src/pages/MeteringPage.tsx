@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, defaultRange } from '../lib/api';
 import type { MeteringPayload } from '../lib/types';
 import { count, nanosToMoney } from '../lib/format';
-import { SectionHeading, StatTile } from '../components/ui';
+import { ErrorLine, KpiStrip, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import { nanosToUsd } from '../lib/excel';
 
 export function MeteringPage() {
   const range = useMemo(() => defaultRange(), []);
@@ -24,69 +26,127 @@ export function MeteringPage() {
     };
   }, [range]);
 
+  if (!data && !error) return <Loading label="Loading metering" />;
   const totals = data?.totals;
+  const byCustomer = data?.byCustomer ?? [];
+  const byModel = data?.byModel ?? [];
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Metering</h1>
-      <p className="mt-1 text-sm text-ink-500">
-        AI cost versus compute — internal only. Customers never see token-level cost.
-      </p>
-      {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
+      <PageHeader
+        eyebrow="AI cost & usage"
+        title="Metering"
+        subtitle="AI cost versus compute, trailing twelve months. Internal only: customers never see token-level cost."
+      />
+      {error && <ErrorLine message={error} />}
       {totals && (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label="AI cost" value={nanosToMoney(totals.aiCostNanos)} />
-          <StatTile label="Events" value={count(totals.eventCount)} />
-          <StatTile label="Compute units" value={count(totals.computeUnits)} />
-          <StatTile label="Orgs" value={count(totals.distinctOrgs)} />
-        </div>
+        <KpiStrip
+          download={{ table: 'metering-totals', label: 'metering totals' }}
+          items={[
+            { label: 'AI cost', unit: 'USD, trailing 12 months', value: nanosToMoney(totals.aiCostNanos), raw: nanosToUsd(totals.aiCostNanos), rawType: 'usd' },
+            { label: 'Events', unit: 'metered events', value: count(totals.eventCount), raw: totals.eventCount, rawType: 'integer' },
+            { label: 'Compute units', unit: 'count', value: count(totals.computeUnits), raw: totals.computeUnits, rawType: 'integer' },
+            { label: 'Orgs', unit: 'with metered usage', value: count(totals.distinctOrgs), raw: totals.distinctOrgs, rawType: 'integer' },
+          ]}
+        />
       )}
-      <SectionHeading title="By customer" />
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Organization</th>
-              <th className="px-4 py-3 text-right">Events</th>
-              <th className="px-4 py-3 text-right">Jobs</th>
-              <th className="px-4 py-3 text-right">AI cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.byCustomer ?? []).map((row) => (
-              <tr key={row.orgId} className="border-t border-line">
-                <td className="px-4 py-3 font-medium">{row.orgName}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctJobs)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.aiCostNanos)}</td>
+
+      <Section
+        title="By customer"
+        note={`${count(byCustomer.length)} organizations`}
+        actions={
+          <DownloadButton
+            table="metering-by-customer"
+            label="metering by customer"
+            disabled={byCustomer.length === 0}
+            sheets={() => [
+              {
+                name: 'By customer',
+                columns: [
+                  { header: 'Organization' },
+                  { header: 'Org id' },
+                  { header: 'Events', type: 'integer' },
+                  { header: 'Jobs', type: 'integer' },
+                  { header: 'Compute units', type: 'integer' },
+                  { header: 'AI cost, USD', type: 'usd', format: '"$"#,##0.0000' },
+                ],
+                rows: byCustomer.map((r) => [r.orgName, r.orgId, r.eventCount, r.distinctJobs, r.computeUnits, nanosToUsd(r.aiCostNanos)]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[560px]">
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th className="num">Events</th>
+                <th className="num">Jobs</th>
+                <th className="num">AI cost</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <SectionHeading title="By model" />
-      <div className="overflow-hidden border border-line bg-paper-0">
-        <table className="w-full text-sm">
-          <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
-            <tr>
-              <th className="px-4 py-3">Provider</th>
-              <th className="px-4 py-3">Model</th>
-              <th className="px-4 py-3 text-right">Events</th>
-              <th className="px-4 py-3 text-right">AI cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.byModel ?? []).map((row) => (
-              <tr key={`${row.provider}-${row.model}`} className="border-t border-line">
-                <td className="px-4 py-3">{row.provider}</td>
-                <td className="px-4 py-3 font-mono text-sm">{row.model}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.aiCostNanos)}</td>
+            </thead>
+            <tbody>
+              {byCustomer.map((row) => (
+                <tr key={row.orgId}>
+                  <td className="font-medium text-ink-900">{row.orgName}</td>
+                  <td className="num">{count(row.eventCount)}</td>
+                  <td className="num">{count(row.distinctJobs)}</td>
+                  <td className="num">{nanosToMoney(row.aiCostNanos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section
+        title="By model"
+        note={`${count(byModel.length)} models`}
+        actions={
+          <DownloadButton
+            table="metering-by-model"
+            label="metering by model"
+            disabled={byModel.length === 0}
+            sheets={() => [
+              {
+                name: 'By model',
+                columns: [
+                  { header: 'Provider' },
+                  { header: 'Model' },
+                  { header: 'Events', type: 'integer' },
+                  { header: 'AI cost, USD', type: 'usd', format: '"$"#,##0.0000' },
+                ],
+                rows: byModel.map((r) => [r.provider, r.model, r.eventCount, nanosToUsd(r.aiCostNanos)]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[560px]">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Model</th>
+                <th className="num">Events</th>
+                <th className="num">AI cost</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {byModel.map((row) => (
+                <tr key={`${row.provider}-${row.model}`}>
+                  <td>{row.provider}</td>
+                  <td className="text-ink-700">{row.model}</td>
+                  <td className="num">{count(row.eventCount)}</td>
+                  <td className="num">{nanosToMoney(row.aiCostNanos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
     </div>
   );
 }

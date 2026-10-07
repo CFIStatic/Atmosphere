@@ -4,7 +4,23 @@ import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { canManageAccess } from '../lib/access';
 import type { AccessRequest } from '../lib/types';
-import { EmptyState, SectionHeading, StatusPill } from '../components/ui';
+import { EmptyState, StatusPill } from '../components/ui';
+import { ErrorLine, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import type { ExportSheet } from '../lib/excel';
+
+function requestsSheet(name: string, rows: AccessRequest[]): ExportSheet {
+  return {
+    name,
+    columns: [
+      { header: 'Employee' },
+      { header: 'Email' },
+      { header: 'Status' },
+      { header: 'Last requested', type: 'datetime' },
+    ],
+    rows: rows.map((row) => [fullName(row), row.email, row.status, row.lastRequestedAt]),
+  };
+}
 
 function fullName(row: AccessRequest): string {
   return `${row.firstName} ${row.lastName}`.replace(/\s+/g, ' ').trim();
@@ -59,41 +75,47 @@ export function AccessPage() {
   }
 
   if (loading && requests.length === 0) {
-    return <p className="text-ink-500">Loading access requests…</p>;
+    return <Loading label="Loading access requests" />;
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Access</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Employees who asked to join Atmosphere Analytics. Approve them here — they then
-            sign in with the same email and password as their Atmosphere Platform account.
-          </p>
-        </div>
-        {pending.length > 0 && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() =>
-              void run('all', async () => {
-                await api.approveAllAccessRequests();
-              })
-            }
-            className="bg-ink-900 px-4 py-2 text-sm font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
-          >
-            {busy === 'all' ? 'Approving…' : `Approve all (${pending.length})`}
-          </button>
-        )}
-      </div>
-
-      {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
-
-      <SectionHeading
-        title="Waiting for approval"
-        hint={pending.length === 1 ? '1 employee' : `${pending.length} employees`}
+      <PageHeader
+        eyebrow="System & access"
+        title="Access"
+        subtitle="Employees who asked to join Atmosphere Analytics. Approve them here; they then sign in with the same email and password as their Atmosphere Platform account."
+        actions={
+          pending.length > 0 ? (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() =>
+                void run('all', async () => {
+                  await api.approveAllAccessRequests();
+                })
+              }
+              className="btn-primary"
+            >
+              {busy === 'all' ? 'Approving…' : `Approve all (${pending.length})`}
+            </button>
+          ) : undefined
+        }
       />
+
+      {error && <ErrorLine message={error} />}
+
+      <Section
+        title="Waiting for approval"
+        note={pending.length === 1 ? '1 employee' : `${pending.length} employees`}
+        actions={
+          <DownloadButton
+            table="access-requests-pending"
+            label="pending access requests"
+            disabled={pending.length === 0}
+            sheets={() => [requestsSheet('Waiting for approval', pending)]}
+          />
+        }
+      >
       {pending.length === 0 ? (
         <EmptyState
           title="No pending requests"
@@ -108,11 +130,22 @@ export function AccessPage() {
         />
       )}
 
+      </Section>
+
       {reviewed.length > 0 && (
-        <>
-          <SectionHeading title="Reviewed" hint={`${reviewed.length} recent`} />
+        <Section
+          title="Reviewed"
+          note={`${reviewed.length} recent`}
+          actions={
+            <DownloadButton
+              table="access-requests-reviewed"
+              label="reviewed access requests"
+              sheets={() => [requestsSheet('Reviewed', reviewed)]}
+            />
+          }
+        >
           <RequestTable rows={reviewed} busy={busy} />
-        </>
+        </Section>
       )}
     </div>
   );
@@ -130,34 +163,34 @@ function RequestTable({
   onDeny?: (id: string) => void;
 }) {
   return (
-    <div className="overflow-hidden border border-line bg-paper-0">
-      <table className="w-full text-sm">
-        <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
+    <div className="overflow-x-auto">
+      <table className="report-table min-w-[640px]">
+        <thead>
           <tr>
-            <th className="px-4 py-3">Employee</th>
-            <th className="px-4 py-3">Email</th>
-            <th className="px-4 py-3">Requested</th>
-            <th className="px-4 py-3">Status</th>
-            {onApprove && <th className="px-4 py-3 text-right">Actions</th>}
+            <th>Employee</th>
+            <th>Email</th>
+            <th>Requested</th>
+            <th>Status</th>
+            {onApprove && <th className="num">Actions</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-t border-line">
-              <td className="px-4 py-3 font-medium">{fullName(row)}</td>
-              <td className="px-4 py-3 font-mono text-ink-600">{row.email}</td>
-              <td className="px-4 py-3 text-ink-500">{requestedLabel(row.lastRequestedAt)}</td>
-              <td className="px-4 py-3">
+            <tr key={row.id}>
+              <td className="font-medium text-ink-900">{fullName(row)}</td>
+              <td className="text-ink-600">{row.email}</td>
+              <td className="whitespace-nowrap text-ink-600">{requestedLabel(row.lastRequestedAt)}</td>
+              <td>
                 <StatusPill status={row.status} />
               </td>
               {onApprove && (
-                <td className="px-4 py-3 text-right">
+                <td className="num">
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
                       disabled={busy !== null}
                       onClick={() => onApprove(row.id)}
-                      className="bg-ink-900 px-3 py-1 text-xs font-medium text-paper-0 hover:bg-ink-800 disabled:opacity-60"
+                      className="btn-primary px-2.5 py-1 text-[12px]"
                     >
                       {busy === row.id ? 'Saving…' : 'Approve'}
                     </button>
@@ -166,7 +199,7 @@ function RequestTable({
                         type="button"
                         disabled={busy !== null}
                         onClick={() => onDeny(row.id)}
-                        className="px-3 py-1 text-xs text-ink-500 hover:bg-paper-200 hover:text-ink-800 disabled:opacity-60"
+                        className="btn px-2.5 py-1 text-[12px]"
                       >
                         Deny
                       </button>

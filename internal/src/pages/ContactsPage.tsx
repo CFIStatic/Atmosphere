@@ -7,6 +7,8 @@ import { downloadCsv, toCsv } from '../lib/csv';
 import { STATUSES, STATUS_LABEL, planLabel, planOptions, searchContacts } from '../lib/contacts';
 import type { Contact, ContactSourceId, ContactStatus } from '../lib/types';
 import { ErrorLine, Footnotes, KpiStrip, Loading, PageHeader, Section, Tag } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import type { ExportSheet } from '../lib/excel';
 
 function statusTone(status: ContactStatus): 'good' | 'bad' | 'accent' | 'neutral' {
   if (status === 'active') return 'good';
@@ -59,6 +61,34 @@ export function ContactsPage() {
     downloadCsv(`atmosphere-contacts-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
+  function contactsSheet(): ExportSheet {
+    return {
+      name: 'Contacts',
+      columns: [
+        { header: 'Name' },
+        { header: 'Email' },
+        { header: 'Company' },
+        { header: 'Org id' },
+        { header: 'Plan' },
+        { header: 'Subscription status' },
+        { header: 'Created', type: 'date' },
+        { header: 'Source' },
+        { header: 'Unsubscribed' },
+      ],
+      rows: filtered.map((c) => [
+        c.name,
+        c.email,
+        c.company,
+        c.orgId,
+        planLabel(c.plan),
+        STATUS_LABEL[c.status],
+        c.createdAt,
+        c.sources.map((s) => (s === 'stripe' ? 'Stripe' : 'CRM')).join('; '),
+        c.suppressed,
+      ]),
+    };
+  }
+
   if (loading && !data) return <Loading label="Loading contacts from Stripe" />;
 
   return (
@@ -92,13 +122,20 @@ export function ContactsPage() {
       {data && (
         <>
           <KpiStrip
+            download={{ table: 'contacts-summary', label: 'contact counts' }}
             items={[
-              { label: 'Contacts', unit: 'unique emails, all sources', value: count(contacts.length) },
-              { label: 'Active subscription', unit: 'count', value: count(byStatus('active')) },
-              { label: 'Trialing', unit: 'count', value: count(byStatus('trialing')) },
-              { label: 'Past due', unit: 'count', value: count(byStatus('past_due')) },
-              { label: 'Canceled or none', unit: 'count', value: count(byStatus('canceled') + byStatus('none')) },
-              { label: 'Unsubscribed', unit: 'never emailed', value: count(data.suppressedCount) },
+              { label: 'Contacts', unit: 'unique emails, all sources', value: count(contacts.length), raw: contacts.length, rawType: 'integer' },
+              { label: 'Active subscription', unit: 'count', value: count(byStatus('active')), raw: byStatus('active'), rawType: 'integer' },
+              { label: 'Trialing', unit: 'count', value: count(byStatus('trialing')), raw: byStatus('trialing'), rawType: 'integer' },
+              { label: 'Past due', unit: 'count', value: count(byStatus('past_due')), raw: byStatus('past_due'), rawType: 'integer' },
+              {
+                label: 'Canceled or none',
+                unit: 'count',
+                value: count(byStatus('canceled') + byStatus('none')),
+                raw: byStatus('canceled') + byStatus('none'),
+                rawType: 'integer',
+              },
+              { label: 'Unsubscribed', unit: 'never emailed', value: count(data.suppressedCount), raw: data.suppressedCount, rawType: 'integer' },
             ]}
           />
 
@@ -127,7 +164,18 @@ export function ContactsPage() {
             </ul>
           </Section>
 
-          <Section title="Directory" note={`${count(filtered.length)} of ${count(contacts.length)} contacts shown`}>
+          <Section
+            title="Directory"
+            note={`${count(filtered.length)} of ${count(contacts.length)} contacts shown`}
+            actions={
+              <DownloadButton
+                table="contacts"
+                label="filtered contacts"
+                disabled={filtered.length === 0}
+                sheets={() => [contactsSheet()]}
+              />
+            }
+          >
             <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto_auto] lg:items-center">
               <input
                 type="search"
@@ -179,7 +227,7 @@ export function ContactsPage() {
                 />
                 Hide unsubscribed
               </label>
-              <button type="button" className="btn" onClick={exportCsv} disabled={filtered.length === 0}>
+              <button type="button" className="btn-quiet" onClick={exportCsv} disabled={filtered.length === 0}>
                 Export CSV
               </button>
             </div>
@@ -231,7 +279,7 @@ export function ContactsPage() {
             </div>
             {filtered.length > 500 && (
               <p className="mt-2 text-[12px] text-ink-500">
-                Showing the first 500 rows. Export CSV includes all {count(filtered.length)}.
+                Showing the first 500 rows. Download (Excel) and Export CSV include all {count(filtered.length)}.
               </p>
             )}
           </Section>
@@ -244,7 +292,7 @@ export function ContactsPage() {
           'Source: Stripe customers (customers.list with subscriptions), read server-side with the existing Stripe key and cached for five minutes. Deleted customers and customers without an email are skipped. The first 5,000 customers are read.',
           'Company: the Atmosphere organization named in the customer’s org_id metadata. Plan and status: the most engaged subscription (active, then trialing, past due, canceled).',
           'Unsubscribed: the address is on the campaign suppression list (unsubscribe link, bounce, complaint or manual) and is never included in a send.',
-          'CSV export contains the filtered rows. Cells that begin with =, +, −, @ are prefixed so spreadsheets do not run them as formulas.',
+          'Download (Excel .xlsx) and CSV export contain every filtered row, not just the 500 on screen. In the Excel file every cell is stored as text, a number or a date, never a formula; in the CSV, cells that begin with =, +, −, @ are prefixed so spreadsheets do not run them as formulas.',
         ]}
       />
     </div>

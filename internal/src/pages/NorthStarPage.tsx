@@ -1,6 +1,37 @@
 import { useProductHealth } from '../hooks/useProductHealth';
 import { count, decimal, pctChange, weekLabel } from '../lib/format';
 import { Delta, ErrorLine, Footnotes, Fn, LineChart, Loading, PageHeader, Section } from '../components/report';
+import { DownloadButton } from '../components/DownloadButton';
+import type { ExportSheet } from '../lib/excel';
+import type { NorthStarWeek } from '../lib/types';
+
+function weeklySheet(name: string, rows: NorthStarWeek[]): ExportSheet {
+  return {
+    name,
+    columns: [
+      { header: 'Week of (Mon, UTC)', type: 'date' },
+      { header: 'Week in progress' },
+      { header: 'Paying orgs', type: 'integer' },
+      { header: 'Paying seats', type: 'integer' },
+      { header: 'Films', type: 'integer' },
+      { header: 'Hours, paying', type: 'number' },
+      { header: 'Hours, all orgs', type: 'number' },
+      { header: 'Hours per seat', type: 'number' },
+      { header: 'Change vs prior week', type: 'percent' },
+    ],
+    rows: rows.map((w, i) => [
+      w.weekStart,
+      w.partial,
+      w.payingOrgs,
+      w.payingSeats,
+      w.films,
+      w.hoursPaying,
+      w.hoursAll,
+      w.hoursPerSeat,
+      w.partial ? null : pctChange(w.hoursPerSeat, rows[i + 1]?.hoursPerSeat),
+    ]),
+  };
+}
 
 /** Detail page for the north star: the weekly chart, every week's inputs, and the definition. */
 export function NorthStarPage() {
@@ -25,7 +56,17 @@ export function NorthStarPage() {
 
       {h && (
         <>
-          <Section title="Hours filmed per paying seat, weekly" note="Complete weeks, Monday–Sunday UTC">
+          <Section
+            title="Hours filmed per paying seat, weekly"
+            note="Complete weeks, Monday–Sunday UTC"
+            actions={
+              <DownloadButton
+                table="north-star-chart"
+                label="chart data"
+                sheets={() => [weeklySheet('North star chart', [...complete].reverse())]}
+              />
+            }
+          >
             <LineChart
               ariaLabel="Hours filmed per paying seat by week"
               format={(v) => decimal(v, 1)}
@@ -36,7 +77,17 @@ export function NorthStarPage() {
             />
           </Section>
 
-          <Section title="Weekly detail" note="Most recent first; the week in progress is marked “to date”">
+          <Section
+            title="Weekly detail"
+            note="Most recent first; the week in progress is marked “to date”"
+            actions={
+              <DownloadButton
+                table="north-star-weekly-detail"
+                label="weekly detail"
+                sheets={() => [weeklySheet('Weekly detail', [...weekly].reverse())]}
+              />
+            }
+          >
             <div className="overflow-x-auto">
               <table className="report-table min-w-[720px]">
                 <thead>

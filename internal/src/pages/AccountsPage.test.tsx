@@ -21,7 +21,7 @@ describe('AccountsPage', () => {
         <AccountsPage />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'Accounts' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Organizations' })).toBeInTheDocument();
     expect(screen.getByText('Harbor Mitigation Co')).toBeInTheDocument();
     expect(screen.getByText('Northwind Restoration')).toBeInTheDocument();
     expect(screen.getByRole('searchbox')).toBeInTheDocument();
