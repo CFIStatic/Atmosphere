@@ -6,6 +6,13 @@
 # the office. POSTs to /api must reach the Atmosphere BFF — a static-only
 # nginx answers POST with 405 HTML, which the app surfaces as "Request failed."
 
+# Scripts are stamped with ?v=<content hash> at image build (see Dockerfile),
+# so a versioned request is immutable; an unversioned one must revalidate.
+map $arg_v $fc_static_cache {
+  ""      "no-cache";
+  default "public, max-age=31536000, immutable";
+}
+
 server {
   listen ${PORT};
   server_name _;
@@ -75,8 +82,23 @@ server {
     return 503 '{"error":"Atmosphere API is not reachable. Set API_UPSTREAM on this service to the Atmosphere APIs private HTTP URL.","code":"backend_unreachable"}';
   }
 
+  location ~ ^(/fieldcapture)?/js/ {
+    add_header Cache-Control $fc_static_cache;
+    include /etc/nginx/security-headers.conf;
+    try_files $uri =404;
+  }
+
+  # Icons are linked with ?v=N; a day of caching is safe.
+  location ~ ^(/fieldcapture)?/icons/ {
+    add_header Cache-Control "public, max-age=86400";
+    include /etc/nginx/security-headers.conf;
+    try_files $uri =404;
+  }
+
+  # HTML (and the SPA fallback): keep a copy but revalidate every load, so a
+  # deploy's new script hashes are seen immediately.
   location / {
-    add_header Cache-Control "no-store";
+    add_header Cache-Control "no-cache";
     include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }

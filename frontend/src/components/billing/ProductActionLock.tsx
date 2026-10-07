@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { getBillingOnboardingShared } from '../../lib/billingOnboardingShared';
 import { billingStepHref } from '../../lib/firstRun';
 import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../../lib/appShell';
 
@@ -16,9 +17,8 @@ export function useProductActionsLocked(): boolean {
   const [locked, setLocked] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    const load = api.getBillingOnboarding;
-    if (typeof load !== 'function') return;
-    load()
+    if (typeof api.getBillingOnboarding !== 'function') return;
+    getBillingOnboardingShared(api.getBillingOnboarding)
       .then((status) => {
         if (!cancelled) setLocked(Boolean(status?.required && !status?.complete));
       })

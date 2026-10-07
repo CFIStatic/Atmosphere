@@ -21,6 +21,13 @@ WORKDIR /tmp/fieldcapture-src
 COPY fieldcapture/index.html fieldcapture/manifest.webmanifest ./
 COPY fieldcapture/js ./js
 COPY fieldcapture/icons ./icons
+# Stamp each script tag with its content hash so nginx can cache js/ for a
+# year (versioned URL changes whenever the file does).
+RUN for f in js/*.js; do \
+      n=$(basename "$f"); h=$(sha256sum "$f" | cut -c1-12); \
+      sed -i "s#js/${n}?v=[^\"]*\"#js/${n}?v=${h}\"#g" index.html; \
+    done \
+  && grep -q 'js/app.js?v=' index.html
 RUN mkdir -p /usr/share/nginx/html/fieldcapture \
   && cp -a /tmp/fieldcapture-src/. /usr/share/nginx/html/ \
   && cp -a /tmp/fieldcapture-src/. /usr/share/nginx/html/fieldcapture/ \
