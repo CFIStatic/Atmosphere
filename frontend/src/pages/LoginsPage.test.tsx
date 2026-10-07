@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComputerLogin, ComputerLoginsState, ComputerSignIn, LoginCatalog } from '../lib/computer';
-import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { LoginsPage } from './LoginsPage';
 
 const computerLogins = vi.fn();
@@ -152,6 +152,21 @@ beforeEach(() => {
   scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 
+/** Like the app's sidebar rail (an iframe): it asks the app to navigate('/logins'), even when already there. */
+function RailLogins() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/logins')}>
+        Rail Logins
+      </button>
+      <button type="button" onClick={() => navigate(-1)}>
+        Browser Back
+      </button>
+    </>
+  );
+}
+
 function Where() {
   const loc = useLocation();
   return <output data-testid="where">{`${loc.pathname}${loc.search}`}</output>;
@@ -164,6 +179,7 @@ function renderPage(entry = '/logins') {
     <MemoryRouter initialEntries={[entry]}>
       <nav>
         <Link to="/logins">Sidebar Logins</Link>
+        <RailLogins />
       </nav>
       <Where />
       <Routes>
@@ -391,6 +407,17 @@ describe('LoginsPage', () => {
     expect(screen.getByTestId('logins-manage')).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Sidebar Logins' }));
     expect(screen.queryByTestId('logins-manage')).toBeNull();
+    // The rail's navigate('/logins') does the same.
+    await user.click(screen.getByTestId('logins-catalog-outlook'));
+    await user.click(screen.getByRole('button', { name: 'Rail Logins' }));
+    expect(screen.queryByTestId('logins-manage')).toBeNull();
+    expect(screen.getByTestId('logins-catalog')).toBeInTheDocument();
+    // Browser Back from an open site returns to the list too.
+    await user.click(screen.getByTestId('logins-catalog-gmail'));
+    expect(screen.getByTestId('logins-add-form')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Browser Back' }));
+    expect(where()).toBe('/logins');
+    expect(screen.queryByTestId('logins-add-form')).toBeNull();
     // Clicking it on the list itself clears the search.
     await user.type(screen.getByLabelText('Search sites'), 'slack');
     await user.click(screen.getByRole('link', { name: 'Sidebar Logins' }));

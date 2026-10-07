@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
@@ -61,7 +62,14 @@ function errorText(err: unknown, fallback: string): string {
   return fallback;
 }
 
-function scrollToTop() {
+/**
+ * Back to the top of the page. The page scrolls the window on desktop, but inside the phone
+ * shell it scrolls an inner container, so reset every scrolled ancestor too.
+ */
+function scrollToTop(from?: HTMLElement | null) {
+  for (let el = from?.parentElement ?? null; el; el = el.parentElement) {
+    if (el.scrollTop > 0) el.scrollTop = 0;
+  }
   try {
     window.scrollTo({ top: 0 });
   } catch {
@@ -165,7 +173,7 @@ function BackToList({ onClick }: { onClick: () => void }) {
   );
 }
 
-const cardClass = 'rounded-2xl border border-line bg-paper-0 p-4 sm:p-5';
+const cardClass = 'max-w-xl rounded-2xl border border-line bg-paper-0 p-4 sm:p-5';
 
 interface Credentials {
   username: string;
@@ -604,6 +612,7 @@ export function LoginsPage() {
     text: string;
   } | null>(null);
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigationType = useNavigationType();
@@ -652,7 +661,7 @@ export function LoginsPage() {
 
   // Opening or closing a site starts at the top of the page.
   useEffect(() => {
-    scrollToTop();
+    scrollToTop(rootRef.current);
   }, [selectionKey]);
 
   // A fresh visit to the list (the sidebar's Logins link, even when already here) starts clean.
@@ -702,7 +711,7 @@ export function LoginsPage() {
     const fromList = (location.state as { fromList?: boolean } | null)?.fromList;
     if (fromList && hasSelection) navigate(-1);
     else setParams({}, { replace: true });
-    scrollToTop();
+    scrollToTop(rootRef.current);
   }
 
   function cancelToList() {
@@ -923,7 +932,7 @@ export function LoginsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl" data-testid="logins-page">
+    <div ref={rootRef} className="mx-auto w-full max-w-4xl" data-testid="logins-page">
       <header>
         <h1 className="text-xl font-semibold text-ink-900">Logins</h1>
         <p className="mt-1 text-sm text-ink-600" data-testid="logins-password-line">
