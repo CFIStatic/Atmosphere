@@ -1,5 +1,5 @@
-import { CircleCheck, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { CircleCheck, Plus, Search } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   groupLoginCatalog,
   type ComputerLogin,
@@ -91,33 +91,8 @@ export function HostLogo({
   );
 }
 
-export const TWO_STEP_LINE = 'You’ll be asked for a code when signing in.';
-export const SSO_LINE =
-  'Company accounts may sign in through Google, Microsoft or another single sign-on page.';
-
-/** Small badges under a site name: code at sign-in, single sign-on. */
-export function SiteBadges({ site }: { site: LoginCatalogEntry }) {
-  return (
-    <span className="mt-0.5 flex flex-wrap gap-1">
-      {site.twoStep === 'likely' ? (
-        <span
-          className="rounded bg-caution-50 px-1.5 py-0.5 text-[10px] font-semibold text-ink-800"
-          title={TWO_STEP_LINE}
-        >
-          Code at sign-in
-        </span>
-      ) : null}
-      {site.sso ? (
-        <span
-          className="rounded bg-paper-50 px-1.5 py-0.5 text-[10px] font-semibold text-ink-700"
-          title={SSO_LINE}
-        >
-          Single sign-on
-        </span>
-      ) : null}
-    </span>
-  );
-}
+/** One small muted line for sites that usually ask for a code at sign-in. */
+export const CODE_LINE = 'This site may send a code; Computer will ask you for it.';
 
 /** The small green check on a site that already has a saved login. */
 export function SavedCheck() {
@@ -135,180 +110,200 @@ export function SavedCheck() {
 }
 
 const tileClass =
-  'flex items-start gap-2.5 rounded-lg border border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
+  'flex min-w-0 items-center gap-2.5 rounded-xl border border-line bg-paper-0 px-3 py-2.5 text-left transition hover:border-brand-600 focus-visible:border-brand-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
 
-function attentionOf(login: ComputerLogin | undefined): boolean {
-  return login?.credential?.status === 'needs_attention';
-}
+const gridClass = 'grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3';
 
-function AttentionLine() {
-  return (
-    <span className="block text-[11px] font-semibold text-danger-700" data-testid="logins-tile-attention">
-      Password needs attention
-    </span>
-  );
-}
-
-/** A saved login that isn't a catalog site (a custom site): same tile, with the check. */
-export function SavedLoginTile({
-  login,
-  onPick,
+function Tile({
+  logo,
+  name,
+  saved,
+  attention,
+  disabled,
+  onClick,
+  testId,
 }: {
-  login: ComputerLogin;
-  onPick: (login: ComputerLogin) => void;
+  logo: ReactNode;
+  name: string;
+  saved: boolean;
+  attention?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  testId: string;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onPick(login)}
+      onClick={onClick}
+      disabled={disabled}
       className={tileClass}
-      data-testid={`logins-saved-${login.id}`}
-      data-saved="true"
+      data-testid={testId}
+      data-saved={saved ? 'true' : undefined}
     >
-      <HostLogo host={login.host} name={login.label} />
-      <span className="min-w-0">
-        <span className="flex items-center gap-1">
-          <span className="truncate text-sm font-semibold text-ink-900">{login.label}</span>
-          <SavedCheck />
+      {logo}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-semibold text-ink-900">{name}</span>
+          {saved ? <SavedCheck /> : null}
         </span>
-        <span className="block truncate text-[11px] text-ink-600">{login.host}</span>
-        {attentionOf(login) ? <AttentionLine /> : null}
+        {attention ? (
+          <span
+            className="block truncate text-[11px] font-semibold text-danger-700"
+            data-testid="logins-tile-attention"
+          >
+            Password needs attention
+          </span>
+        ) : null}
       </span>
     </button>
   );
 }
 
+const fold = (s: string) =>
+  s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** A saved login: the catalog site it matched (if any), for its name and logo. */
+export interface SavedEntry {
+  login: ComputerLogin;
+  site: LoginCatalogEntry | null;
+}
+
+/**
+ * The site list: search, "Your logins" (every saved site, checked) first, then the catalog by
+ * category (sites not saved yet), then Custom website. No inner scroll; the page scrolls.
+ */
 export function LoginCatalogPicker({
   catalog,
+  savedEntries,
+  query,
+  onQueryChange,
   onPick,
-  onCustom,
   onPickLogin,
-  saved,
-  otherLogins = [],
+  onCustom,
   disabled = false,
 }: {
-  catalog: LoginCatalog;
+  catalog: LoginCatalog | null;
+  /** Every saved login, in list order, with its catalog site when it matched one. */
+  savedEntries: SavedEntry[];
+  query: string;
+  onQueryChange: (next: string) => void;
   /** A site without a saved login: start adding it. */
   onPick: (site: LoginCatalogEntry) => void;
-  onCustom: () => void;
-  /** A site with a saved login (catalog or custom): open its actions. */
+  /** A saved site: open its actions. */
   onPickLogin: (login: ComputerLogin) => void;
-  /** Saved logins by catalog site id (those sites get the green check). */
-  saved: ReadonlyMap<string, ComputerLogin>;
-  /** Saved logins that match no catalog site, shown as tiles at the end of the grid. */
-  otherLogins?: ComputerLogin[];
+  onCustom: () => void;
   /** New sign-ins can't start right now; saved sites stay open so they can still be managed. */
   disabled?: boolean;
 }) {
-  const [query, setQuery] = useState('');
-  const groups = useMemo(() => groupLoginCatalog(catalog, query), [catalog, query]);
-  const others = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
-      ? otherLogins.filter((l) => `${l.label} ${l.host}`.toLowerCase().includes(q))
-      : otherLogins;
-  }, [otherLogins, query]);
-  const matches = groups.reduce((n, g) => n + g.sites.length, 0) + others.length;
+  const savedSiteIds = useMemo(
+    () => new Set(savedEntries.flatMap((e) => (e.site ? [e.site.id] : []))),
+    [savedEntries],
+  );
+  const groups = useMemo(() => {
+    if (!catalog) return [];
+    const unsaved = { ...catalog, sites: catalog.sites.filter((s) => !savedSiteIds.has(s.id)) };
+    return groupLoginCatalog(unsaved, query);
+  }, [catalog, savedSiteIds, query]);
+  const yours = useMemo(() => {
+    const q = fold(query);
+    if (!q) return savedEntries;
+    return savedEntries.filter((e) =>
+      [e.login.label, e.login.host, e.site?.name ?? '', ...(e.site?.aliases ?? [])].some((t) =>
+        fold(t).includes(q),
+      ),
+    );
+  }, [savedEntries, query]);
+  const nothing = query.trim() !== '' && yours.length === 0 && groups.length === 0;
+
   return (
     <div data-testid="logins-catalog">
-      {/* The search bar sits at the very top and filters every site by name, category or address as you type. */}
-      <div className="sticky top-0 z-10 bg-paper-0 pb-2">
-        <div className="relative">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-600"
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search sites by name or category: Outlook, QuickBooks, Restoration…"
-            className="w-full rounded-xl border-2 border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 shadow-sm outline-none transition focus:border-brand-600"
-            autoComplete="off"
-            autoFocus
-            aria-label="Search sites"
-            data-testid="logins-catalog-search"
-          />
-        </div>
-        <p
-          className="mt-1.5 text-xs text-ink-600"
-          aria-live="polite"
-          data-testid="logins-catalog-count"
-        >
-          {query.trim()
-            ? `${matches} ${matches === 1 ? 'site matches' : 'sites match'} “${query.trim()}”`
-            : `${catalog.sites.length} sites, ready to sign in with a saved login`}
-        </p>
+      <div className="relative">
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-500"
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search sites"
+          className="w-full rounded-xl border border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 outline-none transition placeholder:text-ink-500 focus:border-brand-600"
+          autoComplete="off"
+          autoFocus
+          aria-label="Search sites"
+          data-testid="logins-catalog-search"
+        />
       </div>
-      <div className="mt-1 max-h-[28rem] space-y-4 overflow-y-auto pr-1">
+
+      <div className="mt-5 space-y-6">
+        {yours.length > 0 ? (
+          <section aria-label="Your logins" data-testid="logins-yours">
+            <h2 className="mb-2 text-sm font-semibold text-ink-900">Your logins</h2>
+            <div className={gridClass}>
+              {yours.map(({ login, site }) => (
+                <Tile
+                  key={login.id}
+                  logo={
+                    site ? (
+                      <SiteLogo site={site} />
+                    ) : (
+                      <HostLogo host={login.host} name={login.label} />
+                    )
+                  }
+                  name={site?.name ?? login.label}
+                  saved
+                  attention={login.credential?.status === 'needs_attention'}
+                  onClick={() => onPickLogin(login)}
+                  testId={site ? `logins-catalog-${site.id}` : `logins-saved-${login.id}`}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {groups.map((g) => (
           <section key={g.id} aria-label={g.label}>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
               {g.label}
             </h3>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {g.sites.map((site) => {
-                const login = saved.get(site.id);
-                return (
-                  <button
-                    key={site.id}
-                    type="button"
-                    onClick={() => (login ? onPickLogin(login) : onPick(site))}
-                    disabled={disabled && !login}
-                    className={tileClass}
-                    data-testid={`logins-catalog-${site.id}`}
-                    data-saved={login ? 'true' : undefined}
-                  >
-                    <SiteLogo site={site} />
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1">
-                        <span className="truncate text-sm font-semibold text-ink-900">
-                          {site.name}
-                        </span>
-                        {login ? <SavedCheck /> : null}
-                      </span>
-                      <span className="block truncate text-[11px] text-ink-600">{site.host}</span>
-                      {attentionOf(login) ? <AttentionLine /> : null}
-                      <SiteBadges site={site} />
-                    </span>
-                  </button>
-                );
-              })}
+            <div className={gridClass}>
+              {g.sites.map((site) => (
+                <Tile
+                  key={site.id}
+                  logo={<SiteLogo site={site} />}
+                  name={site.name}
+                  saved={false}
+                  disabled={disabled}
+                  onClick={() => onPick(site)}
+                  testId={`logins-catalog-${site.id}`}
+                />
+              ))}
             </div>
           </section>
         ))}
-        {groups.length === 0 && others.length === 0 ? (
+
+        {nothing ? (
           <p className="text-sm text-ink-600" data-testid="logins-catalog-empty">
-            No site matches “{query}”. Use Custom website for any other site.
+            No site matches “{query.trim()}”. Add it as a custom website.
           </p>
         ) : null}
+
         <section aria-label="Other">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-600">
-            Any other site
-          </h3>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {others.map((login) => (
-              <SavedLoginTile key={login.id} login={login} onPick={onPickLogin} />
-            ))}
+          <div className={gridClass}>
             <button
               type="button"
               onClick={onCustom}
               disabled={disabled}
-              className="flex items-center gap-2.5 rounded-lg border border-dashed border-line bg-paper-0 p-2.5 text-left transition hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`${tileClass} border-dashed`}
               data-testid="logins-catalog-custom"
             >
               <span
                 aria-hidden="true"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper-50 text-base font-bold text-ink-700"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper-50 text-ink-700"
               >
-                +
+                <Plus className="h-4 w-4" />
               </span>
-              <span>
-                <span className="block text-sm font-semibold text-ink-900">Custom website</span>
-                <span className="block text-[11px] text-ink-600">
-                  Carrier portals, permit sites, anything with a sign-in page
-                </span>
-              </span>
+              <span className="truncate text-sm font-semibold text-ink-900">Custom website</span>
             </button>
           </div>
         </section>
