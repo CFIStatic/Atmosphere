@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, Eye, EyeOff, Plus } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Eye, EyeOff, Globe, Plus } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -18,7 +18,9 @@ import {
   type ComputerSignIn,
   type LoginCatalog,
   type LoginCatalogEntry,
+  type LoginSiteIdentity,
   matchSavedLogins,
+  typedSiteHost,
 } from '../lib/computer';
 import {
   CODE_LINE,
@@ -192,9 +194,109 @@ function credentialOf(c: Credentials, fallbackLoginUrl: string | null) {
   } satisfies ComputerCredentialInput;
 }
 
+/**
+ * Name and catalog match for a typed custom website: looked up a moment after typing stops
+ * (or right away on blur). Only answers for the address currently typed count.
+ */
+function useSiteIdentity(text: string, catalog: LoginCatalog | null) {
+  const host = typedSiteHost(text);
+  const [found, setFound] = useState<{ host: string; identity: LoginSiteIdentity | null } | null>(null);
+  const [flushFor, setFlushFor] = useState('');
+  const asked = useRef(new Map<string, Promise<LoginSiteIdentity | null>>());
+  const now = Boolean(host) && flushFor === host;
+
+  useEffect(() => {
+    if (!host) return;
+    let live = true;
+    const run = () => {
+      let pending = asked.current.get(host);
+      if (!pending) {
+        pending = api
+          .computerIdentifySite(host)
+          .then((r) => r.site)
+          .catch(() => null);
+        asked.current.set(host, pending);
+      }
+      void pending.then((identity) => {
+        if (live) setFound({ host, identity });
+      });
+    };
+    const timer = window.setTimeout(run, now ? 0 : IDENTIFY_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [host, now]);
+
+  const answer = found && found.host === host ? found : null;
+  const identity = answer?.identity ?? null;
+  const site = identity?.siteId ? (catalog?.sites.find((s) => s.id === identity.siteId) ?? null) : null;
+  return {
+    host,
+    identity,
+    /** The name to show: the one found, or the address itself if the lookup failed; null while looking. */
+    name: answer ? (identity?.name ?? host) : null,
+    site,
+    /** Look up now (on blur) instead of waiting for the debounce. */
+    flush: () => setFlushFor(host),
+  };
+}
+
+const IDENTIFY_DEBOUNCE_MS = 450;
+
+/** The form's header: a site's logo and name, like its tile in the list. */
+function FormSiteHeader({
+  site,
+  host,
+  name,
+}: {
+  site: LoginCatalogEntry | null;
+  host: string;
+  name: string | null;
+}) {
+  if (site) {
+    return (
+      <div className="mt-3 flex min-h-10 items-center gap-3" data-testid="logins-add-site">
+        <SiteLogo site={site} size="lg" />
+        <h2 className="min-w-0 truncate text-base font-semibold text-ink-900">{site.name}</h2>
+      </div>
+    );
+  }
+  if (host) {
+    return (
+      <div className="mt-3 flex min-h-10 items-center gap-3" data-testid="logins-add-site">
+        <HostLogo key={host} host={host} name={name ?? host} size="lg" />
+        {name ? (
+          <h2 className="min-w-0 truncate text-base font-semibold text-ink-900">{name}</h2>
+        ) : (
+          <span
+            className="h-4 w-32 animate-pulse rounded bg-paper-50"
+            aria-label="Finding the site"
+            role="status"
+            data-testid="logins-add-site-finding"
+          />
+        )}
+      </div>
+    );
+  }
+  // Nothing typed yet: a quiet empty logo spot so the form doesn't jump when the site appears.
+  return (
+    <div className="mt-3 flex min-h-10 items-center gap-3" data-testid="logins-add-site-empty">
+      <span
+        aria-hidden="true"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-line text-ink-500"
+      >
+        <Globe className="h-5 w-5" />
+      </span>
+      <span className="text-sm text-ink-500">Enter the website address</span>
+    </div>
+  );
+}
+
 /** The compact add-login form for a catalog site, or (site = null) a custom website. */
 function AddLoginForm({
   site,
+  catalog,
   canSavePasswords,
   passwordsNote,
   busy,
@@ -204,6 +306,7 @@ function AddLoginForm({
   onError,
 }: {
   site: LoginCatalogEntry | null;
+  catalog: LoginCatalog | null;
   canSavePasswords: boolean;
   passwordsNote: ReactNode;
   busy: boolean;
@@ -214,37 +317,43 @@ function AddLoginForm({
 }) {
   const [creds, setCreds] = useState<Credentials>(EMPTY_CREDS);
   const [url, setUrl] = useState('');
-  const [label, setLabel] = useState('');
+  const typed = useSiteIdentity(site ? '' : url, catalog);
+  // A typed address that is one of our built-in sites is added just like picking its tile.
+  const known = site ?? typed.site;
 
-  function target(): { url: string; label?: string } | null {
-    if (site) return { url: site.signInUrl, label: site.name };
+  function target(): { url: string; label?: string; signInUrl: string | null } | null {
+    if (known) return { url: known.signInUrl, label: known.name, signInUrl: known.signInUrl };
     const trimmed = url.trim();
     if (!trimmed) {
       onError('Enter the web address of the site.');
       return null;
     }
-    return { url: trimmed, label: label.trim() || undefined };
+    // Computer opens the address and finds the sign-in form itself; the name is the one we found.
+    return { url: trimmed, label: typed.identity?.name || undefined, signInUrl: null };
   }
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const t = target();
     if (!t) return;
+    const { signInUrl, ...start } = t;
     if (!canSavePasswords) {
-      onStart(t);
+      onStart(start);
       return;
     }
-    const credential = credentialOf(creds, site ? site.signInUrl : null);
+    const credential = credentialOf(creds, signInUrl);
     if (!credential) {
       onError('Enter the email and password.');
       return;
     }
-    onStart({ ...t, credential });
+    onStart({ ...start, credential });
   }
 
   function withoutPassword() {
     const t = target();
-    if (t) onStart(t);
+    if (!t) return;
+    const { signInUrl: _signInUrl, ...start } = t;
+    onStart(start);
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -264,54 +373,31 @@ function AddLoginForm({
       data-testid="logins-add-form"
     >
       <BackToList onClick={onCancel} />
-      <div className="mt-3 flex items-center gap-3">
-        {site ? (
-          <SiteLogo site={site} size="lg" />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-paper-50 text-lg font-bold text-ink-700"
-          >
-            +
-          </span>
-        )}
-        <h2 className="min-w-0 truncate text-base font-semibold text-ink-900">
-          {site ? site.name : 'Custom website'}
-        </h2>
-      </div>
+      {site ? (
+        <FormSiteHeader site={site} host={site.host} name={site.name} />
+      ) : (
+        <FormSiteHeader site={typed.site} host={typed.host} name={typed.name} />
+      )}
 
       <div className="mt-4 grid gap-3">
         {site ? null : (
-          <>
-            <label className={labelClass}>
-              Website address
-              <input
-                type="text"
-                inputMode="url"
-                name="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="portal.example.com"
-                className={inputClass}
-                autoComplete="url"
-                autoCapitalize="none"
-                spellCheck={false}
-                autoFocus
-              />
-            </label>
-            <label className={labelClass}>
-              Name (optional)
-              <input
-                type="text"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Carrier portal"
-                maxLength={80}
-                className={inputClass}
-                autoComplete="off"
-              />
-            </label>
-          </>
+          <label className={labelClass}>
+            Website address
+            <input
+              type="text"
+              inputMode="url"
+              name="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={typed.flush}
+              placeholder="portal.example.com"
+              className={inputClass}
+              autoComplete="url"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
         )}
         {canSavePasswords ? (
           <>
@@ -329,7 +415,7 @@ function AddLoginForm({
       </div>
 
       {passwordsNote}
-      {site?.twoStep === 'likely' ? (
+      {known?.twoStep === 'likely' ? (
         <p className="mt-3 text-xs text-ink-500" data-testid="logins-two-step-note">
           {CODE_LINE}
         </p>
@@ -344,7 +430,8 @@ function AddLoginForm({
         </button>
       </div>
 
-      {canSavePasswords ? (
+      {/* Catalog sites only: a custom website's sign-in page is found from its address. */}
+      {canSavePasswords && site ? (
         <MoreOptions>
           <label className={labelClass}>
             Sign-in page
@@ -353,7 +440,7 @@ function AddLoginForm({
               inputMode="url"
               value={creds.loginUrl}
               onChange={(e) => setCreds({ ...creds, loginUrl: e.target.value })}
-              placeholder={site?.signInUrl ?? 'https://portal.example.com/login'}
+              placeholder={site.signInUrl}
               className={inputClass}
               autoComplete="off"
               autoCapitalize="none"
@@ -911,6 +998,7 @@ export function LoginsPage() {
         <AddLoginForm
           key={openSite?.id ?? 'custom'}
           site={openSite}
+          catalog={catalog}
           canSavePasswords={canSavePasswords}
           passwordsNote={passwordsNote}
           busy={working === 'start'}

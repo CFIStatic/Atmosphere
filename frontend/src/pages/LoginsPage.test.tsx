@@ -14,6 +14,7 @@ const computerRemoveLogin = vi.fn();
 const computerSaveCredential = vi.fn();
 const computerDeleteCredential = vi.fn();
 const computerLoginCatalog = vi.fn();
+const computerIdentifySite = vi.fn();
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -30,6 +31,7 @@ vi.mock('../lib/api', async () => {
       computerSaveCredential: (...a: unknown[]) => computerSaveCredential(...a),
       computerDeleteCredential: (...a: unknown[]) => computerDeleteCredential(...a),
       computerLoginCatalog: (...a: unknown[]) => computerLoginCatalog(...a),
+      computerIdentifySite: (...a: unknown[]) => computerIdentifySite(...a),
     },
   };
 });
@@ -233,6 +235,8 @@ describe('LoginsPage', () => {
     const x = within(yours).getByTestId('logins-saved-l2');
     expect(x).toHaveTextContent('Xactimate');
     expect(within(x).getByRole('img', { name: 'Saved' })).toBeInTheDocument();
+    // …with its own logo (favicon, or a monogram if that fails), like the catalog tiles.
+    expect(within(x).getByTestId('site-logo').querySelector('img')?.getAttribute('src')).toContain('identity.xactware.com');
     expect(screen.getAllByTestId('logins-catalog-outlook')).toHaveLength(1);
     expect(screen.getAllByTestId('logins-saved-check')).toHaveLength(2);
     expect(within(picker).queryByText('Password saved')).toBeNull();
@@ -348,10 +352,13 @@ describe('LoginsPage', () => {
     expect(screen.getByRole('button', { name: 'Open sign-in page' })).toBeEnabled();
   });
 
-  it('custom website: address, name, email and password in the same simple form', async () => {
-    const started = { ...signIn, label: 'Carrier portal' };
+  it('custom website: just the address, email and password; the site names itself', async () => {
+    const started = { ...signIn, label: 'Acme Insurance' };
     computerLogins.mockResolvedValueOnce(state({ passwords: ADMIN }));
     computerLogins.mockResolvedValue(state({ passwords: ADMIN, signingIn: started }));
+    computerIdentifySite.mockResolvedValue({
+      site: { url: 'https://portal.acme-ins.example/', host: 'portal.acme-ins.example', name: 'Acme Insurance', source: 'page', siteId: null, signInUrl: null },
+    });
     computerStartSignIn.mockResolvedValue({
       signIn: { ...started, autoSignIn: { outcome: 'two_factor', message: 'The saved password worked. The portal is asking for a verification code.' } },
     });
@@ -366,19 +373,73 @@ describe('LoginsPage', () => {
     expect(where()).toBe('/logins?add=custom');
     // Hidden while a form is open.
     expect(screen.queryByTestId('logins-catalog-custom')).toBeNull();
+    const form = screen.getByTestId('logins-add-form');
+    // No "+ Custom website" title, no Name field, no More options.
+    expect(form).not.toHaveTextContent('Custom website');
+    expect(screen.getByTestId('logins-add-site-empty')).toBeInTheDocument();
+    expect(within(form).queryByLabelText('Name (optional)')).toBeNull();
+    expect(within(form).queryByRole('button', { name: 'More options' })).toBeNull();
+    expect(within(form).queryByText('Sign in myself without saving a password')).toBeNull();
     expect(screen.getByLabelText('Website address')).toHaveFocus();
-    await user.type(screen.getByLabelText('Website address'), 'portal.carrier.example');
-    await user.type(screen.getByLabelText('Name (optional)'), 'Carrier portal');
+    await user.type(screen.getByLabelText('Website address'), 'portal.acme-ins.example');
+    const header = await screen.findByTestId('logins-add-site');
+    await waitFor(() => expect(header).toHaveTextContent('Acme Insurance'), { timeout: 2000 });
+    expect(within(header).getByTestId('site-logo').querySelector('img')?.getAttribute('src')).toContain('portal.acme-ins.example');
+    // Looked up once the typing stopped, not on every key.
+    expect(computerIdentifySite).toHaveBeenCalledTimes(1);
+    expect(computerIdentifySite).toHaveBeenCalledWith('portal.acme-ins.example');
     await user.type(screen.getByLabelText('Email or username'), 'estimates@example.test');
     await user.type(screen.getByLabelText('Password'), PASSWORD);
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(computerStartSignIn).toHaveBeenCalledWith({
-      url: 'portal.carrier.example',
-      label: 'Carrier portal',
+      url: 'portal.acme-ins.example',
+      label: 'Acme Insurance',
       credential: { username: 'estimates@example.test', password: PASSWORD, loginUrl: null },
     });
     expect(await screen.findByTestId('logins-auto-sign-in')).toHaveTextContent('asking for a verification code');
     expect(document.body.innerHTML).not.toContain(PASSWORD);
+  });
+
+  it('custom website: a built-in site typed by address shows and saves as that site', async () => {
+    computerLogins.mockResolvedValue(state({ passwords: ADMIN }));
+    computerIdentifySite.mockResolvedValue({
+      site: { url: 'https://mail.google.com/', host: 'mail.google.com', name: 'Gmail (Google)', source: 'catalog', siteId: 'gmail', signInUrl: 'https://mail.google.com/' },
+    });
+    computerStartSignIn.mockResolvedValue({ signIn });
+    const user = renderPage('/logins?add=custom');
+    const address = await screen.findByLabelText('Website address');
+    await user.type(address, 'mail.google.com');
+    await user.tab(); // blur looks up right away
+    const header = await screen.findByTestId('logins-add-site');
+    await waitFor(() => expect(header).toHaveTextContent('Gmail (Google)'));
+    expect(screen.getByTestId('logins-two-step-note')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Email or username'), 'office@example.test');
+    await user.type(screen.getByLabelText('Password'), PASSWORD);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(computerStartSignIn).toHaveBeenCalledWith({
+      url: 'https://mail.google.com/',
+      label: 'Gmail (Google)',
+      credential: { username: 'office@example.test', password: PASSWORD, loginUrl: 'https://mail.google.com/' },
+    });
+  });
+
+  it('custom website: if the lookup fails, the address stands in and the server names it', async () => {
+    computerLogins.mockResolvedValue(state({ passwords: ADMIN }));
+    computerIdentifySite.mockRejectedValue(new Error('offline'));
+    computerStartSignIn.mockResolvedValue({ signIn });
+    const user = renderPage('/logins?add=custom');
+    await user.type(await screen.findByLabelText('Website address'), 'https://claims.acme.example/login');
+    await user.tab();
+    const header = await screen.findByTestId('logins-add-site');
+    await waitFor(() => expect(header).toHaveTextContent('claims.acme.example'));
+    await user.type(screen.getByLabelText('Email or username'), 'a@example.test');
+    await user.type(screen.getByLabelText('Password'), PASSWORD);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(computerStartSignIn).toHaveBeenCalledWith({
+      url: 'https://claims.acme.example/login',
+      label: undefined,
+      credential: { username: 'a@example.test', password: PASSWORD, loginUrl: null },
+    });
   });
 
   it('Cancel and Esc return to the list and scroll to the top', async () => {
