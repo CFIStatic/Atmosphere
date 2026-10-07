@@ -38,6 +38,7 @@ import {
 import { computerSettings, helperSessionStale, LOGIN_SESSION_SEC, NOT_SET_UP_MESSAGE } from './config.js';
 import { meterBrowserTime } from './metering.js';
 import { ComputerServiceError, cleanUrl } from './service.js';
+import { quickSiteName } from './siteIdentity.js';
 import {
   SessionBusyError,
   type ComputerCredentialRow,
@@ -397,7 +398,8 @@ export async function startSignIn(input: {
   }
   if (!url) throw new ComputerServiceError('Enter the website address, like outlook.office.com.', 'bad_request');
   const host = hostOf(url);
-  if (!label) label = defaultLabel(host);
+  // No name given (the custom-site form names it itself): catalog name, else the domain, e.g. "Acme".
+  if (!label) label = quickSiteName(host);
   try {
     await assertComputerAiAllowed(input.orgId, Boolean(input.canManage));
   } catch (err) {

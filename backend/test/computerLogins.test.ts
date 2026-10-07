@@ -328,3 +328,15 @@ test('Check login refuses when a task or sign-in holds the browser', async () =>
   await startSignIn({ orgId: ORG, userId: USER, url: 'outlook.office.com' });
   await rejectsWith(verifyLogin(ORG, saved.id, USER), 'conflict');
 });
+
+test('custom website without a name: named from the domain (or the catalog), opens the address', async () => {
+  setup();
+  const s = await startSignIn({ orgId: ORG, userId: USER, url: 'portal.acme-carrier.test' });
+  assert.equal(s.label, 'Acme Carrier');
+  const saved = await finishSignIn(ORG, s.sessionId, USER);
+  assert.equal(saved.label, 'Acme Carrier');
+  assert.equal(saved.url, 'https://portal.acme-carrier.test/');
+  await removeLogin(ORG, saved.id, USER, true);
+  const o = await startSignIn({ orgId: ORG, userId: USER, url: 'outlook.office.com' });
+  assert.match(o.label, /Outlook/);
+});

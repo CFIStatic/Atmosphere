@@ -13,6 +13,7 @@
  * Logins page (sign in to outside sites ahead of time; no AI runs):
  *   GET    /api/chat-computer/logins                     saved sites + any sign-in in progress
  *   GET    /api/chat-computer/logins/catalog             the Add-a-login site catalog
+ *   GET    /api/chat-computer/logins/identify?url=       name a custom website (catalog, its page, or domain)
  *   POST   /api/chat-computer/logins/sign-ins            { url, label? } or { loginId } → open the site
  *   POST   /api/chat-computer/logins/sign-ins/:id/live   → short-lived live-view URL (control)
  *   POST   /api/chat-computer/logins/sign-ins/:id/done   "Done, I'm signed in" → save the site
@@ -56,6 +57,7 @@ import {
   verifyLogin,
 } from '../computer/logins.js';
 import { loginCatalogView } from '../computer/catalog/sites.js';
+import { identifySite } from '../computer/siteIdentity.js';
 import { HttpError } from '../lib/errors.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -218,6 +220,19 @@ computerRouter.get(
     await requireOrgContext(req);
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.json(loginCatalogView());
+  }),
+);
+
+/** Name and catalog match for a typed custom website, so the "+ Add" form needs only the address. */
+computerRouter.get(
+  '/logins/identify',
+  wrap(async (req, res) => {
+    await requireOrgContext(req);
+    const raw = typeof req.query.url === 'string' ? req.query.url.slice(0, 2048) : '';
+    const site = await identifySite(raw);
+    if (!site) throw new HttpError(400, 'Enter the website address, like portal.example.com.', 'bad_request');
+    res.setHeader('Cache-Control', 'private, max-age=600');
+    res.json({ site });
   }),
 );
 

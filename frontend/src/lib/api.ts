@@ -14,6 +14,7 @@ import type {
   ComputerCredentialInput,
   ComputerLoginsState,
   LoginCatalog,
+  LoginSiteIdentity,
   ComputerRemoveLoginResult,
   ComputerVerifyLoginResult,
   ComputerSignIn,
@@ -6089,6 +6090,10 @@ export const api = {
 
   /** The "Add a login" site catalog (official sign-in URLs, grouped by category). */
   computerLoginCatalog: () => request<LoginCatalog>('/api/chat-computer/logins/catalog'),
+
+  /** Name (and catalog match) for a typed custom website address. */
+  computerIdentifySite: (url: string) =>
+    request<{ site: LoginSiteIdentity }>(`/api/chat-computer/logins/identify?url=${encodeURIComponent(url)}`),
 
   computerStartSignIn: (input: { url?: string; label?: string; loginId?: string; credential?: ComputerCredentialInput }) =>
     request<{ signIn: ComputerSignIn }>('/api/chat-computer/logins/sign-ins', {

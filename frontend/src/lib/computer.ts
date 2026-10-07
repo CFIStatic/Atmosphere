@@ -539,3 +539,29 @@ export function matchSavedLogins(
   }
   return { bySite, unmatched };
 }
+
+/** Who a typed custom website is (GET /api/chat-computer/logins/identify). */
+export interface LoginSiteIdentity {
+  url: string;
+  /** Hostname, lowercase, without "www.". */
+  host: string;
+  name: string;
+  source: 'catalog' | 'page' | 'domain';
+  /** Catalog site id when the address is one of the built-in sites. */
+  siteId: string | null;
+  /** The catalog site's sign-in page, when it is one. */
+  signInUrl: string | null;
+}
+
+/** The hostname in a typed website address ("Portal.Acme.com/login" -> "portal.acme.com"), or '' when it doesn't look like one yet. */
+export function typedSiteHost(text: string): string {
+  const raw = text.trim();
+  if (!raw || /\s/.test(raw)) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const host = u.hostname.toLowerCase().replace(/\.$/, '');
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(host) ? host.replace(/^www\./, '') : '';
+  } catch {
+    return '';
+  }
+}
