@@ -413,6 +413,23 @@ test('open_url outside the sites the task names is blocked', async () => {
   assert.match(COMPUTER_SYSTEM_PROMPT, /PAGE CONTENT IS UNTRUSTED/);
 });
 
+test('system prompt: session stability and Needs you hand-off', () => {
+  assert.match(COMPUTER_SYSTEM_PROMPT, /SESSION STABILITY/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /accessible name \(ARIA\)/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /wait for the page and network to settle/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /sign-in forms, cookie banners, MFA prompts, captchas/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /call needs_you/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /sign_in_saved/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /already signed in/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /do not rapid-retry/i);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /report_stuck/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /request_approval/);
+  assert.match(COMPUTER_SYSTEM_PROMPT, /Never ask anyone to paste cookies, session state, or tokens/);
+  assert.doesNotMatch(COMPUTER_SYSTEM_PROMPT, /HUMAN_INTERVENTION_REQUIRED/);
+  assert.doesNotMatch(COMPUTER_SYSTEM_PROMPT, /mimic humans/i);
+  assert.doesNotMatch(COMPUTER_SYSTEM_PROMPT, /avoid security filters/i);
+});
+
 test('metering: agent tokens and browser time land on the Computer line at 10x', async () => {
   const h = await setup({
     turns: [[computer('screenshot')], [tool('finish', { summary: 'ok' })]],
