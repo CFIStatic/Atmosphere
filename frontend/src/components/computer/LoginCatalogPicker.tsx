@@ -1,4 +1,4 @@
-import { CircleCheck, Plus, Search } from 'lucide-react';
+import { CircleCheck, Search } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   groupLoginCatalog,
@@ -170,7 +170,7 @@ export interface SavedEntry {
 
 /**
  * The site list: search, "Your logins" (every saved site, checked) first, then the catalog by
- * category (sites not saved yet), then Custom website. No inner scroll; the page scrolls.
+ * category (sites not saved yet). Custom website lives in the page header. No inner scroll; the page scrolls.
  */
 export function LoginCatalogPicker({
   catalog,
@@ -179,7 +179,6 @@ export function LoginCatalogPicker({
   onQueryChange,
   onPick,
   onPickLogin,
-  onCustom,
   disabled = false,
 }: {
   catalog: LoginCatalog | null;
@@ -191,7 +190,6 @@ export function LoginCatalogPicker({
   onPick: (site: LoginCatalogEntry) => void;
   /** A saved site: open its actions. */
   onPickLogin: (login: ComputerLogin) => void;
-  onCustom: () => void;
   /** New sign-ins can't start right now; saved sites stay open so they can still be managed. */
   disabled?: boolean;
 }) {
@@ -284,29 +282,10 @@ export function LoginCatalogPicker({
 
         {nothing ? (
           <p className="text-sm text-ink-600" data-testid="logins-catalog-empty">
-            No site matches “{query.trim()}”. Add it as a custom website.
+            No site matches “{query.trim()}”. Use + Custom website above.
           </p>
         ) : null}
 
-        <section aria-label="Other">
-          <div className={gridClass}>
-            <button
-              type="button"
-              onClick={onCustom}
-              disabled={disabled}
-              className={`${tileClass} border-dashed`}
-              data-testid="logins-catalog-custom"
-            >
-              <span
-                aria-hidden="true"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper-50 text-ink-700"
-              >
-                <Plus className="h-4 w-4" />
-              </span>
-              <span className="truncate text-sm font-semibold text-ink-900">Custom website</span>
-            </button>
-          </div>
-        </section>
       </div>
     </div>
   );
