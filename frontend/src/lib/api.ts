@@ -15,6 +15,7 @@ import type {
   ComputerLoginsState,
   LoginCatalog,
   ComputerRemoveLoginResult,
+  ComputerVerifyLoginResult,
   ComputerSignIn,
   ComputerTaskView,
 } from './computer';
@@ -6128,6 +6129,13 @@ export const api = {
   computerRemoveLogin: (loginId: string) =>
     request<ComputerRemoveLoginResult>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}`, {
       method: 'DELETE',
+    }),
+
+  /** Open the saved site on the org profile and report signed-in vs login page. */
+  computerVerifyLogin: (loginId: string) =>
+    request<{ check: ComputerVerifyLoginResult }>(`/api/chat-computer/logins/${encodeURIComponent(loginId)}/verify`, {
+      method: 'POST',
+      cache: 'no-store',
     }),
 
   computerHandBack: (id: string) =>

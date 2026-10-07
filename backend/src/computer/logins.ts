@@ -203,6 +203,7 @@ async function busyReason(d: ComputerWorkerDeps, orgId: string): Promise<string 
   }
   if (live.purpose === 'login') return `Someone is signing in to ${live.target_label ?? 'a site'} right now. Try again when they're done.`;
   if (live.purpose === 'logout') return 'Computer is clearing a removed site. Try again in a moment.';
+  if (live.purpose === 'verify') return `Computer is checking whether it is still signed in to ${live.target_label ?? 'a site'}. Try again in a moment.`;
   return 'Computer is working on a task for your company right now. Sign-ins can start when it finishes or is stopped.';
 }
 
@@ -509,6 +510,10 @@ export async function finishSignIn(orgId: string, sessionId: string, userId: str
       logger.warn('computer sign-in cookie read failed', { orgId, error: safeError(err) });
     }
   }
+  // When this process does not hold the driver (restart / other replica), we
+  // cannot compute a before/after cookie diff. provider_session_id is still
+  // persisted and connect() can re-fetch connectUrl; cookie domains stay empty
+  // and Remove will say so (same as before).
   await releaseSession(d, row, userId);
   const url = row.target_url!;
   const saved = await d.store.saveLogin({
@@ -640,6 +645,139 @@ export async function removeLogin(orgId: string, loginId: string, userId: string
     message: keptShared
       ? `Removed ${login.label} and signed Computer out of it. A sign-in it shares with another site on your list was kept.`
       : `Removed ${login.label} and signed Computer out of it.`,
+  };
+}
+
+
+export type VerifyLoginStatus = 'signed_in' | 'needs_sign_in' | 'captcha' | 'two_factor' | 'number_match' | 'unclear';
+
+export interface VerifyLoginResult {
+  status: VerifyLoginStatus;
+  /** Plain sentence for the person. Never invents credentials or codes. */
+  message: string;
+  host: string;
+  label: string;
+  /** Where the browser landed (host only in logs; full URL returned to the caller). */
+  url: string | null;
+}
+
+/**
+ * Check login / warm-up: open the saved site on the org's persistent browser
+ * profile, detect signed-in vs a login / MFA / captcha page, report clearly,
+ * and release. Does not type passwords or invent codes.
+ */
+export async function verifyLogin(orgId: string, loginId: string, userId: string): Promise<VerifyLoginResult> {
+  const d = need();
+  const login = await d.store.getLogin(orgId, loginId);
+  if (!login) throw new ComputerServiceError('That site is not on your Logins list.', 'not_found');
+  try {
+    await assertComputerAiAllowed(orgId, false);
+  } catch (err) {
+    throw new ComputerServiceError(err instanceof Error ? err.message : 'AI is paused for this account.', 'ai_paused');
+  }
+  const busy = await busyReason(d, orgId);
+  if (busy) throw new ComputerServiceError(busy, 'conflict');
+
+  let contextId = await d.store.latestContextId(orgId, d.provider.id);
+  if (!contextId) {
+    contextId = await d.provider.createContext(orgId);
+    await audit(d.store, orgId, null, userId, 'context_created');
+  }
+
+  let row: ComputerSessionRow;
+  try {
+    row = await d.store.insertSession({
+      org_id: orgId,
+      provider: d.provider.id,
+      provider_context_id: contextId,
+      purpose: 'verify',
+      login_id: login.id,
+      target_url: login.url,
+      target_label: login.label,
+      started_by: userId,
+    });
+  } catch (err) {
+    if (err instanceof SessionBusyError) throw new ComputerServiceError(err.message, 'conflict');
+    throw err;
+  }
+
+  let driver: ComputerDriver | null = null;
+  let result: VerifyLoginResult;
+  try {
+    const handle = await d.provider.createSession({ orgId, contextId, timeoutSec: 120 });
+    const startedAt = handle.startedAt.toISOString();
+    await d.store.updateSession(row.id, { status: 'active', provider_session_id: handle.providerSessionId, started_at: startedAt });
+    row = { ...row, status: 'active', provider_session_id: handle.providerSessionId, started_at: startedAt };
+    driver = await d.provider.connect(handle);
+    // Prefer the saved sign-in page when we have one; otherwise the site home.
+    const credential = await d.store.getCredential(orgId, login.id);
+    const openUrl = credential?.login_url || login.url;
+    await driver.navigate(openUrl);
+    const signals = await driver.pageSignals().catch(() => null);
+    const url = await driver.currentUrl().catch(() => null);
+    result = classifyWarmup(login, signals, url);
+    await audit(d.store, orgId, row.id, userId, 'login_verified', {
+      host: login.host,
+      status: result.status,
+    });
+  } catch (err) {
+    logger.error('computer check login failed', { orgId, error: safeError(err) });
+    await driver?.close().catch(() => undefined);
+    await releaseSession(d, row, userId).catch(() => undefined);
+    throw new ComputerServiceError(`Could not check this login: ${safeError(err)}`, 'unavailable');
+  }
+  await driver.close().catch(() => undefined);
+  await releaseSession(d, row, userId);
+  return result;
+}
+
+/** Classify the page after opening a saved site. Never invents credentials. */
+export function classifyWarmup(
+  login: Pick<ComputerLoginRow, 'label' | 'host'>,
+  signals: Awaited<ReturnType<ComputerDriver['pageSignals']>> | null,
+  url: string | null,
+): VerifyLoginResult {
+  const name = login.label || login.host;
+  const base = { host: login.host, label: name, url };
+  if (!signals) {
+    return {
+      ...base,
+      status: 'unclear',
+      message: `Opened ${name}, but Computer could not read the page. Open Sign in again if you need to refresh the session.`,
+    };
+  }
+  if (signals.hasCaptcha) {
+    return {
+      ...base,
+      status: 'captcha',
+      message: `${name} showed a captcha. Computer never solves captchas — use Sign in again and complete it in the live view.`,
+    };
+  }
+  if (signals.approvalNumber) {
+    return {
+      ...base,
+      status: 'number_match',
+      message: `${name} is asking you to approve ${signals.approvalNumber} on your phone. Use Sign in again to finish it in the live view.`,
+    };
+  }
+  if (signals.hasOneTimeCodeField || signals.mentionsVerificationCode) {
+    return {
+      ...base,
+      status: 'two_factor',
+      message: `${name} is asking for a verification code. Use Sign in again to enter it in the live view.`,
+    };
+  }
+  if (signals.hasPasswordField) {
+    return {
+      ...base,
+      status: 'needs_sign_in',
+      message: `${name} is showing a sign-in page. Computer is not signed in there anymore — use Sign in again.`,
+    };
+  }
+  return {
+    ...base,
+    status: 'signed_in',
+    message: `Computer looks signed in to ${name}. Later tasks should reuse this session without asking you to sign in again unless the site logs it out.`,
   };
 }
 

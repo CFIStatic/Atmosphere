@@ -197,20 +197,27 @@ describe('ComputerTaskCard', () => {
     expect(frame.style.pointerEvents).toBe('');
   });
 
-  it('Needs you card: Take control, resume and cancel', async () => {
+  it('Needs you card: auto-opens live view, resume and cancel', async () => {
     computerTask.mockResolvedValue({
       task: task({
         status: 'needs_you',
-        needsYou: { reason: 'two_factor', message: 'Enter the code the site sent you.', since: '2026-10-04T15:01:00Z' },
+        needsYou: {
+          reason: 'two_factor',
+          message: 'Enter the code the site sent you.',
+          since: '2026-10-04T15:01:00Z',
+          screenshot: 'data:image/jpeg;base64,AAAA',
+        },
       }),
     });
     render(<ComputerTaskCard path={`computer-task:${ID}`} />);
     const card = await screen.findByTestId('computer-needs-you-card');
     expect(card).toHaveTextContent('Enter the code the site sent you.');
+    expect(screen.getByTestId('computer-needs-you-screenshot')).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA');
     expect(screen.getByTestId('computer-task-pill')).toHaveTextContent('Needs you');
     expect(screen.getByTestId('computer-task-title')).toHaveTextContent('portal.example.test: code needed');
-    await userEvent.click(within(card).getByRole('button', { name: 'Take control' }));
+    // Auto-open Take control / live view when Needs you fires.
     await waitFor(() => expect(computerLiveView).toHaveBeenCalledWith(ID, 'control'));
+    expect(await screen.findByTestId('computer-live-iframe')).toBeInTheDocument();
     await userEvent.click(within(card).getByRole('button', { name: "I'm done, resume" }));
     await waitFor(() => expect(computerResume).toHaveBeenCalledWith(ID));
     await userEvent.click(within(card).getByRole('button', { name: 'Cancel' }));

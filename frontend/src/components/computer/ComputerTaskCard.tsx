@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import {
   cleanFieldLabel,
@@ -124,6 +124,9 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   const [live, setLive] = useState<'watch' | 'control' | null>(null);
   const [busy, setBusy] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
+  const liveAnchorRef = useRef<HTMLDivElement | null>(null);
+  /** Once we auto-open control for a Needs-you pause, do not fight the person closing it. */
+  const autoOpenedForNeedsYou = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -151,6 +154,23 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
       if (timer) window.clearTimeout(timer);
     };
   }, [load]);
+
+  // Needs you: surface Take control + live view immediately so the person is not left waiting
+  // while the agent is paused. Scroll the live view into sight once.
+  useEffect(() => {
+    if (!task || task.status !== 'needs_you' || !task.needsYou || !task.canWatch) return;
+    const key = `${task.id}:${task.needsYou.since}`;
+    if (autoOpenedForNeedsYou.current === key) return;
+    autoOpenedForNeedsYou.current = key;
+    setLive((prev) => prev ?? 'control');
+    const id = window.requestAnimationFrame(() => {
+      const el = liveAnchorRef.current;
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [task]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -232,15 +252,22 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
         />
       ) : null}
 
-      {live && task.canWatch ? (
-        <ComputerLiveView
-          taskId={task.id}
-          mode={live}
-          onClose={() => setLive(null)}
-          onTakeControl={takeControl}
-          onHandBack={task.status === 'running' || task.status === 'awaiting_approval' ? handBack : undefined}
-        />
-      ) : null}
+      <div ref={liveAnchorRef}>
+        {live && task.canWatch ? (
+          <ComputerLiveView
+            taskId={task.id}
+            mode={live}
+            onClose={() => setLive(null)}
+            onTakeControl={takeControl}
+            onHandBack={task.status === 'running' || task.status === 'awaiting_approval' ? handBack : undefined}
+            controlHint={
+              task.status === 'needs_you'
+                ? 'Computer is paused for you. Finish the step (sign-in, code, or captcha), then press I’m done, resume above.'
+                : undefined
+            }
+          />
+        ) : null}
+      </div>
 
       {finished && fields.length ? (
         <dl className="divide-y divide-line rounded-lg border border-line text-sm" data-testid="computer-result-fields">

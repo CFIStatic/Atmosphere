@@ -383,6 +383,7 @@ function ManageLogin({
   canStart,
   onBack,
   onSignIn,
+  onCheckLogin,
   onSavePassword,
   onRemove,
   onForget,
@@ -395,6 +396,7 @@ function ManageLogin({
   canStart: boolean;
   onBack: () => void;
   onSignIn: () => void;
+  onCheckLogin: () => void;
   onSavePassword: (credential: ComputerCredentialInput) => Promise<boolean>;
   onRemove: () => void;
   onForget: () => Promise<boolean>;
@@ -551,6 +553,15 @@ function ManageLogin({
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button type="button" onClick={onSignIn} disabled={!canStart} className={primaryButton}>
               {working === 'start' ? 'Opening…' : 'Sign in again'}
+            </button>
+            <button
+              type="button"
+              onClick={onCheckLogin}
+              disabled={!canStart}
+              className={secondaryButton}
+              data-testid="login-check"
+            >
+              {working === `check:${login.id}` ? 'Checking…' : 'Check login'}
             </button>
             {canSavePasswords ? (
               <button
@@ -793,6 +804,21 @@ export function LoginsPage() {
     }
   }
 
+  async function checkLogin(login: ComputerLogin) {
+    setActionError(null);
+    setNotice(null);
+    setWorking(`check:${login.id}`);
+    try {
+      const { check } = await api.computerVerifyLogin(login.id);
+      setNotice(check.message);
+    } catch (err) {
+      setActionError(errorText(err, 'Could not check this login.'));
+    } finally {
+      setWorking(null);
+      void load();
+    }
+  }
+
   async function savePassword(login: ComputerLogin, credential: ComputerCredentialInput) {
     setActionError(null);
     setNotice(null);
@@ -872,6 +898,7 @@ export function LoginsPage() {
           canStart={canStart}
           onBack={cancelToList}
           onSignIn={() => void start({ loginId: openLogin.id })}
+          onCheckLogin={() => void checkLogin(openLogin)}
           onSavePassword={(credential) => savePassword(openLogin, credential)}
           onRemove={() => void remove(openLogin)}
           onForget={() => forgetPassword(openLogin)}
