@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Eye, EyeOff, Plus } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -886,6 +886,7 @@ export function LoginsPage() {
   ) : null;
 
   let body: ReactNode = null;
+  let listOpen = false;
   if (showList) {
     if (openLogin) {
       body = (
@@ -926,6 +927,7 @@ export function LoginsPage() {
         </div>
       );
     } else {
+      listOpen = true;
       body = (
         <section
           aria-label="Sites"
@@ -945,7 +947,6 @@ export function LoginsPage() {
               onQueryChange={setQuery}
               onPick={(site) => openParams({ site: site.id })}
               onPickLogin={(login) => openParams({ login: login.id })}
-              onCustom={() => openParams({ add: 'custom' })}
               disabled={!canStart}
             />
           ) : (
@@ -961,7 +962,23 @@ export function LoginsPage() {
   return (
     <div ref={rootRef} className="mx-auto w-full max-w-4xl" data-testid="logins-page">
       <header>
-        <h1 className="text-xl font-semibold text-ink-900">Logins</h1>
+        <div className="flex min-h-8 items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-ink-900">Logins</h1>
+          {listOpen ? (
+            <button
+              type="button"
+              onClick={() => openParams({ add: 'custom' })}
+              disabled={!canStart}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm font-semibold text-ink-900 transition hover:border-brand-600 hover:bg-paper-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Add a custom website"
+              title="Add a custom website"
+              data-testid="logins-catalog-custom"
+            >
+              <Plus aria-hidden="true" className="h-4 w-4" />
+              Add
+            </button>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-ink-600" data-testid="logins-password-line">
           {INTRO_LINE}
         </p>

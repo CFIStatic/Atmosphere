@@ -254,7 +254,7 @@ describe('LoginsPage', () => {
     expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Search sites'));
     await user.type(screen.getByLabelText('Search sites'), 'nothing like this');
-    expect(screen.getByTestId('logins-catalog-empty')).toHaveTextContent('custom website');
+    expect(screen.getByTestId('logins-catalog-empty')).toHaveTextContent("+ Add");
     expect(screen.getByTestId('logins-catalog-custom')).toBeInTheDocument();
   });
 
@@ -356,8 +356,16 @@ describe('LoginsPage', () => {
       signIn: { ...started, autoSignIn: { outcome: 'two_factor', message: 'The saved password worked. The portal is asking for a verification code.' } },
     });
     const user = renderPage();
-    await user.click(await screen.findByTestId('logins-catalog-custom'));
+    const custom = await screen.findByTestId('logins-catalog-custom');
+    // Lives in the page header next to the title, not in the site list.
+    expect(custom.closest('header')).not.toBeNull();
+    expect(custom).toHaveTextContent(/^Add$/);
+    expect(custom).toHaveAccessibleName('Add a custom website');
+    expect(screen.getByTestId('logins-catalog')).not.toContainElement(custom);
+    await user.click(custom);
     expect(where()).toBe('/logins?add=custom');
+    // Hidden while a form is open.
+    expect(screen.queryByTestId('logins-catalog-custom')).toBeNull();
     expect(screen.getByLabelText('Website address')).toHaveFocus();
     await user.type(screen.getByLabelText('Website address'), 'portal.carrier.example');
     await user.type(screen.getByLabelText('Name (optional)'), 'Carrier portal');
