@@ -46,6 +46,11 @@ echo "==> Assertions (core PM)"
 echo "==> Assertions (orchestration)"
 "${PSQL[@]}" -d "$DB" -f "$HERE/02_pm_orchestration_test.sql"
 
+# CI runs this script; the analytics audit corrections suite rides along in its
+# own throwaway database (it exits non-zero on the first failed check).
+echo "==> Analytics audit corrections (formulas, exclusion, grants)"
+bash "$HERE/11_analytics_audit_corrections.sh" "$@"
+
 echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"
 echo "    refusing the operation. Orchestration section 3 (event update) and 4"

@@ -6721,6 +6721,42 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20261007230000_analytics_audit_corrections",
+      "file": "20261007230000_analytics_audit_corrections.sql",
+      "structurallyVerifiable": true,
+      "expect": [
+        "column|public.job_proofs.first_analysed_at",
+        "column|public.org_billing.stripe_amount_synced_at",
+        "column|public.org_billing.stripe_interval",
+        "column|public.org_billing.stripe_livemode",
+        "column|public.org_billing.stripe_mrr_cents",
+        "column|public.org_billing_events.atmosphere_plan_code",
+        "column|public.org_billing_events.fc_seats",
+        "column|public.orgs.analytics_exclusion_reason",
+        "column|public.orgs.exclude_from_analytics",
+        "column|public.payments.livemode",
+        "column|public.payments.tax_cents",
+        "function|private.ai_feature_catalog_key",
+        "function|private.analytics_in_scope",
+        "function|private.atmosphere_catalog_mrr_cents",
+        "function|private.atmosphere_plan_name",
+        "function|private.churned_orgs_between",
+        "function|private.job_proofs_first_analysed",
+        "function|private.org_billing_fc_seats",
+        "function|private.org_billing_label",
+        "function|private.org_billing_mrr_cents",
+        "function|private.org_internal_reason",
+        "function|private.org_last_active_at",
+        "function|private.org_mrr_cents",
+        "function|public.analytics_internal_orgs",
+        "trigger|public.job_proofs.job_proofs_first_analysed",
+        "view|private.payments_net"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 13
     }
   ]
 }
