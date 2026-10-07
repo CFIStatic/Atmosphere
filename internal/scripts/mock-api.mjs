@@ -72,9 +72,11 @@ function productHealth(weeks) {
   const complete = rows.filter((r) => !r.partial);
   const analysisWeekly = rows
     .filter((r) => !r.partial)
-    .map((r, i) => ({
+    .map((r, i, all) => ({
       weekStart: r.weekStart,
       analysed: r.films,
+      // One week carries proofs whose first analysis time was lost to a bulk re-run.
+      firstTimeUnknown: i === all.length - 3 ? 12 : 0,
       medianSeconds: Math.round((24 - i * 0.55 + (rand() - 0.5) * 2) * 60),
       p90Seconds: Math.round((58 - i * 1.4 + (rand() - 0.5) * 5) * 60),
     }));
@@ -98,8 +100,9 @@ function productHealth(weeks) {
       ],
     },
     analysis: {
-      current: { received: 1121, analysed: 1098, failed: 7, pending: 16, medianSeconds: 1126, p90Seconds: 2832 },
-      prior: { received: 961, analysed: 934, failed: 11, pending: 16, medianSeconds: 1288, p90Seconds: 3315 },
+      measuredTo: 'first_analysis',
+      current: { received: 1121, analysed: 1098, firstTimeUnknown: 12, failed: 7, pending: 16, medianSeconds: 1126, p90Seconds: 2832 },
+      prior: { received: 961, analysed: 934, firstTimeUnknown: 0, failed: 11, pending: 16, medianSeconds: 1288, p90Seconds: 3315 },
       weekly: analysisWeekly,
     },
     evidence: {
@@ -118,7 +121,7 @@ function productHealth(weeks) {
 }
 
 // ----------------------------------------------------------------- overview
-function overview() {
+function overview(includeInternal = false) {
   const o = structuredClone(demo.demoOverview);
   o.generatedAt = iso(NOW);
   o.range = { from: iso(new Date(NOW.getTime() - 365 * DAY)), to: iso(NOW) };
@@ -130,12 +133,25 @@ function overview() {
   o.summary.revenue.netNewMrrCents = 13900;
   o.summary.revenue.arpaMrrCents = 19367;
   o.summary.customers.orgsPaying = 12;
-  o.summary.customers.orgsGrowthMomPct = 9.1;
+  o.summary.customers.orgsPayingPrev = 11;
+  o.summary.customers.payingGrowthMomPct = 9.1;
+  o.summary.customers.orgsGrowthMomPct = 7.1;
+  o.summary.customers.orgsExcluded = 14;
+  o.summary.includeInternal = includeInternal;
+  o.includeInternal = includeInternal;
+  o.summary.seats = { seatsLicensed: 50, seatsFilled: 41, seatUtilizationPct: 82, seatsGrowthMomPct: 4.2 };
+  o.summary.revenue.churnedOrgsThisMonth = 0;
   o.planMix = [
     { planCode: 'work_verification', planName: 'Work Verification', billingInterval: 'monthly', orgs: 6, seats: 24, mrrCents: 127400, arrCents: 1528800, mrrSharePct: 54.8 },
     { planCode: 'scale', planName: 'Scale', billingInterval: 'annual', orgs: 2, seats: 20, mrrCents: 66600, arrCents: 799200, mrrSharePct: 28.7 },
     { planCode: 'starter', planName: 'Starter', billingInterval: 'monthly', orgs: 4, seats: 6, mrrCents: 38400, arrCents: 460800, mrrSharePct: 16.5 },
+    { planCode: 'none', planName: 'No paid subscription', billingInterval: '—', orgs: 3, seats: 0, mrrCents: 0, arrCents: 0, mrrSharePct: null },
   ];
+  if (includeInternal) {
+    o.summary.customers.orgsTotal += 14;
+    o.summary.customers.orgsExcluded = 0;
+    o.planMix.push({ planCode: 'comp', planName: 'Comp (no charge)', billingInterval: '—', orgs: 7, seats: 21, mrrCents: 0, arrCents: 0, mrrSharePct: null });
+  }
   return o;
 }
 
@@ -388,6 +404,42 @@ function aiReconciliation() {
   };
 }
 
+// ------------------------------------------------------- AI budgets (TEST DATA)
+// Allowance = 10% of what the org pays; comp shows "comp"; unpaid shows $0.
+function aiBudgets(includeInternal) {
+  const month = { from: iso(new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), 1))), to: iso(new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 1, 1))) };
+  const nextReset = month.to;
+  const row = (orgId, orgName, billingClass, paidCents, source, aiCostUsd, extra = {}) => {
+    const paying = billingClass === 'paying' || billingClass === 'past_due';
+    const allowanceNanos = billingClass === 'comp' ? null : paying ? paidCents * 0.1 * 10_000_000 : 0;
+    const aiCostNanos = Math.round(aiCostUsd * 1e9);
+    return {
+      orgId, orgName, internal: extra.internal ?? false, state: 'ok', paused: false,
+      usedNanos: aiCostNanos, allowanceNanos: allowanceNanos ?? 0, usedFraction: 0, creditBalanceNanos: extra.credits ?? 0, resetAt: extra.resetAt ?? nextReset,
+      staff: {
+        billingClass, paidMonthlyCents: paying ? paidCents : 0, paidSource: paying ? source : null,
+        allowanceMonthlyNanos: allowanceNanos,
+        allowanceLabel: billingClass === 'comp' ? 'comp' : allowanceNanos ? `$${(allowanceNanos / 1e9).toFixed(2)}` : '$0',
+        periodNote: extra.periodNote ?? null,
+        displayResetAt: extra.periodNote ? null : (extra.resetAt ?? nextReset),
+        usedOfAllowancePct: allowanceNanos ? Math.round((aiCostNanos / allowanceNanos) * 1000) / 10 : null,
+        aiCostNanos, costWindow: month,
+      },
+    };
+  };
+  const budgets = [
+    row('aaaaaaaa-0000-4000-8000-000000000001', 'Test Restoration Co (TEST DATA)', 'paying', 84_900, 'stripe', 31.42),
+    row('aaaaaaaa-0000-4000-8000-000000000002', 'Sample Builders (TEST DATA)', 'paying', 70_750, 'stripe', 4.18),
+    row('aaaaaaaa-0000-4000-8000-000000000003', 'Example Scale Group (TEST DATA)', 'paying', 224_900, 'catalog', 12.06, { credits: 25e9 }),
+    row('aaaaaaaa-0000-4000-8000-000000000004', 'Mockley Mitigation (TEST DATA)', 'past_due', 39_900, 'stripe', 1.2, { periodNote: 'ended_awaiting_renewal', resetAt: iso(new Date(NOW.getTime() - 3 * DAY)) }),
+    row('aaaaaaaa-0000-4000-8000-000000000005', 'Fixture Roofing (TEST DATA)', 'trialing', 0, null, 0.84),
+  ];
+  if (includeInternal) {
+    budgets.push(row('aaaaaaaa-0000-4000-8000-0000000000c1', 'Internal Comp Org (TEST DATA)', 'comp', 0, null, 9.31, { internal: true, periodNote: 'no_reset_comp_term', resetAt: '2126-10-01T00:00:00.000Z' }));
+  }
+  return { budgets, includeInternal, allowanceFraction: 0.1, costWindow: { ...month, timeZone: 'UTC' } };
+}
+
 // ----------------------------------------------------------------- server
 function send(res, status, body) {
   res.writeHead(status, {
@@ -426,13 +478,14 @@ const server = http.createServer(async (req, res) => {
   const r = p.slice('/api/analytics'.length);
 
   if (r === '/access') return send(res, 200, { scope: 'internal', displayName: 'Test Staff (TEST DATA)', pendingAccessRequests: 2 });
-  if (r === '/overview') return send(res, 200, overview());
+  const includeInternal = url.searchParams.get('internal') === '1';
+  if (r === '/overview') return send(res, 200, overview(includeInternal));
   if (r === '/product-health') return send(res, 200, productHealth(Math.min(52, Math.max(4, Number(url.searchParams.get('weeks') ?? 12)))));
-  if (r === '/experiments') return send(res, 200, { experiments: demo.demoExperiments });
+  if (r === '/experiments') return send(res, 200, { experiments: [], tracking: false, note: 'No experiments are instrumented.' });
   if (r === '/metering') return send(res, 200, demo.demoMetering);
   if (r === '/token-usage') return send(res, 200, tokenUsage());
   if (r === '/ai-reconciliation') return send(res, 200, aiReconciliation());
-  if (r === '/ai-budgets') return send(res, 200, { budgets: [] });
+  if (r === '/ai-budgets') return send(res, 200, aiBudgets(includeInternal));
   if (r === '/access-requests') return send(res, 200, { requests: [], pendingCount: 0 });
 
   if (r === '/contacts') {

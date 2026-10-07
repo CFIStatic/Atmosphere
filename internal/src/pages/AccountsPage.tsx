@@ -58,7 +58,10 @@ export function AccountsPage() {
                   { header: 'ARR, USD', type: 'usd' },
                   { header: 'Collected in period, USD', type: 'usd' },
                   { header: 'Members', type: 'integer' },
-                  { header: 'Seats', type: 'integer' },
+                  { header: 'Field Capture seats', type: 'integer' },
+                  { header: 'Field Capture seats in use', type: 'integer' },
+                  { header: 'AI cost in period, USD', type: 'usd' },
+                  { header: 'Internal / test / comp' },
                   { header: 'Hours', type: 'number' },
                   { header: 'Top tool' },
                   { header: 'Created', type: 'date' },
@@ -76,6 +79,9 @@ export function AccountsPage() {
                   centsToUsd(row.revenueInRangeCents),
                   row.members,
                   row.seats,
+                  row.seatsUsed ?? null,
+                  centsToUsd(row.aiCostCents ?? 0),
+                  row.internal ? (row.internalReason ?? 'internal') : '',
                   row.activeHours,
                   row.topFeature,
                   row.createdAt,
@@ -117,7 +123,7 @@ export function AccountsPage() {
                 <th>Organization</th>
                 <th>Plan</th>
                 <th className="num">MRR</th>
-                <th className="num">Seats</th>
+                <th className="num" title="Field Capture seats in use / licensed">FC seats</th>
                 <th className="num">Hours</th>
                 <th>Top tool</th>
                 <th className="num">Last active</th>
@@ -133,6 +139,14 @@ export function AccountsPage() {
                     <span className="ml-2">
                       <StatusPill status={row.status} />
                     </span>
+                    {row.internal && (
+                      <span
+                        className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-caution-600"
+                        title={row.internalReason ?? 'Internal / test / comp'}
+                      >
+                        internal
+                      </span>
+                    )}
                   </td>
                   <td className="text-ink-600">
                     {row.planName}
@@ -140,7 +154,7 @@ export function AccountsPage() {
                   </td>
                   <td className="num">{money(row.mrrCents)}</td>
                   <td className="num">
-                    {count(row.members)}/{count(row.seats)}
+                    {count(row.seatsUsed ?? 0)}/{count(row.seats)}
                   </td>
                   <td className="num">{hours(row.activeHours)}</td>
                   <td className="text-ink-600">{row.topFeature ?? '—'}</td>

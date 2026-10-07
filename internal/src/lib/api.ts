@@ -9,6 +9,7 @@ import type {
   MeteringPayload,
   TokenUsageAnalyticsPayload,
   AiReconciliationPayload,
+  AiBudgetsPayload,
   OverviewPayload,
   RangeParams,
   ReadyPayload,
@@ -32,6 +33,7 @@ import type {
   PlaybookDraft,
 } from './types';
 import { normalizeProductHealth } from './productHealth';
+import { internalParam } from './scope';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -113,7 +115,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function rangeQuery({ from, to, months }: RangeParams): string {
   return `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(
     to.toISOString(),
-  )}&months=${months}`;
+  )}&months=${months}${internalParam()}`;
 }
 
 export const api = {
@@ -159,7 +161,7 @@ export const api = {
     request<OverviewPayload>(`/api/analytics/overview?${rangeQuery(range)}`),
 
   experiments: (range: RangeParams) =>
-    request<{ experiments: ExperimentStats[] }>(
+    request<{ experiments: ExperimentStats[]; tracking?: boolean; note?: string }>(
       `/api/analytics/experiments?${rangeQuery(range)}`,
     ),
 
@@ -249,7 +251,7 @@ export const api = {
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
 
   productHealth: (weeks = 12): Promise<ProductHealth> =>
-    request<unknown>(`/api/analytics/product-health?weeks=${weeks}`).then(normalizeProductHealth),
+    request<unknown>(`/api/analytics/product-health?weeks=${weeks}${internalParam()}`).then(normalizeProductHealth),
 
   contacts: (refresh = false) =>
     request<ContactDirectory>(`/api/analytics/contacts${refresh ? '?refresh=1' : ''}`),
@@ -290,19 +292,7 @@ export const api = {
     ),
 
   aiBudgets: () =>
-    request<{
-      budgets: Array<{
-        orgId: string;
-        orgName: string | null;
-        state: string;
-        paused: boolean;
-        usedNanos: number;
-        allowanceNanos: number;
-        usedFraction: number;
-        creditBalanceNanos: number;
-        resetAt: string | null;
-      }>;
-    }>('/api/analytics/ai-budgets'),
+    request<AiBudgetsPayload>(`/api/analytics/ai-budgets${internalParam('?')}`),
 
   grantAiCredits: (orgId: string, dollars: number, note?: string) =>
     request<{ applied: boolean; balanceNanos: number }>(`/api/analytics/ai-budgets/${orgId}/credits`, {

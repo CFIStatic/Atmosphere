@@ -84,18 +84,26 @@ export function Sparkline({
   );
 }
 
+/** Billing labels from analytics_accounts (comp and no subscription are not "active"). */
+const STATUS_LABELS: Record<string, string> = {
+  no_subscription: 'no subscription',
+  test_mode: 'test mode',
+  past_due: 'past due',
+  comp: 'comp',
+};
+
 export function StatusPill({ status }: { status: string }) {
   const tone =
     status === 'active' || status === 'ready' || status === 'running' || status === 'approved'
       ? 'border-success-600/40 text-success-600'
-      : status === 'canceled' || status === 'not_ready' || status === 'denied'
+      : status === 'canceled' || status === 'not_ready' || status === 'denied' || status === 'past_due'
         ? 'border-danger-600/40 text-danger-600'
-        : status === 'pending'
+        : status === 'pending' || status === 'trialing'
           ? 'border-brand-500/50 text-brand-600'
           : 'border-line-strong text-ink-600';
   return (
     <span className={`inline-block whitespace-nowrap border px-1.5 py-px text-[10px] font-semibold uppercase tracking-[0.06em] ${tone}`}>
-      {status.replace(/_/g, ' ')}
+      {STATUS_LABELS[status] ?? status.replace(/_/g, ' ')}
     </span>
   );
 }

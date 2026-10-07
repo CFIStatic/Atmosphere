@@ -137,8 +137,8 @@ export function OverviewPage() {
             value: count(customers?.orgsPaying ?? null),
             raw: customers?.orgsPaying ?? null,
             rawType: 'integer',
-            delta: <Delta value={customers?.orgsGrowthMomPct ?? null} />,
-            comparison: 'vs prior month',
+            delta: <Delta value={customers?.payingGrowthMomPct ?? null} />,
+            comparison: `vs ${count(customers?.orgsPayingPrev ?? 0)} at month start`,
             to: '/growth',
           },
           {
@@ -158,7 +158,7 @@ export function OverviewPage() {
           },
           {
             label: 'Time to analysis',
-            unit: 'median, last 4 wks',
+            unit: 'median to first analysis, last 4 wks',
             value: duration(h?.analysis.current.medianSeconds ?? null),
             raw: h?.analysis.current.medianSeconds ?? null,
             rawUnit: 'seconds',

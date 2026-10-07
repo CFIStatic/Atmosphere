@@ -9,6 +9,8 @@ import { readSidebarCollapsed, writeSidebarCollapsed } from '../lib/sidebar';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { ErrorBoundary } from './ErrorBoundary';
+import { ScopeNote, ScopeToggle } from './ScopeToggle';
+import { useIncludeInternal } from '../hooks/useIncludeInternal';
 
 function useTestDataFlag(): boolean {
   return useSyncExternalStore(onTestData, isTestData, () => false);
@@ -125,6 +127,7 @@ export function Shell() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLDivElement>(null);
   const testData = useTestDataFlag();
+  const includeInternal = useIncludeInternal();
   const internal = canSeeAccounts(access?.scope);
   const pending = canManageAccess(access?.scope) ? (access?.pendingAccessRequests ?? 0) : 0;
   const groups = NAV_GROUPS.map((group) => ({
@@ -229,6 +232,7 @@ export function Shell() {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-2.5 text-[13px] text-ink-600 sm:gap-3">
+            {internal && <ScopeToggle compact />}
             <ThemeToggle />
             <span className="hidden max-w-[16rem] truncate md:inline">{access?.displayName ?? user?.email}</span>
             <button
@@ -324,9 +328,11 @@ export function Shell() {
 
         <main className="min-w-0 flex-1">
           <div className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-            <ErrorBoundary key={location.pathname}>
+            {/* Remount the page when the scope changes so every report refetches. */}
+            <ErrorBoundary key={`${location.pathname}:${internal && includeInternal ? 'all' : 'customers'}`}>
               <Outlet />
             </ErrorBoundary>
+            <ScopeNote allowed={internal} />
           </div>
         </main>
       </div>

@@ -602,7 +602,8 @@ set search_path = public, pg_temp
 as $$
 declare
   v_scope public.analytics_scope;
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
   v_month_start timestamptz;
   v_mrr bigint; v_mrr_prev bigint;
   v_seats bigint; v_seats_prev bigint;
@@ -797,7 +798,8 @@ set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('investor');
 
@@ -895,7 +897,8 @@ set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('investor');
 
@@ -959,7 +962,8 @@ set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('internal');
 
@@ -1101,7 +1105,8 @@ set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('investor');
 
@@ -1152,7 +1157,8 @@ set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('investor');
 
@@ -1205,7 +1211,8 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_inc        boolean := coalesce(p_include_internal, false);
+  v_inc        boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
   v_weeks      integer := greatest(4, least(coalesce(p_weeks, 12), 52));
   v_now        timestamptz := now();
   v_this_week  timestamptz := date_trunc('week', v_now at time zone 'UTC') at time zone 'UTC';
@@ -1458,7 +1465,8 @@ security definer
 set search_path to 'public', 'private', 'auth', 'pg_temp'
 as $$
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('internal');
 
@@ -1593,7 +1601,8 @@ security definer
 set search_path to 'public', 'private', 'pg_temp'
 as $$
 declare
-  v_inc boolean := coalesce(p_include_internal, false);
+  v_inc boolean := coalesce(p_include_internal, false)
+    and coalesce(private.analytics_scope() = 'internal', false);  -- investors always see customers only
 begin
   perform private.require_analytics('internal');
 

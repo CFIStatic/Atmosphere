@@ -9,6 +9,7 @@ import type { Contact, ContactSourceId, ContactStatus } from '../lib/types';
 import { ErrorLine, Footnotes, KpiStrip, Loading, PageHeader, Section, Tag } from '../components/report';
 import { DownloadButton } from '../components/DownloadButton';
 import type { ExportSheet } from '../lib/excel';
+import { useIncludeInternal } from '../hooks/useIncludeInternal';
 
 function statusTone(status: ContactStatus): 'good' | 'bad' | 'accent' | 'neutral' {
   if (status === 'active') return 'good';
@@ -31,7 +32,14 @@ export function ContactsPage() {
   const [source, setSource] = useState<ContactSourceId | ''>('');
   const [hideSuppressed, setHideSuppressed] = useState(false);
 
-  const contacts = useMemo(() => data?.contacts ?? [], [data]);
+  // Internal (Jettx staff, test/demo/comp org) contacts follow the global toggle.
+  const includeInternal = useIncludeInternal();
+  const allContacts = useMemo(() => data?.contacts ?? [], [data]);
+  const contacts = useMemo(
+    () => (includeInternal ? allContacts : allContacts.filter((c) => !c.internal)),
+    [allContacts, includeInternal],
+  );
+  const hiddenInternal = allContacts.length - contacts.length;
   const filtered = useMemo(() => {
     return searchContacts(contacts, query).filter(
       (c) =>
@@ -124,17 +132,19 @@ export function ContactsPage() {
           <KpiStrip
             download={{ table: 'contacts-summary', label: 'contact counts' }}
             items={[
-              { label: 'Contacts', unit: 'unique emails, all sources', value: count(contacts.length), raw: contacts.length, rawType: 'integer' },
+              {
+                label: 'Contacts',
+                unit: 'unique emails, all sources',
+                value: count(contacts.length),
+                raw: contacts.length,
+                rawType: 'integer',
+                note: hiddenInternal ? `${count(hiddenInternal)} internal hidden` : undefined,
+              },
               { label: 'Active subscription', unit: 'count', value: count(byStatus('active')), raw: byStatus('active'), rawType: 'integer' },
               { label: 'Trialing', unit: 'count', value: count(byStatus('trialing')), raw: byStatus('trialing'), rawType: 'integer' },
               { label: 'Past due', unit: 'count', value: count(byStatus('past_due')), raw: byStatus('past_due'), rawType: 'integer' },
-              {
-                label: 'Canceled or none',
-                unit: 'count',
-                value: count(byStatus('canceled') + byStatus('none')),
-                raw: byStatus('canceled') + byStatus('none'),
-                rawType: 'integer',
-              },
+              { label: 'Canceled', unit: 'count', value: count(byStatus('canceled')), raw: byStatus('canceled'), rawType: 'integer' },
+              { label: 'No subscription', unit: 'count', value: count(byStatus('none')), raw: byStatus('none'), rawType: 'integer' },
               { label: 'Unsubscribed', unit: 'never emailed', value: count(data.suppressedCount), raw: data.suppressedCount, rawType: 'integer' },
             ]}
           />
@@ -263,6 +273,11 @@ export function ContactsPage() {
                               <Tag>Unsubscribed</Tag>
                             </span>
                           )}
+                          {c.internal && (
+                            <span className="ml-2">
+                              <Tag tone="accent">Internal</Tag>
+                            </span>
+                          )}
                         </td>
                         <td>{c.company ?? <span className="text-ink-400">—</span>}</td>
                         <td>{planLabel(c.plan)}</td>
@@ -290,7 +305,7 @@ export function ContactsPage() {
         asOfValue={data?.fetchedAt ?? null}
         notes={[
           'Source: Stripe customers (customers.list with subscriptions), read server-side with the existing Stripe key and cached for five minutes. Deleted customers and customers without an email are skipped. The first 5,000 customers are read.',
-          'Company: the Atmosphere organization named in the customer’s org_id metadata. Plan and status: the most engaged subscription (active, then trialing, past due, canceled).',
+          'Company: the Atmosphere organization named in the customer’s org_id metadata. Plan and status: the most engaged subscription across all of the customer’s subscriptions, including canceled ones (active, then trialing, past due, canceled). Internal contacts (jettx.ai addresses and orgs flagged internal, test or comp) are hidden unless “Include internal & test accounts” is on.',
           'Unsubscribed: the address is on the campaign suppression list (unsubscribe link, bounce, complaint or manual) and is never included in a send.',
           'Download (Excel .xlsx) and CSV export contain every filtered row, not just the 500 on screen. In the Excel file every cell is stored as text, a number or a date, never a formula; in the CSV, cells that begin with =, +, −, @ are prefixed so spreadsheets do not run them as formulas.',
         ]}

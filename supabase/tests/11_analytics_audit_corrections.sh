@@ -306,6 +306,7 @@ do $$ begin
 exception when insufficient_privilege then raise notice 'ok - investor scope cannot read accounts';
 end $$;
 create temp table s_inv as select public.analytics_summary(now() - interval '30 days', now(), false) as j;
+create temp table s_inv_inc as select public.analytics_summary(now() - interval '30 days', now(), true) as j;
 
 set request.headers = '{"x-analytics-user-id":"00000000-0000-4000-8000-000000000001"}';
 create temp table s as select public.analytics_summary(now() - interval '30 days', now(), false) as j;
@@ -367,6 +368,7 @@ select pg_temp.check((select (j -> 'revenue' ->> 'tax_excluded_cents')::bigint =
 
 -- 6. Unit economics: internal only, honest names.
 select pg_temp.check((select j ? 'unit_economics' from s) and not (select j ? 'unit_economics' from s_inv), 'unit economics internal-only');
+select pg_temp.check((select (j->>'include_internal')::boolean = false and (j->'customers'->>'orgs_paying') = (select j->'customers'->>'orgs_paying' from s) from s_inv_inc), 'investors cannot include internal accounts');
 select pg_temp.check((select not (j -> 'unit_economics' ? 'gross_margin_pct') from s), 'no gross margin on list value');
 select pg_temp.check((select (j -> 'unit_economics' ->> 'model_cost_cents')::numeric = 500 from s), 'model cost = $5.00 (customer orgs)');
 

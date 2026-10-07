@@ -85,16 +85,19 @@ export function CapturePage() {
               },
               {
                 label: 'Time to analysis',
-                unit: 'median, last 4 wks',
+                unit: 'median to first analysis, last 4 wks',
                 value: duration(a.current.medianSeconds),
                 raw: a.current.medianSeconds,
                 rawUnit: 'seconds',
                 delta: <Delta value={pctChange(a.current.medianSeconds, a.prior.medianSeconds)} goodWhen="down" />,
                 comparison: 'vs prior 4 wks',
+                note: a.current.firstTimeUnknown
+                  ? `${count(a.current.analysed - a.current.firstTimeUnknown)} timed · ${count(a.current.firstTimeUnknown)} first time unknown`
+                  : undefined,
               },
               {
                 label: 'Time to analysis',
-                unit: '90th percentile, last 4 wks',
+                unit: '90th percentile to first analysis, last 4 wks',
                 value: duration(a.current.p90Seconds),
                 raw: a.current.p90Seconds,
                 rawUnit: 'seconds',
@@ -103,7 +106,7 @@ export function CapturePage() {
               },
               {
                 label: 'Proofs analysed',
-                unit: 'count, last 4 wks',
+                unit: 'first analysed in the last 4 wks',
                 value: count(e.current.proofsAnalysed),
                 raw: e.current.proofsAnalysed,
                 rawType: 'integer',
@@ -249,8 +252,8 @@ export function CapturePage() {
           </Section>
 
           <Section
-            title="Time from upload to analysis, weekly"
-            note="Minutes; median and 90th percentile"
+            title="Time from upload to first analysis, weekly"
+            note="Minutes; median and 90th percentile. Re-runs do not count."
             actions={
               <DownloadButton
                 table="time-to-analysis"
@@ -261,12 +264,14 @@ export function CapturePage() {
                     columns: [
                       { header: 'Week of (Mon, UTC)', type: 'date' },
                       { header: 'Analysed', type: 'integer' },
+                      { header: 'First time unknown', type: 'integer' },
                       { header: 'Median, minutes', type: 'number' },
                       { header: '90th percentile, minutes', type: 'number' },
                     ],
                     rows: a.weekly.map((w) => [
                       w.weekStart,
                       w.analysed,
+                      w.firstTimeUnknown ?? 0,
                       w.medianSeconds === null ? null : w.medianSeconds / 60,
                       w.p90Seconds === null ? null : w.p90Seconds / 60,
                     ]),
@@ -281,6 +286,7 @@ export function CapturePage() {
                     rows: [
                       ['Videos received', a.current.received, a.prior.received],
                       ['Analysed', a.current.analysed, a.prior.analysed],
+                      ['First analysis time unknown (Sep 21 bulk re-run)', a.current.firstTimeUnknown ?? 0, a.prior.firstTimeUnknown ?? 0],
                       ['Analysis failed', a.current.failed, a.prior.failed],
                       ['Waiting for analysis', a.current.pending, a.prior.pending],
                       ['Median time to analysis, seconds', a.current.medianSeconds, a.prior.medianSeconds],
@@ -319,6 +325,7 @@ export function CapturePage() {
               <tbody>
                 <tr><td>Videos received</td><td className="num">{count(a.current.received)}</td><td className="num text-ink-600">{count(a.prior.received)}</td></tr>
                 <tr><td>Analysed</td><td className="num">{count(a.current.analysed)}</td><td className="num text-ink-600">{count(a.prior.analysed)}</td></tr>
+                <tr><td>First analysis time unknown</td><td className="num">{count(a.current.firstTimeUnknown ?? 0)}</td><td className="num text-ink-600">{count(a.prior.firstTimeUnknown ?? 0)}</td></tr>
                 <tr><td>Analysis failed</td><td className="num">{count(a.current.failed)}</td><td className="num text-ink-600">{count(a.prior.failed)}</td></tr>
                 <tr><td>Waiting for analysis</td><td className="num">{count(a.current.pending)}</td><td className="num text-ink-600">{count(a.prior.pending)}</td></tr>
               </tbody>
@@ -416,7 +423,7 @@ export function CapturePage() {
         notes={[
           'Uploads: capture_upload_attempts, one row per upload from the first signed upload URL. Completion rate = completed ÷ (started − in flight). In flight = activity within 24 hours and not finished; abandoned = neither finished nor active within 24 hours. Uploads before this release are not in the history.',
           'Failure codes are the upload_* error codes the API returned when stitching or recording the upload.',
-          'Analysis: videos received in the window (job_proofs.received_at). Time is received_at to analysed_at for those whose analysis finished; failed = analysis_status failed; waiting = not yet done or failed.',
+          'Analysis: videos received in the window (job_proofs.received_at), deleted jobs and videos excluded. Time is received_at to first_analysed_at, the first time analysis finished; later re-runs (such as the Sep 21 bulk re-analysis) do not reset it. Videos whose first analysis time was overwritten by that re-run are counted as "first time unknown" and left out of the median and p90. Failed = analysis_status failed; waiting = not yet done or failed. Weeks start Monday, UTC.',
           'Evidence: job_proofs (analysed), daily_job_reports (status sent), evidence_downloads, verifier_shares (created_at; last_opened_at for opens). Share-link views keep only a running total, so there is no per-period history.',
         ]}
       />

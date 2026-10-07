@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, tokenUsageRange } from '../lib/api';
 import type { AiReconciliationPayload, AiReconciliationProvider } from '../lib/types';
 import { asOf } from '../lib/format';
-import { ErrorLine, KpiStrip, Loading, PageHeader, Section } from '../components/report';
+import { ErrorLine, Footnotes, KpiStrip, Loading, PageHeader, Section } from '../components/report';
 import { DownloadButton } from '../components/DownloadButton';
 import type { ExportSheet } from '../lib/excel';
 
@@ -254,6 +254,11 @@ export function AiReconciliationPage() {
           {data.providers.map((p) => (
             <ProviderSection key={p.provider} p={p} threshold={data.thresholdPct} />
           ))}
+          <Footnotes
+            notes={[
+              'Our side: token_usage_events.cost_nanos summed per provider per UTC day. Providers not listed above (for example Browserbase sessions used by Computer) are included in "Our recorded AI cost" but are not reconciled: there is no provider cost API wired up for them, so check their invoices by hand.',
+            ]}
+          />
         </>
       )}
     </div>

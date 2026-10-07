@@ -112,13 +112,17 @@ export const demoOverview: OverviewPayload = {
   range: { from: '2025-08-21T00:00:00.000Z', to: '2026-08-21T00:00:00.000Z' },
   summary: {
     scope: 'internal',
+    includeInternal: false,
     range: { from: '2025-08-21T00:00:00.000Z', to: '2026-08-21T00:00:00.000Z', days: 365 },
     customers: {
       orgsTotal: 14,
       orgsNew: 3,
       orgsPaying: 11,
+      orgsPayingPrev: 10,
       orgsActive: 12,
+      orgsExcluded: 4,
       orgsGrowthMomPct: 8.3,
+      payingGrowthMomPct: 10,
     },
     users: {
       usersTotal: 86,
@@ -138,7 +142,13 @@ export const demoOverview: OverviewPayload = {
       annualContractedArrCents: 1911600,
       mrrGrowthMomPct: 5.4,
       netNewMrrCents: 11200,
+      churnedOrgsThisMonth: 0,
       collectedInRangeCents: 1842000,
+      subscriptionRevenueCents: 1790000,
+      usageRevenueCents: 38000,
+      creditRevenueCents: 20000,
+      refundsCents: -6000,
+      taxExcludedCents: 41200,
       trailing12mRevenueCents: 1842000,
       avgMonthlySpendPerAccountCents: 19860,
       arpaMrrCents: 19864,
@@ -152,10 +162,9 @@ export const demoOverview: OverviewPayload = {
       aiRequests: 940,
     },
     unitEconomics: {
-      billedUsageCents: 18400,
       modelCostCents: 6100,
-      grossMarginCents: 12300,
-      grossMarginPct: 66.8,
+      listValueCents: 61000,
+      modelCost30dCents: 1840,
     },
   },
   monthly: [
@@ -209,16 +218,19 @@ export const demoExperiments: ExperimentStats[] = [
 ];
 
 export const demoMetering: MeteringPayload = {
-  totals: { eventCount: 940, aiCostNanos: 6100_0000000, computeUnits: 1820, distinctOrgs: 9 },
+  source: 'token_usage_events',
+  includeInternal: false,
+  totals: { eventCount: 940, aiCostNanos: 6100_0000000, computeUnits: 6100, totalTokens: 4_210_000, distinctOrgs: 9 },
   byCustomer: [
-    { orgId: accounts[2].orgId, orgName: accounts[2].orgName, eventCount: 410, aiCostNanos: 2800_0000000, computeUnits: 820, distinctJobs: 18 },
-    { orgId: accounts[0].orgId, orgName: accounts[0].orgName, eventCount: 260, aiCostNanos: 1700_0000000, computeUnits: 510, distinctJobs: 11 },
-    { orgId: accounts[1].orgId, orgName: accounts[1].orgName, eventCount: 140, aiCostNanos: 900_0000000, computeUnits: 280, distinctJobs: 7 },
+    { orgId: accounts[2].orgId, orgName: accounts[2].orgName, eventCount: 410, aiCostNanos: 2800_0000000, computeUnits: 2800, distinctJobs: 18 },
+    { orgId: accounts[0].orgId, orgName: accounts[0].orgName, eventCount: 260, aiCostNanos: 1700_0000000, computeUnits: 1700, distinctJobs: 11 },
+    { orgId: accounts[1].orgId, orgName: accounts[1].orgName, eventCount: 140, aiCostNanos: 900_0000000, computeUnits: 900, distinctJobs: 7 },
   ],
   byWorkflow: [
-    { workflowId: 'verifier.dictation', eventCount: 620, aiCostNanos: 3900_0000000 },
-    { workflowId: 'intake.propose', eventCount: 210, aiCostNanos: 1400_0000000 },
+    { workflowId: 'video_analysis', eventCount: 620, aiCostNanos: 3900_0000000 },
+    { workflowId: 'ask', eventCount: 210, aiCostNanos: 1400_0000000 },
   ],
+  byAgent: [{ agentType: 'verifier', eventCount: 620, aiCostNanos: 3900_0000000 }],
   byModel: [
     { provider: 'google', model: 'gemini-2.5-flash', eventCount: 700, aiCostNanos: 2100_0000000 },
     { provider: 'anthropic', model: 'claude-sonnet-5', eventCount: 240, aiCostNanos: 4000_0000000 },
