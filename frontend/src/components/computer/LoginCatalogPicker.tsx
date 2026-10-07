@@ -282,7 +282,7 @@ export function LoginCatalogPicker({
 
         {nothing ? (
           <p className="text-sm text-ink-600" data-testid="logins-catalog-empty">
-            No site matches “{query.trim()}”. Use + Custom website above.
+            No site matches “{query.trim()}”. Use + Add above to add it.
           </p>
         ) : null}
 

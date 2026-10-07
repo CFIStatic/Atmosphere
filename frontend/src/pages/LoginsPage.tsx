@@ -970,10 +970,12 @@ export function LoginsPage() {
               onClick={() => openParams({ add: 'custom' })}
               disabled={!canStart}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm font-semibold text-ink-900 transition hover:border-brand-600 hover:bg-paper-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Add a custom website"
+              title="Add a custom website"
               data-testid="logins-catalog-custom"
             >
               <Plus aria-hidden="true" className="h-4 w-4" />
-              Custom website
+              Add
             </button>
           ) : null}
         </div>

@@ -254,7 +254,7 @@ describe('LoginsPage', () => {
     expect(within(picker).getByTestId('logins-catalog-homedepot')).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Search sites'));
     await user.type(screen.getByLabelText('Search sites'), 'nothing like this');
-    expect(screen.getByTestId('logins-catalog-empty')).toHaveTextContent("Custom website");
+    expect(screen.getByTestId('logins-catalog-empty')).toHaveTextContent("+ Add");
     expect(screen.getByTestId('logins-catalog-custom')).toBeInTheDocument();
   });
 
@@ -359,6 +359,8 @@ describe('LoginsPage', () => {
     const custom = await screen.findByTestId('logins-catalog-custom');
     // Lives in the page header next to the title, not in the site list.
     expect(custom.closest('header')).not.toBeNull();
+    expect(custom).toHaveTextContent(/^Add$/);
+    expect(custom).toHaveAccessibleName('Add a custom website');
     expect(screen.getByTestId('logins-catalog')).not.toContainElement(custom);
     await user.click(custom);
     expect(where()).toBe('/logins?add=custom');
