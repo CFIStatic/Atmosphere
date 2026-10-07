@@ -47,6 +47,8 @@ export function betterStatus(a: ContactStatus, b: ContactStatus): ContactStatus 
 }
 
 interface SubscriptionLike {
+  id?: string | null;
+  customer?: string | { id?: string | null } | null;
   status?: string | null;
   items?: { data?: Array<{ price?: { id?: string | null; nickname?: string | null } | null }> };
 }
@@ -73,10 +75,46 @@ export interface StripeCustomerLike {
   subscriptions?: { data?: SubscriptionLike[] } | null;
 }
 
+/** Internal staff addresses (Jettx). */
+export const INTERNAL_EMAIL_DOMAINS = ['jettx.ai'];
+
+/**
+ * Attach every subscription (status 'all') to its customer. customers.list
+ * with expand=data.subscriptions only returns subscriptions that are not
+ * canceled, so a canceled customer used to read as "none". Exported for tests.
+ */
+export function attachSubscriptions(
+  customers: StripeCustomerLike[],
+  subscriptions: SubscriptionLike[],
+): StripeCustomerLike[] {
+  const byCustomer = new Map<string, SubscriptionLike[]>();
+  for (const sub of subscriptions) {
+    const id = typeof sub.customer === 'string' ? sub.customer : (sub.customer?.id ?? null);
+    if (!id) continue;
+    const list = byCustomer.get(id) ?? [];
+    list.push(sub);
+    byCustomer.set(id, list);
+  }
+  return customers.map((customer) => {
+    const extra = byCustomer.get(customer.id) ?? [];
+    if (extra.length === 0) return customer;
+    const seen = new Set<string>();
+    const merged: SubscriptionLike[] = [];
+    for (const sub of [...(customer.subscriptions?.data ?? []), ...extra]) {
+      const key = sub.id ?? '';
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      merged.push(sub);
+    }
+    return { ...customer, subscriptions: { data: merged } };
+  });
+}
+
 /** Pure mapping, exported for tests. Returns null for customers with no usable email. */
 export function contactFromStripeCustomer(
   customer: StripeCustomerLike,
   orgNames: Map<string, string>,
+  internalOrgIds: Set<string> = new Set(),
 ): Contact | null {
   if (customer.deleted) return null;
   const email = (customer.email ?? '').trim().toLowerCase();
@@ -97,6 +135,8 @@ export function contactFromStripeCustomer(
 
   const orgId = customer.metadata?.org_id?.trim() || null;
   const name = customer.name?.trim() || null;
+  const domain = email.split('@')[1] ?? '';
+  const internal = (orgId !== null && internalOrgIds.has(orgId)) || INTERNAL_EMAIL_DOMAINS.includes(domain);
   return {
     email,
     name,
@@ -109,11 +149,12 @@ export function contactFromStripeCustomer(
         ? new Date(customer.created * 1000).toISOString()
         : null,
     sources: ['stripe'],
+    internal,
   };
 }
 
 export interface StripeContactSourceDeps {
-  stripe: () => Pick<Stripe, 'customers'>;
+  stripe: () => Pick<Stripe, 'customers'> & Partial<Pick<Stripe, 'subscriptions'>>;
   /** Service-role client used only to resolve org names from metadata.org_id. */
   admin: () => SupabaseClient | null;
   secretKeyConfigured?: () => boolean;
@@ -122,24 +163,52 @@ export interface StripeContactSourceDeps {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function loadOrgNames(admin: SupabaseClient | null, ids: string[]): Promise<Map<string, string>> {
+async function loadOrgNames(
+  admin: SupabaseClient | null,
+  ids: string[],
+): Promise<{ names: Map<string, string>; internal: Set<string> }> {
   const names = new Map<string, string>();
+  const internal = new Set<string>();
   const valid = [...new Set(ids.filter((id) => UUID.test(id)))];
-  if (!admin || valid.length === 0) return names;
+  if (!admin || valid.length === 0) return { names, internal };
   for (let i = 0; i < valid.length; i += 200) {
-    const { data, error } = await admin
+    const chunk = valid.slice(i, i + 200);
+    type OrgNameRow = { id: string; name: string | null; exclude_from_analytics?: boolean | null };
+    let res: { data: OrgNameRow[] | null; error: { message: string } | null } = await admin
       .from('orgs')
-      .select('id, name')
-      .in('id', valid.slice(i, i + 200));
-    if (error) {
-      console.warn('[analytics-contacts] org name lookup failed:', error.message);
-      return names;
+      .select('id, name, exclude_from_analytics')
+      .in('id', chunk);
+    if (res.error && /exclude_from_analytics|column|schema cache/i.test(res.error.message)) {
+      // Pre-migration database: names only.
+      res = await admin.from('orgs').select('id, name').in('id', chunk);
     }
-    for (const row of (data ?? []) as Array<{ id: string; name: string | null }>) {
+    if (res.error) {
+      console.warn('[analytics-contacts] org name lookup failed:', res.error.message);
+      return { names, internal };
+    }
+    for (const row of res.data ?? []) {
       if (row.name) names.set(row.id, row.name);
+      if (row.exclude_from_analytics) internal.add(row.id);
     }
   }
-  return names;
+  return { names, internal };
+}
+
+async function listAllSubscriptions(
+  stripe: Partial<Pick<Stripe, 'subscriptions'>>,
+  cap: number,
+): Promise<SubscriptionLike[]> {
+  if (!stripe.subscriptions?.list) return [];
+  const subs: SubscriptionLike[] = [];
+  try {
+    for await (const sub of stripe.subscriptions.list({ status: 'all', limit: 100 })) {
+      if (subs.length >= cap) break;
+      subs.push(sub as unknown as SubscriptionLike);
+    }
+  } catch (err) {
+    console.warn('[analytics-contacts] subscription list failed; canceled status may be missing:', err);
+  }
+  return subs;
 }
 
 export function createStripeContactSource(deps: StripeContactSourceDeps): ContactSource {
@@ -167,12 +236,13 @@ export function createStripeContactSource(deps: StripeContactSourceDeps): Contac
         }
         customers.push(customer as unknown as StripeCustomerLike);
       }
-      const orgIds = customers
+      const withAll = attachSubscriptions(customers, await listAllSubscriptions(deps.stripe(), cap * 4));
+      const orgIds = withAll
         .map((c) => c.metadata?.org_id?.trim())
         .filter((id): id is string => Boolean(id));
-      const orgNames = await loadOrgNames(deps.admin(), orgIds);
-      const contacts = customers
-        .map((c) => contactFromStripeCustomer(c, orgNames))
+      const orgs = await loadOrgNames(deps.admin(), orgIds);
+      const contacts = withAll
+        .map((c) => contactFromStripeCustomer(c, orgs.names, orgs.internal))
         .filter((c): c is Contact => c !== null);
       return { contacts, truncated };
     },

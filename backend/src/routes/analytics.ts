@@ -9,6 +9,7 @@ import {
   analyticsDatasetSchema,
   analyticsOrgIdSchema,
   analyticsRangeSchema,
+  parseIncludeInternal,
 } from '../lib/validation.js';
 import { forbidden, HttpError } from '../lib/errors.js';
 import { canGrantAiCredits } from '../metering/aiBudget.js';
@@ -26,6 +27,7 @@ import {
   getAccounts,
   getExperiments,
   getFeatures,
+  getInternalOrgs,
   getMonthly,
   getOverview,
   getPlanMix,
@@ -37,6 +39,8 @@ import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics, getAdminTokenUsageAnalytics } from '../metering/periodAggregation.js';
 import { getProductHealth } from '../analytics/productHealth.js';
+import { currentUtcMonth, staffBudgetDisplay, type StaffBillingRow } from '../analytics/aiBudgetDisplay.js';
+import { collectPaged, TOKEN_USAGE_PAGE } from '../metering/tokenUsage.js';
 import { buildReconciliation } from '../metering/reconciliation.js';
 import { contactRegistry, normalizeAudience } from '../analytics/contacts/registry.js';
 import {
@@ -127,9 +131,9 @@ function parseRange(req: Request) {
 /** The whole dashboard in one round trip. */
 analyticsRouter.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { from, to, months } = parseRange(req);
+    const { from, to, months, includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json(await getOverview(supabase, req.analyticsScope!, from, to, months));
+    res.json(await getOverview(supabase, req.analyticsScope!, from, to, months, includeInternal));
   } catch (err) {
     next(err);
   }
@@ -137,9 +141,9 @@ analyticsRouter.get('/overview', async (req: Request, res: Response, next: NextF
 
 analyticsRouter.get('/summary', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { from, to } = parseRange(req);
+    const { from, to, includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json({ summary: await getSummary(supabase, from, to) });
+    res.json({ summary: await getSummary(supabase, from, to, includeInternal) });
   } catch (err) {
     next(err);
   }
@@ -147,9 +151,9 @@ analyticsRouter.get('/summary', async (req: Request, res: Response, next: NextFu
 
 analyticsRouter.get('/monthly', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { months } = parseRange(req);
+    const { months, includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json({ months: await getMonthly(supabase, months) });
+    res.json({ months: await getMonthly(supabase, months, includeInternal) });
   } catch (err) {
     next(err);
   }
@@ -157,9 +161,9 @@ analyticsRouter.get('/monthly', async (req: Request, res: Response, next: NextFu
 
 analyticsRouter.get('/features', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { from, to } = parseRange(req);
+    const { from, to, includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json({ features: await getFeatures(supabase, from, to) });
+    res.json({ features: await getFeatures(supabase, from, to, includeInternal) });
   } catch (err) {
     next(err);
   }
@@ -167,8 +171,9 @@ analyticsRouter.get('/features', async (req: Request, res: Response, next: NextF
 
 analyticsRouter.get('/plan-mix', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const { includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json({ plans: await getPlanMix(supabase) });
+    res.json({ plans: await getPlanMix(supabase, includeInternal) });
   } catch (err) {
     next(err);
   }
@@ -176,9 +181,9 @@ analyticsRouter.get('/plan-mix', async (req: Request, res: Response, next: NextF
 
 analyticsRouter.get('/retention', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { months } = parseRange(req);
+    const { months, includeInternal } = parseRange(req);
     const supabase = staffReports(req);
-    res.json({ cohorts: await getRetention(supabase, Math.min(months, 36)) });
+    res.json({ cohorts: await getRetention(supabase, Math.min(months, 36), includeInternal) });
   } catch (err) {
     next(err);
   }
@@ -190,9 +195,23 @@ analyticsRouter.get(
   requireAnalytics('internal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { from, to } = parseRange(req);
+      const { from, to, includeInternal } = parseRange(req);
       const supabase = staffReports(req);
-      res.json({ accounts: await getAccounts(supabase, from, to, 500) });
+      res.json({ accounts: await getAccounts(supabase, from, to, 500, includeInternal) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Orgs left out of reports by default, and why. Internal scope only. */
+analyticsRouter.get(
+  '/internal-orgs',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = staffReports(req);
+      res.json({ orgs: await getInternalOrgs(supabase) });
     } catch (err) {
       next(err);
     }
@@ -229,9 +248,11 @@ analyticsRouter.get(
   requireAnalytics('internal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { from, to } = parseRange(req);
+      const { from, to, includeInternal } = parseRange(req);
       const supabase = staffReports(req);
-      res.json(await getAdminTokenUsageAnalytics(supabase, from.toISOString(), to.toISOString()));
+      res.json(
+        await getAdminTokenUsageAnalytics(supabase, from.toISOString(), to.toISOString(), includeInternal),
+      );
     } catch (err) {
       next(err);
     }
@@ -257,15 +278,17 @@ analyticsRouter.get(
   },
 );
 
-/** AI cost vs revenue metering — internal scope only. */
+/** AI cost by customer, feature and model from the token ledger — internal scope only. */
 analyticsRouter.get(
   '/metering',
   requireAnalytics('internal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { from, to } = parseRange(req);
+      const { from, to, includeInternal } = parseRange(req);
       const supabase = staffReports(req);
-      res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
+      res.json(
+        await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString(), includeInternal),
+      );
     } catch (err) {
       next(err);
     }
@@ -358,7 +381,10 @@ analyticsRouter.post(
   },
 );
 
-/** A/B experiment funnel — Atmosphere internal staff only. */
+/**
+ * A/B experiments — Atmosphere internal staff only. The experiment tables were
+ * dropped, so this honestly reports that nothing is being measured.
+ */
 analyticsRouter.get(
   '/experiments',
   requireAnalytics('internal'),
@@ -366,7 +392,11 @@ analyticsRouter.get(
     try {
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
-      res.json({ experiments: await getExperiments(supabase, from, to) });
+      res.json({
+        experiments: await getExperiments(supabase, from, to),
+        tracking: false,
+        note: 'No experiments are instrumented. The experiment tables were removed; nothing is being measured.',
+      });
     } catch (err) {
       next(err);
     }
@@ -383,7 +413,7 @@ analyticsRouter.get(
  */
 analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { from, to, months } = parseRange(req);
+    const { from, to, months, includeInternal } = parseRange(req);
     const scope = req.analyticsScope!;
 
     const datasetParsed = analyticsDatasetSchema.safeParse(req.query.dataset ?? 'all');
@@ -401,7 +431,7 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
     }
 
     const supabase = staffReports(req);
-    const payload = await getOverview(supabase, scope, from, to, months);
+    const payload = await getOverview(supabase, scope, from, to, months, includeInternal);
     const workbook = buildWorkbook(payload, dataset);
     const filename = workbookFilename(payload, dataset);
 
@@ -420,7 +450,12 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
   }
 });
 
-/** Staff view of each org's AI spend against its allowance. */
+/**
+ * Staff view of each org's AI cost against its allowance. Display only:
+ * allowance = 10% of what the org actually pays per month (comp orgs "comp",
+ * unpaid orgs $0); AI cost = provider cost this calendar month (UTC).
+ * Enforcement state (paused / warning) still comes from loadAiAllowance.
+ */
 analyticsRouter.get(
   '/ai-budgets',
   requireAnalytics('internal'),
@@ -429,16 +464,80 @@ analyticsRouter.get(
       if (!canGrantAiCredits(req.analyticsScope)) {
         throw forbidden('Only Atmosphere staff can view AI budgets.', 'analytics_forbidden');
       }
+      const includeInternal = parseIncludeInternal(req.query.internal);
       const admin = createAdminClient();
       if (!admin) throw new HttpError(503, 'Admin client is not configured.', 'no_admin');
-      const { data, error } = await admin.from('orgs').select('id, name').order('name').limit(100);
-      if (error) throw new HttpError(500, error.message, 'ai_budgets_failed');
-      const budgets = [];
-      for (const org of (data ?? []) as Array<{ id: string; name: string | null }>) {
-        const view = publicAllowance(await loadAiAllowance(admin, org.id));
-        budgets.push({ orgId: org.id, orgName: org.name, ...view });
+      const now = new Date();
+      const month = currentUtcMonth(now);
+      const config = aiBudgetConfig();
+
+      const orgsRes = await admin
+        .from('orgs')
+        .select('id, name, exclude_from_analytics')
+        .order('name')
+        .limit(500);
+      if (orgsRes.error) throw new HttpError(500, orgsRes.error.message, 'ai_budgets_failed');
+      const billingCols =
+        'org_id, status, stripe_subscription_id, stripe_mrr_cents, stripe_interval, stripe_livemode, atmosphere_plan_code, extra_fc_seats, billing_interval, period_start, period_end';
+      let billingRes = await admin.from('org_billing').select(billingCols);
+      if (billingRes.error && /column|schema cache/i.test(billingRes.error.message)) {
+        // Database without 20261007230000: price from the catalog.
+        billingRes = await admin
+          .from('org_billing')
+          .select('org_id, status, stripe_subscription_id, atmosphere_plan_code, extra_fc_seats, billing_interval, period_start, period_end');
       }
-      res.json({ budgets });
+      if (billingRes.error) throw new HttpError(500, billingRes.error.message, 'ai_budgets_failed');
+      const billing = new Map<string, StaffBillingRow>();
+      for (const row of (billingRes.data ?? []) as Array<StaffBillingRow & { org_id: string }>) {
+        billing.set(row.org_id, row);
+      }
+
+      const costRows = await collectPaged<{ org_id: string; cost_nanos: number | string | null }>(
+        TOKEN_USAGE_PAGE,
+        async (lo, hi) => {
+          const { data, error } = await admin
+            .from('token_usage_events')
+            .select('org_id, cost_nanos')
+            .gte('created_at', month.start.toISOString())
+            .lt('created_at', month.end.toISOString())
+            .order('id', { ascending: true })
+            .range(lo, hi);
+          if (error) throw error;
+          return (data ?? []) as Array<{ org_id: string; cost_nanos: number | string | null }>;
+        },
+      );
+      const costByOrg = new Map<string, number>();
+      for (const row of costRows) {
+        costByOrg.set(row.org_id, (costByOrg.get(row.org_id) ?? 0) + (Number(row.cost_nanos) || 0));
+      }
+
+      const budgets = [];
+      for (const org of (orgsRes.data ?? []) as Array<{ id: string; name: string | null; exclude_from_analytics?: boolean }>) {
+        const row = billing.get(org.id) ?? null;
+        const comp = (row?.stripe_subscription_id ?? '').startsWith('comp_');
+        const internal = Boolean(org.exclude_from_analytics) || comp;
+        if (internal && !includeInternal) continue;
+        const aiCostNanos = costByOrg.get(org.id) ?? 0;
+        const staff = staffBudgetDisplay(row, {
+          allowanceFraction: config.allowanceFraction,
+          aiCostNanos,
+          now,
+        });
+        const view = publicAllowance(await loadAiAllowance(admin, org.id));
+        budgets.push({
+          orgId: org.id,
+          orgName: org.name,
+          internal,
+          ...view,
+          staff: { ...staff, aiCostNanos, costWindow: { from: month.start.toISOString(), to: month.end.toISOString() } },
+        });
+      }
+      res.json({
+        budgets,
+        includeInternal,
+        allowanceFraction: config.allowanceFraction,
+        costWindow: { from: month.start.toISOString(), to: month.end.toISOString(), timeZone: 'UTC' },
+      });
     } catch (err) {
       next(err);
     }
@@ -594,7 +693,7 @@ analyticsRouter.get('/product-health', async (req: Request, res: Response, next:
   try {
     const weeks = z.coerce.number().int().min(4).max(52).catch(12).parse(req.query.weeks ?? 12);
     const supabase = staffReports(req);
-    res.json(await getProductHealth(supabase, weeks));
+    res.json(await getProductHealth(supabase, weeks, parseIncludeInternal(req.query.internal)));
   } catch (err) {
     next(err);
   }

@@ -7,7 +7,6 @@ import {
   Clapperboard,
   Coins,
   Contact,
-  FlaskConical,
   Gauge,
   LayoutDashboard,
   Mail,
@@ -50,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/growth', label: 'Revenue & customers', icon: BadgeDollarSign },
       { to: '/accounts', label: 'Organizations', icon: Building2, internal: true },
-      { to: '/experiments', label: 'Experiments', icon: FlaskConical, internal: true },
+      // Experiments is hidden: nothing is instrumented (/experiments shows an empty state).
     ],
   },
   {

@@ -30,6 +30,7 @@ const EMPTY_UPLOADS: UploadPeriod = {
 const EMPTY_ANALYSIS: AnalysisPeriod = {
   received: 0,
   analysed: 0,
+  firstTimeUnknown: 0,
   failed: 0,
   pending: 0,
   medianSeconds: null,
@@ -72,6 +73,7 @@ export function normalizeProductHealth(raw: unknown): ProductHealth {
   return {
     generatedAt: typeof d.generatedAt === 'string' ? d.generatedAt : '',
     weeks: Number(d.weeks ?? 0) || 0,
+    includeInternal: d.includeInternal === true,
     windows: { current: win(windows.current), prior: win(windows.prior) },
     northStar: {
       weekly: arr(northStar.weekly),
@@ -85,6 +87,7 @@ export function normalizeProductHealth(raw: unknown): ProductHealth {
       topErrors: arr(uploads.topErrors),
     },
     analysis: {
+      measuredTo: typeof analysis.measuredTo === 'string' ? analysis.measuredTo : 'first_analysis',
       current: period(analysis.current, EMPTY_ANALYSIS),
       prior: period(analysis.prior, EMPTY_ANALYSIS),
       weekly: arr(analysis.weekly),

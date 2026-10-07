@@ -93,7 +93,7 @@ export function TokenUsagePage() {
           <span className="font-semibold text-ink-800">{data.window.label}</span>
           {' · '}
           {new Date(data.window.from).toISOString().slice(0, 10)} to {new Date(data.window.to).toISOString().slice(0, 10)}
-          {' · '}Billable = provider cost × markup, the same rule as Settings › Billing
+          {' · '}AI cost = provider cost. “At list markup” = provider cost × customer markup (the Settings › Billing rate card); it is not invoiced
           {data.pricing?.rateCardVerifiedAt ? ` · rate card verified ${data.pricing.rateCardVerifiedAt}` : ''}
         </p>
       )}
@@ -108,7 +108,7 @@ export function TokenUsagePage() {
             {count(data.health.unpricedEvents)} AI call{data.health.unpricedEvents === 1 ? '' : 's'} with tokens but no price.
           </span>{' '}
           No rate-card entry for{' '}
-          {data.health.unpricedModels.map((m) => `${m.model} (${count(m.events)})`).join(', ')}. These are not billed
+          {data.health.unpricedModels.map((m) => `${m.model} (${count(m.events)})`).join(', ')}. These have no cost or list value
           until the model is priced.
         </div>
       )}
@@ -144,10 +144,10 @@ export function TokenUsagePage() {
             { label: 'Customers', unit: 'Orgs with usage', value: count(totals.distinctOrgs), raw: totals.distinctOrgs, rawType: 'integer' },
             {
               label: 'Users / models',
-              unit: `Billable ${nanosToMoney(totals.priceNanos)}`,
+              unit: `AI cost ${nanosToMoney(totals.costNanos)} · ${nanosToMoney(totals.priceNanos)} at list markup (not invoiced)`,
               value: `${count(totals.distinctUsers)} / ${count(totals.distinctModels)}`,
-              raw: nanosToUsd(totals.priceNanos),
-              rawUnit: 'USD billable',
+              raw: nanosToUsd(totals.costNanos),
+              rawUnit: 'USD AI cost',
             },
           ]}
         />
@@ -185,7 +185,8 @@ export function TokenUsagePage() {
                       { header: 'Total tokens', type: 'integer' },
                       { header: 'Users', type: 'integer' },
                       { header: 'Models', type: 'integer' },
-                      { header: 'Billable, USD', type: 'usd', format: usdFine },
+                      { header: 'AI cost, USD', type: 'usd', format: usdFine },
+                      { header: 'At list markup (not invoiced), USD', type: 'usd', format: usdFine },
                     ],
                     rows: byCustomer.map((r) => [
                       r.orgName,
@@ -197,6 +198,7 @@ export function TokenUsagePage() {
                       r.totalTokens,
                       r.distinctUsers,
                       r.distinctModels,
+                      nanosToUsd(r.costNanos ?? 0),
                       nanosToUsd(r.priceNanos),
                     ]),
                   },
@@ -213,7 +215,8 @@ export function TokenUsagePage() {
                     <th className="num">Tokens</th>
                     <th className="num">Users</th>
                     <th className="num">Models</th>
-                    <th className="num">Billable</th>
+                    <th className="num">AI cost</th>
+                    <th className="num" title="Provider cost at the customer list markup. Not invoiced.">At list markup</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -224,7 +227,8 @@ export function TokenUsagePage() {
                       <td className="num">{tokens(row.totalTokens)}</td>
                       <td className="num">{count(row.distinctUsers)}</td>
                       <td className="num">{count(row.distinctModels)}</td>
-                      <td className="num">{nanosToMoney(row.priceNanos)}</td>
+                      <td className="num">{nanosToMoney(row.costNanos ?? 0)}</td>
+                      <td className="num text-ink-500">{nanosToMoney(row.priceNanos)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -254,7 +258,8 @@ export function TokenUsagePage() {
                       { header: 'Output tokens', type: 'integer' },
                       { header: 'Cache tokens', type: 'integer' },
                       { header: 'Total tokens', type: 'integer' },
-                      { header: 'Billable, USD', type: 'usd', format: usdFine },
+                      { header: 'AI cost, USD', type: 'usd', format: usdFine },
+                      { header: 'At list markup (not invoiced), USD', type: 'usd', format: usdFine },
                     ],
                     rows: byUser.map((r) => [
                       r.userName,
@@ -267,6 +272,7 @@ export function TokenUsagePage() {
                       r.outputTokens,
                       r.cacheTokens,
                       r.totalTokens,
+                      nanosToUsd(r.costNanos ?? 0),
                       nanosToUsd(r.priceNanos),
                     ]),
                   },
@@ -282,7 +288,8 @@ export function TokenUsagePage() {
                     <th>Organization</th>
                     <th className="num">Events</th>
                     <th className="num">Tokens</th>
-                    <th className="num">Billable</th>
+                    <th className="num">AI cost</th>
+                    <th className="num" title="Provider cost at the customer list markup. Not invoiced.">At list markup</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -295,7 +302,8 @@ export function TokenUsagePage() {
                       <td className="text-ink-600">{row.orgName}</td>
                       <td className="num">{count(row.eventCount)}</td>
                       <td className="num">{tokens(row.totalTokens)}</td>
-                      <td className="num">{nanosToMoney(row.priceNanos)}</td>
+                      <td className="num">{nanosToMoney(row.costNanos ?? 0)}</td>
+                      <td className="num text-ink-500">{nanosToMoney(row.priceNanos)}</td>
                     </tr>
                   ))}
                   {byUser.length === 0 && (
@@ -330,7 +338,8 @@ export function TokenUsagePage() {
                       { header: 'Total tokens', type: 'integer' },
                       { header: 'Orgs', type: 'integer' },
                       { header: 'Users', type: 'integer' },
-                      { header: 'Billable, USD', type: 'usd', format: usdFine },
+                      { header: 'AI cost, USD', type: 'usd', format: usdFine },
+                      { header: 'At list markup (not invoiced), USD', type: 'usd', format: usdFine },
                     ],
                     rows: byModel.map((r) => [
                       r.model,
@@ -341,6 +350,7 @@ export function TokenUsagePage() {
                       r.totalTokens,
                       r.distinctOrgs,
                       r.distinctUsers,
+                      nanosToUsd(r.costNanos ?? 0),
                       nanosToUsd(r.priceNanos),
                     ]),
                   },
@@ -357,7 +367,8 @@ export function TokenUsagePage() {
                     <th className="num">Tokens</th>
                     <th className="num">Orgs</th>
                     <th className="num">Users</th>
-                    <th className="num">Billable</th>
+                    <th className="num">AI cost</th>
+                    <th className="num" title="Provider cost at the customer list markup. Not invoiced.">At list markup</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -368,7 +379,8 @@ export function TokenUsagePage() {
                       <td className="num">{tokens(row.totalTokens)}</td>
                       <td className="num">{count(row.distinctOrgs)}</td>
                       <td className="num">{count(row.distinctUsers)}</td>
-                      <td className="num">{nanosToMoney(row.priceNanos)}</td>
+                      <td className="num">{nanosToMoney(row.costNanos ?? 0)}</td>
+                      <td className="num text-ink-500">{nanosToMoney(row.priceNanos)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -392,13 +404,15 @@ export function TokenUsagePage() {
                         { header: 'Feature key' },
                         { header: 'Events', type: 'integer' },
                         { header: 'Total tokens', type: 'integer' },
-                        { header: 'Billable, USD', type: 'usd', format: usdFine },
+                        { header: 'AI cost, USD', type: 'usd', format: usdFine },
+                      { header: 'At list markup (not invoiced), USD', type: 'usd', format: usdFine },
                       ],
                       rows: byFeature.map((r) => [
                         FEATURE_LABELS[r.feature] ?? r.feature,
                         r.feature,
                         r.eventCount,
                         r.totalTokens,
+                        nanosToUsd(r.costNanos ?? 0),
                         nanosToUsd(r.priceNanos),
                       ]),
                     },
@@ -413,7 +427,8 @@ export function TokenUsagePage() {
                       <th>Feature</th>
                       <th className="num">Events</th>
                       <th className="num">Tokens</th>
-                      <th className="num">Billable</th>
+                      <th className="num">AI cost</th>
+                    <th className="num" title="Provider cost at the customer list markup. Not invoiced.">At list markup</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -422,7 +437,8 @@ export function TokenUsagePage() {
                         <td className="font-medium text-ink-900">{FEATURE_LABELS[row.feature] ?? row.feature}</td>
                         <td className="num">{count(row.eventCount)}</td>
                         <td className="num">{tokens(row.totalTokens)}</td>
-                        <td className="num">{nanosToMoney(row.priceNanos)}</td>
+                        <td className="num">{nanosToMoney(row.costNanos ?? 0)}</td>
+                        <td className="num text-ink-500">{nanosToMoney(row.priceNanos)}</td>
                       </tr>
                     ))}
                   </tbody>

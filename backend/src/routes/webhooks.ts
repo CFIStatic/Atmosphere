@@ -36,6 +36,13 @@ import {
   requireCreditPurchaseId,
 } from '../lib/stripeWebhook.js';
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
+import {
+  annotatePayment,
+  invoicePaymentKind,
+  isOldPaymentKindCheck,
+  paidInvoiceTaxCents,
+  syncCustomerMrr,
+} from '../lib/stripeAnalyticsFields.js';
 import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
 import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
 import {
@@ -226,6 +233,12 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     p_purchase_id: purchaseId ?? null,
   });
   if (paymentError) throw new Error(`payment record failed: ${paymentError.message}`);
+  // Analytics: collected revenue excludes tax and test-mode money.
+  await annotatePayment(
+    admin,
+    { column: 'stripe_payment_intent_id', value: paymentIntentId },
+    { taxCents: session.total_details?.amount_tax ?? 0, livemode: session.livemode },
+  );
 }
 
 /**
@@ -281,11 +294,14 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, eventType: string)
   }
   const card = cardDetails(charge);
 
-  const { error } = await admin.rpc('record_payment', {
+  // Same-day usage and overage invoices are usage revenue, not subscription.
+  const kind = invoicePaymentKind(invoice);
+  const amountCents = record.paid ? (invoice.amount_paid ?? 0) : (invoice.amount_due ?? invoice.total ?? 0);
+  const paymentArgs = {
     p_org: orgId,
-    p_kind: 'subscription',
+    p_kind: kind as string,
     p_status: record.status,
-    p_amount_cents: record.paid ? (invoice.amount_paid ?? 0) : (invoice.amount_due ?? invoice.total ?? 0),
+    p_amount_cents: amountCents,
     p_currency: invoice.currency ?? 'usd',
     p_description: line?.description ?? invoice.description ?? 'Subscription',
     p_invoice_id: invoice.id,
@@ -299,8 +315,18 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, eventType: string)
     p_period_start: toIso(line?.period?.start),
     p_period_end: toIso(line?.period?.end),
     p_failure_reason: record.status === 'failed' ? 'Payment failed' : null,
-  });
+  };
+  let { error } = await admin.rpc('record_payment', paymentArgs);
+  if (error && kind === 'usage' && isOldPaymentKindCheck(error.message)) {
+    // Database without 20261007230000: the kind check predates 'usage'.
+    ({ error } = await admin.rpc('record_payment', { ...paymentArgs, p_kind: 'subscription' }));
+  }
   if (error) throw new Error(`invoice record failed: ${error.message}`);
+  await annotatePayment(
+    admin,
+    { column: 'stripe_invoice_id', value: invoice.id ?? null },
+    { taxCents: paidInvoiceTaxCents(invoice as any, amountCents), livemode: invoice.livemode },
+  );
 
   if (record.status === 'failed') {
     // Leave the plan in place but flag it; Stripe will retry the charge and
@@ -326,6 +352,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   await rememberRecurringPrice(admin, orgId, sub, periodStart);
 
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  const syncMrr = () => syncCustomerMrr(admin, stripeClient(), orgId, customerId, sub as any);
   const extraOnThisSub = extraSeatQuantityFromSubscription(sub);
   try {
     await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
@@ -353,6 +380,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
         p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
       });
       if (error) throw new Error(`subscription sync failed: ${error.message}`);
+      await syncMrr();
       return;
     }
   }
@@ -407,10 +435,12 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
       planCode: plan.code,
       includedFcSeats: includedFromMeta ?? plan.includedFcSeats,
     });
+    await syncMrr();
     return;
   }
 
   if (items.some((row) => isExtraSeatLineItem(row))) {
+    await syncMrr();
     return;
   }
 
@@ -437,12 +467,14 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
     })
   ) {
     await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
+    await syncCustomerMrr(admin, stripeClient(), orgId, customerId, sub as any);
     return;
   }
 
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
   await persistExtraFcSeats(admin, orgId, 0);
+  await syncCustomerMrr(admin, stripeClient(), orgId, customerId, sub as any);
 }
 
 async function rememberRecurringPrice(
@@ -498,6 +530,11 @@ async function onChargeRefunded(charge: Stripe.Charge, eventId: string, admin: a
     p_card_last4: card.last4,
   });
   if (error) throw new Error(`refund record failed: ${error.message}`);
+  await annotatePayment(
+    admin,
+    { column: 'stripe_charge_id', value: `${charge.id}_refund` },
+    { livemode: charge.livemode },
+  );
 
   await syncCreditPackClawback(admin, orgId, {
     eventId,

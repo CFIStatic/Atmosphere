@@ -32,7 +32,7 @@ export function GrowthPage() {
       <PageHeader
         eyebrow="Growth & revenue"
         title="Revenue & customers"
-        subtitle="Recurring revenue, paying organizations and seats from billing events. Trailing twelve months."
+        subtitle="Recurring revenue from real subscription amounts (active and past-due only, net of discounts, excluding tax). Trailing twelve months."
         asOfValue={data?.generatedAt ?? null}
       />
       {error && <ErrorLine message={error} onRetry={() => void reload()} />}
@@ -72,8 +72,12 @@ export function GrowthPage() {
                 value: count(summary.customers.orgsPaying),
                 raw: summary.customers.orgsPaying,
                 rawType: 'integer',
-                delta: <Delta value={summary.customers.orgsGrowthMomPct} />,
-                comparison: 'vs prior month',
+                delta: <Delta value={summary.customers.payingGrowthMomPct ?? null} />,
+                comparison: `vs ${count(summary.customers.orgsPayingPrev ?? 0)} at month start`,
+                note:
+                  summary.revenue.churnedOrgsThisMonth !== undefined
+                    ? `${count(summary.revenue.churnedOrgsThisMonth)} churned this month`
+                    : undefined,
               },
               {
                 label: 'ARPA',
@@ -84,11 +88,11 @@ export function GrowthPage() {
               },
               {
                 label: 'Seat utilization',
-                unit: '% of licensed seats filled',
+                unit: '% of licensed Field Capture seats in use',
                 value: percent(summary.seats.seatUtilizationPct),
                 raw: summary.seats.seatUtilizationPct,
                 rawType: 'percent',
-                note: `${count(summary.seats.seatsFilled)} of ${count(summary.seats.seatsLicensed)} seats`,
+                note: `${count(summary.seats.seatsFilled)} of ${count(summary.seats.seatsLicensed)} Field Capture seats`,
               },
             ]}
           />
@@ -197,8 +201,64 @@ export function GrowthPage() {
           </Section>
 
           <Section
+            title="Collected revenue"
+            note="USD, report period, live mode, net of refunds, excluding tax"
+            actions={
+              <DownloadButton
+                table="collected-revenue"
+                label="collected revenue"
+                sheets={() => [
+                  {
+                    name: 'Collected revenue',
+                    columns: [{ header: 'Measure' }, { header: 'Value', type: 'usd' }],
+                    rows: [
+                      ['Subscriptions, USD', centsToUsd(revenue.subscriptionRevenueCents ?? 0)],
+                      ['Usage, USD', centsToUsd(revenue.usageRevenueCents ?? 0)],
+                      ['AI credits, USD', centsToUsd(revenue.creditRevenueCents ?? 0)],
+                      ['Refunds, USD', centsToUsd(revenue.refundsCents ?? 0)],
+                      ['Collected (net), USD', centsToUsd(revenue.collectedInRangeCents)],
+                      ['Tax collected (excluded), USD', centsToUsd(revenue.taxExcludedCents ?? 0)],
+                    ],
+                  },
+                ]}
+              />
+            }
+          >
+            <div className="max-w-xl overflow-x-auto">
+              <table className="report-table">
+                <tbody>
+                  <tr>
+                    <td>Subscriptions</td>
+                    <td className="num">{money(revenue.subscriptionRevenueCents ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td>Usage</td>
+                    <td className="num">{money(revenue.usageRevenueCents ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td>AI credits</td>
+                    <td className="num">{money(revenue.creditRevenueCents ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td>Refunds</td>
+                    <td className="num">{money(revenue.refundsCents ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-semibold text-ink-900">Collected, net</td>
+                    <td className="num font-semibold text-ink-900">{money(revenue.collectedInRangeCents)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-ink-500">Tax collected (not revenue, excluded)</td>
+                    <td className="num text-ink-500">{money(revenue.taxExcludedCents ?? 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Section>
+
+          <Section
             title="Plan mix"
-            note={`Active subscriptions, as of ${asOfDate}`}
+            note={`Paying subscriptions, plus comp and unpaid orgs at $0, as of ${asOfDate}`}
             actions={
               <DownloadButton
                 table="plan-mix"
@@ -211,7 +271,7 @@ export function GrowthPage() {
                       { header: 'Plan code' },
                       { header: 'Billing' },
                       { header: 'Orgs', type: 'integer' },
-                      { header: 'Seats', type: 'integer' },
+                      { header: 'Field Capture seats', type: 'integer' },
                       { header: 'MRR, USD', type: 'usd' },
                       { header: 'ARR, USD', type: 'usd' },
                       { header: 'Share of MRR', type: 'percent' },
@@ -238,7 +298,7 @@ export function GrowthPage() {
                     <th>Plan</th>
                     <th>Billing</th>
                     <th className="num">Orgs</th>
-                    <th className="num">Seats</th>
+                    <th className="num">FC seats</th>
                     <th className="num">MRR, USD</th>
                     <th className="num">Share of MRR</th>
                   </tr>
@@ -261,23 +321,22 @@ export function GrowthPage() {
 
           {summary.unitEconomics && (
             <Section
-              title="AI unit economics"
+              title="AI cost"
               note="USD, report period"
               actions={
                 <DownloadButton
-                  table="ai-unit-economics"
-                  label="AI unit economics"
+                  table="ai-cost"
+                  label="AI cost"
                   sheets={() => {
                     const u = summary.unitEconomics!;
                     return [
                       {
-                        name: 'AI unit economics',
+                        name: 'AI cost',
                         columns: [{ header: 'Measure' }, { header: 'Value', type: 'usd' }],
                         rows: [
-                          ['Usage billed to customers, USD', centsToUsd(u.billedUsageCents)],
-                          ['Model cost, USD', centsToUsd(u.modelCostCents)],
-                          ['Gross margin, USD', centsToUsd(u.grossMarginCents)],
-                          ['Gross margin, %', { value: u.grossMarginPct, type: 'percent' }],
+                          ['AI provider cost, USD', centsToUsd(u.modelCostCents)],
+                          ['AI provider cost, last 30 days, USD', centsToUsd(u.modelCost30dCents)],
+                          ['AI cost at list markup (not invoiced), USD', centsToUsd(u.listValueCents)],
                         ],
                       },
                     ];
@@ -289,23 +348,27 @@ export function GrowthPage() {
               <table className="report-table">
                 <tbody>
                   <tr>
-                    <td>Usage billed to customers<Fn n={2} /></td>
-                    <td className="num">{money(summary.unitEconomics.billedUsageCents)}</td>
+                    <td className="font-semibold text-ink-900">AI provider cost</td>
+                    <td className="num font-semibold text-ink-900">{money(summary.unitEconomics.modelCostCents)}</td>
                   </tr>
                   <tr>
-                    <td>Model cost</td>
-                    <td className="num">{money(summary.unitEconomics.modelCostCents)}</td>
+                    <td>AI provider cost, last 30 days</td>
+                    <td className="num">{money(summary.unitEconomics.modelCost30dCents)}</td>
                   </tr>
                   <tr>
-                    <td className="font-semibold text-ink-900">Gross margin</td>
-                    <td className="num font-semibold text-ink-900">
-                      {money(summary.unitEconomics.grossMarginCents)}{' '}
-                      <span className="font-normal text-ink-500">({percent(summary.unitEconomics.grossMarginPct)})</span>
-                    </td>
+                    <td className="text-ink-500">AI cost at list markup (not invoiced)<Fn n={2} /></td>
+                    <td className="num text-ink-500">{money(summary.unitEconomics.listValueCents)}</td>
                   </tr>
                 </tbody>
               </table>
               </div>
+              <p className="mt-2 text-[12px] text-ink-500">
+                Compare AI cost with each org's allowance on{' '}
+                <Link to="/ai-budgets" className="text-brand-600 underline-offset-2 hover:underline">
+                  AI budgets
+                </Link>
+                . Usage is not invoiced at list markup, so there is no AI gross margin to report.
+              </p>
             </Section>
           )}
 
@@ -327,8 +390,9 @@ export function GrowthPage() {
       <Footnotes
         asOfValue={data?.generatedAt ?? null}
         notes={[
-          'MRR, ARR, organizations and plan mix: org_billing_events through analytics_summary, analytics_monthly and analytics_plan_mix. ARR is MRR × 12.',
-          'AI unit economics: usage_events price and cost for the report period. Billed usage is what customers are charged; model cost is the provider price. Internal scope only.',
+          'MRR, ARR, ARPA, paying orgs, churn and plan mix: org_billing_events (latest event per org) through analytics_summary, analytics_monthly and analytics_plan_mix. MRR is the Stripe amount stored by the webhook (net of discounts, annual ÷ 12, tax excluded), else the catalog price (Starter $399, Work Verification $849, Scale $1,999, +$125 per extra Field Capture seat). Only active and past-due subscriptions count; trialing, canceled, test-mode and comp accounts are $0. ARR is MRR × 12. Billing history before Oct 7, 2026 was recorded at $0, so earlier months read $0.',
+          'AI cost: provider cost from token_usage_events. "List markup" is that cost at the customer rate card; it is not invoiced. Internal scope only.',
+          'Internal, test and comp accounts are excluded unless "Include internal & test accounts" is on. Dates and months are UTC.',
         ]}
       />
     </div>

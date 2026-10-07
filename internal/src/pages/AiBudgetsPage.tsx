@@ -1,24 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
-import { count, nanosToMoney, percent } from '../lib/format';
-import { ErrorLine, Loading, PageHeader, Section } from '../components/report';
+import { count, money, nanosToMoney, percent } from '../lib/format';
+import { ErrorLine, Footnotes, Loading, PageHeader, Section } from '../components/report';
 import { DownloadButton } from '../components/DownloadButton';
-import { nanosToUsd } from '../lib/excel';
+import { centsToUsd, nanosToUsd } from '../lib/excel';
+import type { AiBudgetRow, AiBudgetsPayload } from '../lib/types';
+import { BILLING_LABEL, allowanceLabel, resetLabel } from '../lib/aiBudgets';
 
-type BudgetRow = {
-  orgId: string;
-  orgName: string | null;
-  state: string;
-  paused: boolean;
-  usedNanos: number;
-  allowanceNanos: number;
-  usedFraction: number;
-  creditBalanceNanos: number;
-  resetAt: string | null;
-};
+type BudgetRow = AiBudgetRow;
 
 export function AiBudgetsPage() {
   const [rows, setRows] = useState<BudgetRow[] | null>(null);
+  const [meta, setMeta] = useState<Omit<AiBudgetsPayload, 'budgets'> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState('');
   const [dollars, setDollars] = useState('25');
@@ -29,7 +22,11 @@ export function AiBudgetsPage() {
     setError(null);
     api
       .aiBudgets()
-      .then((payload) => setRows(payload.budgets))
+      .then((payload) => {
+        const { budgets, ...rest } = payload;
+        setRows(budgets);
+        setMeta(rest);
+      })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load AI budgets'));
   }
 
@@ -62,7 +59,7 @@ export function AiBudgetsPage() {
       <PageHeader
         eyebrow="AI cost & usage"
         title="AI budgets"
-        subtitle="Provider spend against each account's included allowance. Staff can grant credits that roll over until used."
+        subtitle={`AI provider cost this month against each org's allowance: ${Math.round((meta?.allowanceFraction ?? 0.1) * 100)}% of what the org actually pays. Display only; staff can grant credits that roll over until used.`}
       />
       {error && <ErrorLine message={error} />}
 
@@ -101,24 +98,34 @@ export function AiBudgetsPage() {
                 columns: [
                   { header: 'Organization' },
                   { header: 'Org id' },
-                  { header: 'State' },
-                  { header: 'Paused' },
-                  { header: 'Used, USD', type: 'usd', format: '"$"#,##0.0000' },
+                  { header: 'Billing' },
+                  { header: 'Pays per month, USD', type: 'usd' },
+                  { header: 'Price source' },
+                  { header: 'AI cost this month (UTC), USD', type: 'usd', format: '"$"#,##0.0000' },
+                  { header: 'Allowance' },
                   { header: 'Allowance, USD', type: 'usd' },
-                  { header: 'Used of allowance', type: 'percent' },
+                  { header: 'AI cost of allowance', type: 'percent' },
                   { header: 'Credits, USD', type: 'usd' },
-                  { header: 'Resets', type: 'date' },
+                  { header: 'Resets' },
+                  { header: 'Enforcement state' },
+                  { header: 'Paused' },
+                  { header: 'Internal / test / comp' },
                 ],
                 rows: list.map((row) => [
                   row.orgName || 'Untitled',
                   row.orgId,
+                  row.staff ? BILLING_LABEL[row.staff.billingClass] : '',
+                  centsToUsd(row.staff?.paidMonthlyCents ?? null),
+                  row.staff?.paidSource ?? '',
+                  nanosToUsd(row.staff?.aiCostNanos ?? row.usedNanos),
+                  allowanceLabel(row),
+                  row.staff?.allowanceMonthlyNanos == null ? null : nanosToUsd(row.staff.allowanceMonthlyNanos),
+                  row.staff?.usedOfAllowancePct ?? null,
+                  nanosToUsd(row.creditBalanceNanos),
+                  resetLabel(row.staff, row.resetAt),
                   row.state,
                   row.paused,
-                  nanosToUsd(row.usedNanos),
-                  nanosToUsd(row.allowanceNanos),
-                  row.usedFraction * 100,
-                  nanosToUsd(row.creditBalanceNanos),
-                  row.resetAt,
+                  row.internal ? 'yes' : '',
                 ]),
               },
             ]}
@@ -126,14 +133,15 @@ export function AiBudgetsPage() {
         }
       >
         <div className="overflow-x-auto">
-          <table className="report-table min-w-[720px]">
+          <table className="report-table min-w-[860px]">
             <thead>
               <tr>
                 <th>Organization</th>
-                <th>State</th>
-                <th className="num">Used</th>
+                <th>Billing</th>
+                <th className="num">Pays / month</th>
+                <th className="num">AI cost, month</th>
                 <th className="num">Allowance</th>
-                <th className="num">Used %</th>
+                <th className="num">Of allowance</th>
                 <th className="num">Credits</th>
                 <th className="num">Resets</th>
               </tr>
@@ -141,23 +149,41 @@ export function AiBudgetsPage() {
             <tbody>
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-ink-500">
-                    No organizations have an AI allowance yet.
+                  <td colSpan={8} className="py-6 text-center text-ink-500">
+                    No customer organizations yet. Internal, test and comp orgs are hidden unless the toggle is on.
                   </td>
                 </tr>
               ) : (
                 list.map((row) => (
                   <tr key={row.orgId}>
                     <td>
-                      <div className="font-medium text-ink-900">{row.orgName || 'Untitled'}</div>
+                      <div className="font-medium text-ink-900">
+                        {row.orgName || 'Untitled'}
+                        {row.internal && (
+                          <span className="ml-2 text-[10.5px] font-semibold uppercase tracking-wide text-caution-600">internal</span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-ink-400">{row.orgId}</div>
                     </td>
-                    <td>{row.paused ? 'Paused' : row.state}</td>
-                    <td className="num">{nanosToMoney(row.usedNanos)}</td>
-                    <td className="num">{nanosToMoney(row.allowanceNanos)}</td>
-                    <td className="num">{percent(row.usedFraction * 100, 0)}</td>
+                    <td>
+                      {row.staff ? BILLING_LABEL[row.staff.billingClass] : '—'}
+                      {row.paused && <span className="ml-1 text-[11px] text-danger-600">· paused</span>}
+                    </td>
+                    <td className="num">
+                      {row.staff ? money(row.staff.paidMonthlyCents) : '—'}
+                      {row.staff?.paidSource === 'catalog' && (
+                        <span className="ml-1 text-[10.5px] text-ink-400" title="No Stripe amount stored yet; catalog price">
+                          catalog
+                        </span>
+                      )}
+                    </td>
+                    <td className="num">{nanosToMoney(row.staff?.aiCostNanos ?? row.usedNanos)}</td>
+                    <td className="num">{allowanceLabel(row)}</td>
+                    <td className="num">
+                      {row.staff ? (row.staff.usedOfAllowancePct == null ? '—' : percent(row.staff.usedOfAllowancePct, 0)) : percent(row.usedFraction * 100, 0)}
+                    </td>
                     <td className="num">{nanosToMoney(row.creditBalanceNanos)}</td>
-                    <td className="num whitespace-nowrap">{row.resetAt ? row.resetAt.slice(0, 10) : '—'}</td>
+                    <td className="num whitespace-nowrap">{resetLabel(row.staff, row.resetAt)}</td>
                   </tr>
                 ))
               )}
@@ -165,6 +191,14 @@ export function AiBudgetsPage() {
           </table>
         </div>
       </Section>
+
+      <Footnotes
+        notes={[
+          `Allowance: ${Math.round((meta?.allowanceFraction ?? 0.1) * 100)}% of what the org actually pays per month: the Stripe amount stored by the webhook (net of discounts, annual ÷ 12, tax excluded), else the catalog price. Only live active or past-due subscriptions pay; trialing, canceled, test-mode and no-subscription orgs show $0. Comp orgs show "comp".`,
+          `AI cost: provider cost from token_usage_events for the current calendar month, UTC${meta?.costWindow ? ` (${meta.costWindow.from.slice(0, 10)} to ${meta.costWindow.to.slice(0, 10)})` : ''}. Display only: this page writes nothing, and enforcement (paused / warning) is unchanged.`,
+          'Resets: billing periods ending more than 400 days out (comp terms ending in 2126) show "No reset"; periods that already ended show "awaiting renewal" instead of a date in the past.',
+        ]}
+      />
     </div>
   );
 }

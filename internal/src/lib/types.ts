@@ -50,13 +50,21 @@ export interface AuthUser {
 
 export interface SummaryPayload {
   scope: AnalyticsScope;
+  /** True when internal / test / comp accounts are included (staff toggle). */
+  includeInternal?: boolean;
   range: { from: string; to: string; days: number };
   customers: {
     orgsTotal: number;
     orgsNew: number;
     orgsPaying: number;
+    /** Paying orgs at the start of this month (for the paying delta). */
+    orgsPayingPrev?: number;
     orgsActive: number;
+    /** Internal / test / comp orgs left out of these figures. */
+    orgsExcluded?: number;
     orgsGrowthMomPct: number | null;
+    /** Month-over-month change in PAYING orgs. */
+    payingGrowthMomPct?: number | null;
   };
   users: {
     usersTotal: number;
@@ -76,7 +84,15 @@ export interface SummaryPayload {
     annualContractedArrCents: number;
     mrrGrowthMomPct: number | null;
     netNewMrrCents: number;
+    /** Orgs that left a paying status this month. */
+    churnedOrgsThisMonth?: number;
+    /** Live-mode money collected in range, net of refunds, excluding tax. */
     collectedInRangeCents: number;
+    subscriptionRevenueCents?: number;
+    usageRevenueCents?: number;
+    creditRevenueCents?: number;
+    refundsCents?: number;
+    taxExcludedCents?: number;
     trailing12mRevenueCents: number;
     avgMonthlySpendPerAccountCents: number | null;
     arpaMrrCents: number | null;
@@ -89,11 +105,14 @@ export interface SummaryPayload {
     featuresTracked: number;
     aiRequests: number;
   };
+  /**
+   * Internal only. modelCostCents is real provider cost; listValueCents is
+   * that cost at the customer list markup and is NOT invoiced.
+   */
   unitEconomics?: {
-    billedUsageCents: number;
     modelCostCents: number;
-    grossMarginCents: number;
-    grossMarginPct: number | null;
+    listValueCents: number;
+    modelCost30dCents: number;
   };
 }
 
@@ -107,6 +126,8 @@ export interface MonthlyRow {
   mrrCents: number;
   arrCents: number;
   revenueCents: number;
+  usageRevenueCents?: number;
+  refundsCents?: number;
   trackedHours: number;
 }
 
@@ -131,7 +152,10 @@ export interface AccountRow {
   planName: string;
   billingInterval: string;
   status: string;
+  /** Licensed Field Capture seats. */
   seats: number;
+  /** Field Capture seats in use. */
+  seatsUsed?: number;
   members: number;
   mrrCents: number;
   arrCents: number;
@@ -140,6 +164,10 @@ export interface AccountRow {
   activeHours: number;
   topFeature: string | null;
   lastActiveAt: string | null;
+  /** Provider AI cost in range, cents. */
+  aiCostCents?: number;
+  internal?: boolean;
+  internalReason?: string | null;
 }
 
 export interface PlanMixRow {
@@ -163,6 +191,7 @@ export interface RetentionRow {
 
 export interface OverviewPayload {
   scope: AnalyticsScope;
+  includeInternal?: boolean;
   generatedAt: string;
   range: { from: string; to: string };
   summary: SummaryPayload;
@@ -219,7 +248,9 @@ export interface AccountDetail {
   account: AccountRow;
   members: AccountMember[];
   jobs: {
+    /** Live jobs; deleted jobs are excluded. */
     total: number;
+    deleted?: number;
     byStatus: Array<{ status: string; count: number }>;
     recent: AccountJob[];
   };
@@ -272,8 +303,10 @@ export interface TokenUsageAnalyticsPayload {
     cacheTokens: number;
     totalTokens: number;
     priceNanos: number;
+    costNanos?: number;
     distinctUsers: number;
     distinctModels: number;
+    internal?: boolean;
   }>;
   byUser?: Array<{
     userId: string;
@@ -287,6 +320,7 @@ export interface TokenUsageAnalyticsPayload {
     cacheTokens: number;
     totalTokens: number;
     priceNanos: number;
+    costNanos?: number;
   }>;
   byModel?: Array<{
     model: string;
@@ -296,6 +330,7 @@ export interface TokenUsageAnalyticsPayload {
     cacheTokens: number;
     totalTokens: number;
     priceNanos: number;
+    costNanos?: number;
     distinctOrgs: number;
     distinctUsers: number;
   }>;
@@ -304,25 +339,36 @@ export interface TokenUsageAnalyticsPayload {
     eventCount: number;
     totalTokens: number;
     priceNanos: number;
+    costNanos?: number;
   }>;
+  includeInternal?: boolean;
 }
 
+/** Read from the token ledger (token_usage_events), provider cost only. */
 export interface MeteringPayload {
+  source?: string;
+  includeInternal?: boolean;
   totals?: {
     eventCount: number;
     aiCostNanos: number;
     computeUnits: number;
+    totalTokens?: number;
     distinctOrgs: number;
   };
   byCustomer?: Array<{
     orgId: string;
     orgName: string;
+    internal?: boolean;
     eventCount: number;
     aiCostNanos: number;
     computeUnits: number;
+    totalTokens?: number;
     distinctJobs: number;
   }>;
+  /** Grouped by ledger feature. */
   byWorkflow?: Array<{ workflowId: string; eventCount: number; aiCostNanos: number }>;
+  /** Grouped by ledger source. */
+  byAgent?: Array<{ agentType: string; eventCount: number; aiCostNanos: number }>;
   byModel?: Array<{
     provider: string;
     model: string;
@@ -469,6 +515,8 @@ export interface UploadPeriod {
 export interface AnalysisPeriod {
   received: number;
   analysed: number;
+  /** Analysed proofs whose first analysis time was lost to the Sep 21 bulk re-run. */
+  firstTimeUnknown?: number;
   failed: number;
   pending: number;
   medianSeconds: number | null;
@@ -498,6 +546,7 @@ export interface AskPeriod {
 export interface ProductHealth {
   generatedAt: string;
   weeks: number;
+  includeInternal?: boolean;
   windows: {
     current: { from: string; to: string };
     prior: { from: string; to: string };
@@ -514,9 +563,17 @@ export interface ProductHealth {
     topErrors: Array<{ code: string; count: number }>;
   };
   analysis: {
+    /** 'first_analysis': time to analysis ends at the first completed analysis. */
+    measuredTo?: string;
     current: AnalysisPeriod;
     prior: AnalysisPeriod;
-    weekly: Array<{ weekStart: string; analysed: number; medianSeconds: number | null; p90Seconds: number | null }>;
+    weekly: Array<{
+      weekStart: string;
+      analysed: number;
+      firstTimeUnknown?: number;
+      medianSeconds: number | null;
+      p90Seconds: number | null;
+    }>;
   };
   evidence: {
     current: EvidencePeriod;
@@ -548,6 +605,8 @@ export interface Contact {
   createdAt: string | null;
   sources: ContactSourceId[];
   suppressed: boolean;
+  /** Jettx staff address or an org flagged internal / test / comp. */
+  internal?: boolean;
 }
 
 export interface ContactSourceInfo {
@@ -765,4 +824,51 @@ export interface PlaybookDraft {
   reviewedAt: string | null;
   playbookId: string | null;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// AI budgets (/api/analytics/ai-budgets). Display only.
+
+export type StaffBillingClass =
+  | 'paying'
+  | 'past_due'
+  | 'comp'
+  | 'trialing'
+  | 'canceled'
+  | 'test_mode'
+  | 'no_subscription';
+
+export interface StaffBudget {
+  billingClass: StaffBillingClass;
+  paidMonthlyCents: number;
+  paidSource: 'stripe' | 'catalog' | null;
+  /** null for comp: no allowance applies. */
+  allowanceMonthlyNanos: number | null;
+  allowanceLabel: string;
+  periodNote: 'no_reset_comp_term' | 'ended_awaiting_renewal' | null;
+  displayResetAt: string | null;
+  usedOfAllowancePct: number | null;
+  aiCostNanos: number;
+  costWindow: { from: string; to: string };
+}
+
+export interface AiBudgetRow {
+  orgId: string;
+  orgName: string | null;
+  internal?: boolean;
+  state: string;
+  paused: boolean;
+  usedNanos: number;
+  allowanceNanos: number;
+  usedFraction: number;
+  creditBalanceNanos: number;
+  resetAt: string | null;
+  staff?: StaffBudget;
+}
+
+export interface AiBudgetsPayload {
+  budgets: AiBudgetRow[];
+  includeInternal?: boolean;
+  allowanceFraction?: number;
+  costWindow?: { from: string; to: string; timeZone: string };
 }

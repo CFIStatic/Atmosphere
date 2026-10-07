@@ -32,6 +32,8 @@ export interface Contact {
   /** ISO timestamp; earliest across sources after a merge. */
   createdAt: string | null;
   sources: ContactSourceId[];
+  /** Jettx / test / demo / comp org: hidden unless staff include internal & test accounts. */
+  internal?: boolean;
 }
 
 export interface ContactSourceInfo {

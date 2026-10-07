@@ -130,6 +130,7 @@ function inMemoryClient(tables: Record<string, Row[]>) {
   return {
     from: (table: string) => query(tables[table] ?? []),
     rpc: async (name: string, args: Record<string, string>) => {
+      if (name === 'analytics_internal_orgs') return { data: [], error: null };
       assert.equal(name, 'admin_token_usage_analytics');
       return { data: analyticsRpc(args.p_from, args.p_to), error: null };
     },

@@ -21,12 +21,16 @@ export function mergeAskIntoChat(rows: FeatureRow[] | undefined): FeatureRow[] {
   for (const row of rows ?? []) {
     const feature = row.feature === 'ask' ? 'chat' : row.feature;
     const prev = merged.get(feature);
-    merged.set(feature, {
+    const next: FeatureRow = {
       feature,
       eventCount: (prev?.eventCount ?? 0) + row.eventCount,
       totalTokens: (prev?.totalTokens ?? 0) + row.totalTokens,
       priceNanos: (prev?.priceNanos ?? 0) + row.priceNanos,
-    });
+    };
+    if (prev?.costNanos !== undefined || row.costNanos !== undefined) {
+      next.costNanos = (prev?.costNanos ?? 0) + (row.costNanos ?? 0);
+    }
+    merged.set(feature, next);
   }
   const rank = (feature: string) => {
     const i = FEATURE_ORDER.indexOf(feature);

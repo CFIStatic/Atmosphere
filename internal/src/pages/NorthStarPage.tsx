@@ -139,9 +139,11 @@ export function NorthStarPage() {
         notes={[
           <>
             Hours filmed per paying seat: total duration of capture videos received in the week from organizations whose
-            latest billing event is active or past due with MRR above zero, divided by those organizations’ billed seats.
-            Sources: job_proofs.duration_seconds and received_at, org_billing_events. Trial and free usage is excluded
-            (hours, all orgs includes it). Weeks are Monday–Sunday UTC; the week in progress is not charted.
+            latest billing event is active or past due with real MRR above zero (Stripe amount, else catalog price),
+            divided by those organizations’ licensed Field Capture seats. Deleted jobs and videos are excluded.
+            Sources: job_proofs.duration_seconds and received_at, org_billing_events. Trial, free, comp and internal
+            usage is excluded unless the internal toggle is on (hours, all orgs includes trial and free). Weeks are
+            Monday–Sunday UTC; the week in progress is not charted.
           </>,
         ]}
       />

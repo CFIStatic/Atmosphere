@@ -30,13 +30,14 @@ export function MeteringPage() {
   const totals = data?.totals;
   const byCustomer = data?.byCustomer ?? [];
   const byModel = data?.byModel ?? [];
+  const byWorkflow = data?.byWorkflow ?? [];
 
   return (
     <div>
       <PageHeader
         eyebrow="AI cost & usage"
         title="Metering"
-        subtitle="AI cost versus compute, trailing twelve months. Internal only: customers never see token-level cost."
+        subtitle="Provider AI cost from the token ledger (token_usage_events), trailing twelve months. Internal only: customers never see token-level cost."
       />
       {error && <ErrorLine message={error} />}
       {totals && (
@@ -45,7 +46,7 @@ export function MeteringPage() {
           items={[
             { label: 'AI cost', unit: 'USD, trailing 12 months', value: nanosToMoney(totals.aiCostNanos), raw: nanosToUsd(totals.aiCostNanos), rawType: 'usd' },
             { label: 'Events', unit: 'metered events', value: count(totals.eventCount), raw: totals.eventCount, rawType: 'integer' },
-            { label: 'Compute units', unit: 'count', value: count(totals.computeUnits), raw: totals.computeUnits, rawType: 'integer' },
+            { label: 'Compute units', unit: '1 unit = $0.01 of AI cost', value: count(Math.round(totals.computeUnits)), raw: totals.computeUnits, rawType: 'number' },
             { label: 'Orgs', unit: 'with metered usage', value: count(totals.distinctOrgs), raw: totals.distinctOrgs, rawType: 'integer' },
           ]}
         />
@@ -89,7 +90,10 @@ export function MeteringPage() {
             <tbody>
               {byCustomer.map((row) => (
                 <tr key={row.orgId}>
-                  <td className="font-medium text-ink-900">{row.orgName}</td>
+                  <td className="font-medium text-ink-900">
+                    {row.orgName}
+                    {row.internal && <span className="ml-2 text-[11px] font-normal uppercase tracking-wide text-caution-600">internal</span>}
+                  </td>
                   <td className="num">{count(row.eventCount)}</td>
                   <td className="num">{count(row.distinctJobs)}</td>
                   <td className="num">{nanosToMoney(row.aiCostNanos)}</td>
@@ -147,6 +151,49 @@ export function MeteringPage() {
         </div>
       </Section>
 
+      <Section
+        title="By feature"
+        note={`${count(byWorkflow.length)} features`}
+        actions={
+          <DownloadButton
+            table="metering-by-feature"
+            label="metering by feature"
+            disabled={byWorkflow.length === 0}
+            sheets={() => [
+              {
+                name: 'By feature',
+                columns: [
+                  { header: 'Feature' },
+                  { header: 'Events', type: 'integer' },
+                  { header: 'AI cost, USD', type: 'usd', format: '"$"#,##0.0000' },
+                ],
+                rows: byWorkflow.map((r) => [r.workflowId, r.eventCount, nanosToUsd(r.aiCostNanos)]),
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="report-table min-w-[420px]">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th className="num">Events</th>
+                <th className="num">AI cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byWorkflow.map((row) => (
+                <tr key={row.workflowId}>
+                  <td>{row.workflowId}</td>
+                  <td className="num">{count(row.eventCount)}</td>
+                  <td className="num">{nanosToMoney(row.aiCostNanos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
     </div>
   );
 }

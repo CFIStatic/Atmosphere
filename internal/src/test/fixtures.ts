@@ -28,7 +28,7 @@ export const testHealth: ProductHealth = {
     topErrors: [{ code: 'upload_part_missing', count: 5 }],
   },
   analysis: {
-    current: { received: 396, analysed: 388, failed: 3, pending: 5, medianSeconds: 1104, p90Seconds: 2700 },
+    current: { received: 396, analysed: 388, firstTimeUnknown: 2, failed: 3, pending: 5, medianSeconds: 1104, p90Seconds: 2700 },
     prior: { received: 352, analysed: 340, failed: 5, pending: 7, medianSeconds: 1320, p90Seconds: 3100 },
     weekly: [],
   },

@@ -69,6 +69,11 @@ export function AccountDetailPage() {
         subtitle={
           <>
             <StatusPill status={account.status} /> <span className="ml-1">{account.planName} · {account.billingInterval} · created {dateTime(account.createdAt)}</span>
+            {account.internal && (
+              <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-caution-600">
+                internal{account.internalReason ? ` · ${account.internalReason}` : ''}
+              </span>
+            )}
           </>
         }
       />
@@ -77,7 +82,8 @@ export function AccountDetailPage() {
         download={{ table: `${slug}-summary`, label: 'organization summary' }}
         items={[
           { label: 'MRR', unit: `USD · ARR ${money(account.arrCents)}`, value: money(account.mrrCents), raw: centsToUsd(account.mrrCents), rawType: 'usd' },
-          { label: 'Seats', unit: 'members / licensed', value: `${count(account.members)}/${count(account.seats)}`, raw: account.seats, rawType: 'integer', note: `${count(account.members)} members` },
+          { label: 'Field Capture seats', unit: 'in use / licensed', value: `${count(account.seatsUsed ?? 0)}/${count(account.seats)}`, raw: account.seats, rawType: 'integer', note: `${count(account.members)} members` },
+          { label: 'AI cost', unit: 'USD provider cost, period', value: money(account.aiCostCents ?? 0), raw: centsToUsd(account.aiCostCents ?? 0), rawType: 'usd' },
           { label: 'Hours', unit: account.topFeature ? `top tool: ${account.topFeature}` : 'no usage', value: hours(account.activeHours), raw: account.activeHours, rawUnit: 'hours' },
           { label: 'Collected', unit: `USD, last active ${dateTime(account.lastActiveAt)}`, value: money(account.revenueInRangeCents), raw: centsToUsd(account.revenueInRangeCents), rawType: 'usd' },
         ]}
@@ -137,7 +143,7 @@ export function AccountDetailPage() {
 
       <Section
         title="Jobs"
-        note={`${count(data.jobs.total)} on file · most recent shown`}
+        note={`${count(data.jobs.total)} live${data.jobs.deleted ? ` · ${count(data.jobs.deleted)} deleted, not counted` : ''} · most recent shown`}
         actions={
           <DownloadButton
             table={`${slug}-jobs`}
