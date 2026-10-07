@@ -140,10 +140,14 @@ function addSummarySheet(workbook: ExcelJS.Workbook, summary: SummaryPayload, no
     ['Revenue', 'MRR billed monthly', dollars(r.monthlyBilledMrrCents), 'USD / month'],
     ['Revenue', 'Trial pipeline MRR', dollars(r.trialPipelineMrrCents), 'USD / month'],
     ['Revenue', 'Net new MRR this month', dollars(r.netNewMrrCents), 'USD'],
+    ['Revenue', 'Organizations churned this month', r.churnedOrgsThisMonth, 'count'],
     ['Revenue', 'MRR growth (month over month)', r.mrrGrowthMomPct, '%'],
-    ['Revenue', 'Collected in range', dollars(r.collectedInRangeCents), 'USD'],
+    ['Revenue', 'Collected in range (net of refunds, excl. tax, live mode)', dollars(r.collectedInRangeCents), 'USD'],
     ['Revenue', 'Subscription revenue in range', dollars(r.subscriptionRevenueCents), 'USD'],
+    ['Revenue', 'Usage revenue in range', dollars(r.usageRevenueCents), 'USD'],
     ['Revenue', 'Credit revenue in range', dollars(r.creditRevenueCents), 'USD'],
+    ['Revenue', 'Refunds in range', dollars(r.refundsCents), 'USD'],
+    ['Revenue', 'Tax excluded in range', dollars(r.taxExcludedCents), 'USD'],
     ['Revenue', 'Trailing 12-month revenue', dollars(r.trailing12mRevenueCents), 'USD'],
     ['Revenue', 'Average monthly spend per account', dollars(r.avgMonthlySpendPerAccountCents), 'USD / month'],
     ['Revenue', 'Average monthly spend per seat', dollars(r.avgMonthlySpendPerSeatCents), 'USD / month'],
@@ -151,6 +155,8 @@ function addSummarySheet(workbook: ExcelJS.Workbook, summary: SummaryPayload, no
 
     ['Customers', 'Organizations (total)', summary.customers.orgsTotal, 'count'],
     ['Customers', 'Organizations (paying)', summary.customers.orgsPaying, 'count'],
+    ['Customers', 'Paying organizations (month over month)', summary.customers.payingGrowthMomPct, '%'],
+    ['Customers', 'Internal / test / comp organizations excluded', summary.includeInternal ? 0 : summary.customers.orgsExcluded, 'count'],
     ['Customers', 'Organizations (new in range)', summary.customers.orgsNew, 'count'],
     ['Customers', 'Organizations (active in range)', summary.customers.orgsActive, 'count'],
     ['Customers', 'Organization growth (month over month)', summary.customers.orgsGrowthMomPct, '%'],
@@ -160,8 +166,8 @@ function addSummarySheet(workbook: ExcelJS.Workbook, summary: SummaryPayload, no
     ['Users', 'Users (active in range)', summary.users.usersActive, 'count'],
     ['Users', 'User growth (month over month)', summary.users.usersGrowthMomPct, '%'],
 
-    ['Seats', 'Seats licensed', summary.seats.seatsLicensed, 'count'],
-    ['Seats', 'Seats filled', summary.seats.seatsFilled, 'count'],
+    ['Seats', 'Field Capture seats paid for', summary.seats.seatsLicensed, 'count'],
+    ['Seats', 'Field Capture seats in use', summary.seats.seatsFilled, 'count'],
     ['Seats', 'Seat utilization', summary.seats.seatUtilizationPct, '%'],
     ['Seats', 'Seat growth (month over month)', summary.seats.seatsGrowthMomPct, '%'],
 
@@ -175,10 +181,9 @@ function addSummarySheet(workbook: ExcelJS.Workbook, summary: SummaryPayload, no
   if (summary.unitEconomics) {
     const u = summary.unitEconomics;
     rows.push(
-      ['Unit economics', 'Billed usage', dollars(u.billedUsageCents), 'USD'],
-      ['Unit economics', 'Model cost', dollars(u.modelCostCents), 'USD'],
-      ['Unit economics', 'Gross margin', dollars(u.grossMarginCents), 'USD'],
-      ['Unit economics', 'Gross margin', u.grossMarginPct, '%'],
+      ['AI cost', 'AI provider cost in range', dollars(u.modelCostCents), 'USD'],
+      ['AI cost', 'AI cost at list markup (not invoiced)', dollars(u.listValueCents), 'USD'],
+      ['AI cost', 'AI provider cost, last 30 days', dollars(u.modelCost30dCents), 'USD'],
     );
   }
 
@@ -208,9 +213,11 @@ const monthlyColumns: Column<MonthlyRow>[] = [
   { header: 'MRR growth %', width: 14, format: PERCENT, value: (r) => r.mrrGrowthPct },
   { header: 'Revenue collected', width: 16, format: MONEY, value: (r) => dollars(r.revenueCents) },
   { header: 'Subscription revenue', width: 18, format: MONEY, value: (r) => dollars(r.subscriptionRevenueCents) },
+  { header: 'Usage revenue', width: 15, format: MONEY, value: (r) => dollars(r.usageRevenueCents) },
   { header: 'Credit revenue', width: 15, format: MONEY, value: (r) => dollars(r.creditRevenueCents) },
+  { header: 'Refunds', width: 12, format: MONEY, value: (r) => dollars(r.refundsCents) },
   { header: 'ARPA', width: 12, format: MONEY, value: (r) => dollars(r.arpaCents) },
-  { header: 'Seats', width: 10, format: COUNT, value: (r) => r.seats },
+  { header: 'Field Capture seats', width: 12, format: COUNT, value: (r) => r.seats },
   { header: 'Seat growth %', width: 14, format: PERCENT, value: (r) => r.seatGrowthPct },
   { header: 'Users (total)', width: 13, format: COUNT, value: (r) => r.totalUsers },
   { header: 'Users (new)', width: 12, format: COUNT, value: (r) => r.newUsers },
@@ -262,12 +269,15 @@ const accountColumns: Column<AccountRow>[] = [
   { header: 'Organization', width: 28, value: (r) => r.orgName },
   { header: 'Plan', width: 14, value: (r) => r.planName },
   { header: 'Billing interval', width: 15, value: (r) => r.billingInterval },
-  { header: 'Status', width: 12, value: (r) => r.status },
+  { header: 'Status', width: 14, value: (r) => r.status },
+  { header: 'Internal / test', width: 14, value: (r) => (r.internal ? r.internalReason ?? 'yes' : '') },
   { header: 'MRR', width: 13, format: MONEY, value: (r) => dollars(r.mrrCents) },
   { header: 'ARR', width: 14, format: MONEY, value: (r) => dollars(r.arrCents) },
   { header: 'Revenue in range', width: 16, format: MONEY, value: (r) => dollars(r.revenueInRangeCents) },
-  { header: 'Usage billed', width: 14, format: MONEY, value: (r) => (r.creditSpendCents ?? 0) / 100 },
-  { header: 'Seats', width: 9, format: COUNT, value: (r) => r.seats },
+  { header: 'AI cost', width: 12, format: MONEY, value: (r) => (r.aiCostCents ?? 0) / 100 },
+  { header: 'AI at list markup (not invoiced)', width: 18, format: MONEY, value: (r) => (r.creditSpendCents ?? 0) / 100 },
+  { header: 'Field Capture seats', width: 12, format: COUNT, value: (r) => r.seats },
+  { header: 'FC seats in use', width: 12, format: COUNT, value: (r) => r.seatsUsed },
   { header: 'Members', width: 10, format: COUNT, value: (r) => r.members },
   { header: 'Hours in product', width: 16, format: DECIMAL, value: (r) => r.activeHours },
   { header: 'Most-used tool', width: 22, value: (r) => r.topFeature },
@@ -283,7 +293,8 @@ function formatRange(payload: OverviewPayload): string {
 
 function header(payload: OverviewPayload, label: string): string {
   const view = payload.scope === 'internal' ? 'Internal' : 'Investor';
-  return `Atmosphere — ${label} · ${view} view · ${formatRange(payload)} · generated ${new Date(
+  const who = payload.includeInternal ? 'incl. internal & test accounts' : 'customers only (internal & test excluded)';
+  return `Atmosphere — ${label} · ${view} view · ${who} · ${formatRange(payload)} (UTC) · generated ${new Date(
     payload.generatedAt,
   )
     .toISOString()
@@ -297,27 +308,30 @@ function header(payload: OverviewPayload, label: string): string {
  */
 function addDefinitionsSheet(workbook: ExcelJS.Workbook, scope: AnalyticsScope): void {
   const rows: [string, string][] = [
-    ['MRR', 'Monthly recurring revenue: each active or past-due subscription at its plan price (annual plans use the annual per-month rate), multiplied by seats on per-seat plans.'],
+    ['MRR', 'Monthly recurring revenue: what each org with a real, live-mode Stripe subscription in status active or past_due pays per month — the net Stripe amount stored by the webhook (discounts applied, tax excluded, annual ÷ 12), or the plan catalog price until that is stored (Starter $399, Work Verification $849, Scale $1,999, +$125 per extra Field Capture seat). Trialing, canceled, comp and test-mode subscriptions are $0.'],
     ['ARR', 'MRR × 12 — the annualised run-rate of today’s subscriptions, not trailing revenue.'],
     ['MRR on annual contracts', 'The slice of MRR from subscriptions billed annually (prepaid, hardest to churn).'],
     ['Trial pipeline MRR', 'What trialing subscriptions would add to MRR if they converted as-is. Never counted inside MRR.'],
-    ['Revenue collected', 'Cash from succeeded payments in the period — subscriptions plus credit purchases. Independent of MRR.'],
-    ['Average monthly spend', 'Revenue collected in the range, normalised to a 30-day month, divided by paying accounts (or by seats).'],
+    ['Revenue collected', 'Live-mode cash from succeeded payments in the period, tax excluded, refunds netted: subscriptions, usage invoices and credit purchases. Independent of MRR.'],
+    ['Average monthly spend', 'Revenue collected in the range, normalised to a 30-day month, divided by paying accounts (or by Field Capture seats).'],
     ['ARPA', 'MRR divided by the number of paying accounts.'],
-    ['Seats', 'Licensed seats on active, past-due or trialing subscriptions. "Filled" counts members actually linked to those orgs.'],
+    ['Paying organizations', 'Orgs with MRR above $0. The month-over-month change compares paying orgs now with paying orgs at the start of the month (UTC).'],
+    ['Seats', 'Field Capture seats (included + extra) on paying subscriptions. "In use" counts Field Capture members and pending invites on those orgs.'],
+    ['Internal & test accounts', 'Jettx, test, demo and comp orgs are left out of every number unless "Include internal & test accounts" is on.'],
     ['Active org / user', 'Recorded product activity in the period: a feature session or an AI request.'],
     ['Hours in product', 'Foreground time in a tool, accumulated from 30-second client heartbeats. Each heartbeat is capped at 5 minutes so a backgrounded tab cannot inflate it.'],
     ['Share of time %', 'A feature’s hours as a percentage of all tracked hours in the period.'],
     ['Least-used tools', 'Instrumented features are always listed, including those with zero recorded time — that is how the bottom of the ranking stays meaningful.'],
-    ['Churned orgs', 'Subscriptions moving to canceled in the month, having previously carried MRR.'],
+    ['Churned orgs', 'Orgs whose subscription left a paying status (canceled etc.) in the month, having previously carried MRR.'],
     ['Retention', 'Of the orgs that signed up in a cohort month, the share showing product activity N months later.'],
-    ['Point-in-time history', 'Monthly seats and MRR are reconstructed from the subscription change log, so past months reflect the plans and prices in force then. Months before the log was introduced show the state at its backfill.'],
+    ['Point-in-time history', 'Monthly seats and MRR are reconstructed from the subscription change log, so past months reflect the plans and prices in force then. MRR before 2026-10-07 was recorded as $0 by the old pricing; history starts from the corrected model on that date.'],
+    ['Time zone', 'All dates, weeks (Monday–Sunday) and months are UTC.'],
   ];
 
   if (scope === 'internal') {
     rows.push([
-      'Unit economics',
-      'Billed usage is what customers were charged for AI usage; model cost is what it cost us; gross margin is the difference. Internal view only.',
+      'AI cost',
+      'AI provider cost is what model calls cost us. "AI cost at list markup" is that cost times the customer markup — a list value, NOT invoiced: usage is covered by each plan\'s AI allowance (10% of what the org pays). Internal view only.',
     ]);
   }
 

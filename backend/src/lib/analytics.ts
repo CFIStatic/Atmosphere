@@ -45,13 +45,21 @@ export interface AnalyticsAccess {
 
 export interface SummaryPayload {
   scope: AnalyticsScope;
+  /** True when internal, test, demo and comp orgs are counted. */
+  includeInternal: boolean;
   range: { from: string; to: string; days: number };
   customers: {
     orgsTotal: number;
     orgsNew: number;
     orgsPaying: number;
+    /** Paying orgs at the start of this month (UTC): the base for the delta. */
+    orgsPayingPrev: number;
     orgsActive: number;
+    /** Internal / test / comp orgs left out of every number (0 counted when included). */
+    orgsExcluded: number;
     orgsGrowthMomPct: number | null;
+    /** Month-over-month change in PAYING orgs. */
+    payingGrowthMomPct: number | null;
   };
   users: {
     usersTotal: number;
@@ -74,9 +82,15 @@ export interface SummaryPayload {
     trialPipelineMrrCents: number;
     mrrGrowthMomPct: number | null;
     netNewMrrCents: number;
+    churnedOrgsThisMonth: number;
+    /** Live-mode cash, tax excluded, refunds netted. */
     collectedInRangeCents: number;
     subscriptionRevenueCents: number;
+    usageRevenueCents: number;
     creditRevenueCents: number;
+    /** Negative: refunds net of their tax share. */
+    refundsCents: number;
+    taxExcludedCents: number;
     trailing12mRevenueCents: number;
     avgMonthlySpendPerAccountCents: number | null;
     avgMonthlySpendPerSeatCents: number | null;
@@ -89,12 +103,15 @@ export interface SummaryPayload {
     featuresTracked: number;
     aiRequests: number;
   };
-  /** Internal scope only — omitted entirely for investor scope. */
+  /**
+   * Internal scope only — omitted entirely for investor scope.
+   * listValueCents is model cost at the customer list markup. It is NOT
+   * invoiced: usage is covered by each plan's AI allowance.
+   */
   unitEconomics?: {
-    billedUsageCents: number;
     modelCostCents: number;
-    grossMarginCents: number;
-    grossMarginPct: number | null;
+    listValueCents: number;
+    modelCost30dCents: number;
   };
 }
 
@@ -113,7 +130,9 @@ export interface MonthlyRow {
   arrCents: number;
   revenueCents: number;
   subscriptionRevenueCents: number;
+  usageRevenueCents: number;
   creditRevenueCents: number;
+  refundsCents: number;
   arpaCents: number | null;
   mrrGrowthPct: number | null;
   userGrowthPct: number | null;
@@ -144,16 +163,31 @@ export interface AccountRow {
   planCode: string;
   planName: string;
   billingInterval: string;
+  /** active | past_due | trialing | canceled | comp | no_subscription | test_mode */
   status: string;
+  /** Field Capture seats paid for (included + extra). */
   seats: number;
+  /** Field Capture seats in use. */
+  seatsUsed: number;
   members: number;
   mrrCents: number;
   arrCents: number;
   revenueInRangeCents: number;
+  /** AI usage at list markup (not invoiced). */
   creditSpendCents: number;
+  /** AI provider cost. */
+  aiCostCents: number;
   activeHours: number;
   topFeature: string | null;
   lastActiveAt: string | null;
+  internal: boolean;
+  internalReason: string | null;
+}
+
+export interface InternalOrgRow {
+  orgId: string;
+  orgName: string;
+  reason: string;
 }
 
 export interface AccountMember {
@@ -186,7 +220,9 @@ export interface AccountDetail {
   account: AccountRow;
   members: AccountMember[];
   jobs: {
+    /** Live jobs (deleted excluded). */
     total: number;
+    deleted: number;
     byStatus: Array<{ status: string; count: number }>;
     recent: AccountJob[];
   };
@@ -215,6 +251,7 @@ export interface RetentionRow {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const num = (value: unknown): number => (value === null || value === undefined ? 0 : Number(value));
+const bool = (value: unknown): boolean => value === true || value === 'true';
 const numOrNull = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value);
 
@@ -270,27 +307,22 @@ export async function getAccess(supabase: SupabaseClient): Promise<AnalyticsAcce
   return { scope: row.scope ?? null, displayName: row.display_name ?? null };
 }
 
-export async function getSummary(
-  supabase: SupabaseClient,
-  from: Date,
-  to: Date,
-): Promise<SummaryPayload> {
-  const { data, error } = await supabase.rpc('analytics_summary', {
-    p_from: from.toISOString(),
-    p_to: to.toISOString(),
-  });
-  if (error) throw rpcError(error, 'analytics_summary_failed');
-
+/** Translate the analytics_summary JSONB payload. Exported for tests. */
+export function mapSummary(data: unknown): SummaryPayload {
   const d = data as any;
   const summary: SummaryPayload = {
     scope: d.scope,
+    includeInternal: bool(d.include_internal),
     range: { from: d.range.from, to: d.range.to, days: num(d.range.days) },
     customers: {
       orgsTotal: num(d.customers.orgs_total),
       orgsNew: num(d.customers.orgs_new),
       orgsPaying: num(d.customers.orgs_paying),
+      orgsPayingPrev: num(d.customers.orgs_paying_prev),
       orgsActive: num(d.customers.orgs_active),
+      orgsExcluded: num(d.customers.orgs_excluded),
       orgsGrowthMomPct: numOrNull(d.customers.orgs_growth_mom_pct),
+      payingGrowthMomPct: numOrNull(d.customers.paying_growth_mom_pct),
     },
     users: {
       usersTotal: num(d.users.users_total),
@@ -313,9 +345,13 @@ export async function getSummary(
       trialPipelineMrrCents: num(d.revenue.trial_pipeline_mrr_cents),
       mrrGrowthMomPct: numOrNull(d.revenue.mrr_growth_mom_pct),
       netNewMrrCents: num(d.revenue.net_new_mrr_cents),
+      churnedOrgsThisMonth: num(d.revenue.churned_orgs_this_month),
       collectedInRangeCents: num(d.revenue.collected_in_range_cents),
       subscriptionRevenueCents: num(d.revenue.subscription_revenue_cents),
+      usageRevenueCents: num(d.revenue.usage_revenue_cents),
       creditRevenueCents: num(d.revenue.credit_revenue_cents),
+      refundsCents: num(d.revenue.refunds_cents),
+      taxExcludedCents: num(d.revenue.tax_excluded_cents),
       trailing12mRevenueCents: num(d.revenue.trailing_12m_revenue_cents),
       avgMonthlySpendPerAccountCents: numOrNull(d.revenue.avg_monthly_spend_per_account_cents),
       avgMonthlySpendPerSeatCents: numOrNull(d.revenue.avg_monthly_spend_per_seat_cents),
@@ -332,18 +368,39 @@ export async function getSummary(
 
   if (d.unit_economics) {
     summary.unitEconomics = {
-      billedUsageCents: num(d.unit_economics.billed_usage_cents),
       modelCostCents: num(d.unit_economics.model_cost_cents),
-      grossMarginCents: num(d.unit_economics.gross_margin_cents),
-      grossMarginPct: numOrNull(d.unit_economics.gross_margin_pct),
+      listValueCents: num(d.unit_economics.list_value_cents),
+      modelCost30dCents: num(d.unit_economics.model_cost_30d_cents),
     };
   }
 
   return summary;
 }
 
-export async function getMonthly(supabase: SupabaseClient, months: number): Promise<MonthlyRow[]> {
-  const { data, error } = await supabase.rpc('analytics_monthly', { p_months: months });
+export async function getSummary(
+  supabase: SupabaseClient,
+  from: Date,
+  to: Date,
+  includeInternal = false,
+): Promise<SummaryPayload> {
+  const { data, error } = await supabase.rpc('analytics_summary', {
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+    p_include_internal: includeInternal,
+  });
+  if (error) throw rpcError(error, 'analytics_summary_failed');
+  return mapSummary(data);
+}
+
+export async function getMonthly(
+  supabase: SupabaseClient,
+  months: number,
+  includeInternal = false,
+): Promise<MonthlyRow[]> {
+  const { data, error } = await supabase.rpc('analytics_monthly', {
+    p_months: months,
+    p_include_internal: includeInternal,
+  });
   if (error) throw rpcError(error, 'analytics_monthly_failed');
   return ((data ?? []) as any[]).map((r) => ({
     month: r.month,
@@ -360,7 +417,9 @@ export async function getMonthly(supabase: SupabaseClient, months: number): Prom
     arrCents: num(r.arr_cents),
     revenueCents: num(r.revenue_cents),
     subscriptionRevenueCents: num(r.subscription_revenue_cents),
+    usageRevenueCents: num(r.usage_revenue_cents),
     creditRevenueCents: num(r.credit_revenue_cents),
+    refundsCents: num(r.refunds_cents),
     arpaCents: numOrNull(r.arpa_cents),
     mrrGrowthPct: numOrNull(r.mrr_growth_pct),
     userGrowthPct: numOrNull(r.user_growth_pct),
@@ -373,10 +432,12 @@ export async function getFeatures(
   supabase: SupabaseClient,
   from: Date,
   to: Date,
+  includeInternal = false,
 ): Promise<FeatureRow[]> {
   const { data, error } = await supabase.rpc('analytics_features', {
     p_from: from.toISOString(),
     p_to: to.toISOString(),
+    p_include_internal: includeInternal,
   });
   if (error) throw rpcError(error, 'analytics_features_failed');
   return ((data ?? []) as any[]).map((r) => ({
@@ -401,16 +462,18 @@ function mapAccountRow(r: Record<string, unknown>): AccountRow {
     orgId: String(r.org_id ?? r.orgId ?? ''),
     orgName: String(r.org_name ?? r.orgName ?? ''),
     createdAt: String(r.created_at ?? r.createdAt ?? ''),
-    planCode: String(r.plan_code ?? r.planCode ?? 'free'),
-    planName: String(r.plan_name ?? r.planName ?? 'Free'),
+    planCode: String(r.plan_code ?? r.planCode ?? 'none'),
+    planName: String(r.plan_name ?? r.planName ?? 'No plan'),
     billingInterval: String(r.billing_interval ?? r.billingInterval ?? 'monthly'),
-    status: String(r.status ?? 'active'),
+    status: String(r.status ?? 'no_subscription'),
     seats: num(r.seats),
+    seatsUsed: num(r.seats_used ?? r.seatsUsed),
     members: num(r.members),
     mrrCents: num(r.mrr_cents ?? r.mrrCents),
     arrCents: num(r.arr_cents ?? r.arrCents),
     revenueInRangeCents: num(r.revenue_in_range_cents ?? r.revenueInRangeCents),
     creditSpendCents: num(r.credit_spend_cents ?? r.creditSpendCents),
+    aiCostCents: num(r.ai_cost_cents ?? r.aiCostCents),
     activeHours: num(r.active_hours ?? r.activeHours),
     topFeature:
       (r.top_feature as string | null | undefined) ??
@@ -418,6 +481,9 @@ function mapAccountRow(r: Record<string, unknown>): AccountRow {
       null,
     lastActiveAt:
       (r.last_active_at as string | null | undefined) ?? (r.lastActiveAt as string | null) ?? null,
+    internal: bool(r.internal),
+    internalReason:
+      (r.internal_reason as string | null | undefined) ?? (r.internalReason as string | null) ?? null,
   };
 }
 
@@ -426,14 +492,27 @@ export async function getAccounts(
   from: Date,
   to: Date,
   limit: number,
+  includeInternal = false,
 ): Promise<AccountRow[]> {
   const { data, error } = await supabase.rpc('analytics_accounts', {
     p_from: from.toISOString(),
     p_to: to.toISOString(),
     p_limit: limit,
+    p_include_internal: includeInternal,
   });
   if (error) throw rpcError(error, 'analytics_accounts_failed');
   return ((data ?? []) as any[]).map((r) => mapAccountRow(r));
+}
+
+/** Orgs left out of reports by default (internal / test / demo / comp). */
+export async function getInternalOrgs(supabase: SupabaseClient): Promise<InternalOrgRow[]> {
+  const { data, error } = await supabase.rpc('analytics_internal_orgs');
+  if (error) throw rpcError(error, 'analytics_internal_orgs_failed');
+  return ((data ?? []) as any[]).map((r) => ({
+    orgId: String(r.org_id),
+    orgName: String(r.org_name ?? ''),
+    reason: String(r.reason ?? ''),
+  }));
 }
 
 /** Translate the analytics_account_detail JSONB payload. Exported for tests. */
@@ -466,6 +545,7 @@ export function mapAccountDetail(data: unknown): AccountDetail | null {
     }),
     jobs: {
       total: num(jobsRaw.total),
+      deleted: num(jobsRaw.deleted),
       byStatus: byStatusRaw.map((row) => {
         const s = (row ?? {}) as Record<string, unknown>;
         return { status: String(s.status ?? ''), count: num(s.count) };
@@ -510,8 +590,13 @@ export async function getAccountDetail(
   return mapAccountDetail(data);
 }
 
-export async function getPlanMix(supabase: SupabaseClient): Promise<PlanMixRow[]> {
-  const { data, error } = await supabase.rpc('analytics_plan_mix');
+export async function getPlanMix(
+  supabase: SupabaseClient,
+  includeInternal = false,
+): Promise<PlanMixRow[]> {
+  const { data, error } = await supabase.rpc('analytics_plan_mix', {
+    p_include_internal: includeInternal,
+  });
   if (error) throw rpcError(error, 'analytics_plan_mix_failed');
   return ((data ?? []) as any[]).map((r) => ({
     planCode: r.plan_code,
@@ -528,8 +613,12 @@ export async function getPlanMix(supabase: SupabaseClient): Promise<PlanMixRow[]
 export async function getRetention(
   supabase: SupabaseClient,
   months: number,
+  includeInternal = false,
 ): Promise<RetentionRow[]> {
-  const { data, error } = await supabase.rpc('analytics_retention', { p_months: months });
+  const { data, error } = await supabase.rpc('analytics_retention', {
+    p_months: months,
+    p_include_internal: includeInternal,
+  });
   if (error) throw rpcError(error, 'analytics_retention_failed');
   return ((data ?? []) as any[]).map((r) => ({
     cohortMonth: r.cohort_month,
@@ -553,6 +642,7 @@ export async function getExperiments(
 export interface OverviewPayload {
   scope: AnalyticsScope;
   generatedAt: string;
+  includeInternal: boolean;
   range: { from: string; to: string };
   summary: SummaryPayload;
   monthly: MonthlyRow[];
@@ -568,22 +658,24 @@ export async function getOverview(
   from: Date,
   to: Date,
   months: number,
+  includeInternal = false,
 ): Promise<OverviewPayload> {
   const isInternal = scopeAtLeast(scope, 'internal');
 
   const [summary, monthly, features, planMix, retention, accounts] = await Promise.all([
-    getSummary(supabase, from, to),
-    getMonthly(supabase, months),
-    getFeatures(supabase, from, to),
-    getPlanMix(supabase),
-    getRetention(supabase, Math.min(months, 12)),
+    getSummary(supabase, from, to, includeInternal),
+    getMonthly(supabase, months, includeInternal),
+    getFeatures(supabase, from, to, includeInternal),
+    getPlanMix(supabase, includeInternal),
+    getRetention(supabase, Math.min(months, 12), includeInternal),
     // Per-customer detail never leaves the building for investor scope.
-    isInternal ? getAccounts(supabase, from, to, 500) : Promise.resolve(null),
+    isInternal ? getAccounts(supabase, from, to, 500, includeInternal) : Promise.resolve(null),
   ]);
 
   return {
     scope,
     generatedAt: new Date().toISOString(),
+    includeInternal,
     range: { from: from.toISOString(), to: to.toISOString() },
     summary,
     monthly,

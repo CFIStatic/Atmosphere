@@ -383,16 +383,31 @@ const isoDate = z
  * hand-edited URL cannot ask the database for a decade of rows, and an inverted
  * range is rejected rather than silently returning nothing.
  */
+/**
+ * "Include internal & test accounts" toggle (?internal=1). Off by default:
+ * internal, test, demo and comp orgs are left out of every report.
+ */
+export const analyticsIncludeInternalSchema = z
+  .union([z.boolean(), z.string()])
+  .optional()
+  .transform((v) => v === true || v === '1' || v === 'true' || v === 'yes');
+
+export function parseIncludeInternal(value: unknown): boolean {
+  const parsed = analyticsIncludeInternalSchema.safeParse(value);
+  return parsed.success ? parsed.data : false;
+}
+
 export const analyticsRangeSchema = z
   .object({
     from: isoDate.optional(),
     to: isoDate.optional(),
     months: z.coerce.number().int().min(1).max(60).default(24),
+    internal: analyticsIncludeInternalSchema,
   })
-  .transform(({ from, to, months }) => {
+  .transform(({ from, to, months, internal }) => {
     const end = to ?? new Date();
     const start = from ?? new Date(end.getTime() - 30 * DAY_MS);
-    return { from: start, to: end, months };
+    return { from: start, to: end, months, includeInternal: internal };
   })
   .refine(({ from, to }) => from < to, {
     message: 'The start of the range must come before the end',

@@ -34,7 +34,10 @@ export interface UploadPeriod {
 
 export interface AnalysisPeriod {
   received: number;
+  /** Films whose FIRST analysis time is known (percentiles use these). */
   analysed: number;
+  /** Analysed films whose first analysis time was overwritten before tracking began (Sep 21 batch). */
+  firstTimeUnknown: number;
   failed: number;
   pending: number;
   medianSeconds: number | null;
@@ -44,6 +47,7 @@ export interface AnalysisPeriod {
 export interface AnalysisWeek {
   weekStart: string;
   analysed: number;
+  firstTimeUnknown: number;
   medianSeconds: number | null;
   p90Seconds: number | null;
 }
@@ -73,6 +77,7 @@ export interface AskPeriod {
 export interface ProductHealth {
   generatedAt: string;
   weeks: number;
+  includeInternal: boolean;
   windows: {
     current: { from: string; to: string };
     prior: { from: string; to: string };
@@ -91,6 +96,8 @@ export interface ProductHealth {
     topErrors: Array<{ code: string; count: number }>;
   };
   analysis: {
+    /** 'first_analysis': upload -> first analysis; re-analysis is ignored. */
+    measuredTo: string;
     current: AnalysisPeriod | null;
     prior: AnalysisPeriod | null;
     weekly: AnalysisWeek[];
@@ -170,6 +177,7 @@ function mapAnalysis(raw: unknown): AnalysisPeriod | null {
   return {
     received: num(r.received),
     analysed: num(r.analysed),
+    firstTimeUnknown: num(r.first_time_unknown),
     failed: num(r.failed),
     pending: num(r.pending),
     medianSeconds: numOrNull(r.median_seconds),
@@ -224,6 +232,7 @@ export function mapProductHealth(data: unknown): ProductHealth {
   return {
     generatedAt: str(d.generated_at),
     weeks: num(d.weeks),
+    includeInternal: d.include_internal === true,
     windows: {
       current: { from: str(cur.from), to: str(cur.to) },
       prior: { from: str(prior.from), to: str(prior.to) },
@@ -243,6 +252,7 @@ export function mapProductHealth(data: unknown): ProductHealth {
       }),
     },
     analysis: {
+      measuredTo: str(analysis.measured_to) || 'first_analysis',
       current: mapAnalysis(analysis.current),
       prior: mapAnalysis(analysis.prior),
       weekly: arr(analysis.weekly).map((row) => {
@@ -250,6 +260,7 @@ export function mapProductHealth(data: unknown): ProductHealth {
         return {
           weekStart: str(w.week_start),
           analysed: num(w.analysed),
+          firstTimeUnknown: num(w.first_time_unknown),
           medianSeconds: numOrNull(w.median_seconds),
           p90Seconds: numOrNull(w.p90_seconds),
         };
@@ -280,8 +291,12 @@ export function mapProductHealth(data: unknown): ProductHealth {
 export async function getProductHealth(
   supabase: SupabaseClient,
   weeks: number,
+  includeInternal = false,
 ): Promise<ProductHealth> {
-  const { data, error } = await supabase.rpc('analytics_product_health', { p_weeks: weeks });
+  const { data, error } = await supabase.rpc('analytics_product_health', {
+    p_weeks: weeks,
+    p_include_internal: includeInternal,
+  });
   if (error) throw translateAnalyticsRpcError(error, 'analytics_product_health_failed');
   return mapProductHealth(data);
 }

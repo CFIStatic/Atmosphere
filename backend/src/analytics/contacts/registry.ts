@@ -41,6 +41,7 @@ export function dedupeContacts(rows: Contact[]): Contact[] {
       status: betterStatus(prev.status, row.status),
       createdAt,
       sources: [...new Set([...prev.sources, ...row.sources])],
+      internal: Boolean(prev.internal || row.internal),
     });
   }
   return [...byEmail.values()].sort((a, b) => a.email.localeCompare(b.email));

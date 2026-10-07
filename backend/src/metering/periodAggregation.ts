@@ -70,14 +70,20 @@ export async function closeMeteringPeriod(
   return row;
 }
 
+/**
+ * Metering report. Reads token_usage_events (the real ledger) since
+ * 20261007230000; private.ai_usage_events was never written in production.
+ */
 export async function getAdminMeteringAnalytics(
   client: SupabaseClient,
   from: string,
   to: string,
+  includeInternal = false,
 ): Promise<Record<string, unknown>> {
   const { data, error } = await client.rpc('admin_metering_analytics', {
     p_from: from,
     p_to: to,
+    p_include_internal: includeInternal,
   });
   if (error) throw error;
   return data as Record<string, unknown>;
@@ -186,18 +192,45 @@ export function applySharedPricingToTokenReport(
   return report;
 }
 
-/** Global token ledger for Internal Growth Metrics (token_usage_events). */
+/** Org ids left out of reports by default (internal / test / demo / comp). */
+export async function loadInternalOrgIds(client: SupabaseClient): Promise<Set<string>> {
+  const { data, error } = await client.rpc('analytics_internal_orgs');
+  if (error) {
+    // Pre-migration database: nothing is flagged yet, so nothing extra to drop.
+    console.warn('[analytics] internal org list unavailable:', error.message);
+    return new Set<string>();
+  }
+  return new Set(((data ?? []) as Array<{ org_id: string }>).map((r) => String(r.org_id)));
+}
+
+/** Drop ledger rows from internal orgs unless the toggle includes them. */
+export function scopeUnpricedRows(
+  rows: UnpricedLedgerRow[],
+  internalOrgIds: Set<string>,
+  includeInternal: boolean,
+): UnpricedLedgerRow[] {
+  if (includeInternal || internalOrgIds.size === 0) return rows;
+  return rows.filter((row) => !internalOrgIds.has(row.org_id));
+}
+
+/**
+ * Global token ledger for Internal Growth Metrics (token_usage_events).
+ * priceNanos is list value (cost x customer markup), not an invoiced amount.
+ */
 export async function getAdminTokenUsageAnalytics(
   client: SupabaseClient,
   from: string,
   to: string,
+  includeInternal = false,
 ): Promise<Record<string, unknown>> {
   const { data, error } = await client.rpc('admin_token_usage_analytics', {
     p_from: from,
     p_to: to,
+    p_include_internal: includeInternal,
   });
   if (error) throw error;
   const report = (data ?? {}) as Record<string, unknown>;
+  const internalOrgIds = includeInternal ? new Set<string>() : await loadInternalOrgIds(client);
   const unpriced = await collectPaged<UnpricedLedgerRow>(TOKEN_USAGE_PAGE, async (lo, hi) => {
     const { data: rows, error: rowsError } = await client
       .from('token_usage_events')
@@ -215,5 +248,8 @@ export async function getAdminTokenUsageAnalytics(
     if (rowsError) throw rowsError;
     return (rows ?? []) as UnpricedLedgerRow[];
   });
-  return applySharedPricingToTokenReport(report, unpriced, { from, to });
+  return applySharedPricingToTokenReport(report, scopeUnpricedRows(unpriced, internalOrgIds, includeInternal), {
+    from,
+    to,
+  });
 }
