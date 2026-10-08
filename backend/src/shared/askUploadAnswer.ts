@@ -2,14 +2,16 @@
  * Answers about files attached in this chat, the way a general chat assistant
  * reads an attachment: a plain answer in its own words, no job-match note.
  *
- * - Same Ask completion (completeAskText, interactive) and model settings as
- *   the rest of Ask. Nothing here picks a model or provider.
+ * - Same Ask completion (completeAskText, interactive) as the rest of Ask. A
+ *   quick read goes to the fast Anthropic model; anything the router would
+ *   send deep (summaries, quotes, money, multi-part) keeps the default model.
  * - The file text goes only into this prompt. The job-file prompt never sees
  *   an unattached upload.
  * - Every quote is checked against the file text and dropped when it is not
  *   an exact substring. A reply with no prose left is not used.
  */
-import { completeAskText } from '../lib/askModel.js';
+import { askFastAnthropicModel, completeAskText } from '../lib/askModel.js';
+import { needsCriticalEscalation, needsDeepEvidence } from './askRoute.js';
 import type { MeasuredUsage } from '../lib/anthropic.js';
 import { documentChunksForGrounding, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
@@ -100,6 +102,16 @@ function hasProse(answer: string): boolean {
   return body.split(/\s+/).filter((word) => word.length > 1).length >= 3;
 }
 
+/** Anthropic model for an upload answer: null keeps the default (deep) model. */
+export function uploadAnswerModel(question: string): string | null {
+  const q = trim(question);
+  if (!q) return null;
+  if (needsDeepEvidence(q) || needsCriticalEscalation(q)) return null;
+  if ((q.match(/\?/g) ?? []).length >= 2) return null;
+  if (q.split(/\s+/).length > 24) return null;
+  return askFastAnthropicModel();
+}
+
 export async function answerChatUploadsWithModel(input: {
   question: string;
   documents: AskDocumentView[];
@@ -109,6 +121,8 @@ export async function answerChatUploadsWithModel(input: {
   signal?: AbortSignal;
   /** Test hook. Defaults to the shared Ask completion. */
   complete?: typeof completeAskText;
+  /** Stream visible text as it arrives (the caller's preview gate filters it). */
+  onToken?: (text: string) => void;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null } | null> {
   const documents = input.documents.filter((doc) => fileText(doc));
   if (!documents.length) return null;
@@ -117,9 +131,13 @@ export async function answerChatUploadsWithModel(input: {
     system: UPLOAD_ANSWER_SYSTEM,
     user: formatUploadAnswerRequest({ question: input.question, documents, history: input.history }),
     anthropicApiKey: input.apiKey ?? null,
+    // Quick reads of an upload ("what's the total on this?") go to the fast
+    // model; summaries, quotes, money, and multi-part asks stay on the deep one.
+    anthropicModel: uploadAnswerModel(input.question),
     mode: 'interactive',
     fetchFn: input.fetchFn,
     signal: input.signal,
+    onToken: input.onToken,
   });
   const raw = trim(completed?.text);
   if (!completed || !raw) return null;

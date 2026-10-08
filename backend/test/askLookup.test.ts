@@ -799,7 +799,8 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     const first = anthropicBodies[0]!;
     assert.equal(first.model, 'claude-opus-5-5');
     assert.equal((first.thinking as { type?: string } | undefined)?.type, 'adaptive');
-    assert.equal((first.output_config as { effort?: string } | undefined)?.effort, 'high');
+    // Everyday deep questions use the interactive effort (ASK_DEEP_EFFORT, medium).
+    assert.equal((first.output_config as { effort?: string } | undefined)?.effort, 'medium');
     assert.equal(JSON.stringify(first).includes('budget_tokens'), false);
     assert.ok(Number(first.max_tokens) >= 16_000);
     const cachedSystem = first.system as Array<{ text?: string; cache_control?: { type?: string; ttl?: string } }>;
@@ -835,9 +836,22 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     assert.match(String((deep.system as Array<{ text?: string }>)[0]?.text ?? ''), /Write a real document from the job context/);
     assert.equal(deep.model, 'claude-opus-5-5');
     assert.equal((deep.thinking as { type?: string } | undefined)?.type, 'adaptive');
-    assert.equal((deep.output_config as { effort?: string } | undefined)?.effort, 'high');
+    // Drafts keep the deep model and the full job context, at interactive effort.
+    assert.equal((deep.output_config as { effort?: string } | undefined)?.effort, 'medium');
     assert.ok(Number(deep.max_tokens) >= 16_000);
     assert.equal(JSON.stringify(deep).includes('budget_tokens'), false);
+
+    // Money, safety, disputes, and hard dates keep the full analysis effort.
+    anthropicBodies.length = 0;
+    await answerFromAskLookup({
+      question: 'What deductible amount did the carrier approve?',
+      catalog: file,
+      anthropicApiKey: 'sk-ant-test-shape-key',
+      fetchFn,
+    });
+    const critical = anthropicBodies[0]!;
+    assert.equal(critical.model, 'claude-opus-5-5');
+    assert.equal((critical.output_config as { effort?: string } | undefined)?.effort, 'high');
 
     anthropicBodies.length = 0;
     geminiBodies.length = 0;

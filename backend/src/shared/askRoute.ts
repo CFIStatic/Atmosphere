@@ -14,6 +14,7 @@ import { asksAboutOtherJobs, type AskLookupCatalog } from './askLookup.js';
 import { askFastGeminiModel, scrubProviderDetail } from '../lib/askModel.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
 import { classifyAskIntent, classifyChatTurn, isJobContentsQuestion, isJobOverview } from './askPolish.js';
+import { isGeneralAsk } from './askWebSearch.js';
 
 export type AskModelRoute = 'fast' | 'deep' | 'skipped';
 
@@ -131,6 +132,9 @@ export function routeAskQuestion(input: {
   const intent = classifyAskIntent(resolved);
   if (intent.kind === 'task') return { route: 'deep', reason: `task_${intent.task}` };
   if (asksAboutOtherJobs(asked) || asksAboutOtherJobs(resolved)) return { route: 'deep', reason: 'other_jobs' };
+  // Public questions (sports, weather, news, codes, prices) are not about this
+  // file: a fast model answers them from one web search.
+  if (isGeneralAsk(asked) && isGeneralAsk(resolved)) return { route: 'fast', reason: 'general' };
   if (isJobOverview(resolved) || isJobOverview(asked) || isFileNarrative(resolved) || isFileNarrative(asked)) {
     return { route: 'deep', reason: 'overview' };
   }
@@ -209,6 +213,9 @@ export function fastAnswerNeedsDeepFallback(
   return false;
 }
 
+/** The classifier runs alongside retrieval; it must never be the slow part of a turn. */
+export const ASK_ROUTE_CLASSIFIER_TIMEOUT_MS = 1_500;
+
 const CLASSIFIER_SYSTEM = `You route one construction-job Chat question. Reply with exactly one word: FAST or DEEP.
 FAST = inventory, counts, lists, status, who/when on the job, address/claim/homeowner, a single CRM fact.
 DEEP = quotes or what someone said, evidence, multi-clip summary, draft/email/estimate, dispute, comparison, why/reasoning, other jobs.
@@ -239,9 +246,17 @@ export async function refineAskRouteWithClassifier(input: {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: CLASSIFIER_SYSTEM }] },
         contents: [{ role: 'user', parts: [{ text: input.question.trim().slice(0, 500) }] }],
-        generationConfig: { maxOutputTokens: 8, temperature: 0 },
+        // Gemini 3 thinks by default and thinking tokens count against
+        // maxOutputTokens: with 8 tokens the reply was empty, every unsure
+        // turn fell back to Opus ("default"), and the turn still paid the wait.
+        generationConfig: {
+          maxOutputTokens: 64,
+          ...(/^gemini-3/i.test(model) && !/lite/i.test(model)
+            ? { thinkingConfig: { thinkingLevel: 'low' } }
+            : { temperature: 0 }),
+        },
       }),
-      signal: AbortSignal.timeout(4_000),
+      signal: AbortSignal.timeout(ASK_ROUTE_CLASSIFIER_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`Gemini classifier ${response.status}: ${await response.text()}`);

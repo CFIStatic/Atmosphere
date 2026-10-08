@@ -26,9 +26,10 @@ import {
   looksLikeExplicitWebSearchRequest,
   plainWebModelText,
   searchAskWebDetailed,
-  shouldSupplementWithWebSearch,
+  shouldSearchWebBeforeAnswer,
   webSearchModelPayload,
   type AskWebHit,
+  type AskWebSearchFn,
 } from './askWebSearch.js';
 import type { JobFileAskContext } from './jobFileAsk.js';
 import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
@@ -58,6 +59,8 @@ export type AskToolContext = {
   propertyId?: string | null;
   /** Formatted site address already loaded for this turn. */
   address?: string | null;
+  /** Per-turn memoized web search (one search per query per turn). */
+  webSearch?: AskWebSearchFn;
 };
 
 export type AskToolResult = {
@@ -419,9 +422,10 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   ) {
     add('search_crm');
   }
-  // Explicit search always runs. Other non-job questions run too (no topic list).
-  // Job evidence questions are not pre-searched; the model may still call the tool.
-  if (shouldSupplementWithWebSearch(question, '')) {
+  // Explicit searches and plainly public questions are searched up front.
+  // Unclear ones ("and what happened after that?") are not: a blocking search
+  // there costs seconds and rarely helps; the model may still call the tool.
+  if (shouldSearchWebBeforeAnswer(question, '')) {
     add('web_search');
   }
 
@@ -550,7 +554,7 @@ export async function executeAskTool(
           };
         }
         const domains = includeDomainsForAsk(query, input.include_domains ?? input.includeDomains);
-        const outcome = await searchAskWebDetailed(query, {
+        const outcome = await (ctx.webSearch ?? searchAskWebDetailed)(query, {
           fetchFn: ctx.fetchFn,
           limit: 5,
           includeDomains: domains,
@@ -1133,31 +1137,36 @@ export async function executeAskTool(
         }
         try {
           const store = computerStore();
-          const logins = store ? await store.listLogins(ctx.orgId) : [];
-          let accessPeople: Array<{ kind?: string | null; name?: string | null; email?: string | null; displayName?: string | null }> = [];
-          try {
-            if (ctx.jobId) {
-              accessPeople = (await loadAccessRoster(ctx)).map((p) => ({
-                kind: p.kind,
-                name: p.name,
-                email: p.email,
-                displayName: p.displayName,
-              }));
-            }
-          } catch {
-            accessPeople = [];
-          }
-          let companyName: string | null = null;
-          try {
-            const { data: orgRow } = await ctx.supabase
-              .from('orgs')
-              .select('name')
-              .eq('id', ctx.orgId)
-              .maybeSingle();
-            companyName = String((orgRow as { name?: string | null } | null)?.name ?? '').trim() || null;
-          } catch {
-            companyName = null;
-          }
+          // Saved logins, the access roster, and the company name are
+          // independent reads: fetch them side by side.
+          const [logins, accessPeople, companyName] = await Promise.all([
+            store ? store.listLogins(ctx.orgId) : Promise.resolve([]),
+            (async (): Promise<Array<{ kind?: string | null; name?: string | null; email?: string | null; displayName?: string | null }>> => {
+              try {
+                if (!ctx.jobId) return [];
+                return (await loadAccessRoster(ctx)).map((p) => ({
+                  kind: p.kind,
+                  name: p.name,
+                  email: p.email,
+                  displayName: p.displayName,
+                }));
+              } catch {
+                return [];
+              }
+            })(),
+            (async (): Promise<string | null> => {
+              try {
+                const { data: orgRow } = await ctx.supabase
+                  .from('orgs')
+                  .select('name')
+                  .eq('id', ctx.orgId)
+                  .maybeSingle();
+                return String((orgRow as { name?: string | null } | null)?.name ?? '').trim() || null;
+              } catch {
+                return null;
+              }
+            })(),
+          ]);
           const plan = looksLikeSupplyOrderAsk(instructions)
             ? await planSupplyOrderComputerTask({
                 question: instructions,

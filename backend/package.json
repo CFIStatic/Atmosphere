@@ -37,6 +37,7 @@
     "stripe:sync": "tsx src/scripts/syncStripeCatalog.ts",
     "test:vitest": "vitest run --passWithNoTests",
     "eval:ask": "tsx src/scripts/askEval.ts",
+    "bench:ask": "tsx src/scripts/askLatencyBench.ts",
     "reconcile:ai-costs": "tsx src/scripts/reconcileAiCosts.ts"
   },
   "engines": {

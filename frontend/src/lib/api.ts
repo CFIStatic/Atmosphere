@@ -4238,7 +4238,10 @@ export const api = {
     jobId: string,
     question: string,
     handlers: {
+      /** Checked preview text, appended in order. `done` carries the final answer. */
       onToken?: (text: string) => void;
+      /** The preview so far was withdrawn (the model went to look something up). */
+      onReset?: () => void;
       onStatus?: (phase: string) => void;
     } = {},
     opts?: { threadId?: string | null; signal?: AbortSignal; documentIds?: string[] },
@@ -4320,7 +4323,11 @@ export const api = {
           continue;
         }
         if (event.type === 'token') {
-          // Thinking dots only. The answer arrives on the done event.
+          // Server-checked preview sentences (no quotes, cites, or links). The
+          // final, fully grounded answer arrives on the done event.
+          if (typeof event.text === 'string' && event.text) handlers.onToken?.(event.text);
+        } else if (event.type === 'reset') {
+          handlers.onReset?.();
         } else if (event.type === 'status' && event.phase) {
           handlers.onStatus?.(event.phase);
         } else if (event.type === 'done') {

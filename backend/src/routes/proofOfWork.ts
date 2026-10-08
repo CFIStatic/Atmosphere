@@ -81,7 +81,18 @@ import {
 import { chatUploadShouldAnswer, sessionAnswerIsPrivate } from '../documents/answer.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
 import { excludeOfficeOnlyRows, listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
-import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
+import {
+  createAskWebSearchMemo,
+  includeDomainsForAsk,
+  isAskWebSearchConfigured,
+  isGeneralAsk,
+  scrubWebDerivedAskAnswer,
+  stripExternalAskLinks,
+  webSourcesFromHits,
+  type AskWebHit,
+  type AskWebSource,
+} from '../shared/askWebSearch.js';
+import { createAskPreviewGate } from '../shared/askPreview.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
 import {
@@ -2994,6 +3005,9 @@ export async function runProofAsk(
   }
 }
 
+/** Longest the stored answer waits on the thread title that started with the turn. */
+const ASK_TITLE_WAIT_MS = 1_200;
+
 async function runProofAskTurn(input: {
   supabase: any;
   orgId: string;
@@ -3005,7 +3019,14 @@ async function runProofAskTurn(input: {
   /** IANA zone of the person asking, when the client sends one. */
   timeZone?: string | null;
   requestId: string;
+  /**
+   * Live preview text. Only sentences that pass the preview gate (no quotes,
+   * cites, links, machine lines; job answers also pass the grounding verifier)
+   * arrive here. The final answer still comes back in the result.
+   */
   onToken?: (text: string) => void;
+  /** The preview so far is withdrawn (a tool call or a model escalation followed it). */
+  onPreviewReset?: () => void;
   onStatus?: (phase: string) => void;
   /** Set when the reader stops the answer. A stopped turn is not stored. */
   signal?: AbortSignal;
@@ -3037,10 +3058,24 @@ async function runProofAskTurn(input: {
       await assertAiFeatureAllowed(budgetClient, orgId, { canManage: false });
     }
     const clock = createAskTurnClock();
+    const preview = createAskPreviewGate({
+      emit: (text: string) => {
+        if (!text) return;
+        clock.markFirstVisible();
+        input.onToken?.(text);
+      },
+      reset: () => input.onPreviewReset?.(),
+    });
     const onToken = (text: string) => {
       if (text) clock.markFirstToken();
-      input.onToken?.(text);
+      preview.push(text);
     };
+    // One web search per query per turn. A public question ("who's going to
+    // win the ball game") starts its search now, while the job file loads.
+    const webSearch = createAskWebSearchMemo({ timeZone: input.timeZone ?? 'America/Chicago' });
+    if (isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
+      void webSearch(input.question, { limit: 5, includeDomains: includeDomainsForAsk(input.question) });
+    }
     const writeDb = askWriteClient(supabase);
     let threadId: string | null = input.threadId ?? null;
     const askAccess: 'org' | 'viewer' = input.access === 'org' ? 'org' : 'viewer';
@@ -3088,6 +3123,27 @@ async function runProofAskTurn(input: {
             .order('work_date', { ascending: false })
             .limit(24)
         : Promise.resolve({ data: null as Array<Record<string, unknown>> | null });
+
+    // Independent of the job file: start these with it instead of after it.
+    const orgAdminEarly = unscopedAdminOrNull();
+    const orgMemoryPromise =
+      askAccess === 'org'
+        ? loadOrgMemoryFacts(orgAdminEarly, {
+            orgId,
+            accessibleJobIds: jobId ? new Set<string>([jobId]) : new Set<string>(),
+            limit: 40,
+          }).catch(() => [])
+        : Promise.resolve([]);
+    const sessionDocumentsPromise =
+      askAccess === 'org' ? loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : Promise.resolve([]);
+    const apiKeyPromise = resolveAskApiKey(orgId);
+    const styleRowPromise =
+      userId && askAccess === 'org'
+        ? loadCommunicationStyle(writeDb ?? supabase, userId).catch(() => null)
+        : Promise.resolve(null);
+    // Unhandled-rejection guard; each is awaited (and rethrows) below.
+    sessionDocumentsPromise.catch(() => null);
+    apiKeyPromise.catch(() => null);
 
     const [
       proofsRes,
@@ -3518,27 +3574,19 @@ async function runProofAskTurn(input: {
       now: new Date().toISOString(),
     };
 
-    const orgAdmin = unscopedAdminOrNull();
-    const accessibleJobIds =
-      askAccess === 'org' && jobId ? new Set<string>([jobId]) : new Set<string>();
+    const orgAdmin = orgAdminEarly;
     // Office Ask on a job: treat current job as accessible; restricted facts that
     // cite other jobs are dropped unless those ids are also in the set (fail closed).
-    const orgMemory =
-      askAccess === 'org'
-        ? await loadOrgMemoryFacts(orgAdmin, {
-            orgId,
-            accessibleJobIds,
-            limit: 40,
-          }).catch(() => [])
-        : [];
-
-    const sessionDocuments =
-      askAccess === 'org' ? await loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : [];
+    // (Started alongside the job file load above.)
+    const [orgMemory, sessionDocuments, apiKey] = await Promise.all([
+      orgMemoryPromise,
+      sessionDocumentsPromise,
+      apiKeyPromise,
+    ]);
     const aboutUpload = chatUploadShouldAnswer(input.question, sessionDocuments);
     const mentionHistory = aboutUpload
       ? history
       : (historyWithoutPrivateUploads(history, sessionDocuments) ?? history);
-    const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
         ? await prepareMentionAsk(supabase, {
@@ -3616,10 +3664,7 @@ async function runProofAskTurn(input: {
       threadId && owner && priorCount === 0
         ? modelAskThreadTitle({ question: scrubStoredAskText(input.question, memoryClips) }).catch(() => null)
         : Promise.resolve(null);
-    const styleRow =
-      userId && askAccess === 'org'
-        ? await loadCommunicationStyle(writeDb ?? supabase, userId).catch(() => null)
-        : null;
+    const styleRow = await styleRowPromise;
     const styleSummary = styleRow?.promptSummary ?? null;
 
     const result = mentionPrep?.directAnswer
@@ -3660,6 +3705,9 @@ async function runProofAskTurn(input: {
       timing: clock,
       sessionDocuments,
       lookup,
+      webSearch,
+      onPreviewReset: () => preview.reset(),
+      setPreviewCheck: (check) => preview.setCheck(check),
       toolContext: {
         orgId,
         jobId,
@@ -3671,6 +3719,7 @@ async function runProofAskTurn(input: {
         propertyId,
         address: siteAddress,
         jobTitle: file.job?.title ?? null,
+        webSearch,
       },
       styleSummary,
     });
@@ -3775,13 +3824,16 @@ async function runProofAskTurn(input: {
       .single();
 
     if (mentionPrep?.mentions.length && stored?.id) {
-      await recordContentMentions(supabase, {
-        orgId,
-        jobId,
-        source: 'ask_question',
-        sourceId: stored.id,
-        mentions: mentionPrep.mentions,
-      });
+      // Bookkeeping for @mentions: never holds the answer.
+      void Promise.resolve(
+        recordContentMentions(supabase, {
+          orgId,
+          jobId,
+          source: 'ask_question',
+          sourceId: stored.id,
+          mentions: mentionPrep.mentions,
+        }),
+      ).catch(() => null);
     }
 
     // Quiet style learning — after the turn is stored, never on the hot path.
@@ -3799,8 +3851,10 @@ async function runProofAskTurn(input: {
 
     if (threadId && owner) {
       try {
-        const ahead = await titleAhead;
-        await touchAskThreadAfterMessage(writeDb, {
+        // The thread is touched (and named from the question) right away; the
+        // model title has been generating since the turn began and lands when
+        // ready. The answer waits at most a moment for that refinement.
+        const touched = touchAskThreadAfterMessage(writeDb, {
           orgId,
           jobId,
           threadId,
@@ -3808,8 +3862,19 @@ async function runProofAskTurn(input: {
           question: storedQuestion,
           answer: storedAnswer,
           isFirstMessage: priorCount === 0,
-          complete: async () => (ahead ? { text: ahead } : null),
+          complete: async () => {
+            const ahead = await titleAhead;
+            return ahead ? { text: ahead } : null;
+          },
         });
+        touched.catch(() => null);
+        await Promise.race([
+          touched,
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, ASK_TITLE_WAIT_MS);
+            timer.unref?.();
+          }),
+        ]);
       } catch {
         // Non-fatal — answer already stored.
       }
@@ -3952,7 +4017,10 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       };
       res.on('close', onClose);
       try {
-        writeEvent({ type: 'status', phase: 'Looking through clips…' });
+        writeEvent({
+          type: 'status',
+          phase: isGeneralAsk(input.question) ? 'Searching the web…' : 'Looking through clips…',
+        });
         if (typeof res.flushHeaders === 'function') res.flushHeaders();
         const result = await runProofAsk({
           supabase,
@@ -3967,6 +4035,9 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           documentIds: access === 'org' ? input.documentIds : undefined,
           signal: abort.signal,
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
+          // Checked sentences stream as they are written; `done` replaces them.
+          onToken: (text) => writeEvent({ type: 'token', text }),
+          onPreviewReset: () => writeEvent({ type: 'reset' }),
         });
         if (!abort.signal.aborted && !res.writableEnded) {
           writeEvent({

@@ -102,6 +102,12 @@ function formatAnalysis(chunk: AnalysisChunk): string {
 }
 
 /**
+ * Query-time embeddings are a ranking boost, not a requirement. Past this
+ * the turn keeps lexical retrieval instead of waiting (the old cap was 20 s).
+ */
+export const ASK_QUERY_EMBED_TIMEOUT_MS = 2_500;
+
+/**
  * Rank analysis chunks against the question (embeddings when available).
  */
 export async function retrieveAnalysisChunks(
@@ -113,8 +119,11 @@ export async function retrieveAnalysisChunks(
   const chunks = analysisChunksInScope(catalog);
   if (!chunks.length) return [];
   if (askEmbeddingsEnabled()) {
-    const qVec = await embedText(question, { fetchFn: opts?.fetchFn });
-    const docVecs = qVec ? await embedTexts(chunks.map((c) => c.text), { fetchFn: opts?.fetchFn }) : null;
+    // Question and chunk vectors in one round trip each, side by side.
+    const [qVec, docVecs] = await Promise.all([
+      embedText(question, { fetchFn: opts?.fetchFn, timeoutMs: ASK_QUERY_EMBED_TIMEOUT_MS }),
+      embedTexts(chunks.map((c) => c.text), { fetchFn: opts?.fetchFn, timeoutMs: ASK_QUERY_EMBED_TIMEOUT_MS }),
+    ]);
     if (qVec && docVecs) {
       return chunks
         .map((chunk, i) => ({ chunk, score: cosineSimilarity(qVec, docVecs[i]!) }))
@@ -156,19 +165,21 @@ export async function retrieveAskEvidenceEmbedded(
   void pool;
   const allChunks = clipsInScope(catalog).flatMap((clip) => chunkClipTranscript(clip));
   if (!allChunks.length) return base;
-  const qVec = await embedText(question, { fetchFn: opts?.fetchFn });
-  if (!qVec) return base;
   // Cap embed batch for cost: prefer chunks that lexical already likes, else first N.
   const preferKeys = new Set(base.merged.map((h) => h.key));
   const ordered = [
     ...allChunks.filter((c) => preferKeys.has(c.key)),
     ...allChunks.filter((c) => !preferKeys.has(c.key)),
   ].slice(0, 48);
-  const vectors = await embedTexts(
-    ordered.map((c) => c.text),
-    { fetchFn: opts?.fetchFn },
-  );
-  if (!vectors) return base;
+  // The question vector and the chunk vectors do not depend on each other.
+  const [qVec, vectors] = await Promise.all([
+    embedText(question, { fetchFn: opts?.fetchFn, timeoutMs: ASK_QUERY_EMBED_TIMEOUT_MS }),
+    embedTexts(
+      ordered.map((c) => c.text),
+      { fetchFn: opts?.fetchFn, timeoutMs: ASK_QUERY_EMBED_TIMEOUT_MS },
+    ),
+  ]);
+  if (!qVec || !vectors) return base;
   const scored = ordered
     .map((chunk, i) => ({
       chunk,
@@ -240,13 +251,17 @@ export async function buildRetrievalAskContext(input: {
 }): Promise<RetrievalContextParts> {
   const cached = resolveAskJobSummary(input.catalog, input.jobFileRecord);
   const summary = cached.summary.startsWith('Job summary:') ? cached.summary : `Job summary:\n${cached.summary}`;
-  const evidence = await retrieveAskEvidenceEmbedded(input.catalog, input.question, {
-    limit: ASK_RETRIEVAL_TOP_K,
-    fetchFn: input.fetchFn,
-  });
-  const analysis = await retrieveAnalysisChunks(input.catalog, input.question, 4, {
-    fetchFn: input.fetchFn,
-  });
+  // Transcript and analysis retrieval run side by side (they used to wait on
+  // each other's embedding calls).
+  const [evidence, analysis] = await Promise.all([
+    retrieveAskEvidenceEmbedded(input.catalog, input.question, {
+      limit: ASK_RETRIEVAL_TOP_K,
+      fetchFn: input.fetchFn,
+    }),
+    retrieveAnalysisChunks(input.catalog, input.question, 4, {
+      fetchFn: input.fetchFn,
+    }),
+  ]);
   const evidenceBlock = evidence.merged.length
     ? `Retrieved evidence (top ${evidence.merged.length}):\n${evidence.merged.map(formatHit).join('\n')}`
     : 'Retrieved evidence: none matched this question.';

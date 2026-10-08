@@ -198,12 +198,14 @@ export function askAnalysisEffort(): AnthropicEffort | null {
  * claude-opus-5 uses thinking.type "adaptive" plus output_config.effort.
  * budget_tokens is only attached for models that still require it.
  */
-export function anthropicReasoningRequest(model: string): {
+export function anthropicReasoningRequest(model: string, effortOverride?: AnthropicEffort | null): {
   max_tokens: number;
   thinking?: { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number };
   output_config?: { effort: AnthropicEffort };
 } {
-  const effort = askAnalysisEffort();
+  const configured = askAnalysisEffort();
+  // An override only applies when thinking is on at all.
+  const effort = configured && effortOverride ? effortOverride : configured;
   const budget = askReasoningThinkingBudget();
   if (!effort || budget == null) return { max_tokens: ANTHROPIC_REASONING_MAX_TOKENS };
   if (anthropicUsesBudgetTokens(model)) {
@@ -218,6 +220,19 @@ export function anthropicReasoningRequest(model: string): {
     thinking: { type: 'adaptive' },
     output_config: { effort },
   };
+}
+
+/**
+ * Effort for an interactive deep Ask turn (Opus with adaptive thinking).
+ * Drafts, disputes, money, safety, deadlines, and research keep the analysis
+ * effort (high by default); everyday deep job questions use medium so the
+ * first sentence is not waiting on a long hidden think. ASK_DEEP_EFFORT=high
+ * restores the old behaviour.
+ */
+export function askInteractiveDeepEffort(): AnthropicEffort {
+  const raw = (process.env.ASK_DEEP_EFFORT ?? 'medium').trim().toLowerCase();
+  if (raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh' || raw === 'max') return raw;
+  return 'medium';
 }
 
 /**
@@ -366,8 +381,16 @@ export function buildGeminiGenerationConfig(input: {
   if (/^gemini-3/i.test(input.model)) {
     // Gemini 3 reasoning is tuned for the default temperature. Don't send 0.
     // Lite variants reject thinkingConfig entirely.
-    if (!/lite/i.test(input.model) && level !== 'none' && level !== 'off' && level !== 'minimal') {
-      generationConfig.thinkingConfig = { thinkingLevel: gemini3ThinkingLevel(level) };
+    if (!/lite/i.test(input.model)) {
+      if (level !== 'none' && level !== 'off' && level !== 'minimal') {
+        generationConfig.thinkingConfig = { thinkingLevel: gemini3ThinkingLevel(level) };
+      } else {
+        // Omitting thinkingConfig does NOT turn thinking off on Gemini 3: the
+        // model falls back to its default (high) and interactive Ask waited
+        // 6–9 s for the first token. "low" is the lowest level every Gemini 3
+        // model accepts.
+        generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+      }
     }
   } else {
     generationConfig.temperature = 0;

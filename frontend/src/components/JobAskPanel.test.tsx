@@ -349,23 +349,29 @@ describe('JobAskPanel', () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
-  it('shows thinking dots and no partial text until the final answer lands', async () => {
-    let release: () => void = () => {};
-    const paused = new Promise<void>((resolve) => {
-      release = resolve;
+  it('streams the checked preview, drops it on reset, and swaps in the final answer', async () => {
+    let releaseFirst: () => void = () => {};
+    let releaseSecond: () => void = () => {};
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
     });
     askAboutProofsStream.mockImplementation(
       async (
         _jobId: string,
         _q: string,
-        handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void },
+        handlers: { onToken?: (t: string) => void; onReset?: () => void; onStatus?: (phase: string) => void },
       ) => {
-        handlers.onToken?.("I'll look that up. ");
         handlers.onStatus?.('Searching transcripts');
-        await paused;
-        handlers.onToken?.('The tarp came off.');
+        await first;
+        handlers.onToken?.("I'll look that up. ");
+        await second;
+        handlers.onReset?.();
+        handlers.onToken?.('The tarp came off. ');
         return {
-          answer: 'The tarp came off.',
+          answer: 'The tarp came off on Aug 5.',
           groundedOn: 1,
           model: 'claude-opus',
           question: null,
@@ -384,17 +390,74 @@ describe('JobAskPanel', () => {
     const thinking = await screen.findByTestId('ask-status');
     expect(thinking).toHaveTextContent('Thinking');
     expect(thinking.querySelector('.gpt-typing')).not.toBeNull();
+    // Internal phase names are not shown; only web / Computer / writing phases are.
     expect(screen.queryByText('Searching transcripts')).not.toBeInTheDocument();
-    expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
-    expect(screen.queryByTestId('ask-answer-body')).not.toBeInTheDocument();
+    releaseFirst();
+    expect(await screen.findByTestId('ask-live-preview')).toHaveTextContent("I'll look that up.");
     expect(screen.queryByTestId('ask-message-copy')).not.toBeInTheDocument();
-    release();
+    releaseSecond();
     await pending;
-    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(await screen.findByText(/the tarp came off on aug 5/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('ask-live-preview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('ask-status')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('ask-answer-body')).toHaveLength(1);
     expect(screen.getByTestId('ask-message-copy')).toBeInTheDocument();
     expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+  });
+
+  it('says it is searching the web while a web answer is on the way', async () => {
+    let release: () => void = () => {};
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    askAboutProofsStream.mockImplementation(
+      async (_jobId: string, _q: string, handlers: { onStatus?: (phase: string) => void }) => {
+        handlers.onStatus?.('Searching the web…');
+        await paused;
+        return {
+          answer: 'The Yankees are favored tonight.',
+          groundedOn: 0,
+          model: 'claude-sonnet-5-5',
+          question: null,
+          webSources: [{ title: 'Odds', url: 'https://example.com/odds', snippet: 'Yankees -150' }],
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider><VideoSeekProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider></JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'whos going to win the ball game');
+    const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByTestId('ask-status')).toHaveTextContent('Searching the web…');
+    release();
+    await pending;
+    expect(await screen.findByText(/yankees are favored/i)).toBeInTheDocument();
+    expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
+  });
+
+  it('never labels a web-only reply "From this job file", even from an older stored turn', async () => {
+    askAboutProofsStream.mockResolvedValue({
+      answer: 'The Guardians are slight favorites.',
+      groundedOn: 3,
+      model: 'claude-opus',
+      question: null,
+      webSources: [{ title: 'Preview', url: 'https://example.com/preview', snippet: 'Guardians favored' }],
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider><VideoSeekProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider></JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'who wins tonight');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText(/guardians are slight favorites/i)).toBeInTheDocument();
+    expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
   });
 
   it('uses the stream API and renders only the final answer', async () => {
