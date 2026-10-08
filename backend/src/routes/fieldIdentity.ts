@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { adminForPartyToken, unscopedAdmin } from '../lib/scopedAdmin.js';
 import { claimInvitedPartiesForUser } from '../shared/inviteeJobAccess.js';
 import { bearerAccessToken } from '../middleware/requireAuth.js';
@@ -54,6 +55,7 @@ export const fieldIdentityRouter = Router();
 // limit is trivially evaded and would let an attacker lock a real sub out of
 // their own jobs by burning their attempts for them.
 const claimLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 20,
   standardHeaders: true,
@@ -62,6 +64,7 @@ const claimLimiter = rateLimit({
 });
 
 const sessionLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 1000,
   limit: 60,
   standardHeaders: true,

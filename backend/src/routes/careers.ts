@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { config } from '../config.js';
 import { careersApplicationSchema } from '../lib/validation.js';
 import { careersMailConfigured, sendApplicationEmail } from '../lib/careersMail.js';
@@ -17,6 +18,7 @@ export const careersRouter = Router();
  * sends again. Anything past a handful an hour from one address is a script.
  */
 const applyLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 60 * 1000,
   max: 5,
   standardHeaders: true,

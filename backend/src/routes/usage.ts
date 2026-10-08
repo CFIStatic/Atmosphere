@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
@@ -21,6 +22,7 @@ usageRouter.use(requireAuth, requireOrg);
  * hammering the ledger.
  */
 const meterLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 1000,
   limit: 600,
   standardHeaders: true,

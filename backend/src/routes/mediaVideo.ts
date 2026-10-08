@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -28,6 +29,7 @@ export const mediaVideoRouter = Router();
 mediaVideoRouter.use(requireAuth);
 
 const processLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 30,
   standardHeaders: true,

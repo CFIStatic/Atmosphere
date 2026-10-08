@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { assertInviteeAccount } from '../shared/inviteeJobAccess.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
@@ -131,6 +132,7 @@ sharedJobsRouter.use(requireAuth);
 export const jobShareRouter = Router();
 
 const shareLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 60,
   standardHeaders: true,

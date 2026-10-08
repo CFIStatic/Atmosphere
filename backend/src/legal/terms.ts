@@ -1,5 +1,3 @@
-import { isIP } from 'node:net';
-
 /**
  * Versioned Terms of Service acknowledgment.
  *
@@ -81,29 +79,8 @@ export function isTermsExemptPath(path: string): boolean {
   );
 }
 
-/**
- * Visitor IP for terms/legal records.
- *
- * Production path: browser -> Cloudflare -> Railway edge -> our nginx -> API.
- * Railway's edge overwrites X-Real-IP and X-Forwarded-For on every request
- * (caller-sent copies never reach us) and, behind Cloudflare, fills X-Real-IP
- * from CF-Connecting-IP. Our nginx front ends relay that X-Real-IP unchanged.
- * The leftmost X-Forwarded-For entry is Cloudflare's edge, and `req.ip`
- * (trust proxy = 1) is Railway's internal 100.64.x hop, so neither is the
- * visitor. X-Forwarded-For is never read here.
- *
- * Falls back to `req.ip` when X-Real-IP is missing or not a valid IP.
- */
-export function clientIp(req: { ip?: string; headers?: Record<string, unknown> }): string | null {
-  const raw = req.headers?.['x-real-ip'];
-  const realIp = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof realIp === 'string') {
-    const candidate = realIp.trim();
-    if (candidate && isIP(candidate)) return candidate.slice(0, 128);
-  }
-  const ip = typeof req.ip === 'string' ? req.ip.trim() : '';
-  return ip ? ip.slice(0, 128) : null;
-}
+/** Visitor IP for terms/legal records. Shared with logs and rate limits. */
+export { clientIp } from '../lib/clientIp.js';
 
 export function clientUserAgent(req: { get?: (name: string) => string | undefined }): string | null {
   const ua = req.get?.('user-agent')?.trim() ?? '';

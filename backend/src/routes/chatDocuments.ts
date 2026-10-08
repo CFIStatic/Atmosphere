@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -35,6 +36,7 @@ export const chatDocumentsRouter = Router();
 
 const uploadJson = express.json({ limit: '36mb' });
 const uploadLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 20,
   standardHeaders: true,

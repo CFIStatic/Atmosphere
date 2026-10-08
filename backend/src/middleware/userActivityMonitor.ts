@@ -7,6 +7,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { classifyRequest } from '../legal/classify.js';
 import { actorFromRequest, recordUserAction } from '../legal/monitor.js';
+import { clientIp } from '../lib/clientIp.js';
 
 const ORG_CACHE = Symbol.for('atmosphere.orgContext');
 
@@ -32,7 +33,7 @@ export function userActivityMonitor(req: Request, res: Response, next: NextFunct
       method: req.method,
       path: req.path,
       status: res.statusCode,
-      ip: req.ip ?? null,
+      ip: clientIp(req),
       userAgent: req.get('user-agent') ?? null,
     }).catch(() => undefined);
   });
