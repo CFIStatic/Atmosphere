@@ -63,7 +63,7 @@ export function resetAskEmbeddingCacheForTests(): void {
  */
 export async function embedTexts(
   texts: string[],
-  opts?: { fetchFn?: typeof fetch; apiKey?: string | null; model?: string },
+  opts?: { fetchFn?: typeof fetch; apiKey?: string | null; model?: string; timeoutMs?: number },
 ): Promise<number[][] | null> {
   const cleaned = texts.map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (!cleaned.length) return [];
@@ -90,7 +90,7 @@ export async function embedTexts(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ model, input: missing.map((row) => row.text.slice(0, 8000)) }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(opts?.timeoutMs ?? 20_000),
     });
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 200);
@@ -120,7 +120,7 @@ export async function embedTexts(
 
 export async function embedText(
   text: string,
-  opts?: { fetchFn?: typeof fetch; apiKey?: string | null },
+  opts?: { fetchFn?: typeof fetch; apiKey?: string | null; timeoutMs?: number },
 ): Promise<number[] | null> {
   const rows = await embedTexts([text], opts);
   return rows?.[0] ?? null;

@@ -287,7 +287,13 @@ export function looksLikeLiveTopicalAsk(question: string): boolean {
     /\b(games?|matches?)\s+(on|today|tonight|this\s+(week|weekend)|tomorrow)\b/i.test(q) ||
     /\b(sports?)\s+(schedule|scores?|standings|games?|on\s+today)\b/i.test(q) ||
     /\bwhat\s+(nfl|nba|mlb|nhl)?\s*games?\s+(are\s+)?(on|playing)\b/i.test(q) ||
-    /\bwho\s+(is\s+)?(playing|won)\b/i.test(q)
+    /\bwho\s+(is\s+)?(playing|won)\b/i.test(q) ||
+    /\bball\s*games?\b/i.test(q) ||
+    /\b(playoffs?|world\s+series|wild\s*card|postseason)\b/i.test(q) ||
+    /\b(games?|match(es)?)\s+(tonight|today|score|odds)\b/i.test(q) ||
+    /\b(score|odds|spread|line)\s+(of|for|on)\s+the\s+(game|match)\b/i.test(q) ||
+    (/\bwho(?:'s|’s|s|\s+is)?\s+(?:going\s+to|gonna|gunna|will|favored\s+to|likely\s+to)\s+win\b/i.test(q) &&
+      !/\b(bid|bids|contract|job|claim|estimate|proposal|dispute|appeal|file)\b/i.test(q))
   ) {
     return true;
   }
@@ -637,6 +643,21 @@ export function asksAboutJobFile(question: string): boolean {
   return false;
 }
 
+/**
+ * A public question with nothing to do with this job: sports, weather, news,
+ * codes, prices, or an explicit "search the web for…". These skip the job
+ * lookup loop and get one web search plus one fast streamed answer.
+ * Anything that names this job, its clips, people, or records is not general.
+ */
+export function isGeneralAsk(question: string): boolean {
+  const q = trim(question);
+  if (!q || q.includes('@')) return false;
+  if (askWebSearchBlockedReason(q)) return false;
+  if (looksLikePureWebCapabilityAsk(q) || looksLikeSmallTalk(q)) return false;
+  if (asksAboutJobFile(q)) return false;
+  return looksLikePublicTopic(q) || looksLikeExplicitWebSearchRequest(q);
+}
+
 export function looksLikeJobEvidenceQuestion(question: string): boolean {
   if (looksLikeExplicitWebSearchRequest(question)) return false;
   return asksAboutJobFile(question);
@@ -660,6 +681,33 @@ export function shouldSupplementWithWebSearch(question: string, grounded = ''): 
   if (looksLikeJobEvidenceQuestion(question)) return false;
   if (asksAboutJobFile(question)) return false;
   return true;
+}
+
+/**
+ * A short reply that leans on the thread ("and what happened after that?",
+ * "why did he do that"). It is about the conversation, not the public web.
+ */
+export function looksLikeThreadFollowUp(question: string): boolean {
+  const t = trim(question).toLowerCase();
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (!words || words > 12) return false;
+  if (/^(?:and|so|but|then|also|ok(?:ay)?|what about|how about|same for)\b/.test(t)) return true;
+  return words <= 8 && /\b(?:that|it|this|those|these|them|he|she|they|him|her|there)\b/.test(t);
+}
+
+/**
+ * Whether to search the web before the model starts. Plainly public questions
+ * (explicit "search the web", live topics, outside-knowledge subjects, sports,
+ * weather, news) and other non-job questions still do. A thread follow-up
+ * ("and what happened after that?") does not pay a blocking search up front;
+ * the model keeps the web_search tool for the rare case it needs one.
+ */
+export function shouldSearchWebBeforeAnswer(question: string, grounded = ''): boolean {
+  if (!shouldSupplementWithWebSearch(question, grounded)) return false;
+  if (looksLikeExplicitWebSearchRequest(question) || looksLikeOutsideKnowledgeAsk(question) || isGeneralAsk(question)) {
+    return true;
+  }
+  return !looksLikeThreadFollowUp(question);
 }
 
 /**
@@ -705,7 +753,8 @@ function pushHit(hits: AskWebHit[], next: AskWebHit | null) {
 }
 
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
-const TAVILY_TIMEOUT_MS = 9_000;
+/** A slow search must not hold the whole answer: give up and answer without it. */
+const TAVILY_TIMEOUT_MS = 4_500;
 const TAVILY_MAX_RESULTS = 5;
 /** Basic search: 1 credit. Advanced would be 2 — metering follows whatever is sent. */
 const TAVILY_SEARCH_DEPTH: 'basic' | 'advanced' = 'basic';
@@ -737,7 +786,9 @@ async function searchTavily(
     query,
     search_depth: TAVILY_SEARCH_DEPTH,
     max_results: maxResults,
-    include_answer: true,
+    // Tavily's own LLM answer added ~1.2 s per search (measured p50 2.6 s vs
+    // 1.4 s). The Ask model writes the answer from the results anyway.
+    include_answer: false,
     // Ask Tavily to report the credits this request used, so we bill on the
     // provider's number rather than our assumption (basic = 1 credit).
     include_usage: true,
@@ -1349,6 +1400,32 @@ function meterTavilyCall(
     userId: scope.userId,
   });
   logger.info('tavily_metered', { endpoint: call.endpoint, credits, reportedByProvider });
+}
+
+export type AskWebSearchFn = (query: string, opts?: AskWebSearchOptions) => Promise<AskWebSearchOutcome>;
+
+/**
+ * One search per distinct query per Ask turn. The turn starts the search for
+ * a public question while it is still loading the job file, and every later
+ * caller (the heuristic tool, the proactive search) gets that same result
+ * instead of paying for a second round trip.
+ */
+export function createAskWebSearchMemo(base: AskWebSearchOptions = {}): AskWebSearchFn {
+  const seen = new Map<string, Promise<AskWebSearchOutcome>>();
+  return (query, opts) => {
+    const domains = (opts?.includeDomains ?? base.includeDomains ?? [])
+      .map((d) => trim(d).toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join(',');
+    const key = `${trim(query).toLowerCase()}|${domains}`;
+    let pending = seen.get(key);
+    if (!pending) {
+      pending = searchAskWebDetailed(query, { ...base, ...opts }).catch(() => ({ hits: [], answer: '' }));
+      seen.set(key, pending);
+    }
+    return pending;
+  };
 }
 
 export async function searchAskWeb(question: string, opts?: AskWebSearchOptions): Promise<AskWebHit[]> {

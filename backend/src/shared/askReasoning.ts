@@ -24,7 +24,9 @@ import {
   anthropicReasoningRequest,
   askFastAnthropicModel,
   askFastGeminiModel,
+  askInteractiveDeepEffort,
   askReasoningConfig,
+  type AnthropicEffort,
   askReasoningTimeoutMs,
   completeAskText,
   geminiAskModel,
@@ -73,7 +75,13 @@ import {
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
-import { fastAnswerNeedsDeepFallback, logAskRouteDecision, resolveAskRoute, type AskModelRoute } from './askRoute.js';
+import {
+  fastAnswerNeedsDeepFallback,
+  logAskRouteDecision,
+  needsCriticalEscalation,
+  resolveAskRoute,
+  type AskModelRoute,
+} from './askRoute.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ASK_RESEARCH_BUDGET_MS,
@@ -323,8 +331,12 @@ const WEB_SEARCH_MODEL_TOOL = {
   },
 };
 
-function lookupModelTools() {
-  if (!isAskWebSearchConfigured()) return LOOKUP_TOOLS;
+/**
+ * `includeWeb: false` when this turn already ran its one web search: the model
+ * answers from those results instead of starting a second search round.
+ */
+function lookupModelTools(includeWeb = true) {
+  if (!includeWeb || !isAskWebSearchConfigured()) return LOOKUP_TOOLS;
   return [...LOOKUP_TOOLS, WEB_SEARCH_MODEL_TOOL];
 }
 
@@ -394,6 +406,7 @@ function anthropicLookupSession(input: {
   thinking?: { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number };
   outputConfig?: { effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   onToken?: (text: string) => void;
+  includeWeb?: boolean;
 }): (state: { system: string; stable?: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
   const messages: Anthropic.MessageParam[] = [];
   let traced = 0;
@@ -434,7 +447,7 @@ function anthropicLookupSession(input: {
         max_tokens: input.maxTokens,
         system: asAnthropicSystem(anthropicCachedSystem(state.system, state.stable ?? '')),
         messages,
-        tools: lookupModelTools(),
+        tools: lookupModelTools(input.includeWeb !== false),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(input.outputConfig ? { output_config: input.outputConfig } : {}),
       },
@@ -479,10 +492,10 @@ function anthropicLookupSession(input: {
 
 type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } };
 
-export function geminiLookupTools() {
+export function geminiLookupTools(includeWeb = true) {
   return [
     {
-      functionDeclarations: lookupModelTools().map(toGeminiFunctionDeclaration),
+      functionDeclarations: lookupModelTools(includeWeb).map(toGeminiFunctionDeclaration),
     },
   ];
 }
@@ -574,10 +587,11 @@ async function geminiLookupTurn(input: {
   signal?: AbortSignal;
   onToken?: (text: string) => void;
   onCache?: (state: 'hit' | 'miss' | 'skip') => void;
+  includeWeb?: boolean;
 }): Promise<LookupModelTurn> {
   const fast = input.route === 'fast';
   const requested = fast ? askFastGeminiModel() : geminiAskModel('reasoning');
-  const tools = geminiLookupTools();
+  const tools = geminiLookupTools(input.includeWeb !== false);
   const stable = input.stable ?? '';
   const cacheName = geminiCachedContentName({
     apiKey: input.apiKey,
@@ -643,12 +657,17 @@ export function providerLookupStep(input: {
    * window. Research fallback passes the deadline captured when Ask began.
    */
   deadlineAt?: number;
+  /** False when the turn already searched the web once (one search round max). */
+  webTool?: boolean;
+  /** Deep turns only: Opus effort for this question (see askInteractiveDeepEffort). */
+  effort?: AnthropicEffort | null;
 }): LookupModelStep {
   const route = input.route ?? 'deep';
+  const includeWeb = input.webTool !== false;
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
   const fastModel = askFastAnthropicModel();
   const deepModel = askReasoningConfig().anthropicModel;
-  const shaped = route === 'fast' ? null : anthropicReasoningRequest(deepModel);
+  const shaped = route === 'fast' ? null : anthropicReasoningRequest(deepModel, input.effort ?? null);
   const anthropic =
     anthropicKey
       ? anthropicLookupSession({
@@ -658,6 +677,7 @@ export function providerLookupStep(input: {
           thinking: shaped?.thinking,
           outputConfig: shaped?.output_config,
           onToken: input.onToken,
+          includeWeb,
         })
       : null;
   // Simple / lookup (fast): prefer Gemini Flash — cheapest capable on providers we
@@ -698,6 +718,7 @@ export function providerLookupStep(input: {
           signal,
           onToken: input.onToken,
           onCache: input.onCache,
+          includeWeb,
         });
       } catch (err) {
         logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
@@ -731,6 +752,7 @@ export function providerLookupStep(input: {
               signal,
               onToken: input.onToken,
               onCache: input.onCache,
+              includeWeb,
             });
           } catch (err2) {
             logAskFailure('ask_lookup_gemini_failed', err2);
@@ -847,6 +869,9 @@ export async function groundLookupAnswer(input: {
               mode: 'interactive',
               maxTokens: 1600,
               signal: input.signal,
+              // A constrained edit against the source block: the fast model
+              // does it in a fraction of the time and the result is re-checked.
+              anthropicModel: askFastAnthropicModel(),
             })
           )?.text ?? null;
     } catch (err) {
@@ -933,6 +958,12 @@ export async function answerFromAskLookup(input: {
     synthesisReserveMs?: number;
     complete?: ResearchComplete | null;
   };
+  /** The turn already ran its web search; the model gets no second round. */
+  webSearchDone?: boolean;
+  /** Clear the reader's live preview (tool call after a preface, model escalation). */
+  onPreviewReset?: () => void;
+  /** Install the sentence check the live preview runs before showing text. */
+  setPreviewCheck?: (check: ((sentence: string) => boolean) | null) => void;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -958,6 +989,17 @@ export async function answerFromAskLookup(input: {
   const evidence = retrieveAskEvidence(input.catalog, resolved);
   const topicQuestion = isTopicSpeechQuestion(resolved, evidence);
   const evidenceBlock = formatEvidenceForPrompt(evidence, topicQuestion);
+  // Routing (heuristics, then a Flash classifier only when unsure) runs side
+  // by side with retrieval instead of after it.
+  const routePromise: Promise<Awaited<ReturnType<typeof resolveAskRoute>>> | null = input.step
+    ? null
+    : resolveAskRoute({
+        question: input.question,
+        resolved,
+        history: input.history,
+        catalog: input.catalog,
+        fetchFn: input.fetchFn,
+      });
   const retrieval = await buildRetrievalAskContext({
     catalog: input.catalog,
     question: resolved,
@@ -985,6 +1027,33 @@ export async function answerFromAskLookup(input: {
   let usage: MeasuredUsage | null = null;
   let prose = '';
   let streamed = false;
+  // Live preview shows a sentence only when the same verifier the final answer
+  // runs finds nothing unsupported in it (names, dates, times, refs, quotes).
+  if (input.setPreviewCheck) {
+    let indexedAt = -1;
+    let index: ReturnType<typeof buildGroundingIndex> | null = null;
+    const previewMemory = [
+      formatOrgMemoryForPrompt(input.orgMemory ?? []),
+      formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone),
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    input.setPreviewCheck((sentence: string) => {
+      try {
+        if (!index || indexedAt !== trace.length) {
+          index = buildGroundingIndex({
+            catalog: input.catalog,
+            extra: [previewMemory, input.extra ?? '', formatTrace(trace)].filter(Boolean).join('\n\n'),
+            question: input.question,
+          });
+          indexedAt = trace.length;
+        }
+        return verifyAskAnswer(sentence, index).open.length === 0;
+      } catch {
+        return false;
+      }
+    });
+  }
   const stopped = () => input.signal?.aborted === true;
   const runCalls = async (calls: Array<{ name: string; input: Record<string, unknown> }>) => {
     if (stopped() || !calls.length) return;
@@ -1072,6 +1141,8 @@ export async function answerFromAskLookup(input: {
       if (turn.calls.length) {
         if (halt) break;
         streamed = false;
+        // A "let me check" preface streamed before the tool call is not the answer.
+        input.onPreviewReset?.();
         await runCalls(turn.calls);
         continue;
       }
@@ -1083,6 +1154,7 @@ export async function answerFromAskLookup(input: {
       ) {
         forcedOther = true;
         streamed = false;
+        input.onPreviewReset?.();
         await runCalls(continueAskLookup(resolved, input.catalog, trace));
         continue;
       }
@@ -1097,13 +1169,7 @@ export async function answerFromAskLookup(input: {
     input.timing?.noteRoute('deep', 'provided_step');
     await consume(input.step, fullUser, 6);
   } else {
-    const decision = await resolveAskRoute({
-      question: input.question,
-      resolved,
-      history: input.history,
-      catalog: input.catalog,
-      fetchFn: input.fetchFn,
-    });
+    const decision = await routePromise!;
     input.timing?.noteRoute(decision.route, decision.reason);
     void logAskRouteDecision({
       orgId: input.catalog.orgId,
@@ -1130,6 +1196,12 @@ export async function answerFromAskLookup(input: {
       parts = splitLookupPrompt(fastInput);
       fullUser = buildLookupUserPrompt(fastInput);
     }
+    // Money, safety, disputes, and hard dates keep the full analysis effort.
+    // Everything else on the deep model (overviews, quotes, drafts) uses the
+    // interactive effort so the first sentence arrives sooner; the evidence,
+    // grounding check, and quote check are the same either way.
+    const keepHighEffort = needsCriticalEscalation(resolved) || needsCriticalEscalation(input.question);
+    const deepEffort: AnthropicEffort | null = keepHighEffort ? null : askInteractiveDeepEffort();
     const stepFor = (route: AskModelRoute) =>
       providerLookupStep({
         route,
@@ -1138,6 +1210,8 @@ export async function answerFromAskLookup(input: {
         onToken,
         onCache: (state) => input.timing?.noteGeminiCache(state),
         deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, route) : undefined,
+        webTool: !input.webSearchDone,
+        effort: deepEffort,
       });
     if (decision.route === 'fast') {
       await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));
@@ -1157,6 +1231,7 @@ export async function answerFromAskLookup(input: {
         });
         prose = '';
         streamed = false;
+        input.onPreviewReset?.();
         input.onStatus?.('Looking through clips…');
         // Escalate with the full job file so grounding / quotes still hold.
         const deepInput = { ...promptInput };

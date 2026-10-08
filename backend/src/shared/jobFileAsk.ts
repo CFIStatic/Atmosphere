@@ -11,7 +11,8 @@ import { looksLikeNotFound } from './askNotFound.js';
  * connected key, or GEMINI_API_KEY / GOOGLE_API_KEY) it writes the prose;
  * otherwise a grounded lookup still answers from the same text.
  */
-import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { askFastAnthropicModel, completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { answerHasJobCitation } from './askNotFound.js';
 import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
 import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
@@ -50,11 +51,14 @@ import {
   looksLikePureWebCapabilityAsk,
   professionalWebCapabilityAnswer,
   searchAskWebDetailed,
-  shouldSupplementWithWebSearch,
+  shouldSearchWebBeforeAnswer,
   asksAboutJobFile,
   looksLikeExplicitWebSearchRequest,
   looksLikeOutsideKnowledgeAsk,
+  isGeneralAsk,
   type AskWebHit,
+  type AskWebSearchFn,
+  type AskWebSearchOutcome,
 } from './askWebSearch.js';
 import {
   collectWebHitsFromToolResults,
@@ -757,6 +761,92 @@ function webFallbackAnswer(input: {
   return { answer: webDerived ? scrubWebDerivedAskAnswer(answer) : answer, webDerived };
 }
 
+const GENERAL_ANSWER_SYSTEM = `You answer a contractor's quick public question in Chat (sports, weather, news, codes, products, prices) from the WEB SEARCH RESULTS given.
+
+${CHAT_VOICE_RULES}
+
+Rules:
+- Lead with a direct, useful answer in 1–3 short sentences, like a sharp friend who just checked. Never open with what you could not find.
+- Predictions ("who's going to win", "will it rain"): give a quick take. Say who is favored and the one or two reasons the results support (odds, records, standings, starters, home field, forecast). One light hedge at most.
+- A vague subject ("the ball game", "the game tonight"): use CURRENT DATE AND TIME and cover the one or two most likely matches in a line each. Do not ask which one.
+- Scores, times, odds, prices, and names must come from the results. If the results are thin, give the best general take and say in one short clause that live details were not in the results.
+- A short "-" list only for a schedule or a few options, one item per line, in your own words.
+- No links or URLs, no headings, no "[...]", no quotation marks around web text, no page labels. The app shows the sources separately.`;
+
+/**
+ * A public question with nothing to do with the job: one web search (often
+ * already running from the start of the turn) and one fast, streamed answer.
+ * No job lookup loop, no second search round, no reasoning model.
+ */
+export async function answerGeneralQuestion(input: {
+  question: string;
+  history?: JobFileAskTurn[] | null;
+  apiKey?: string | null;
+  webSearch?: AskWebSearchFn | null;
+  fetchFn?: typeof fetch;
+  onToken?: (text: string) => void;
+  onStatus?: (phase: string) => void;
+  signal?: AbortSignal;
+  timing?: AskTurnClock | null;
+  now?: Date;
+  timeZone?: string;
+  complete?: typeof completeAskText;
+}): Promise<{
+  answer: string;
+  model: string | null;
+  usage: MeasuredUsage | null;
+  webHits: AskWebHit[];
+  webAnswer: string;
+} | null> {
+  const zone = input.timeZone || 'America/Chicago';
+  input.onStatus?.('Searching the web…');
+  const started = performance.now();
+  const search = input.webSearch ?? ((query: string, opts?: Parameters<AskWebSearchFn>[1]) => searchAskWebDetailed(query, opts));
+  const outcome: AskWebSearchOutcome = await search(input.question, {
+    fetchFn: input.fetchFn,
+    limit: 5,
+    includeDomains: includeDomainsForAsk(input.question),
+    now: input.now,
+    timeZone: zone,
+  }).catch(() => ({ hits: [], answer: '' }));
+  input.timing?.addTool('web_search', performance.now() - started);
+  if (input.signal?.aborted) return null;
+  const complete = input.complete ?? completeAskText;
+  if (!input.complete && !isAskModelConfigured(trim(input.apiKey) || null)) return null;
+  const history = (input.history ?? [])
+    .filter((turn) => trim(turn.text) && turn.officeOnly !== true)
+    .slice(-6)
+    .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text).slice(0, 600)}`)
+    .join('\n');
+  const results = formatAskWebContext(outcome.hits, outcome.answer);
+  input.onStatus?.('Writing the answer…');
+  const completed = await complete({
+    system: `${GENERAL_ANSWER_SYSTEM}\n\n${askClockSystemRules(input.now ?? new Date(), zone)}`,
+    user:
+      `WEB SEARCH RESULTS (public web):\n${results || '(none: live search returned nothing usable)'}` +
+      (history ? `\n\nEarlier in this chat:\n${history}` : '') +
+      `\n\nQuestion: ${input.question}`,
+    anthropicApiKey: trim(input.apiKey) || null,
+    anthropicModel: askFastAnthropicModel(),
+    mode: 'interactive',
+    maxTokens: 600,
+    onToken: input.onToken,
+    signal: input.signal,
+    fetchFn: input.fetchFn,
+  }).catch(() => null);
+  const text = completed?.text
+    ? scrubWebDerivedAskAnswer(ensureWebResultsSection(normalizeAskProse(completed.text)))
+    : '';
+  if (!trim(text)) return null;
+  return {
+    answer: trimChatFiller(text, { question: input.question }),
+    model: completed?.model ?? null,
+    usage: completed?.usage ?? null,
+    webHits: outcome.hits,
+    webAnswer: outcome.answer,
+  };
+}
+
 const WEB_SUMMARY_SYSTEM = `You answer one public question for a contractor's Chat from the WEB SEARCH RESULTS given. Write the answer yourself.
 
 ${CHAT_VOICE_RULES}
@@ -790,6 +880,7 @@ export async function summarizeWebResultsForAsk(input: {
       system: `${WEB_SUMMARY_SYSTEM}\n\n${askClockSystemRules(input.now ?? new Date(), input.timeZone || 'America/Chicago')}`,
       user: `WEB SEARCH RESULTS (public web):\n${formatAskWebContext(input.hits, input.webAnswer)}\n\nQuestion: ${input.question}`,
       anthropicApiKey: trim(input.apiKey) || null,
+      anthropicModel: askFastAnthropicModel(),
       mode: 'interactive',
       maxTokens: 500,
       fetchFn: input.fetchFn,
@@ -982,6 +1073,23 @@ export function clearWebOnNotFound<T extends { answer: string; webHits?: unknown
   return { ...result, webHits: [], webDerivedAnswer: false };
 }
 
+/**
+ * True when this reply leans on web results and nothing in it points back to
+ * the job (no clip, document, or field citation). Such a reply must not carry
+ * the "From this job file" line.
+ */
+export function webBackedWithoutJobCite(
+  answer: string,
+  webHits: AskWebHit[] | null | undefined,
+  webAnswer: string | null | undefined,
+  webDerived?: boolean,
+): boolean {
+  if (webDerived) return true;
+  const usedWeb = (webHits?.length ?? 0) > 0 || Boolean(trim(webAnswer));
+  if (!usedWeb) return false;
+  return !answerHasJobCitation(answer);
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -1024,6 +1132,18 @@ export async function answerFromJobFile(input: {
    * Never overrides grounding, speakers, or job-evidence rules.
    */
   styleSummary?: string | null;
+  /**
+   * Per-turn memoized web search. The HTTP turn starts it for public questions
+   * while the job file is still loading, so the search is usually done by the
+   * time the answer needs it.
+   */
+  webSearch?: AskWebSearchFn | null;
+  /** Clear the reader's live preview (a tool call after a preface, an escalation). */
+  onPreviewReset?: () => void;
+  /** Install the sentence check the live preview runs before showing text. */
+  setPreviewCheck?: (check: ((sentence: string) => boolean) | null) => void;
+  /** Test hook for the general (public question) answer. */
+  generalComplete?: typeof completeAskText;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1109,9 +1229,12 @@ export async function answerFromJobFile(input: {
         fetchFn: input.fetchFn,
         signal: input.signal,
         complete: input.uploadComplete,
+        // Stream the upload answer; the preview holds back quotes until the
+        // exact-substring check on the final.
+        onToken: emit,
       }).catch(() => null);
+      if (modeled) input.timing?.noteRoute('fast', 'upload');
       if (modeled) {
-        emit(modeled.answer);
         return {
           ...empty,
           answer: modeled.answer,
@@ -1134,11 +1257,58 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer: fromDocuments, groundedOn };
   }
 
+  const heuristicPicks = input.toolContext ? pickAskToolsHeuristically(input.question, input.toolContext.access) : [];
+  const generalTurn =
+    !trim(input.file.mentionSupplement) &&
+    isGeneralAsk(input.question) &&
+    heuristicPicks.every((name) => name === 'web_search') &&
+    (Boolean(input.generalComplete) || isAskModelConfigured(apiKey || null));
+  if (generalTurn) {
+    const general = await answerGeneralQuestion({
+      question: input.question,
+      history: input.history,
+      apiKey: apiKey || null,
+      webSearch: input.webSearch ?? null,
+      fetchFn: input.fetchFn,
+      onToken: emit,
+      onStatus: input.onStatus,
+      signal: input.signal,
+      timing: input.timing,
+      now: input.now,
+      timeZone: input.lookup?.timeZone || 'America/Chicago',
+      complete: input.generalComplete,
+    });
+    if (general) {
+      input.timing?.noteRoute('general', 'general_web');
+      input.timing?.noteModel(general.model);
+      void logAskRouteDecision({
+        orgId: input.lookup?.orgId ?? input.toolContext?.orgId ?? null,
+        jobId: input.lookup?.jobId ?? input.toolContext?.jobId ?? null,
+        question: input.question,
+        route: 'fast',
+        reason: 'general_web',
+        unsure: false,
+        modelHint: general.model ?? 'fast',
+      });
+      return {
+        ...empty,
+        answer: general.answer,
+        model: general.model,
+        usage: general.usage,
+        groundedOn: 0,
+        webHits: general.webHits,
+        toolResults: [],
+        webDerivedAnswer: true,
+      };
+    }
+    // No model reply: fall through to the normal path (it still has the search).
+  }
+
   // Run safe tools first so field updates apply before the model writes prose.
   let toolResults: AskToolResult[] = [];
   let webHits: AskWebHit[] = [];
   if (input.toolContext && !sessionCovers) {
-    const picks = pickAskToolsHeuristically(input.question, input.toolContext.access);
+    const picks = heuristicPicks;
     const { sequential, parallel } = partitionAskTools(picks);
     const runTool = async (name: (typeof picks)[number]) => {
       const rawInput =
@@ -1164,10 +1334,12 @@ export async function answerFromJobFile(input: {
         ...input.toolContext!,
         fetchFn: input.fetchFn ?? input.toolContext!.fetchFn,
         file: input.file,
+        webSearch: input.webSearch ?? input.toolContext!.webSearch,
       });
       input.timing?.addTool(name, performance.now() - started);
       return result;
     };
+    if (picks.includes('start_computer_task')) input.onStatus?.('Starting Computer…');
     for (const name of sequential) toolResults.push(await runTool(name));
     if (parallel.length) toolResults.push(...(await Promise.all(parallel.map((name) => runTool(name)))));
     webHits = collectWebHitsFromToolResults(toolResults);
@@ -1212,9 +1384,9 @@ export async function answerFromJobFile(input: {
   // asks (e.g. "search the web for tile prices", "can u search google") are never
   // swallowed by a brief-note hit from the job file.
   let webSearchAttempted = false;
-  if (!sessionCovers && !mentionScoped && !webHits.length && !webAnswer.trim() && shouldSupplementWithWebSearch(input.question, grounded)) {
+  if (!sessionCovers && !mentionScoped && !webHits.length && !webAnswer.trim() && shouldSearchWebBeforeAnswer(input.question, grounded)) {
     webSearchAttempted = true;
-    const outcome = await searchAskWebDetailed(input.question, {
+    const outcome = await (input.webSearch ?? searchAskWebDetailed)(input.question, {
       fetchFn: input.fetchFn,
       limit: 5,
       includeDomains: includeDomainsForAsk(input.question),
@@ -1340,6 +1512,10 @@ export async function answerFromJobFile(input: {
       onStatus: input.onStatus,
       signal: input.signal,
       timing: input.timing,
+      // This turn already searched (or chose not to): no second web round.
+      webSearchDone: webSearchAttempted || toolResults.some((r) => r.tool === 'web_search'),
+      onPreviewReset: input.onPreviewReset,
+      setPreviewCheck: input.setPreviewCheck,
     });
     for (const step of looked.trace) {
       if (step.tool !== 'web_search' || !step.result.data || typeof step.result.data !== 'object') continue;
@@ -1370,7 +1546,9 @@ export async function answerFromJobFile(input: {
     return {
       answer,
       model: looked.model,
-      groundedOn,
+      // A reply built on web results that cites nothing from this job is not
+      // "From this job file".
+      groundedOn: webBackedWithoutJobCite(answer, webHits, webAnswer, applied.webDerived) ? 0 : groundedOn,
       usage: applied.usage ? mergeMeasuredUsages([looked.usage, applied.usage], looked.model) : looked.usage,
       webHits,
       toolResults,
@@ -1450,7 +1628,7 @@ export async function answerFromJobFile(input: {
   return {
     answer,
     model: completed.model,
-    groundedOn,
+    groundedOn: webBackedWithoutJobCite(answer, webHits, webAnswer, applied.webDerived) ? 0 : groundedOn,
     usage: applied.usage ? mergeMeasuredUsages([completed.usage, applied.usage], completed.model) : completed.usage,
     webHits,
     toolResults,

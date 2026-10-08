@@ -26,7 +26,7 @@ const TOOL_NAMES = new Set([
   'propose_revoke_access',
 ]);
 
-export type AskTurnRoute = 'fast' | 'deep' | 'grounded' | 'skipped';
+export type AskTurnRoute = 'fast' | 'deep' | 'grounded' | 'skipped' | 'general';
 
 export type AskGeminiCache = 'hit' | 'miss' | 'skip';
 
@@ -36,6 +36,8 @@ export type AskTurnTiming = {
   model: string | null;
   fallback: boolean;
   ttftMs: number | null;
+  /** First preview text the reader actually saw (null when nothing was previewed). */
+  visibleTtftMs: number | null;
   totalMs: number;
   contextBuildMs: number;
   memoryLoadMs: number;
@@ -70,6 +72,7 @@ export type AskTurnClock = {
   memoryLoadMs: number;
   memorySummarizeMs: number;
   ttftMs: number | null;
+  visibleTtftMs: number | null;
   model: string | null;
   route: AskTurnRoute;
   routeReason: string;
@@ -80,6 +83,7 @@ export type AskTurnClock = {
   cacheReadTokens: number;
   verify: AskTurnVerify;
   markFirstToken: () => void;
+  markFirstVisible: () => void;
   addTool: (name: string, durationMs: number) => void;
   addCacheRead: (tokens: number) => void;
   noteModel: (model: string | null) => void;
@@ -101,6 +105,7 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
     memoryLoadMs: 0,
     memorySummarizeMs: 0,
     ttftMs: null,
+    visibleTtftMs: null,
     model: null,
     route: 'grounded',
     routeReason: 'pending',
@@ -113,6 +118,10 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
     markFirstToken() {
       if (clock.ttftMs != null) return;
       clock.ttftMs = roundMs(Date.now() - clock.startedAt);
+    },
+    markFirstVisible() {
+      if (clock.visibleTtftMs != null) return;
+      clock.visibleTtftMs = roundMs(Date.now() - clock.startedAt);
     },
     addTool(name: string, durationMs: number) {
       const safe = TOOL_NAMES.has(name) ? name : 'tool';
@@ -144,6 +153,7 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
         model: clock.model,
         fallback: clock.fallback,
         ttftMs: clock.ttftMs,
+        visibleTtftMs: clock.visibleTtftMs,
         totalMs: roundMs(at - clock.startedAt),
         contextBuildMs: roundMs(clock.contextBuildMs),
         memoryLoadMs: roundMs(clock.memoryLoadMs),
@@ -172,6 +182,7 @@ export function askTurnLogFields(timing: AskTurnTiming): Record<string, unknown>
     model: timing.model,
     fallback: timing.fallback,
     ttftMs: timing.ttftMs,
+    visibleTtftMs: timing.visibleTtftMs ?? null,
     totalMs: timing.totalMs,
     contextBuildMs: timing.contextBuildMs,
     memoryLoadMs: timing.memoryLoadMs,

@@ -472,7 +472,8 @@ test('searchAskWeb calls Tavily with Bearer auth, caps results, and never logs t
           assert.equal(body.api_key, undefined);
           assert.equal(body.search_depth, 'basic');
           assert.equal(body.max_results, 5);
-          assert.equal(body.include_answer, true);
+          // Tavily's own summary adds ~1s; Ask writes the answer itself.
+          assert.equal(body.include_answer, false);
           assert.deepEqual(body.include_domains, ['homedepot.com', 'lowes.com']);
           assert.ok(init?.signal instanceof AbortSignal);
           return new Response(

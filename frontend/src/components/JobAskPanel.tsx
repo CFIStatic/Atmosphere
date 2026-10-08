@@ -581,6 +581,25 @@ function dropStaleRoleGuess(
   });
 }
 
+/**
+ * A reply built from web results with no job source in it is not "From this
+ * job file". The server already sends groundedOn 0 for these; this guards
+ * older stored turns.
+ */
+function isWebOnlyAnswer(text: string, webSources?: readonly AskWebSource[] | null): boolean {
+  if (!webSources?.length) return false;
+  return extractAskSources(text).sources.length === 0;
+}
+
+/** Status line under the dots while Ask works. Web and Computer say so; the rest say Thinking. */
+function askPhaseLabel(phase: string | null | undefined): string {
+  const value = (phase ?? '').trim();
+  if (/search(?:ing)? the web/i.test(value)) return 'Searching the web…';
+  if (/computer|browser/i.test(value)) return 'Starting Computer…';
+  if (/writing/i.test(value)) return 'Writing…';
+  return 'Thinking';
+}
+
 /** A Computer task reply is about the browser, not the job file: no "From this job file" line. */
 function isComputerTaskAnswer(text: string): boolean {
   return extractAskSources(text).actions.some((action) => action.tool === 'start_computer_task');
@@ -626,6 +645,10 @@ export function JobAskPanel({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
+  /** Server-checked preview of the answer being written (replaced by the final). */
+  const [livePreview, setLivePreview] = useState('');
+  /** What Ask is doing right now ("Searching the web…"), shown with the dots. */
+  const [livePhase, setLivePhase] = useState('');
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -1007,6 +1030,8 @@ export function JobAskPanel({
     abortRef.current = controller;
     setInFlight(true);
     setAsking(true);
+    setLivePreview('');
+    setLivePhase('');
     setDraft('');
     setError(null);
     // The error is panel-level, so a new ask must drop the unanswered question with it.
@@ -1050,12 +1075,19 @@ export function JobAskPanel({
         res = await askFn(text, threadOpts);
       } else {
         try {
-          // No token handlers: the reply stays on the thinking dots until the
-          // stream's done event, then renders once in its final form.
+          // The server streams only sentences that passed its preview checks
+          // (no quotes, cites, or links; job answers also pass the grounding
+          // verifier). The done event's answer replaces the preview.
           res = await api.askAboutProofsStream(
             jobId,
             text,
-            {},
+            {
+              onToken: (chunk) => {
+                if (!controller.signal.aborted) setLivePreview((prev) => prev + chunk);
+              },
+              onReset: () => setLivePreview(''),
+              onStatus: (phase) => setLivePhase(phase),
+            },
             { ...officeOpts, signal: controller.signal },
           );
         } catch (err) {
@@ -1143,6 +1175,8 @@ export function JobAskPanel({
       inFlightRef.current = false;
       setInFlight(false);
       setAsking(false);
+      setLivePreview('');
+      setLivePhase('');
       inputRef.current?.focus();
     }
   }
@@ -1289,7 +1323,8 @@ export function JobAskPanel({
                   {turn.role === 'assistant' &&
                     turn.groundedOn != null &&
                     turn.groundedOn > 0 &&
-                    !isComputerTaskAnswer(turn.content) && (
+                    !isComputerTaskAnswer(turn.content) &&
+                    !isWebOnlyAnswer(turn.content, turn.webSources) && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                   {showActions ? (
@@ -1322,7 +1357,17 @@ export function JobAskPanel({
               </li>
               );
             })}
-            {asking && (
+            {asking && livePreview.trim() && (
+              <li className="flex items-start gap-2.5" data-testid="ask-live-preview">
+                <div role="status" aria-live="polite" aria-busy="true" className={ASSISTANT_BUBBLE}>
+                  <p className="whitespace-pre-wrap leading-relaxed">{livePreview.trim()}</p>
+                  <span className="mt-1 inline-flex">
+                    <TypingDots />
+                  </span>
+                </div>
+              </li>
+            )}
+            {asking && !livePreview.trim() && (
               <li className="flex items-start gap-2.5" data-testid="ask-status">
                 <div
                   role="status"
@@ -1330,7 +1375,7 @@ export function JobAskPanel({
                   className={`${ASSISTANT_BUBBLE} flex items-center gap-2 py-2.5`}
                 >
                   <TypingDots />
-                  <span className="text-xs text-ink-500">Thinking</span>
+                  <span className="text-xs text-ink-500">{askPhaseLabel(livePhase)}</span>
                 </div>
               </li>
             )}
