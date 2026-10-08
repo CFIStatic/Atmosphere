@@ -114,12 +114,27 @@ describe('terms path exemptions', () => {
 });
 
 describe('client metadata', () => {
-  it('prefers the first forwarded IP', () => {
+  it('ignores X-Forwarded-For, including a faked leftmost entry', () => {
     assert.equal(
-      clientIp({ headers: { 'x-forwarded-for': ' 203.0.113.9, 10.0.0.1 ' }, ip: '127.0.0.1' }),
+      clientIp({ headers: { 'x-forwarded-for': '6.6.6.6, 172.68.175.97, 100.64.0.14' }, ip: '100.64.0.14' }),
+      '100.64.0.14',
+    );
+    assert.equal(
+      clientIp({
+        headers: { 'x-forwarded-for': '6.6.6.6, 172.68.175.97', 'x-real-ip': '203.0.113.9' },
+        ip: '100.64.0.14',
+      }),
       '203.0.113.9',
     );
+  });
+
+  it('uses the edge-set X-Real-IP and falls back to req.ip', () => {
+    assert.equal(clientIp({ headers: { 'x-real-ip': ' 2001:db8::7 ' }, ip: '100.64.0.2' }), '2001:db8::7');
+    assert.equal(clientIp({ headers: { 'x-real-ip': ['198.51.100.4'] }, ip: '100.64.0.2' }), '198.51.100.4');
+    assert.equal(clientIp({ headers: { 'x-real-ip': 'not-an-ip' }, ip: '100.64.0.2' }), '100.64.0.2');
+    assert.equal(clientIp({ headers: { 'x-real-ip': '' }, ip: '198.51.100.4' }), '198.51.100.4');
     assert.equal(clientIp({ ip: '198.51.100.4' }), '198.51.100.4');
+    assert.equal(clientIp({}), null);
   });
 
   it('exports the terms_required code the clients branch on', () => {
