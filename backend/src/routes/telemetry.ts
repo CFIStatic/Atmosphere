@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
@@ -17,6 +18,7 @@ telemetryRouter.use(requireAuth);
  * client from hammering the database, not to police normal use.
  */
 const heartbeatLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 1000,
   limit: 120,
   standardHeaders: true,

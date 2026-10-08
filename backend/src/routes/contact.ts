@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { config } from '../config.js';
 import { contactMessageSchema } from '../lib/validation.js';
 import { contactMailConfigured, sendContactEmail } from '../lib/contactMail.js';
@@ -13,6 +14,7 @@ import { HttpError } from '../lib/errors.js';
 export const contactRouter = Router();
 
 const sendLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 60 * 1000,
   max: 5,
   standardHeaders: true,

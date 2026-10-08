@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -163,6 +164,7 @@ fieldAppRouter.all('/office/preview', (_req: Request, res: Response) => {
 fieldAppRouter.use(requireAuth);
 
 const limiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 180,
   standardHeaders: true,

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
@@ -49,6 +50,7 @@ import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 export const progressShareRouter = Router();
 
 const shareLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 120,
   standardHeaders: true,
@@ -78,6 +80,7 @@ progressShareRouter.post('/exchange', async (req: Request, res: Response, next: 
 });
 
 const askLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 20,
   standardHeaders: true,

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
@@ -102,6 +103,7 @@ export const evidenceShareRouter = Router();
 evidenceShareRouter.use(requireAuth);
 
 const shareLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 120,
   standardHeaders: true,
@@ -111,6 +113,7 @@ const shareLimiter = rateLimit({
 evidenceShareRouter.use(shareLimiter);
 
 const askLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 30,
   standardHeaders: true,

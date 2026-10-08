@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { config } from '../config.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { unscopedAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
@@ -44,6 +45,7 @@ export const authRouter = Router();
  * still rate-limit independently).
  */
 export const authLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   max: config.isProduction ? 20 : 200,
   standardHeaders: true,
@@ -376,6 +378,7 @@ authRouter.post(
  * spam relay and a reset-token grinder respectively.
  */
 const recoveryLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 60 * 1000,
   max: 5,
   standardHeaders: true,
@@ -500,6 +503,7 @@ authRouter.post(
  * who simply mistypes.
  */
 const changePasswordLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60 * 60 * 1000,
   max: 10,
   standardHeaders: true,

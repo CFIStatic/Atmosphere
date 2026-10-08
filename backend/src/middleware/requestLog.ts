@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from '../lib/logger.js';
+import { clientIp } from '../lib/clientIp.js';
 
 declare global {
   namespace Express {
@@ -39,7 +40,7 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
       path: req.path,
       status: res.statusCode,
       durationMs: Date.now() - started,
-      ip: req.ip,
+      ip: clientIp(req) ?? undefined,
       userAgent: req.get('user-agent') ?? undefined,
     };
     if (quiet) {

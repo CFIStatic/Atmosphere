@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
@@ -33,6 +34,7 @@ export const mediaCatalogRouter = Router();
 mediaCatalogRouter.use(requireAuth);
 
 const limiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 120,
   standardHeaders: true,

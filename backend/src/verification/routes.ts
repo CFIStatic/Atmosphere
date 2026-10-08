@@ -9,6 +9,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
@@ -37,6 +38,7 @@ import { exportDatasetVersionJsonl } from './dataset/exportJsonl.js';
 export const verificationRouter = Router();
 
 const uploadLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   max: 60,
   standardHeaders: true,

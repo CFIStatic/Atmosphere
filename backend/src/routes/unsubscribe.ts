@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 
 /**
@@ -30,6 +31,7 @@ export const unsubscribeRouter = Router();
 // Generous, but bounded: a real person clicks once, and a script guessing
 // tokens should not get many attempts.
 const limiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 60_000,
   limit: 30,
   standardHeaders: true,
