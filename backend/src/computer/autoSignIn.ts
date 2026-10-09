@@ -8,7 +8,7 @@
  * line, an error message or the audit log. The audit row records only the
  * site and the outcome.
  */
-import { CREDENTIALS_OFF_MESSAGE, credentialKeyFingerprint, credentialsEnabled, openCredential } from './credentialCrypto.js';
+import { CREDENTIALS_OFF_MESSAGE, canOpenFingerprint, credentialsEnabled, openCredential, resealCredential } from './credentialCrypto.js';
 import { hostOfUrl, siteOf } from './sites.js';
 import type { ComputerCredentialRow, ComputerLoginRow, ComputerStore } from './store.js';
 import { catalogSiteForHost, signInHostsFor } from './catalog/sites.js';
@@ -143,13 +143,28 @@ export async function autoSignIn(input: {
   let username: string;
   let password: string;
   try {
-    if (credential.key_fingerprint !== credentialKeyFingerprint()) throw new Error('key changed');
-    username = openCredential(credential.username_sealed, login.org_id, login.id, 'username');
-    password = openCredential(credential.password_sealed, login.org_id, login.id, 'password');
+    if (!canOpenFingerprint(credential.key_fingerprint)) throw new Error('key changed');
+    username = openCredential(credential.username_sealed, login.org_id, login.id, 'username', credential.key_fingerprint);
+    password = openCredential(credential.password_sealed, login.org_id, login.id, 'password', credential.key_fingerprint);
   } catch {
     await needsAttention('This password was saved with a different encryption key. An admin needs to save it again.');
     await record('failed');
     return { outcome: 'failed', message: `The saved password for ${name} can't be read any more. An admin needs to save it again on Logins.` };
+  }
+
+  // Sealed with a previous key (rotation in progress): re-seal it with the
+  // current one now. Best effort; the sign-in goes ahead either way.
+  try {
+    const resealed = resealCredential({
+      org_id: login.org_id,
+      login_id: login.id,
+      username_sealed: credential.username_sealed,
+      password_sealed: credential.password_sealed,
+      key_fingerprint: credential.key_fingerprint,
+    });
+    if (resealed) await store.updateCredential(login.org_id, login.id, resealed);
+  } catch {
+    // Left for the rotation script.
   }
 
   let filled: Awaited<ReturnType<ComputerDriver['fillSignIn']>>;

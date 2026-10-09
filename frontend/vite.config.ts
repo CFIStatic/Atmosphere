@@ -10,13 +10,19 @@ const srcDir = path.resolve(frontendDir, 'src');
 const verifierDir = path.resolve(frontendDir, '../verifier');
 const fieldCaptureDir = path.resolve(frontendDir, '../fieldcapture');
 const distDir = path.resolve(frontendDir, 'dist');
+// Vitest 4 runs on its own Vite 8 (Rolldown/oxc), while the app builds with
+// Vite 6. @vitejs/plugin-react 4 only speaks Vite 6's esbuild options, so
+// under Vitest it triggered deprecation warnings on every run. Vite 8 compiles
+// TSX with the automatic JSX runtime by itself, and tests need no Fast Refresh,
+// so the plugin is left out of test runs.
+const isVitest = Boolean(process.env.VITEST);
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     staticAppPlugin('/verifier', verifierDir, distDir),
     staticAppPlugin('/fieldcapture', fieldCaptureDir, distDir),
-    react(),
+    ...(isVitest ? [] : [react()]),
   ],
   resolve: {
     alias: { '@': srcDir },

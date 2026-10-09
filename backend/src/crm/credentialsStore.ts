@@ -4,7 +4,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { openCrmPassword, sealCrmPassword } from '../lib/crmCredentialCrypto.js';
+import { openCrmPasswordDetailed, sealCrmPassword } from '../lib/crmCredentialCrypto.js';
 import { logger } from '../lib/logger.js';
 import {
   CRM_AGENT_SYSTEMS,
@@ -166,11 +166,12 @@ export async function loadDecryptedCrmCredentials(
     .maybeSingle();
   if (error || !data) return null;
   try {
-    const password = openCrmPassword({
+    const { password, stale } = openCrmPasswordDetailed({
       cipher: String(data.password_cipher),
       iv: String(data.password_iv),
       tag: String(data.password_tag),
     });
+    if (stale) await resealCrmPassword(admin, orgId, system, password);
     return {
       username: String(data.username),
       password,
@@ -183,6 +184,31 @@ export async function loadDecryptedCrmCredentials(
       detail: err instanceof Error ? err.message : String(err),
     });
     return null;
+  }
+}
+
+/** Key rotation: re-seal a password opened with a previous key. Best effort; never logs the value. */
+async function resealCrmPassword(
+  admin: SupabaseClient,
+  orgId: string,
+  system: CrmAgentSystem,
+  password: string,
+): Promise<void> {
+  const sealed = sealCrmPassword(password);
+  const { error } = await admin
+    .from('crm_agent_credentials')
+    .update({
+      password_cipher: sealed.cipher,
+      password_iv: sealed.iv,
+      password_tag: sealed.tag,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('org_id', orgId)
+    .eq('system', system);
+  if (error) {
+    logger.warn('crm_credentials_reseal_failed', { orgId, system, detail: error.message });
+  } else {
+    logger.info('crm_credentials_resealed', { orgId, system });
   }
 }
 

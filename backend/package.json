@@ -38,7 +38,8 @@
     "test:vitest": "vitest run --passWithNoTests",
     "eval:ask": "tsx src/scripts/askEval.ts",
     "bench:ask": "tsx src/scripts/askLatencyBench.ts",
-    "reconcile:ai-costs": "tsx src/scripts/reconcileAiCosts.ts"
+    "reconcile:ai-costs": "tsx src/scripts/reconcileAiCosts.ts",
+    "rotate:computer-credentials": "tsx src/scripts/rotateComputerCredentials.ts"
   },
   "engines": {
     "node": ">=20"

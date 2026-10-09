@@ -15,10 +15,15 @@ import { computerSettings } from '../src/computer/config.js';
 import {
   CREDENTIALS_OFF_MESSAGE,
   CredentialsOffError,
+  canOpenFingerprint,
+  credentialKeyFingerprint,
   credentialsEnabled,
+  needsReseal,
   openCredential,
+  resealCredential,
   sealCredential,
 } from '../src/computer/credentialCrypto.js';
+import { rotateComputerCredentials } from '../src/computer/rotateCredentials.js';
 import { loginsState, resetSignInsForTests, saveCredential } from '../src/computer/logins.js';
 import { MockComputerProvider, MockSite } from '../src/computer/providers/mock.js';
 import { setComputerProviderForTests } from '../src/computer/providers/index.js';
@@ -39,6 +44,8 @@ const KEY = 'test-only-computer-credential-key-0123456789abcdef';
 const SITE_HOST = 'portal.example-carrier.test';
 
 const savedKey = process.env.COMPUTER_CREDENTIAL_KEY;
+const savedPreviousKeys = process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS;
+const NEW_KEY = 'a-rotated-test-key-that-is-long-enough-1234567';
 
 /* ------------------------------------------------------------- log capture -- */
 
@@ -82,6 +89,8 @@ afterEach(() => {
   setComputerWorkerDepsForTests(null);
   if (savedKey === undefined) delete process.env.COMPUTER_CREDENTIAL_KEY;
   else process.env.COMPUTER_CREDENTIAL_KEY = savedKey;
+  if (savedPreviousKeys === undefined) delete process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS;
+  else process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS = savedPreviousKeys;
 });
 
 /* ---------------------------------------------------------------- harness -- */
@@ -516,6 +525,89 @@ test('a key change makes the saved password unreadable: needs attention, never a
   const state = await loginsState(ORG, ADMIN, true);
   assert.equal(state.logins[0].credential?.username, null);
   assert.equal(state.logins[0].credential?.status, 'needs_attention');
+});
+
+test('key rotation: a previous key still opens old rows, and they are re-sealed with the new key', () => {
+  const oldFingerprint = credentialKeyFingerprint();
+  const row = {
+    org_id: ORG,
+    login_id: 'login-1',
+    username_sealed: sealCredential(USERNAME, ORG, 'login-1', 'username'),
+    password_sealed: sealCredential(PASSWORD, ORG, 'login-1', 'password'),
+    key_fingerprint: oldFingerprint,
+  };
+  process.env.COMPUTER_CREDENTIAL_KEY = NEW_KEY;
+  assert.equal(canOpenFingerprint(oldFingerprint), false, 'without the previous key listed, old rows are unreadable');
+  assert.throws(() => resealCredential(row), /Saved sign-in is not readable/);
+
+  process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS = `short, ${KEY}`;
+  assert.equal(canOpenFingerprint(oldFingerprint), true);
+  assert.equal(needsReseal(oldFingerprint), true);
+  assert.equal(openCredential(row.password_sealed, ORG, 'login-1', 'password', oldFingerprint), PASSWORD);
+  // Without the fingerprint only the current key is tried.
+  assert.throws(() => openCredential(row.password_sealed, ORG, 'login-1', 'password'));
+
+  const resealed = resealCredential(row)!;
+  assertNoSecret('re-sealed value', resealed);
+  assert.equal(resealed.key_fingerprint, credentialKeyFingerprint());
+  assert.notEqual(resealed.key_fingerprint, oldFingerprint);
+  assert.equal(needsReseal(resealed.key_fingerprint), false);
+  delete process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS;
+  assert.equal(openCredential(resealed.password_sealed, ORG, 'login-1', 'password'), PASSWORD, 'opens with only the new key');
+  assert.equal(openCredential(resealed.username_sealed, ORG, 'login-1', 'username', resealed.key_fingerprint), USERNAME);
+  assert.equal(resealCredential({ ...row, ...resealed }), null, 'already current');
+});
+
+test('rotateComputerCredentials: dry-run writes nothing, apply re-seals, unknown keys are reported', async () => {
+  const seal = (loginId: string) => ({
+    org_id: ORG,
+    login_id: loginId,
+    username_sealed: sealCredential(USERNAME, ORG, loginId, 'username'),
+    password_sealed: sealCredential(PASSWORD, ORG, loginId, 'password'),
+    key_fingerprint: credentialKeyFingerprint(),
+  });
+  const old = seal('login-old');
+  process.env.COMPUTER_CREDENTIAL_KEY = 'some-retired-key-nobody-kept-0123456789-abcdef';
+  const lost = seal('login-lost');
+  process.env.COMPUTER_CREDENTIAL_KEY = NEW_KEY;
+  process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS = KEY;
+  const current = seal('login-current');
+  const rows = [old, lost, current];
+
+  const writes: Array<{ loginId: string; patch: Record<string, unknown> }> = [];
+  const update = async (_orgId: string, loginId: string, patch: Record<string, unknown>) => {
+    writes.push({ loginId, patch });
+  };
+  const dry = await rotateComputerCredentials({ rows, apply: false, update });
+  assert.deepEqual(dry, { scanned: 3, current: 1, resealed: 1, unreadable: ['login-lost'] });
+  assert.equal(writes.length, 0);
+
+  const applied = await rotateComputerCredentials({ rows, apply: true, update });
+  assert.equal(applied.resealed, 1);
+  assert.deepEqual(writes.map((w) => w.loginId), ['login-old']);
+  assert.equal(writes[0].patch.key_fingerprint, credentialKeyFingerprint());
+  assertNoSecret('rotation writes', writes);
+  delete process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS;
+  assert.equal(openCredential(String(writes[0].patch.password_sealed), ORG, 'login-old', 'password'), PASSWORD);
+});
+
+test('auto sign-in with a previous key still signs in and re-seals the row with the current key', async () => {
+  const t = setup({ turns: [[tool('sign_in_saved', { site: SITE_HOST })], [tool('finish', { title: 'Done', fields: [], submitted: false })]] });
+  const login = await seedLogin(t.store);
+  await saveCredential({ orgId: ORG, loginId: login.id, userId: ADMIN, canManage: true, credential: { username: USERNAME, password: PASSWORD } });
+  const oldFingerprint = (await t.store.getCredential(ORG, login.id))!.key_fingerprint;
+  process.env.COMPUTER_CREDENTIAL_KEY = NEW_KEY;
+  process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS = KEY;
+  await startTask(t.h);
+  await runComputerTask(t.h.taskId);
+  assert.equal(t.site.signInAttempts.length, 1, 'signed in with the old-key password');
+  const cred = (await t.store.getCredential(ORG, login.id))!;
+  assert.notEqual(cred.key_fingerprint, oldFingerprint);
+  assert.equal(cred.key_fingerprint, credentialKeyFingerprint());
+  assert.equal(cred.status, 'ok');
+  delete process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS;
+  const state = await loginsState(ORG, ADMIN, true);
+  assert.equal(state.logins[0].credential?.username, USERNAME, 'readable with only the new key');
 });
 
 test('without the key, tasks get no saved sign-ins and sign_in_saved says so', async () => {
