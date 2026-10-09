@@ -7,7 +7,7 @@
 # Live URL: https://app.atmosphereteam.com/
 # Office /fieldcapture/ remains as a same-origin fallback.
 
-FROM nginx:1.27-alpine AS runtime
+FROM mirror.gcr.io/library/nginx:1.27-alpine AS runtime
 
 ENV PORT=8080
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$

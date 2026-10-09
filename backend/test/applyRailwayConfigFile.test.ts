@@ -184,7 +184,7 @@ test('the Field Capture service has its own nginx config, not the BFF probe', ()
     new URL('../../fieldcapture/Dockerfile', import.meta.url),
     'utf8',
   );
-  assert.match(dockerfile, /FROM nginx:1\.27-alpine/);
+  assert.match(dockerfile, /FROM (?:mirror\.gcr\.io\/library\/)?nginx:1\.27-alpine/);
   assert.match(dockerfile, /15-validate-fieldcapture-env\.envsh/);
   assert.match(dockerfile, /NGINX_ENVSUBST_FILTER=\^\(PORT\|API_UPSTREAM\|API_RESOLVERS\)\$\$/);
 });

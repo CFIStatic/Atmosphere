@@ -6,7 +6,7 @@
 # DEVICE_PEPPER, CONTACT_TO_EMAIL, CAREERS_TO_EMAIL, and usually SMTP_*.
 # See docs/production.md and backend/.env.example.
 
-FROM node:22-bookworm-slim AS deps
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
@@ -14,7 +14,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:22-bookworm-slim AS build
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -22,7 +22,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runtime
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000

@@ -12,7 +12,7 @@
 # The service name has to match what is on the Railway canvas exactly:
 # an unmatched reference resolves to an empty string, not an error.
 
-FROM node:22-bookworm-slim AS build
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -25,7 +25,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM mirror.gcr.io/library/nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY frontend/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY frontend/nginx/security-headers.conf /etc/nginx/security-headers.conf

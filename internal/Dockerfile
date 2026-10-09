@@ -6,7 +6,7 @@
 #   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 # Never start `node dist/index.js` on this image (no Node in the runtime stage).
 
-FROM node:22-bookworm-slim AS build
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS build
 WORKDIR /app
 COPY internal/package.json internal/package-lock.json ./
 RUN npm ci
@@ -16,7 +16,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 # Never bake demo fixtures into the hosted image. The SPA always calls /api.
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM mirror.gcr.io/library/nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY internal/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 # .envsh, not .sh: the image entrypoint sources the first and executes the
