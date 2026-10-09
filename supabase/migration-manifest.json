@@ -222,7 +222,8 @@
     "20261005210000_computer_site_playbooks.sql",
     "20261005220000_computer_supply_orders.sql",
     "20261006150000_computer_iq.sql",
-    "20261009120000_ask_feedback_pins_edits.sql"
+    "20261009120000_ask_feedback_pins_edits.sql",
+    "20261010090000_ask_pending_actions.sql"
   ],
   "migrations": [
     {
@@ -6795,6 +6796,34 @@
         "rls|public.ask_pinned_answers",
         "table|public.ask_answer_feedback",
         "table|public.ask_pinned_answers"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261010090000_ask_pending_actions",
+      "file": "20261010090000_ask_pending_actions.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_pending_actions.created_at",
+        "column|public.ask_pending_actions.decided_at",
+        "column|public.ask_pending_actions.decided_by",
+        "column|public.ask_pending_actions.expires_at",
+        "column|public.ask_pending_actions.id",
+        "column|public.ask_pending_actions.job_id",
+        "column|public.ask_pending_actions.kind",
+        "column|public.ask_pending_actions.org_id",
+        "column|public.ask_pending_actions.payload",
+        "column|public.ask_pending_actions.requested_by",
+        "column|public.ask_pending_actions.result",
+        "column|public.ask_pending_actions.status",
+        "index|public.ask_pending_actions.ask_pending_actions_job_idx",
+        "index|public.ask_pending_actions.ask_pending_actions_pkey",
+        "policy|public.ask_pending_actions.ask_pending_actions_org_read",
+        "rls|public.ask_pending_actions",
+        "table|public.ask_pending_actions"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

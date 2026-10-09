@@ -216,10 +216,13 @@ export function askLookupStatus(tool: string): string {
     case 'read_job_history':
       return 'Reading the job history…';
     case 'search_transcripts':
-    case 'search_other_jobs':
+      return 'Searching what was said…';
     case 'get_clip':
+      return 'Opening a clip…';
+    case 'search_other_jobs':
+      return 'Checking other jobs…';
     case 'list_person_activity':
-      return 'Looking through clips…';
+      return 'Looking up who was on site…';
     default:
       return 'Looking through clips…';
   }

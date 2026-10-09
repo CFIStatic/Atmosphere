@@ -1350,6 +1350,20 @@ export interface AskSearchHit {
   at: string;
 }
 
+/** An action Chat proposed and is waiting on the person to approve (see AskApprovalCard). */
+export interface AskApproval {
+  id: string;
+  kind: 'send_job_sms' | 'revoke_access';
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'failed';
+  title: string;
+  payload: { to?: string; body?: string; recipient?: string | null; personId?: string; name?: string; email?: string | null };
+  editable: boolean;
+  result: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface AskThread {
   id: string;
   title: string;
@@ -4427,6 +4441,19 @@ export const api = {
       `/api/operations/shared/${jobId}/ask/questions/${encodeURIComponent(questionId)}/pin`,
       { method: 'DELETE' },
     ),
+
+  askApproval: (jobId: string, id: string) =>
+    request<{ approval: AskApproval }>(`/api/operations/shared/${jobId}/ask/approvals/${encodeURIComponent(id)}`, { method: 'GET' }),
+
+  /** Runs the action exactly as shown (a text may be edited first). Only this sends or revokes. */
+  approveAskApproval: (jobId: string, id: string, body?: string | null) =>
+    request<{ approval: AskApproval }>(`/api/operations/shared/${jobId}/ask/approvals/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(body != null ? { body } : {}),
+    }),
+
+  denyAskApproval: (jobId: string, id: string) =>
+    request<{ approval: AskApproval }>(`/api/operations/shared/${jobId}/ask/approvals/${encodeURIComponent(id)}/deny`, { method: 'POST' }),
 
   searchAskChats: (jobId: string, query: string) =>
     request<{ results: AskSearchHit[] }>(

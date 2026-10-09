@@ -521,7 +521,7 @@ test('card payload trailer round-trips commas, pipes, brackets and unicode', () 
   assert.equal(actions[1].label, 'Updated  the job   title');
 });
 
-test('text message approval card carries the whole draft, past 120 characters and with commas', async () => {
+test('a text-the-adjuster request becomes an approval card holding the whole draft; nothing is sent', async () => {
   const store = new MemoryComputerStore();
   setComputerProviderForTests(new MockComputerProvider());
   setComputerWorkerDepsForTests({ store, admin: null });
@@ -533,6 +533,22 @@ test('text message approval card carries the whole draft, past 120 characters an
   process.env.TWILIO_ACCOUNT_SID = 'ACtest';
   process.env.TWILIO_AUTH_TOKEN = 'token';
   process.env.TWILIO_FROM_NUMBER = '+15551234567';
+  // Pending approvals are written to ask_pending_actions; capture them.
+  const pending: Array<Record<string, unknown>> = [];
+  const supabase = {
+    from: (table: string) => ({
+      insert: (row: Record<string, unknown>) => {
+        pending.push({ table, ...row });
+        return { select: () => ({ single: async () => ({ data: { id: '0e000000-0000-4000-8000-0000000000a1' }, error: null }) }) };
+      },
+    }),
+  } as unknown as SupabaseClient;
+  const realFetch = globalThis.fetch;
+  let twilioCalls = 0;
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    if (String(args[0]).includes('twilio')) twilioCalls += 1;
+    return realFetch(...args);
+  }) as typeof fetch;
   try {
     const base = ctx('org');
     const file = {
@@ -542,18 +558,22 @@ test('text message approval card carries the whole draft, past 120 characters an
     const result = await executeAskTool(
       'start_computer_task',
       { instructions: 'text the adjuster for a status update' },
-      { ...base, file } as AskToolContext,
+      { ...base, supabase, file } as AskToolContext,
     );
     assert.equal(result.ok, true, result.summary);
-    assert.equal(result.ui?.path, 'computer-task:sms-approval');
-    assert.ok(result.cardPayload, 'sms approval rides as a card payload');
-    assert.ok(result.cardPayload!.length > 120, 'draft is longer than the old 120 character cut');
-    assert.ok(result.cardPayload!.includes(','), 'draft keeps its commas');
-    assert.match(result.cardPayload!, /To: \+15550100001/);
+    assert.equal(result.ui?.path, 'ask-approval:0e000000-0000-4000-8000-0000000000a1');
+    assert.equal(pending.length, 1);
+    const row = pending[0] as { table: string; kind: string; payload: { to: string; body: string } };
+    assert.equal(row.table, 'ask_pending_actions');
+    assert.equal(row.kind, 'send_job_sms');
+    assert.equal(row.payload.to, '+15550100001');
+    assert.ok(row.payload.body.length > 120, 'the whole draft is kept, past the old 120 character cut');
+    assert.ok(row.payload.body.includes(','), 'draft keeps its commas');
     const [action] = parseActionsTrailer(`answer\n\n${formatActionsTrailer([result])}`);
-    assert.equal(action.path, 'computer-task:sms-approval');
-    assert.equal(action.label, result.cardPayload);
+    assert.equal(action.path, 'ask-approval:0e000000-0000-4000-8000-0000000000a1');
+    assert.equal(twilioCalls, 0, 'proposing a text never sends it');
   } finally {
+    globalThis.fetch = realFetch;
     for (const [k, v] of [['TWILIO_ACCOUNT_SID', prev.sid], ['TWILIO_AUTH_TOKEN', prev.tok], ['TWILIO_FROM_NUMBER', prev.from]] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;

@@ -73,6 +73,36 @@ import {
 } from './askTools.js';
 
 /** The one line above a Computer task card in Chat. */
+
+/** The step a person sees while a Chat tool runs (null: no separate step). */
+export function toolStepLabel(tool: string): string | null {
+  switch (tool) {
+    case 'get_crm_record':
+    case 'search_crm':
+      return 'Checking the CRM…';
+    case 'update_job_fields':
+      return 'Updating the job…';
+    case 'send_job_sms':
+      return 'Drafting the text…';
+    case 'propose_revoke_access':
+    case 'list_who_has_access':
+      return 'Checking who has access…';
+    case 'get_punch_list':
+      return 'Reading the punch list…';
+    case 'find_evidence_moments':
+      return 'Finding the moment…';
+    case 'draft_progress_share_copy':
+    case 'draft_site_digest_copy':
+    case 'draft_field_invite_copy':
+      return 'Drafting…';
+    case 'get_job_status':
+    case 'get_job_fields':
+      return 'Reading the job…';
+    default:
+      return null;
+  }
+}
+
 export const COMPUTER_LEAD = "Opening a browser now, and I'll check with you before anything is submitted.";
 
 export interface JobFileAskJob {
@@ -1340,6 +1370,11 @@ export async function answerFromJobFile(input: {
       return result;
     };
     if (picks.includes('start_computer_task')) input.onStatus?.('Starting Computer…');
+    else {
+      // One visible step per kind of tool, in the order they run.
+      const steps = [...new Set(picks.map(toolStepLabel).filter((l): l is string => Boolean(l)))];
+      for (const step of steps) input.onStatus?.(step);
+    }
     for (const name of sequential) toolResults.push(await runTool(name));
     if (parallel.length) toolResults.push(...(await Promise.all(parallel.map((name) => runTool(name)))));
     webHits = collectWebHitsFromToolResults(toolResults);

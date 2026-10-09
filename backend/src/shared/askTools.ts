@@ -5,6 +5,7 @@
  * only or return needs_confirmation (never silent revoke/email/delete).
  */
 
+import { createPendingAction, type PendingKind, type RevokePayload, type SmsPayload } from './askApprovals.js';
 import { buildSiteDigest, formatSiteDigestForContractor } from './siteDigest.js';
 import { ComputerServiceError, startComputerTask } from '../computer/service.js';
 import { computerStore } from '../computer/worker.js';
@@ -15,7 +16,6 @@ import {
 } from './askComputerCommand.js';
 import { looksLikeSupplyOrderAsk, type SupplyCart } from '../computer/supplyOrder.js';
 
-import { sendSms } from './smsProvider.js';
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
@@ -313,21 +313,17 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: 'send_job_sms',
     description:
-      'Office only. Send a text about this job via Twilio AFTER the person clearly approved the exact draft in Chat. ' +
-      'Pass confirm=true only when they approved that exact body. Never send without confirm=true. ' +
-      'Use after a text-the-adjuster draft that asked for approval.',
+      'Office only. Propose a text about this job. This NEVER sends: it shows the person an approval card with the ' +
+      'exact message, and only their Send button sends it. Use it whenever they ask to text someone.',
     audience: 'org',
     input_schema: {
       type: 'object',
       properties: {
         to: { type: 'string', description: 'Phone number to text (E.164 or US 10-digit).' },
-        body: { type: 'string', description: 'Exact approved message body.' },
-        confirm: {
-          type: 'boolean',
-          description: 'True only after the person approved sending this exact text.',
-        },
+        body: { type: 'string', description: 'The exact message to propose.' },
+        recipient: { type: 'string', description: 'Who it is for, e.g. "Dana Whitfield (adjuster)". Optional.' },
       },
-      required: ['to', 'body', 'confirm'],
+      required: ['to', 'body'],
     },
   },
 ];
@@ -397,11 +393,11 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   if (/revoke|remove access|cut off access/.test(q)) {
     add('propose_revoke_access');
   }
-  // Approve / send a drafted adjuster text (Twilio) — only after an explicit approve.
+  // Texting someone: propose it (the approval card is the only way it sends).
   if (
     allow.has('send_job_sms') &&
-    /\b(approve|send|yes)\b/.test(q) &&
-    /\b(text|sms|message)\b/.test(q) &&
+    /\b(text|sms)\b/.test(q) &&
+    /\b(send|text|message)\b/.test(q) &&
     !looksLikeComputerTask(question)
   ) {
     return ['send_job_sms'];
@@ -1068,21 +1064,22 @@ export async function executeAskTool(
             ui: { section: 'access' },
           };
         }
+        const personName = match.displayName || match.name || match.email || label;
+        const approvalId = await proposeForApproval(ctx, 'revoke_access', {
+          personId: match.id,
+          name: personName,
+          email: match.email ?? null,
+        });
         return {
           ok: true,
           tool: name,
-          summary: `Ready to revoke access for ${match.displayName || match.email || label} — confirmation required (not revoked yet).`,
-          data: {
-            id: match.id,
-            kind: match.kind,
-            name: match.displayName || match.name,
-            email: match.email,
-          },
+          summary: `Ready to remove ${personName}'s access. Approve it on the card; nothing has changed yet.`,
+          data: { id: match.id, kind: match.kind, name: personName, email: match.email, approvalId },
           needsConfirmation: {
             action: 'revoke_access',
-            detail: `Revoke ${match.displayName || match.email || label}? Use Who has access → Revoke. Ask will not revoke silently.`,
+            detail: `Waiting for the person to approve removing ${personName} on the card. Do not say it is done.`,
           },
-          ui: { section: 'access' },
+          ui: { section: 'access', path: `ask-approval:${approvalId}` },
         };
       }
 
@@ -1093,38 +1090,21 @@ export async function executeAskTool(
         }
         const to = trim(input.to);
         const body = trim(input.body);
-        const confirm = input.confirm === true || input.confirm === 'true';
         if (!to || !body) {
           return { ok: false, tool: name, summary: 'Need a phone number and the exact message body.' };
         }
-        if (!confirm) {
-          return {
-            ok: false,
-            tool: name,
-            summary: [
-              'Draft only — nothing was sent. Approve this text first:',
-              '',
-              `To: ${to}`,
-              body,
-              '',
-              'Reply to approve, then I will send it via Twilio.',
-            ].join('\n'),
-            data: { to, body, channel: 'sms' },
-            needsConfirmation: {
-              action: 'send_job_sms',
-              detail: `Approve sending this text to ${to} via Twilio?`,
-            },
-          };
-        }
-        const result = await sendSms({ to, body, orgId: ctx.orgId, jobId: ctx.jobId });
-        if (!result.ok) {
-          return { ok: false, tool: name, summary: result.message, data: { reason: result.reason } };
-        }
+        // Never sends from here: the person's Send button on the card does.
+        const approvalId = await proposeForApproval(ctx, 'send_job_sms', { to, body, recipient: trim(input.recipient) || null });
         return {
           ok: true,
           tool: name,
-          summary: `Text sent to ${to} via Twilio.`,
-          data: { to, provider: result.provider, id: result.id },
+          summary: `Here is the text for ${trim(input.recipient) || to}. Nothing has been sent; press Send on the card when it looks right.`,
+          data: { to, body, channel: 'sms', approvalId },
+          needsConfirmation: {
+            action: 'send_job_sms',
+            detail: 'Waiting for the person to press Send on the card. Do not say it was sent.',
+          },
+          ui: { section: 'computer', path: `ask-approval:${approvalId}` },
         };
       }
       case 'start_computer_task': {
@@ -1238,20 +1218,17 @@ export async function executeAskTool(
             };
           }
           if ('smsPendingApproval' in plan && plan.smsPendingApproval) {
-            const draft = [
-              plan.lead,
-              '',
-              `To: ${plan.to}`,
-              '',
-              plan.body,
-            ].join('\n');
+            const approvalId = await proposeForApproval(ctx, 'send_job_sms', {
+              to: plan.to,
+              body: plan.body,
+              recipient: plan.adjusterName ?? null,
+            });
             return {
               ok: true,
               tool: name,
-              summary: draft,
-              // The approval card shows the whole draft, commas and all.
-              cardPayload: draft,
+              summary: plan.lead,
               data: {
+                approvalId,
                 channel: 'sms',
                 to: plan.to,
                 body: plan.body,
@@ -1260,9 +1237,9 @@ export async function executeAskTool(
               },
               needsConfirmation: {
                 action: 'send_job_sms',
-                detail: `Approve sending this text to ${plan.to}? Nothing was sent yet.`,
+                detail: 'Waiting for the person to press Send on the card. Do not say it was sent.',
               },
-              ui: { section: 'computer', path: 'computer-task:sms-approval' },
+              ui: { section: 'computer', path: `ask-approval:${approvalId}` },
             };
           }
           if (!('instructions' in plan)) {
@@ -1323,6 +1300,19 @@ export async function executeAskTool(
     const detail = (err instanceof Error ? err.message : String(err)).slice(0, 200);
     return { ok: false, tool: name, summary: `Tool failed: ${detail}` };
   }
+}
+
+/**
+ * Store an action for the person to approve on a card. Written with the
+ * service role (members cannot write pending actions directly).
+ */
+async function proposeForApproval(
+  ctx: AskToolContext,
+  kind: PendingKind,
+  payload: SmsPayload | RevokePayload,
+): Promise<string> {
+  const db = unscopedAdminOrNull() ?? ctx.supabase;
+  return createPendingAction(db, { orgId: ctx.orgId, jobId: ctx.jobId, userId: ctx.userId ?? null, kind, payload });
 }
 
 /** Format tool results for the model prompt / final context. */
