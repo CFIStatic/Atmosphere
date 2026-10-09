@@ -4,6 +4,7 @@ import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrig
 import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { partyInviteEmail } from './partyInviteEmail.js';
+import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
  * Email a contractor the same capture invite from Start a job and from
@@ -62,7 +63,7 @@ export async function deliverPartyInvite(input: {
 
   if (admin) {
     const [{ data: existing }, { data: erasure }, { data: identity }] = await Promise.all([
-      admin.from('profiles').select('id').ilike('email', email).limit(1).maybeSingle(),
+      admin.from('profiles').select('id').ilike('email', ilikeExact(email) ?? '').limit(1).maybeSingle(),
       admin.from('network_erasures').select('email').eq('email', email).maybeSingle(),
       admin
         .from('field_identities')
