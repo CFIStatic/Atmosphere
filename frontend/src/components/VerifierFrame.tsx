@@ -109,6 +109,7 @@ export function VerifierFrame({
         jobId: payload.jobId,
         threads: payload.threads,
         activeThreadId: payload.activeThreadId,
+        ...(payload.search ? { search: payload.search } : {}),
       });
     });
   }, [postToFrame]);

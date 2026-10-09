@@ -394,4 +394,51 @@ describe('ComputerTaskCard text message approval', () => {
     expect(card.textContent).toContain('To: +15555550123');
     expect(card.querySelector('p.whitespace-pre-wrap')?.className).toContain('break-words');
   });
+
+  describe('watching it work in Chat', () => {
+    it('a task you just started opens its live view by itself', async () => {
+      const justNow = new Date(Date.now() - 10_000).toISOString();
+      computerTask.mockResolvedValue({ task: task({ createdAt: justNow, startedAt: justNow }) });
+      render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+      expect(await screen.findByTestId('computer-live-iframe')).toBeInTheDocument();
+      expect(computerLiveView).toHaveBeenCalledWith(ID, 'watch');
+    });
+
+    it('an older running task waits for Watch (no live links minted just for opening the chat)', async () => {
+      computerTask.mockResolvedValue({ task: task() });
+      render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+      expect(await screen.findByRole('button', { name: 'Watch' })).toBeInTheDocument();
+      expect(computerLiveView).not.toHaveBeenCalled();
+    });
+
+    it('shows the site, the time so far and the latest steps while it runs, without a step count', async () => {
+      computerTask.mockResolvedValue({
+        task: task({
+          events: [
+            { id: 1, event: 'navigate', actor: 'agent', at: '2026-10-04T15:00:02Z', detail: { host: 'portal.example.test' } },
+            { id: 2, event: 'action', actor: 'agent', at: '2026-10-04T15:00:05Z', detail: { action: 'fill_fields', fields: 5, filled: 4, problems: 1 } },
+            { id: 3, event: 'blocked', actor: 'agent', at: '2026-10-04T15:00:06Z', detail: { action: 'fill_fields', why: 'placement', field: 'Policy number' } },
+            { id: 4, event: 'action', actor: 'agent', at: '2026-10-04T15:00:08Z', detail: { action: 'left_click', target: { tag: 'button', label: 'Next' } } },
+          ],
+        }),
+      });
+      render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+      expect(await screen.findByTestId('computer-progress')).toHaveTextContent('On portal.example.test');
+      const recent = screen.getByTestId('computer-recent-steps');
+      expect(recent).toHaveTextContent('Filled in 4 of 5 fields');
+      expect(recent).toHaveTextContent('Left “Policy number” for the right value instead of guessing');
+      expect(recent.querySelectorAll('li')).toHaveLength(3);
+      expect(screen.queryByText(/Step \d+ of \d+/)).toBeNull();
+    });
+
+    it('the browser tab says when Computer is waiting on you, and goes back after', async () => {
+      document.title = 'Atmosphere';
+      computerTask.mockResolvedValue({ task: task({ status: 'awaiting_approval', approval }) });
+      const { unmount } = render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+      await screen.findByTestId('computer-approval-card');
+      expect(document.title).toBe('● Computer is waiting for your approval · Atmosphere');
+      unmount();
+      expect(document.title).toBe('Atmosphere');
+    });
+  });
 });

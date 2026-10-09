@@ -1,3 +1,4 @@
+import { visibleAfterEdits } from '../shared/askEdits.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
 import { clipRoomChipSegments, matchRoomsAcrossClips, segmentClipRooms } from '../shared/roomIntelligence.js';
@@ -3038,6 +3039,12 @@ async function runProofAskTurn(input: {
    * Ask so an unattached or other-job file never enters that answer.
    */
   documentIds?: string[] | null;
+  /**
+   * The person edited an earlier question in this thread and asked again. The
+   * new row points at it; it and everything after it leave the conversation
+   * (they stay on the record).
+   */
+  supersedesId?: string | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3242,7 +3249,7 @@ async function runProofAskTurn(input: {
       (async () => {
         const memoryStarted = Date.now();
         const threadId = await threadPromise;
-        const shape = 'id, question, answer, created_at, office_only';
+        const shape = 'id, question, answer, created_at, office_only, supersedes_id';
         const empty = {
           rows: [] as Array<Record<string, unknown>>,
           memory: null as { summary: string | null; throughId: string | null } | null,
@@ -3342,6 +3349,32 @@ async function runProofAskTurn(input: {
       threadPromise,
     ]);
     threadId = threadIdResolved;
+
+    // An edit must replace a question in this same chat; it drops that question and what followed.
+    let pendingEdit: { supersedesId: string; supersededAt: string | null } | null = null;
+    if (input.supersedesId) {
+      const { data: replaced } = await supabase
+        .from('job_proof_questions')
+        .select('id, created_at, thread_id')
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .eq('id', input.supersedesId)
+        .maybeSingle();
+      const replacedThread = (replaced as { thread_id?: string | null } | null)?.thread_id ?? null;
+      if (!replaced || (threadId && replacedThread !== threadId)) {
+        throw new HttpError(404, 'That question is not in this chat any more.', 'ask_edit_not_found');
+      }
+      pendingEdit = { supersedesId: input.supersedesId, supersededAt: String((replaced as { created_at: string }).created_at) };
+    }
+    const conversationRows = visibleAfterEdits(
+      ((recentRes.rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        ...row,
+        id: String(row.id ?? ''),
+        created_at: String(row.created_at ?? ''),
+        supersedes_id: (row.supersedes_id as string | null | undefined) ?? null,
+      })),
+      pendingEdit,
+    );
 
     // One Ask loads the newest 80 clips. When the job has more, the transcript
     // chunk index finds older clips whose speech matches the question, and
@@ -3520,12 +3553,12 @@ async function runProofAskTurn(input: {
       });
     const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
     const officeOnlyPairIds = new Set(
-      ((recentRes.rows ?? []) as Array<Record<string, unknown>>)
+      (conversationRows as Array<Record<string, unknown>>)
         .filter((row) => row.office_only === true)
         .map((row) => String(row.id ?? ''))
         .filter(Boolean),
     );
-    const priorPairs: StoredAskPair[] = (recentRes.rows ?? []).flatMap((row) => {
+    const priorPairs: StoredAskPair[] = (conversationRows as Array<Record<string, unknown>>).flatMap((row) => {
       const question = scrubAsk(String(row.question ?? ''));
       if (!question.trim()) return [];
       return [
@@ -3820,8 +3853,9 @@ async function runProofAskTurn(input: {
         document_ids: sessionDocuments.map((doc) => doc.id).slice(0, 8),
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
+        ...(pendingEdit ? { supersedes_id: pendingEdit.supersedesId } : {}),
       })
-      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
+      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id, supersedes_id')
       .single();
 
     if (mentionPrep?.mentions.length && stored?.id) {
@@ -3993,6 +4027,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         threadId: z.string().uuid().optional().nullable(),
         timeZone: z.string().trim().min(1).max(64).optional(),
         documentIds: z.array(z.string().uuid()).max(8).optional(),
+        supersedesId: z.string().uuid().optional().nullable(),
       })
       .parse(req.body ?? {});
     const canManage =
@@ -4034,6 +4069,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           requestId: `ask:${req.params.jobId}:${randomUUID()}`,
           access: access === 'org' ? 'org' : 'viewer',
           documentIds: access === 'org' ? input.documentIds : undefined,
+          supersedesId: input.supersedesId ?? null,
           signal: abort.signal,
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
           // Checked sentences stream as they are written; `done` replaces them.
@@ -4069,6 +4105,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
       access: access === 'org' ? 'org' : 'viewer',
       documentIds: access === 'org' ? input.documentIds : undefined,
+      supersedesId: input.supersedesId ?? null,
     });
     res.status(201).json(result);
   } catch (err) {

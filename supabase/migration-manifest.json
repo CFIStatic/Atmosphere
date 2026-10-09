@@ -221,7 +221,8 @@
     "20261005190000_ask_route_skipped.sql",
     "20261005210000_computer_site_playbooks.sql",
     "20261005220000_computer_supply_orders.sql",
-    "20261006150000_computer_iq.sql"
+    "20261006150000_computer_iq.sql",
+    "20261009120000_ask_feedback_pins_edits.sql"
   ],
   "migrations": [
     {
@@ -6764,6 +6765,47 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "alters computer_sessions provider check constraint only; no new durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261009120000_ask_feedback_pins_edits",
+      "file": "20261009120000_ask_feedback_pins_edits.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.ask_answer_feedback.comment",
+        "column|public.ask_answer_feedback.created_at",
+        "column|public.ask_answer_feedback.id",
+        "column|public.ask_answer_feedback.job_id",
+        "column|public.ask_answer_feedback.org_id",
+        "column|public.ask_answer_feedback.question_id",
+        "column|public.ask_answer_feedback.rating",
+        "column|public.ask_answer_feedback.reason",
+        "column|public.ask_answer_feedback.updated_at",
+        "column|public.ask_answer_feedback.user_id",
+        "column|public.ask_pinned_answers.created_at",
+        "column|public.ask_pinned_answers.id",
+        "column|public.ask_pinned_answers.job_id",
+        "column|public.ask_pinned_answers.org_id",
+        "column|public.ask_pinned_answers.pinned_by",
+        "column|public.ask_pinned_answers.question_id",
+        "column|public.job_proof_questions.supersedes_id",
+        "index|public.ask_answer_feedback.ask_answer_feedback_one_per_person",
+        "index|public.ask_answer_feedback.ask_answer_feedback_org_idx",
+        "index|public.ask_answer_feedback.ask_answer_feedback_pkey",
+        "index|public.ask_pinned_answers.ask_pinned_answers_job_idx",
+        "index|public.ask_pinned_answers.ask_pinned_answers_once",
+        "index|public.ask_pinned_answers.ask_pinned_answers_pkey",
+        "index|public.job_proof_questions.job_proof_questions_supersedes_idx",
+        "policy|public.ask_answer_feedback.ask_answer_feedback_own",
+        "policy|public.ask_pinned_answers.ask_pinned_answers_org",
+        "rls|public.ask_answer_feedback",
+        "rls|public.ask_pinned_answers",
+        "table|public.ask_answer_feedback",
+        "table|public.ask_pinned_answers"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
