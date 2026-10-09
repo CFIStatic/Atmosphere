@@ -4,7 +4,7 @@
  * the operations shell — no new chrome.
  */
 
-import type { AskThread } from './api';
+import type { AskSearchHit, AskThread } from './api';
 
 export const ASK_HISTORY_EVENT = 'atmosphere-ask-history';
 export const ASK_HISTORY_ACTION = 'atmosphere-ask-history-action';
@@ -13,11 +13,14 @@ export type AskHistoryPayload = {
   jobId: string;
   threads: AskThread[];
   activeThreadId: string | null;
+  /** Results for the rail's search box (this person's chats on the job). */
+  search?: { query: string; results: AskSearchHit[] };
 };
 
 export type AskHistoryAction =
   | { type: 'new-chat'; jobId: string }
-  | { type: 'select-thread'; jobId: string; threadId: string }
+  | { type: 'select-thread'; jobId: string; threadId: string; questionId?: string | null }
+  | { type: 'search-threads'; jobId: string; query: string }
   | { type: 'rename-thread'; jobId: string; threadId: string; title: string };
 
 export function publishAskHistory(payload: AskHistoryPayload) {

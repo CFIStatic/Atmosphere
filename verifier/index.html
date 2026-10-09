@@ -1106,6 +1106,28 @@
     outline-offset: 1px;
   }
 
+  /* Ask chat search — filters this person's chats on the job (titles, questions, answers) */
+  .ask-hist-search {
+    display: block;
+    width: calc(100% - 12px);
+    margin: 4px 6px 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .ask-hist-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #ask-history-results .navitem { flex-direction: column; align-items: flex-start; gap: 2px; }
+  #ask-history-results .ask-hit-title { font-weight: 650; font-size: 13px; }
+  #ask-history-results .ask-hit-snippet {
+    font-size: 12px; color: var(--muted); line-height: 1.3;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  #ask-history-results .ask-hit-empty { padding: 6px 12px; font-size: 12px; color: var(--muted); }
+
   /* Videos list — ChatGPT-style rename on clip titles */
   .clip-title-row {
     display: flex; align-items: center; gap: 4px; min-width: 0;
@@ -2217,6 +2239,8 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span class="label" data-i18n-chrome="newChat">New chat</span>
       </button>
+      <input type="search" id="ask-history-search" class="ask-hist-search" placeholder="Search chats" aria-label="Search your chats on this job" autocomplete="off" maxlength="100">
+      <div id="ask-history-results" role="list" aria-label="Chat search results" hidden></div>
       <div id="ask-history-list"></div>
     </div>
     </div>
@@ -8750,7 +8774,10 @@
     var list = document.getElementById('ask-history-list');
     var nav = document.getElementById('ask-history-nav');
     if (!list || !nav) return;
-    askHistoryJobId = payload && payload.jobId ? payload.jobId : null;
+    var nextJobId = payload && payload.jobId ? payload.jobId : null;
+    if (nextJobId !== askHistoryJobId) clearAskSearch();
+    if (payload && payload.search) renderAskSearch(payload.search);
+    askHistoryJobId = nextJobId;
     askHistoryActiveId = payload && payload.activeThreadId ? payload.activeThreadId : null;
     var threads = (payload && payload.threads) || [];
     var onJobFile = activeRoute === '/job-progress' || activeRoute === '/shared' || (activeRoute && activeRoute.indexOf('/jobs/') === 0);
@@ -8803,6 +8830,95 @@
       list.appendChild(row);
     });
   }
+
+  var askSearchTimer = null;
+
+  function clearAskSearch() {
+    var input = document.getElementById('ask-history-search');
+    var results = document.getElementById('ask-history-results');
+    var list = document.getElementById('ask-history-list');
+    if (input) input.value = '';
+    if (results) { results.hidden = true; results.innerHTML = ''; }
+    if (list) list.hidden = false;
+  }
+
+  /** Results come back from the job-file panel for the query typed here. */
+  function renderAskSearch(search) {
+    var input = document.getElementById('ask-history-search');
+    var results = document.getElementById('ask-history-results');
+    var list = document.getElementById('ask-history-list');
+    if (!input || !results || !list) return;
+    var current = (input.value || '').trim();
+    // A late answer for an older query must not replace the newer one.
+    if (!current || current !== String(search.query || '').trim()) return;
+    results.innerHTML = '';
+    var hits = Array.isArray(search.results) ? search.results : [];
+    if (!hits.length) {
+      var empty = document.createElement('p');
+      empty.className = 'ask-hit-empty';
+      empty.textContent = 'No chats mention that.';
+      results.appendChild(empty);
+    }
+    hits.forEach(function (hit) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'navitem';
+      btn.setAttribute('role', 'listitem');
+      var title = document.createElement('span');
+      title.className = 'ask-hit-title';
+      title.textContent = displayMentionTitle(hit.threadTitle) || 'Chat';
+      btn.appendChild(title);
+      if (hit.snippet) {
+        var snip = document.createElement('span');
+        snip.className = 'ask-hit-snippet';
+        snip.textContent = hit.snippet;
+        btn.appendChild(snip);
+      }
+      btn.addEventListener('click', function () {
+        if (!askHistoryJobId) return;
+        askHistoryActiveId = hit.threadId;
+        clearAskSearch();
+        if (EMBEDDED) {
+          window.parent.postMessage({
+            atmosphere: 'ask-history-action',
+            action: { type: 'select-thread', jobId: askHistoryJobId, threadId: hit.threadId, questionId: hit.questionId || null }
+          }, '*');
+        }
+      });
+      results.appendChild(btn);
+    });
+    results.hidden = false;
+    list.hidden = true;
+  }
+
+  (function wireAskSearch() {
+    var input = document.getElementById('ask-history-search');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      if (askSearchTimer) clearTimeout(askSearchTimer);
+      var q = (input.value || '').trim();
+      if (q.length < 2) {
+        var results = document.getElementById('ask-history-results');
+        var list = document.getElementById('ask-history-list');
+        if (results) { results.hidden = true; results.innerHTML = ''; }
+        if (list) list.hidden = false;
+        return;
+      }
+      askSearchTimer = setTimeout(function () {
+        if (!askHistoryJobId || !EMBEDDED) return;
+        window.parent.postMessage({
+          atmosphere: 'ask-history-action',
+          action: { type: 'search-threads', jobId: askHistoryJobId, query: q }
+        }, '*');
+      }, 250);
+    });
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        clearAskSearch();
+      }
+    });
+  })();
 
   function startAskHistoryRename(row, thread) {
     if (!row || !askHistoryJobId) return;

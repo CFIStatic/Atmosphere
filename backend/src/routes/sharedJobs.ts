@@ -1,3 +1,4 @@
+import { listAskFeedback, listAskPins, pinAskAnswer, rateAskAnswer, searchAskChats, unpinAskAnswer } from './askExtras.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
@@ -1746,6 +1747,12 @@ sharedJobsRouter.get('/shared/:jobId/custody-export', jobCustodyExport);
 sharedJobsRouter.get('/shared/:jobId/proof-pack.pdf', jobProofPackPdf);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.get('/shared/:jobId/ask/threads', listJobAskThreads);
+sharedJobsRouter.get('/shared/:jobId/ask/search', searchAskChats);
+sharedJobsRouter.get('/shared/:jobId/ask/feedback', listAskFeedback);
+sharedJobsRouter.get('/shared/:jobId/ask/pins', listAskPins);
+sharedJobsRouter.post('/shared/:jobId/ask/questions/:questionId/feedback', rateAskAnswer);
+sharedJobsRouter.post('/shared/:jobId/ask/questions/:questionId/pin', pinAskAnswer);
+sharedJobsRouter.delete('/shared/:jobId/ask/questions/:questionId/pin', unpinAskAnswer);
 sharedJobsRouter.post('/shared/:jobId/ask/threads', createJobAskThread);
 sharedJobsRouter.patch('/shared/:jobId/ask/threads/:threadId', renameJobAskThread);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);

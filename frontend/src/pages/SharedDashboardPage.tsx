@@ -486,7 +486,7 @@ function JobFileSections({
             aria-label="Ask this job"
             data-testid="job-file-ask"
           >
-            <JobAskPanel jobId={record.job.id} fill onOpenHref={onOpenHref} />
+            <JobAskPanel jobId={record.job.id} fill onOpenHref={onOpenHref} officeExtras={!grantViewer} />
           </div>
         ) : null}
 

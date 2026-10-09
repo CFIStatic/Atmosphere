@@ -1321,6 +1321,33 @@ export interface ProofQuestion {
   document_ids?: string[] | null;
   created_at: string;
   thread_id?: string | null;
+  /** Set when this question is an edit of an earlier one (which then leaves the chat). */
+  supersedes_id?: string | null;
+}
+
+export type AskFeedbackReason = 'wrong' | 'incomplete' | 'not_on_file' | 'unclear' | 'other';
+
+export interface AskFeedback {
+  rating: 1 | -1;
+  reason: AskFeedbackReason | null;
+}
+
+export interface AskPinnedAnswer {
+  id: string;
+  questionId: string;
+  question: string;
+  answer: string;
+  askedAt: string;
+  pinnedAt: string;
+  pinnedBy: string | null;
+}
+
+export interface AskSearchHit {
+  threadId: string;
+  threadTitle: string;
+  questionId: string | null;
+  snippet: string;
+  at: string;
 }
 
 export interface AskThread {
@@ -4211,7 +4238,7 @@ export const api = {
   askAboutProofs: (
     jobId: string,
     question: string,
-    opts?: { threadId?: string | null; documentIds?: string[] },
+    opts?: { threadId?: string | null; documentIds?: string[]; supersedesId?: string | null },
   ) =>
     request<{
       answer: string;
@@ -4226,6 +4253,7 @@ export const api = {
         question,
         threadId: opts?.threadId ?? undefined,
         documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
+        supersedesId: opts?.supersedesId ?? undefined,
         timeZone: browserTimeZone(),
       }),
     }),
@@ -4244,7 +4272,7 @@ export const api = {
       onReset?: () => void;
       onStatus?: (phase: string) => void;
     } = {},
-    opts?: { threadId?: string | null; signal?: AbortSignal; documentIds?: string[] },
+    opts?: { threadId?: string | null; signal?: AbortSignal; documentIds?: string[]; supersedesId?: string | null },
   ): Promise<{
     answer: string;
     groundedOn: number;
@@ -4269,6 +4297,7 @@ export const api = {
           question,
           threadId: opts?.threadId ?? undefined,
           documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
+          supersedesId: opts?.supersedesId ?? undefined,
           timeZone: browserTimeZone(),
         }),
       });
@@ -4369,6 +4398,40 @@ export const api = {
     request<{ thread: AskThread }>(
       `/api/operations/shared/${jobId}/ask/threads/${encodeURIComponent(threadId)}`,
       { method: 'PATCH', body: JSON.stringify({ title }) },
+    ),
+
+  /** Thumbs up (1) / down (-1) on an answer, or 0 to clear. Office members. */
+  rateAskAnswer: (jobId: string, questionId: string, rating: 1 | -1 | 0, extra?: { reason?: AskFeedbackReason | null; comment?: string | null }) =>
+    request<{ feedback: AskFeedback | null }>(
+      `/api/operations/shared/${jobId}/ask/questions/${encodeURIComponent(questionId)}/feedback`,
+      { method: 'POST', body: JSON.stringify({ rating, ...(extra ?? {}) }) },
+    ),
+
+  askFeedback: (jobId: string, questionIds: string[]) =>
+    request<{ feedback: Record<string, AskFeedback> }>(
+      `/api/operations/shared/${jobId}/ask/feedback?ids=${encodeURIComponent(questionIds.slice(0, 100).join(','))}`,
+      { method: 'GET' },
+    ),
+
+  askPins: (jobId: string) =>
+    request<{ pins: AskPinnedAnswer[] }>(`/api/operations/shared/${jobId}/ask/pins`, { method: 'GET' }),
+
+  pinAskAnswer: (jobId: string, questionId: string) =>
+    request<{ pins: AskPinnedAnswer[] }>(
+      `/api/operations/shared/${jobId}/ask/questions/${encodeURIComponent(questionId)}/pin`,
+      { method: 'POST' },
+    ),
+
+  unpinAskAnswer: (jobId: string, questionId: string) =>
+    request<{ pins: AskPinnedAnswer[] }>(
+      `/api/operations/shared/${jobId}/ask/questions/${encodeURIComponent(questionId)}/pin`,
+      { method: 'DELETE' },
+    ),
+
+  searchAskChats: (jobId: string, query: string) =>
+    request<{ results: AskSearchHit[] }>(
+      `/api/operations/shared/${jobId}/ask/search?q=${encodeURIComponent(query.slice(0, 100))}`,
+      { method: 'GET' },
     ),
 
   jobEvidence: (jobId: string) =>
