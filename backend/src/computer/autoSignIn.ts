@@ -194,13 +194,20 @@ export async function autoSignIn(input: {
     return { outcome: 'incomplete', message: `${name} sent the sign-in to a different website, so Computer didn't type the saved password there. Please finish signing in yourself.` };
   }
 
+  const signals = await driver.pageSignals().catch(() => null);
+
   if (filled === 'no_form') {
+    // No form we could fill. Only call that "signed in" when the page shows no
+    // password box anywhere (an embedded or unusual sign-in form is not a sign-in).
+    if (signals?.hasPasswordField || signals?.hasCaptcha) {
+      await record('incomplete');
+      return { outcome: 'incomplete', message: `Computer couldn't find a sign-in form it could fill on ${name}.` };
+    }
     await store.updateCredential(login.org_id, login.id, { last_used_at: at }).catch(() => undefined);
     await record('already_signed_in');
     return { outcome: 'already_signed_in', message: `Already signed in to ${name}.` };
   }
 
-  const signals = await driver.pageSignals().catch(() => null);
   let outcome: AutoSignInOutcome;
   let message: string;
   if (signals?.hasCaptcha) {
@@ -212,9 +219,15 @@ export async function autoSignIn(input: {
   } else if (signals?.hasOneTimeCodeField || signals?.mentionsVerificationCode) {
     outcome = 'two_factor';
     message = `The saved password worked. ${name} is asking for a verification code.`;
-  } else if (signals?.hasPasswordField) {
+  } else if (signals?.hasPasswordField && signals.signInError) {
+    // The site said no ("Incorrect password"): the saved login needs updating.
     outcome = 'failed';
     message = `The saved password for ${name} didn't work.`;
+  } else if (signals?.hasPasswordField) {
+    // Still on the form with no error: the site may want something else
+    // (a "remember me" step, a different account picker). Not proof the password is wrong.
+    outcome = 'incomplete';
+    message = `Computer filled in the saved login, but ${name} is still showing its sign-in form.`;
   } else if (filled === 'username_only') {
     outcome = 'incomplete';
     message = `Computer entered the username, but ${name} didn't ask for a password.`;

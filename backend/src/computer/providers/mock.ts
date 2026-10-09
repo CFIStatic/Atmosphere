@@ -122,6 +122,8 @@ export class MockSite {
   account: { username: string; password: string; twoFactor?: boolean; numberMatch?: boolean } | null;
   /** Sign-ins the site saw (password redacted to its length). */
   readonly signInAttempts: Array<{ username: string; passwordLength: number; ok: boolean }> = [];
+  /** Shown after a rejected sign-in, as real sites do. */
+  signInError: string | null = null;
 
   /** A cookie-consent banner covering the page until dismissed. */
   cookieBanner: boolean;
@@ -261,6 +263,7 @@ export class MockSite {
         }
         const ok = this.values.email === this.account.username && this.values.password === this.account.password;
         this.signInAttempts.push({ username: this.values.email ?? '', passwordLength: (this.values.password ?? '').length, ok });
+        this.signInError = ok ? null : 'Incorrect username or password.';
         if (ok) this.page = this.account.numberMatch ? 'number_match' : this.account.twoFactor ? 'two_factor' : 'form';
         break;
       }
@@ -395,6 +398,7 @@ export class MockDriver implements ComputerDriver {
       mentionsVerificationCode: this.site.page === 'two_factor',
       approvalNumber: approval,
       visibleOtpCode: null,
+      signInError: this.site.signInError,
     };
   }
 

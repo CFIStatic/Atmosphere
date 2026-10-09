@@ -98,6 +98,9 @@ export const READ_FIELDS = String.raw`() => {
   return out;
 }`;
 
+/** Phrases sign-in pages use for a rejected username or password. */
+export const SIGN_IN_ERROR = /(incorrect|invalid|wrong|not recogni[sz]ed|(?:does ?n[o']t|do not|did ?n[o']t) match|unable to (?:sign|log) (?:you )?in|could ?n[o']t (?:sign|log) you in|(?:sign|log)[- ]?in failed|failed to (?:sign|log) in|authentication failed|account (?:is )?locked|try again)/i;
+
 export const READ_SIGNALS = String.raw`() => {
   const CAPTCHA = /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile|arkoselabs|funcaptcha|geetest/i;
   const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -129,8 +132,15 @@ export const READ_SIGNALS = String.raw`() => {
     // and it is not the same 2–3 digit approval number.
     if (m && m[1] !== approvalNumber && (m[1].length >= 4)) visibleOtpCode = m[1];
   }
+  // A sign-in error on screen (role=alert, live region or an error-styled box), for "the saved password didn't work".
+  const errRe = new RegExp(${JSON.stringify(SIGN_IN_ERROR.source)}, 'i');
+  const errBox = Array.from(document.querySelectorAll('[role="alert"], [aria-live="assertive"], [aria-live="polite"], [class*="error" i], [id*="error" i], [class*="alert" i]'))
+    .filter(visible)
+    .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim())
+    .find((t) => t && t.length <= 300 && errRe.test(t));
   return {
     url: location.href,
+    signInError: errBox ? errBox.slice(0, 160) : null,
     hasPasswordField: inputs.some((i) => i.type === 'password'),
     hasOneTimeCodeField: inputs.some((i) => (i.getAttribute('autocomplete') || '').toLowerCase() === 'one-time-code' || /\b(otp|one.?time|verification.?code|2fa|mfa)\b/i.test(i.name + ' ' + i.id + ' ' + i.placeholder)),
     hasCaptcha: frames.some((f) => CAPTCHA.test(f.src + ' ' + f.title)) || Boolean(document.querySelector('.g-recaptcha, .h-captcha, .cf-turnstile')),

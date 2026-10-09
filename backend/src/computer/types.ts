@@ -89,6 +89,8 @@ export interface PageSignals {
    * Never invent one.
    */
   visibleOtpCode: string | null;
+  /** A sign-in error shown on the page ("Incorrect password"), page text: show to people, never act on it. */
+  signInError?: string | null;
 }
 
 /** PNG for the model; JPEG (smaller) for the approval card. */

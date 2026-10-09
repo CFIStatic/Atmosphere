@@ -17,6 +17,7 @@ import {
   READ_FIELDS,
   READ_SIGNALS,
   RECORDER,
+  SIGN_IN_ERROR,
 } from '../domScripts.js';
 import type {
   ComputerDriver,
@@ -103,7 +104,10 @@ const USERNAME_SELECTORS = [
 ];
 const PASSWORD_SELECTOR = 'input[type="password"]:visible';
 
-async function firstPresent(page: Page, selectors: string[]): Promise<Locator | null> {
+/** A page or one of its frames: both expose the locator API used here. */
+type Scope = Page | Frame;
+
+async function firstPresent(page: Scope, selectors: string[]): Promise<Locator | null> {
   for (const sel of selectors) {
     const loc = page.locator(sel).first();
     if ((await loc.count().catch(() => 0)) > 0) return loc;
@@ -135,7 +139,7 @@ async function notASignInField(field: Locator): Promise<boolean> {
 }
 
 /** The first visible username/email box that belongs to a sign-in form. */
-async function firstUsernameField(page: Page): Promise<Locator | null> {
+async function firstUsernameField(page: Scope): Promise<Locator | null> {
   for (const sel of USERNAME_SELECTORS) {
     const all = page.locator(sel);
     const n = Math.min(await all.count().catch(() => 0), 5);
@@ -152,7 +156,7 @@ async function firstUsernameField(page: Page): Promise<Locator | null> {
  * landing page's "Sign in"). Exact, so "Sign in" never hits "Sign in with
  * Google" and sends the saved password to another account.
  */
-export async function openSignInForm(page: Page, names: string[]): Promise<boolean> {
+export async function openSignInForm(page: Scope, names: string[]): Promise<boolean> {
   for (const name of names) {
     for (const role of ['link', 'button'] as const) {
       const loc = page.getByRole(role, { name, exact: true });
@@ -170,30 +174,148 @@ export async function openSignInForm(page: Page, names: string[]): Promise<boole
 }
 
 /** Which sign-in fields the page shows now (used by fillSignIn and the readiness check; never types). */
-export async function signInFieldsVisible(page: Page): Promise<{ username: boolean; password: boolean }> {
+export async function signInFieldsVisible(page: Scope): Promise<{ username: boolean; password: boolean }> {
   return {
     username: Boolean(await firstUsernameField(page)),
     password: Boolean(await firstPresent(page, [PASSWORD_SELECTOR])),
   };
 }
 
-/** Submit the field's form: its submit button if it has one, else Enter. */
-async function submitFrom(page: Page, field: Locator): Promise<void> {
-  const clicked = await field
+/**
+ * The text box just before the password box (same form, or same shadow root /
+ * document when there is no form), for portals whose username field has an
+ * unhelpful name such as "acct". Marks it so a locator can find it.
+ */
+async function usernameBeside(scope: Scope, password: Locator): Promise<Locator | null> {
+  const marked = await password
     .evaluate((el) => {
-      type Clickable = { click(): void };
-      const form = (el as unknown as { form?: { querySelector(s: string): Clickable | null } | null }).form;
-      const btn = form?.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
-      if (btn) {
-        btn.click();
-        return true;
+      type In = { type: string; tagName: string; disabled: boolean; readOnly: boolean; setAttribute(n: string, v: string): void; getBoundingClientRect(): { width: number; height: number } };
+      const pw = el as unknown as In & { form?: { elements: ArrayLike<In> } | null; getRootNode(): { querySelectorAll(s: string): ArrayLike<In> } };
+      const pool: In[] = pw.form ? Array.from(pw.form.elements) : Array.from(pw.getRootNode().querySelectorAll('input'));
+      let pick: In | null = null;
+      for (const inp of pool) {
+        if ((inp as unknown) === (pw as unknown)) break;
+        const r = inp.getBoundingClientRect();
+        const t = (inp.type || 'text').toLowerCase();
+        if (inp.tagName === 'INPUT' && ['text', 'email', 'tel'].includes(t) && !inp.disabled && !inp.readOnly && r.width > 0 && r.height > 0) pick = inp;
       }
-      return false;
+      if (!pick) return false;
+      pick.setAttribute('data-atmo-signin-user', '1');
+      return true;
     })
     .catch(() => false);
-  if (!clicked) await field.press('Enter');
+  if (!marked) return null;
+  const loc = scope.locator('[data-atmo-signin-user="1"]').first();
+  return (await loc.count().catch(() => 0)) > 0 ? loc : null;
+}
+
+/** Labels of the button that submits a sign-in step (exact, after trimming). */
+const SUBMIT_LABEL = /^(sign ?in|log ?in|login|log ?on|sign ?on|next|continue|submit|enter|go)$/i;
+
+/** A real function from in-page source, for locator.evaluate (which never calls a source string). */
+function inPage<A extends unknown[], R>(source: string): (el: unknown, ...args: A) => R {
+  return new Function(`return (${source});`)() as (el: unknown, ...args: A) => R;
+}
+
+/** In-page (called with the field): click its form's submit button, else the nearest sign-in style button in the same document or shadow root. */
+const SUBMIT_SIGN_IN = String.raw`(el, labelSrc) => {
+  const re = new RegExp(labelSrc, 'i');
+  const btn = el.form && el.form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+  if (btn) { btn.click(); return true; }
+  const label = (n) => ((n.textContent || '') + ' ' + (n.getAttribute('value') || '') + ' ' + (n.getAttribute('aria-label') || '')).replace(/\s+/g, ' ').trim();
+  const visible = (n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !n.disabled; };
+  const pick = Array.from(el.getRootNode().querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a[role="button"]'))
+    .filter(visible)
+    .find((n) => re.test(label(n)));
+  if (pick) { pick.click(); return true; }
+  return false;
+}`;
+
+/**
+ * Submit the field's sign-in step: its form's submit button; else, with no
+ * form, the nearest "Sign in" / "Log in" / "Next" style button in the same
+ * document or shadow root (portals wired up in script); else Enter.
+ */
+async function submitFrom(field: Locator): Promise<void> {
+  // Built from source so the bundler can't inject helpers (__name) that don't exist in the page.
+  const clicked = await field.evaluate(inPage<[string], boolean>(SUBMIT_SIGN_IN), SUBMIT_LABEL.source).catch(() => false);
+  if (!clicked) await field.press('Enter').catch(() => undefined);
+}
+
+/** In-page: is a password box still visible (open shadow roots too), and has the page answered with a code step or an error? */
+const SIGN_IN_STATE = String.raw`(errSrc) => {
+  const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const roots = [document];
+  for (const h of document.querySelectorAll('*')) if (h.shadowRoot) roots.push(h.shadowRoot);
+  const all = (sel) => roots.flatMap((r) => Array.from(r.querySelectorAll(sel)));
+  const pw = all('input[type="password"]').some(vis);
+  const code = all('input').some((i) => vis(i) && (((i.getAttribute('autocomplete') || '').toLowerCase() === 'one-time-code') || /\b(otp|one.?time|verification.?code|2fa|mfa)\b/i.test(i.name + ' ' + i.id + ' ' + i.placeholder)));
+  const err = new RegExp(errSrc, 'i');
+  const alert = all('[role="alert"], [aria-live="assertive"], [aria-live="polite"], [class*="error" i], [id*="error" i], [class*="alert" i]').some((el) => vis(el) && err.test(el.innerText || ''));
+  return { pw, answered: code || alert };
+}`;
+
+/**
+ * After a password is submitted, wait until the page has answered: the
+ * password box is gone (signed in, or moved on to a code step), an error
+ * shows, or a code / captcha step appears. Single-page apps often take a few
+ * seconds; checking too early reads a correct password as wrong.
+ */
+async function waitForSignInAnswer(page: Page, timeoutMs = 15_000): Promise<void> {
   await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
-  await page.waitForTimeout(1_500);
+  const deadline = Date.now() + timeoutMs;
+  await page.waitForTimeout(400);
+  while (Date.now() < deadline) {
+    let passwordVisible = false;
+    let answered = false;
+    for (const frame of page.frames()) {
+      const got = (await frame
+        .evaluate(`(${SIGN_IN_STATE})(${JSON.stringify(SIGN_IN_ERROR.source)})`)
+        .catch(() => null)) as { pw: boolean; answered: boolean } | null;
+      if (!got) continue;
+      passwordVisible ||= got.pw;
+      answered ||= got.answered;
+    }
+    if (!passwordVisible || answered) break;
+    await page.waitForTimeout(250);
+  }
+  // Let a redirect that just started commit before the caller reads the page.
+  await page.waitForLoadState('domcontentloaded', { timeout: 5_000 }).catch(() => undefined);
+}
+
+/** Where a sign-in step lives: the frame (main first) and its fields. */
+interface SignInScope {
+  frame: Frame;
+  host: string;
+  username: Locator | null;
+  password: Locator | null;
+}
+
+function frameHost(frame: Frame): string {
+  try {
+    return new URL(frame.url()).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Find the sign-in fields in the page or any of its frames (embedded identity
+ * widgets). A frame with a password box wins over one with only a username.
+ */
+async function findSignIn(page: Page): Promise<SignInScope | null> {
+  let usernameOnly: SignInScope | null = null;
+  const frames = [page.mainFrame(), ...page.frames().filter((f) => f !== page.mainFrame())].slice(0, 12);
+  for (const frame of frames) {
+    const password = await firstPresent(frame, [PASSWORD_SELECTOR]);
+    let username = await firstUsernameField(frame);
+    if (password) {
+      if (!username) username = await usernameBeside(frame, password);
+      return { frame, host: frameHost(frame), username, password };
+    }
+    if (username && !usernameOnly) usernameOnly = { frame, host: frameHost(frame), username, password: null };
+  }
+  return usernameOnly;
 }
 
 function strip(raw: RawDescriptor | null): TargetDescriptor | null {
@@ -498,11 +620,21 @@ export class PlaywrightDriver implements ComputerDriver {
       visibleOtpCode: null,
       ...(base ?? {}),
     };
-    for (const frame of page.frames()) {
+    for (const frame of page.frames().slice(0, 12)) {
       if (frame === page.mainFrame()) continue;
       if (/recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile|arkoselabs|funcaptcha/i.test(frame.url())) {
         signals.hasCaptcha = true;
+        continue;
       }
+      // Embedded sign-in widgets: their password box, code box and errors count too.
+      const inner = (await frame.evaluate(`(${READ_SIGNALS})()`).catch(() => null)) as PageSignals | null;
+      if (!inner) continue;
+      signals.hasPasswordField ||= inner.hasPasswordField;
+      signals.hasOneTimeCodeField ||= inner.hasOneTimeCodeField;
+      signals.hasCaptcha ||= inner.hasCaptcha;
+      signals.mentionsVerificationCode ||= inner.mentionsVerificationCode;
+      signals.approvalNumber ??= inner.approvalNumber;
+      signals.signInError ??= inner.signInError ?? null;
     }
     return signals;
   }
@@ -546,15 +678,9 @@ export class PlaywrightDriver implements ComputerDriver {
   async fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill> {
     try {
       const page = await this.active();
-      const hostNow = () => {
-        try {
-          return new URL(page.url()).host.toLowerCase();
-        } catch {
-          return '';
-        }
-      };
-      const allowed = () => !hints?.allowHost || hints.allowHost(hostNow());
-      if (hints?.openWith?.length && !(await firstPresent(page, [PASSWORD_SELECTOR])) && !(await firstUsernameField(page))) {
+      // Never type a saved login into a frame or page the login doesn't belong to.
+      const allowed = (host: string) => !hints?.allowHost || hints.allowHost(host);
+      if (hints?.openWith?.length && !(await findSignIn(page))) {
         // A landing page: open the sign-in form through its own link first.
         if (await openSignInForm(page, hints.openWith)) {
           await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
@@ -563,28 +689,29 @@ export class PlaywrightDriver implements ComputerDriver {
       }
       let sentUsername = false;
       for (let round = 0; round < 3; round += 1) {
-        const password = await firstPresent(page, [PASSWORD_SELECTOR]);
-        let username = await firstUsernameField(page);
-        if (password && !username && !sentUsername) {
+        let found = await findSignIn(page);
+        if (found?.password && !found.username && !sentUsername) {
           // Some pages (Square) draw the password box before the username box.
-          await page.locator(USERNAME_SELECTORS.join(', ')).first().waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined);
-          username = await firstUsernameField(page);
+          await found.frame.locator(USERNAME_SELECTORS.join(', ')).first().waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined);
+          found = (await findSignIn(page)) ?? found;
         }
-        if (password) {
-          // Never type a saved password on a page the login doesn't belong to.
-          if (!allowed()) return 'other_site';
-          if (username && !sentUsername) await username.fill(creds.username);
-          await password.fill(creds.password);
-          await submitFrom(page, password);
+        if (!found) break;
+        if (!allowed(found.host)) return 'other_site';
+        if (found.password) {
+          if (found.username && !sentUsername) await found.username.fill(creds.username);
+          await found.password.fill(creds.password);
+          await submitFrom(found.password);
+          await waitForSignInAnswer(page);
           return 'submitted';
         }
-        if (username && !sentUsername) {
-          if (!allowed()) return 'other_site';
+        if (found.username && !sentUsername) {
           // A username-first page (Microsoft, Google): send it, then wait for the password page.
-          await username.fill(creds.username);
+          await found.username.fill(creds.username);
           sentUsername = true;
-          await submitFrom(page, username);
+          await submitFrom(found.username);
+          await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined);
           await page.locator(PASSWORD_SELECTOR).first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => undefined);
+          for (let i = 0; i < 16 && !(await findSignIn(page))?.password; i += 1) await page.waitForTimeout(250);
           continue;
         }
         break;
