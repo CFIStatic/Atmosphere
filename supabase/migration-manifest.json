@@ -6761,6 +6761,16 @@
       "dropsCount": 13
     },
     {
+      "version": "20261009050000_computer_windows_desktop",
+      "file": "20261009050000_computer_windows_desktop.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "alters computer_sessions provider check constraint only; no new durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
       "version": "20261009120000_ask_feedback_pins_edits",
       "file": "20261009120000_ask_feedback_pins_edits.sql",
       "structurallyVerifiable": true,

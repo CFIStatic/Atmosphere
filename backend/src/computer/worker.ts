@@ -21,10 +21,11 @@ import { unmetExpectation } from './iq/verify.js';
 import { computerSettings, helperSessionStale, NOT_SET_UP_MESSAGE, type ComputerSettings } from './config.js';
 import { browserCostSoFar, meterBrowserTime, meterComputerModelCall } from './metering.js';
 import { anthropicComputerModel } from './model.js';
-import { computerProvider } from './providers/index.js';
+import { computerProvider, providerForTask, windowsDesktopProvider } from './providers/index.js';
 import { SupabaseComputerStore, type ComputerStore, type ComputerTaskRow } from './store.js';
 import type { ComputerDriver, ComputerProvider, ComputerSessionHandle, TaskFile } from './types.js';
 import { isAutomationRestrictedSite, siteGuideFor } from './catalog/sites.js';
+import { desktopAppForUrl } from './desktop/config.js';
 
 export interface ComputerWorkerDeps {
   store: ComputerStore;
@@ -155,9 +156,12 @@ const inFlight = new Set<string>();
 export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps, hooks: TaskRunHooks = {}): Promise<AgentOutcome | null> {
   const d = given ?? computerWorkerDeps();
   if (!d) return null;
-  const { store, provider, settings } = d;
+  const { store, settings } = d;
   const task = await store.getTask(null, taskId);
   if (!task || task.status !== 'queued') return null;
+  // A task that opens a desktop app runs on the org's Windows computer; every
+  // other task runs in the cloud browser. The choice is fixed for the task.
+  const provider = providerForTask({ orgId: task.org_id, startUrl: task.start_url }, d.provider);
   // Someone is signing in to a site on the Logins page: the org's browser is
   // theirs until they finish. The task stays queued and runs after.
   const live = await store.liveSession(task.org_id);
@@ -212,7 +216,7 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
         });
         await audit('session_started', { sessionId: sessionRow.id });
         driver = await provider.connect(handle);
-        if (task.start_url && /^https?:\/\//i.test(task.start_url)) {
+        if (task.start_url && /^(https?|app):\/\//i.test(task.start_url)) {
           await driver.navigate(task.start_url);
           await audit('navigate', { host: new URL(task.start_url).hostname });
         }
@@ -221,8 +225,9 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
         const iqStore = d.iq ?? null;
         const practice = task.practice ?? null;
         const startHost = hostOf(task.start_url);
-        // No playbooks are learned or replayed for Verisk sites (EXCLUDED_SITES).
-        const site = isAutomationRestrictedSite(startHost) ? null : siteOf(startHost ?? '') || null;
+        const desktopApp = provider.id === 'windows' ? desktopAppForUrl(task.start_url) : null;
+        // No web playbooks for Verisk sites (EXCLUDED_SITES) or for desktop apps.
+        const site = provider.id === 'windows' || isAutomationRestrictedSite(startHost) ? null : siteOf(startHost ?? '') || null;
         const trace: TraceEntry[] = [];
         const stepLog = hooks.stepLog ?? [];
         const slots = { projection: task.job_projection ?? [], params: practice?.params ?? {}, instructions: task.instructions };
@@ -334,7 +339,8 @@ export async function runComputerTask(taskId: string, given?: ComputerWorkerDeps
           sleep: d.sleep,
           now: d.now,
           files: practice?.taskType === 'upload_file' ? [practiceUploadFile()] : await (d.taskFiles?.(task) ?? Promise.resolve([])).catch(() => []),
-          siteGuide: siteGuideFor(startHost),
+          siteGuide: desktopApp ? desktopApp.guide : siteGuideFor(startHost),
+          surface: provider.id === 'windows' ? 'desktop' : 'browser',
         });
 
         // A practice task that says it finished must leave the expected result on the page.
@@ -442,6 +448,13 @@ export async function sweepComputerTasksOnce(): Promise<void> {
   await failInterruptedTasks(d.store, d.now()).catch((err) =>
     logger.warn('computer interrupted sweep failed', { error: safeError(err) }),
   );
+  // Stop any EC2 desktop that has been idle past its window (no-op unless one is set up).
+  const windows = windowsDesktopProvider();
+  if (windows.configured()) {
+    await windows
+      .stopIdleDesktops(async (orgId) => (await d.store.activeTask(orgId)) !== null)
+      .catch((err) => logger.warn('computer desktop idle sweep failed', { error: safeError(err) }));
+  }
   const queued = await d.store.listQueuedTasks(10);
   for (const t of queued) {
     if (inFlight.has(t.id)) continue;

@@ -173,6 +173,8 @@ export interface AgentRun {
   files?: TaskFile[];
   /** Starter hints for this kind of site (from the site catalog). */
   siteGuide?: string[];
+  /** 'desktop' when this task drives a Windows desktop app, not a website. */
+  surface?: 'browser' | 'desktop';
 }
 
 const NOT_EXECUTED = 'Not executed: an earlier computer action in this turn failed.';
@@ -1050,12 +1052,19 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         } catch {
           return { text: 'That is not a valid URL.', isError: true };
         }
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        // On a desktop, "app://<id>" opens a desktop app; the driver checks the
+        // id. Web addresses still follow the http(s) + named-site rules.
+        const isAppUrl = parsed.protocol === 'app:';
+        if (isAppUrl && run.surface !== 'desktop') {
+          await audit('blocked', { action: 'open_url', why: 'scheme' });
+          return { text: 'Blocked: app addresses can only be opened on a desktop.', isError: true };
+        }
+        if (!isAppUrl && parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
           await audit('blocked', { action: 'open_url', why: 'scheme' });
           return { text: 'Blocked: only http(s) web addresses can be opened.', isError: true };
         }
         const site = siteOf(parsed.hostname.toLowerCase());
-        if (sites.size > 0 && !sites.has(site)) {
+        if (!isAppUrl && sites.size > 0 && !sites.has(site)) {
           await audit('blocked', { action: 'open_url', why: 'outside_task', host: parsed.hostname });
           return {
             text: `Blocked: ${parsed.hostname} is not a site this task names. Stay on ${[...sites].join(', ')}, or follow links on the page.`,
@@ -1354,6 +1363,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
               note: iq?.promptNote ?? null,
               files: (run.files ?? []).map((f) => ({ id: f.id, name: f.name, sizeKb: Math.max(1, Math.round(f.bytes.length / 1024)) })),
               siteGuide: run.siteGuide ?? [],
+              surface: run.surface ?? 'browser',
             }),
           ),
           ...(await observe()),
