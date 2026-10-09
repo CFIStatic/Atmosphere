@@ -148,7 +148,7 @@ export function stripOrphanEmphasis(text: string): string {
   out = out
     .replace(/ {2,}/g, ' ')
     .replace(/ +([.,!?;:])/g, '$1')
-    .replace(/([({\[]) +/g, '$1');
+    .replace(/([({[]) +/g, '$1');
 
   return out;
 }
@@ -173,6 +173,7 @@ function stripUnpairedSingleAsterisks(text: string): string {
   // Anything left is orphan soup — drop it.
   out = out.replace(/\*/g, '');
 
+  // eslint-disable-next-line no-control-regex -- strips control characters on purpose
   out = out.replace(/\u0000(\d+)\u0000/g, (_m, n: string) => placeholders[Number(n)] ?? '');
   return out;
 }

@@ -151,7 +151,7 @@ function extractMeta(text: string): {
       && /(st|street|ave|avenue|rd|road|blvd|dr|drive|ln|lane|ct|court)\b/i.test(line)
       && !/\b[A-Z]{2}\s+\d{5}\b/.test(line)
     ) {
-      address = line.replace(/^(property|address|site)\s*[:\-]\s*/i, '').slice(0, 200);
+      address = line.replace(/^(property|address|site)\s*[:-]\s*/i, '').slice(0, 200);
     }
 
     if (!city && /^[A-Za-z .'-]+,\s*[A-Z]{2}\s+\d{5}(-\d{4})?$/.test(line)) {

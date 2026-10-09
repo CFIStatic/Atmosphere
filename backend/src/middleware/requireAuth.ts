@@ -9,7 +9,7 @@ import { isTermsExemptPath } from '../legal/terms.js';
 import { assertCurrentTermsAccepted } from '../legal/termsStore.js';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
+   
   namespace Express {
     interface Request {
       user?: User;

@@ -34,6 +34,7 @@ export function extensionOf(filename: string): string {
 }
 
 export function safeFilename(filename: string): string {
+  // eslint-disable-next-line no-control-regex -- strips control characters on purpose
   const base = (filename.split(/[/\\]/).pop() ?? 'document').replace(/[\u0000-\u001f]/g, '').trim();
   const cleaned = base.replace(/[^\w.\- ()]+/g, '_').replace(/_+/g, '_').slice(0, 180);
   return cleaned || 'document';

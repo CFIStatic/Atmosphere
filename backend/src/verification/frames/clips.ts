@@ -30,7 +30,6 @@ export async function createClipsForChangeEvents(ctx: PipelineContext): Promise<
     const stamps = frames.map((f: any) => Number(f.timestamp_seconds));
     const start = Math.max(0, Math.min(...stamps) - 1);
     const end = Math.max(...stamps) + 1;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoId = frames[0]?.video_id ?? event.after_video_id ?? ctx.videoId;
 
     const { data: existing } = await ctx.supabase

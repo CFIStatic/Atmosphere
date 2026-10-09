@@ -563,7 +563,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
         .limit(1)
         .maybeSingle();
 
-      let verification = cached?.parsed_decision
+      const verification = cached?.parsed_decision
         ? {
             parsed: workEventVerificationResultSchema.parse(cached.parsed_decision),
             raw: JSON.stringify(cached.parsed_decision),

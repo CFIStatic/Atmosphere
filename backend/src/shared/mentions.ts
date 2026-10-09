@@ -185,7 +185,7 @@ export function parseMentions(text: string): ParsedMention[] {
     const index = (mark.index ?? 0) + lead.length;
     if (covered.some(([start, end]) => index >= start && index < end)) continue;
     const rest = source.slice(index + 1);
-    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
+    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.-]{0,60}/);
     if (!token) continue;
     found.push({ raw: token[0], claimedUserId: null, index });
   }
@@ -261,7 +261,7 @@ export function resolveMentions(text: string, roster: MentionMember[]): MentionR
       else pushAmbiguous(mentionDisplayName(best.matches[0]!), best.matches);
       continue;
     }
-    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
+    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.-]{0,60}/);
     if (!token) continue;
     const query = withoutPossessive(token[0]);
     if (!query) continue;
@@ -315,7 +315,7 @@ export function stripMentionMarks(question: string, names: string[] = []): strin
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?:['’]s)?(?=$|[\\s,.;:!?)"“”\\]])`, 'gi'), '$1 ');
   }
-  return text.replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,80}/g, '$1 ');
+  return text.replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.-]{0,80}/g, '$1 ');
 }
 
 const FOLLOW_UP_PRONOUN = /\b(they|them|their|theirs|he|him|his|she|her|hers)\b/i;

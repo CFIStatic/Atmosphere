@@ -35,7 +35,6 @@ export function isOpaqueJobWriteError(message: string | null | undefined): boole
 export function renameJobFileError(error: { message?: string } | null | undefined): HttpError {
   const msg = error?.message ?? '';
   if (msg) {
-    // eslint-disable-next-line no-console
     console.warn('[job-file] rename_failed:', msg);
   }
   if (isOpaqueJobWriteError(msg)) {

@@ -117,9 +117,8 @@ test('ASK_MODEL env overrides the interactive Ask model', async () => {
   process.env.ASK_MODEL = 'gemini-3.8-flash';
   try {
     const urls: string[] = [];
-    const fetchFn: typeof fetch = async (input, init) => {
+    const fetchFn: typeof fetch = async (input) => {
       urls.push(String(input));
-      const body = JSON.parse(String(init?.body ?? '{}'));
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Fast flash reply.' }] } }],

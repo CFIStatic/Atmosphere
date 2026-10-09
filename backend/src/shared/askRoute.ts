@@ -276,7 +276,6 @@ export async function refineAskRouteWithClassifier(input: {
     // Keep the safe deep default; never fail the Ask turn on the classifier.
     const detail = scrubProviderDetail(err instanceof Error ? err.message : String(err));
     if (detail) {
-      // eslint-disable-next-line no-console
       console.warn(`[ask-route] classifier failed: ${detail.slice(0, 160)}`);
     }
   }

@@ -320,7 +320,7 @@ function operatorAt(content: string, index: number, op: string): boolean {
   if (!content.startsWith(op, index)) return false;
   const before = index === 0 ? ' ' : content[index - 1]!;
   const after = content[index + op.length] ?? ' ';
-  return /[\s\[\]<>]/.test(before) && /[\s\[\]<>/]/.test(after);
+  return /[\s[\]<>]/.test(before) && /[\s[\]<>/]/.test(after);
 }
 
 function readLiteral(source: string, start: number): { text: string; next: number } {

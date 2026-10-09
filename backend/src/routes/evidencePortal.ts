@@ -723,7 +723,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');
 
-    let proofRows = (data ?? []) as any[];
+    const proofRows = (data ?? []) as any[];
     // Global Admins also see clips queued for the 30-day purge so they can restore.
     if (isGlobalAdmin(role)) {
       const writer = writerForOrg(orgId, supabase).raw;

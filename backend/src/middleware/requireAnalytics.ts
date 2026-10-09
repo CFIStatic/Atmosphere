@@ -5,7 +5,7 @@ import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { HttpError } from '../lib/errors.js';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
+   
   namespace Express {
     interface Request {
       analyticsScope?: AnalyticsScope;

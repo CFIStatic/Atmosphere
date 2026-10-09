@@ -37,7 +37,6 @@ export function intakeWriteError(
 ): HttpError {
   const msg = error?.message ?? '';
   if (msg) {
-    // eslint-disable-next-line no-console
     console.warn(`[intake] ${code}:`, msg);
   }
   if (isJobCreateBlockingError(msg)) {
@@ -67,7 +66,6 @@ async function callRepairRpc(name: string, logPrefix: string): Promise<boolean> 
   if (!error) return true;
   const msg = error.message ?? '';
   if (/does not exist|PGRST202|schema cache/i.test(msg)) return false;
-  // eslint-disable-next-line no-console
   console.warn(`${logPrefix} ${name}:`, msg);
   return false;
 }

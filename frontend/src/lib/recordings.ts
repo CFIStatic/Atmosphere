@@ -53,7 +53,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function useMemory(): Map<string, StoredRecording> {
+function memoryStore(): Map<string, StoredRecording> {
   memoryFallback ??= new Map();
   return memoryFallback;
 }
@@ -79,7 +79,7 @@ export async function listRecordings(): Promise<StoredRecording[]> {
     const all = await runTransaction<StoredRecording[]>('readonly', (store) => store.getAll());
     return all.sort((a, b) => b.createdAt - a.createdAt);
   } catch {
-    return [...useMemory().values()].sort((a, b) => b.createdAt - a.createdAt);
+    return [...memoryStore().values()].sort((a, b) => b.createdAt - a.createdAt);
   }
 }
 
@@ -87,7 +87,7 @@ export async function saveRecording(recording: StoredRecording): Promise<void> {
   try {
     await runTransaction('readwrite', (store) => store.put(recording));
   } catch {
-    useMemory().set(recording.id, recording);
+    memoryStore().set(recording.id, recording);
   }
 }
 
@@ -95,7 +95,7 @@ export async function deleteRecording(id: string): Promise<void> {
   try {
     await runTransaction('readwrite', (store) => store.delete(id));
   } catch {
-    useMemory().delete(id);
+    memoryStore().delete(id);
   }
 }
 
@@ -103,7 +103,7 @@ export async function clearRecordings(): Promise<void> {
   try {
     await runTransaction('readwrite', (store) => store.clear());
   } catch {
-    useMemory().clear();
+    memoryStore().clear();
   }
 }
 
