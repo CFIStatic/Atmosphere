@@ -195,6 +195,8 @@ describe('ComputerTaskCard', () => {
     await waitFor(() => expect(computerLiveView).toHaveBeenCalledWith(ID, 'control'));
     const frame = await screen.findByTestId('computer-live-iframe');
     expect(frame.style.pointerEvents).toBe('');
+    // The approval prompt sits under the live screen, where the person acts.
+    expect(frame.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('Needs you card: auto-opens live view, resume and cancel', async () => {
@@ -217,7 +219,9 @@ describe('ComputerTaskCard', () => {
     expect(screen.getByTestId('computer-task-title')).toHaveTextContent('portal.example.test: code needed');
     // Auto-open Take control / live view when Needs you fires.
     await waitFor(() => expect(computerLiveView).toHaveBeenCalledWith(ID, 'control'));
-    expect(await screen.findByTestId('computer-live-iframe')).toBeInTheDocument();
+    const frame = await screen.findByTestId('computer-live-iframe');
+    // The Needs-you prompt sits under the live screen, not above it.
+    expect(frame.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(card).getByRole('button', { name: "I'm done, resume" }));
     await waitFor(() => expect(computerResume).toHaveBeenCalledWith(ID));
     await userEvent.click(within(card).getByRole('button', { name: 'Cancel' }));

@@ -126,7 +126,8 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   const [live, setLive] = useState<'watch' | 'control' | null>(null);
   const [busy, setBusy] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
-  const liveAnchorRef = useRef<HTMLDivElement | null>(null);
+  const promptRef = useRef<HTMLDivElement | null>(null);
+  const scrolledToPrompt = useRef<string | null>(null);
   /** Once we auto-open control for a Needs-you pause, do not fight the person closing it. */
   const autoOpenedForNeedsYou = useRef<string | null>(null);
   /** Watch opens by itself once while the task runs; closing it is respected. */
@@ -176,7 +177,22 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     autoOpenedForNeedsYou.current = key;
     setLive((prev) => prev ?? 'control');
     const id = window.requestAnimationFrame(() => {
-      const el = liveAnchorRef.current;
+      const el = promptRef.current;
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [task]);
+
+  // Waiting for approval: bring the Approve buttons (under the live screen) into sight once.
+  useEffect(() => {
+    if (!task || task.status !== 'awaiting_approval' || task.approval?.status !== 'pending') return;
+    const key = task.approval.id;
+    if (scrolledToPrompt.current === key) return;
+    scrolledToPrompt.current = key;
+    const id = window.requestAnimationFrame(() => {
+      const el = promptRef.current;
       if (el && typeof el.scrollIntoView === 'function') {
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
@@ -265,35 +281,7 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
         </ol>
       ) : null}
 
-      {task.status === 'awaiting_approval' && task.approval && task.approval.status === 'pending' ? (
-        <ComputerApprovalCard
-          key={task.approval.id}
-          approval={task.approval}
-          busy={busy}
-          onApprove={(selection) =>
-            act(() => (selection ? api.computerApprove(task.approval!.id, selection) : api.computerApprove(task.approval!.id)))
-          }
-          onTakeControl={takeControl}
-          onCancel={() => act(() => api.computerCancelApproval(task.approval!.id))}
-        />
-      ) : null}
-
-      {task.status === 'needs_you' && task.needsYou ? (
-        <ComputerNeedsYouCard
-          needsYou={task.needsYou}
-          busy={busy}
-          onTakeControl={takeControl}
-          onResume={() =>
-            act(async () => {
-              await api.computerResume(task.id);
-              setLive(null);
-            })
-          }
-          onCancel={() => act(() => api.computerCancel(task.id))}
-        />
-      ) : null}
-
-      <div ref={liveAnchorRef}>
+      <div>
         {live && task.canWatch ? (
           <ComputerLiveView
             taskId={task.id}
@@ -303,9 +291,40 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
             onHandBack={task.status === 'running' || task.status === 'awaiting_approval' ? handBack : undefined}
             controlHint={
               task.status === 'needs_you'
-                ? 'Computer is paused for you. Finish the step (sign-in, code, or captcha), then press I’m done, resume above.'
+                ? 'Computer is paused for you. Finish the step (sign-in, code, or captcha), then press I’m done, resume below.'
                 : undefined
             }
+          />
+        ) : null}
+      </div>
+
+      {/* The ask sits under the live screen, where the person acts, like a chat prompt. */}
+      <div ref={promptRef} className="space-y-2.5 empty:hidden">
+        {task.status === 'awaiting_approval' && task.approval && task.approval.status === 'pending' ? (
+          <ComputerApprovalCard
+            key={task.approval.id}
+            approval={task.approval}
+            busy={busy}
+            onApprove={(selection) =>
+              act(() => (selection ? api.computerApprove(task.approval!.id, selection) : api.computerApprove(task.approval!.id)))
+            }
+            onTakeControl={takeControl}
+            onCancel={() => act(() => api.computerCancelApproval(task.approval!.id))}
+          />
+        ) : null}
+
+        {task.status === 'needs_you' && task.needsYou ? (
+          <ComputerNeedsYouCard
+            needsYou={task.needsYou}
+            busy={busy}
+            onTakeControl={takeControl}
+            onResume={() =>
+              act(async () => {
+                await api.computerResume(task.id);
+                setLive(null);
+              })
+            }
+            onCancel={() => act(() => api.computerCancel(task.id))}
           />
         ) : null}
       </div>
