@@ -7,6 +7,7 @@
  */
 import type { JobFileAskContext } from '../shared/jobFileAsk.js';
 import type { ApprovalField, FormFieldReading, ProjectedJobField } from './types.js';
+import { checkPlacement } from './fieldPlacement.js';
 
 const JOB_KEYS: Array<{ key: keyof NonNullable<JobFileAskContext['job']>; label: string }> = [
   { key: 'title', label: 'Job title' },
@@ -105,7 +106,13 @@ export function verifyApprovalFields(input: {
     const n = norm(value);
     seenValues.add(n);
     const match = input.projection.find((f) => norm(f.value) === n);
-    if (match) {
+    const clash = match || (n && said.includes(n))
+      ? checkPlacement({ label, value, projection: input.projection, instructions: input.instructions })
+      : null;
+    if (clash && !clash.ok && clash.source) {
+      // From the job or the message, but in a field whose label asks for something else.
+      out.push({ label, value, source: `${match ? match.source : 'Your message in Chat'}, in a field labelled “${label}” (check this)`, verified: false });
+    } else if (match) {
       out.push({ label, value, source: match.source, verified: true });
     } else if (n && said.includes(n)) {
       out.push({ label, value, source: 'Your message in Chat', verified: true });

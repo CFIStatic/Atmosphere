@@ -20,6 +20,7 @@ import {
   type GateDecision,
 } from './gate.js';
 import { countUnverifiedApprovalFields, verifyApprovalFields } from './projection.js';
+import { checkPlacement } from './fieldPlacement.js';
 import {
   ALREADY_SENT_APPROVAL_MESSAGE,
   actionFingerprint,
@@ -46,6 +47,7 @@ import {
   COMPUTER_IQ_TOOLS,
   COMPUTER_SYSTEM_PROMPT,
   COMPUTER_TOOLSET,
+  FILL_FIELDS_TOOL,
   USE_PLAYBOOK_TOOL,
   ATTACH_FILE_TOOL,
   CHECK_DOWNLOADS_TOOL,
@@ -881,6 +883,11 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         if (!target?.isTextEntry && !target?.isTextarea) {
           return { text: `“${clip(hit.name, 60)}” is not a text field. Use click_element for buttons and links.`, isError: true };
         }
+        const placed = checkPlacement({ label: hit.name || target.label || '', value, projection: task.job_projection ?? [], instructions: task.instructions });
+        if (!placed.ok) {
+          await audit('blocked', { action: 'type', why: 'placement', field: clip(hit.name, 80) });
+          return { text: `Not typed: ${placed.problem}`, isError: true };
+        }
         const typeGate = await passGate(classifyType(value, target), 'type');
         if (!typeGate.ok) return { text: typeGate.text, isError: true };
         const clickGate = await passGate(classifyClick(target), 'left_click');
@@ -900,6 +907,55 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         trace.push({ kind: 'type', target: { role: hit.role, name: hit.name, tag: hit.tag }, value });
         logStep(label, true);
         return { text: `${label}.`, isError: false, acted: true };
+      }
+      case 'fill_fields': {
+        if (!driver.setField) return { text: 'This browser cannot fill fields in one step. Use type_into.', isError: true };
+        const list = Array.isArray(input.fields) ? (input.fields as Array<Record<string, any>>).slice(0, 30) : [];
+        if (!list.length) return { text: 'Give at least one field.', isError: true };
+        const lines: string[] = [];
+        let filled = 0;
+        let problems = 0;
+        for (const f of list) {
+          const value = String(f.value ?? '');
+          const hit = await locateFor(f);
+          const name = clip(hit?.name ?? f.name ?? (f.ref != null ? `ref ${f.ref}` : 'field'), 60);
+          if (!hit) {
+            problems += 1;
+            lines.push(`✗ “${name}”: not found on the page (use a ref from the latest outline).`);
+            continue;
+          }
+          const target = await driver.describeTarget(hit.x, hit.y);
+          const placed = checkPlacement({ label: hit.name || target?.label || '', value, projection: task.job_projection ?? [], instructions: task.instructions });
+          if (!placed.ok) {
+            problems += 1;
+            await audit('blocked', { action: 'fill_fields', why: 'placement', field: clip(hit.name, 80) });
+            lines.push(`✗ “${name}”: not filled. ${placed.problem}`);
+            continue;
+          }
+          // Same gate as clicking and typing: terms boxes need approval, passwords and codes are never typed.
+          const isChoice = Boolean(target?.isCheckbox) || /^(checkbox|radio|switch)$/i.test(hit.role);
+          const gate = await passGate(isChoice ? classifyClick(target) : classifyType(value, target), isChoice ? 'left_click' : 'type');
+          if (!gate.ok) {
+            problems += 1;
+            lines.push(`✗ “${name}”: ${gate.text}`);
+            continue;
+          }
+          const res = await driver.setField(hit.x, hit.y, value);
+          if (res.ok) {
+            filled += 1;
+            lines.push(`✓ “${name}” = “${clip(res.actual ?? value, 80)}” (${placed.source})`);
+            if (!isChoice) trace.push({ kind: 'type', target: { role: hit.role, name: hit.name, tag: hit.tag }, value });
+          } else {
+            problems += 1;
+            lines.push(`✗ “${name}”: ${res.note ?? 'did not take the value'}.`);
+          }
+        }
+        // Counts only: values can be personal information.
+        await audit('action', { action: 'fill_fields', fields: list.length, filled, problems });
+        await store.updateTask(task.id, { last_action: clip(`Filled ${filled} of ${list.length} fields`, 300) });
+        logStep(`Filled ${filled} of ${list.length} fields`, problems === 0, problems ? `${problems} not filled` : undefined);
+        const text = `${lines.join('\n')}${problems ? '\nFix the ✗ fields (right field, a value from the job or the person, or leave blank) before asking for approval.' : ''}`;
+        return { text, isError: filled === 0, acted: filled > 0, verifiedFailure: filled === 0 };
       }
       case 'attach_file': {
         const file = (run.files ?? []).find((f) => f.id === String(input.file_id ?? ''));
@@ -1261,6 +1317,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
     COMPUTER_TOOLSET,
     ...COMPUTER_CUSTOM_TOOLS,
     ...(driver.locate ? COMPUTER_DOM_TOOLS : []),
+    ...(driver.locate && driver.setField ? [FILL_FIELDS_TOOL] : []),
     ...COMPUTER_IQ_TOOLS,
     ...(iq?.playbooks?.length ? [USE_PLAYBOOK_TOOL] : []),
     ...(run.files?.length && driver.attachFiles && driver.locate ? [ATTACH_FILE_TOOL] : []),

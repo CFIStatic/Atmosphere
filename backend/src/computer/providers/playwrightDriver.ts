@@ -16,15 +16,20 @@ import {
   PAGE_OUTLINE,
   READ_FIELDS,
   READ_SIGNALS,
+  MARK_CONTROL_AT,
+  PICK_OPTION,
+  READ_CONTROL,
   RECORDER,
   SIGN_IN_ERROR,
 } from '../domScripts.js';
+import { fieldMatches, toChecked, toIsoDate } from '../fieldValues.js';
 import type {
   ComputerDriver,
   CookieSnapshot,
   DismissedOverlay,
   DownloadedFile,
   ElementTarget,
+  FieldSetResult,
   FormFieldReading,
   LocatedElement,
   MouseButton,
@@ -720,6 +725,80 @@ export class PlaywrightDriver implements ComputerDriver {
     } catch {
       // Playwright errors can quote the call; never pass one on.
       throw new Error('Could not fill in the sign-in form.');
+    }
+  }
+
+  async setField(x: number, y: number, value: string): Promise<FieldSetResult> {
+    const page = await this.active();
+    const info = (await page
+      .mainFrame()
+      .evaluate(`(${MARK_CONTROL_AT})(${Math.round(x)}, ${Math.round(y)})`)
+      .catch(() => null)) as { kind: FieldSetResult['kind']; type: string | null } | null;
+    if (!info) return { kind: 'none', ok: false, actual: null, note: 'there is no form field there' };
+    if (info.kind === 'none') return { kind: 'none', ok: false, actual: null, note: 'that is not a field Computer fills in' };
+    const el = page.locator('[data-atmo-set="1"]').first();
+    const read = async () => (await el.evaluate(inPage<[], string | null>(READ_CONTROL)).catch(() => null)) as string | null;
+    const result = async (kind: FieldSetResult['kind'], note?: string): Promise<FieldSetResult> => {
+      const actual = await read();
+      const ok = fieldMatches(value, actual, kind);
+      return { kind, ok, actual, ...(ok ? {} : { note: note ?? (actual ? `the field shows “${actual.slice(0, 80)}”` : 'the field is still empty') }) };
+    };
+    try {
+      switch (info.kind) {
+        case 'select': {
+          const optionValue = (await el.evaluate(inPage<[string], string | null>(PICK_OPTION), value).catch(() => null)) as string | null;
+          if (optionValue == null) return { kind: 'select', ok: false, actual: await read(), note: `there is no option named “${value.slice(0, 60)}”` };
+          await el.selectOption(optionValue, { timeout: 5_000 });
+          // The chosen option's text is what counts as matching.
+          const actual = await read();
+          return { kind: 'select', ok: actual != null, actual };
+        }
+        case 'checkbox':
+        case 'radio': {
+          const want = toChecked(value);
+          if (want == null) return { kind: info.kind, ok: false, actual: await read(), note: 'say "checked" or "unchecked"' };
+          if (info.kind === 'radio' && !want) return { kind: 'radio', ok: false, actual: await read(), note: 'pick the other option instead of unchecking a radio button' };
+          const now = await read();
+          if ((now === 'checked') !== want) await el.click({ timeout: 5_000 });
+          return result(info.kind);
+        }
+        case 'date': {
+          const iso = toIsoDate(value);
+          if (!iso) return { kind: 'date', ok: false, actual: await read(), note: 'that is not a date this field takes' };
+          await el.fill(info.type === 'month' ? iso.slice(0, 7) : iso, { timeout: 5_000 });
+          return result('date');
+        }
+        case 'editable': {
+          await el.click({ timeout: 5_000 });
+          await page.keyboard.press('Control+A');
+          await page.keyboard.type(value, { delay: 5 });
+          return result('editable');
+        }
+        case 'combobox': {
+          await el.fill(value, { timeout: 5_000 });
+          // Autocomplete boxes often need a suggestion picked before the value counts.
+          const option = page.getByRole('option', { name: value, exact: false }).first();
+          if (await option.waitFor({ state: 'visible', timeout: 1_500 }).then(() => true).catch(() => false)) {
+            await option.click({ timeout: 3_000 }).catch(() => undefined);
+            await page.waitForTimeout(200);
+          }
+          return result('combobox');
+        }
+        default: {
+          await el.fill(value, { timeout: 5_000 });
+          // Masked inputs can reject fill(); typing goes through their key handlers.
+          if (!fieldMatches(value, await read(), 'text')) {
+            await el.click({ timeout: 3_000 }).catch(() => undefined);
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type(value, { delay: 15 });
+          }
+          return result('text');
+        }
+      }
+    } catch {
+      return { kind: info.kind, ok: false, actual: await read(), note: 'the field could not be changed (it may be disabled or read-only)' };
+    } finally {
+      await el.evaluate(inPage<[], void>('(c) => c.removeAttribute("data-atmo-set")')).catch(() => undefined);
     }
   }
 

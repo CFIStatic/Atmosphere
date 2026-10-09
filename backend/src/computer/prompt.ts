@@ -42,6 +42,8 @@ APPROVAL
 SEEING THE PAGE
 - After each action you get a screenshot and, when available, a <page_outline>: the page's buttons, links and fields from its structure, each with a ref, role, accessible name and position. Prefer the outline over guessing from pixels.
 - To click or type into something in the outline, use click_element or type_into with its ref (or its role and name). They find the element even if it moved, scroll it into view, and check that the page changed.
+- To fill a form, use fill_fields with every field you can fill on the screen in ONE call, then read its report. It refuses a value that is not from <job_fields> or <task>, or that does not fit the field (a claim number in "Policy number"): do not force it; find the right field, leave it blank, or ask. Fix anything reported as not matching before you ask for approval.
+- Put each value where the person meant it to go: match the field's label to the meaning of the value (the insured's phone goes in the insured's phone field, not the adjuster's). When two fields could both fit and the task does not say which, ask_clarification.
 - Every action is checked. If a result says nothing changed, the action did not work: do not assume it did. Pick a different element, close what is covering it, or scroll.
 - Cookie banners and promotional pop-ups may be closed for you; if one still blocks the view, dismiss or accept the simple cookie choice yourself. Never accept terms of service, EULAs, or similar on the person's behalf (those need request_approval).
 
@@ -191,6 +193,33 @@ export const COMPUTER_CUSTOM_TOOLS = [
     },
   },
 ] as const;
+
+/** Fill a whole form in one step (offered when the browser can set and read back fields). */
+export const FILL_FIELDS_TOOL = {
+  name: 'fill_fields',
+  description:
+    'Fill several fields of the form in one step: text boxes, text areas, dropdowns (give the option as it reads), checkboxes and radio buttons ("checked" / "unchecked"), dates and autocomplete boxes. Target each field by ref from <page_outline> (or role and name). Every value is checked before typing (it must come from <job_fields> or <task>, and suit the field\'s label) and read back after. The result lists each field as filled, refused or not matching. Never for passwords, codes or uploads.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      fields: {
+        type: 'array',
+        maxItems: 30,
+        items: {
+          type: 'object',
+          properties: {
+            ref: { type: 'integer', description: 'The ref from the latest <page_outline>.' },
+            role: { type: 'string' },
+            name: { type: 'string', description: 'Accessible name, when not using ref.' },
+            value: { type: 'string', description: 'Only values from <job_fields> or <task>; "checked"/"unchecked" for boxes.' },
+          },
+          required: ['value'],
+        },
+      },
+    },
+    required: ['fields'],
+  },
+} as const;
 
 /** Tools that use the page structure (only offered when the browser can read it). */
 export const COMPUTER_DOM_TOOLS = [

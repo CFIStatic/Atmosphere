@@ -142,6 +142,13 @@ export interface ComputerDriver {
    */
   fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill>;
   /**
+   * Set the form control at a point to a value and read it back: text boxes
+   * and text areas (replaced), dropdowns (by option label), checkboxes and
+   * radios ("checked" / "unchecked"), date boxes, autocomplete boxes (picks
+   * the matching suggestion). Optional: drivers without it skip fill_fields.
+   */
+  setField?(x: number, y: number, value: string): Promise<FieldSetResult>;
+  /**
    * DOM / accessibility outline of the interactive elements in view (refs,
    * roles, accessible names, boxes). Preferred over pixels for targeting.
    * Field values are never included; only whether a field has one.
@@ -223,6 +230,17 @@ export interface LocatedElement {
   role: string;
   name: string;
   tag: string;
+}
+
+/** What setField did to one form control, read back from the page. */
+export interface FieldSetResult {
+  kind: 'text' | 'date' | 'select' | 'checkbox' | 'radio' | 'combobox' | 'editable' | 'none';
+  /** The control now holds the value asked for. */
+  ok: boolean;
+  /** What the control shows now (null for none). Never a password. */
+  actual: string | null;
+  /** Plain reason when not ok, e.g. "no option named “TX”". */
+  note?: string;
 }
 
 export interface DismissedOverlay {

@@ -85,6 +85,41 @@ live view can load.
 - All four tables are service-role only, with RLS on. Every route checks the
   caller's org, and another org's id returns 404.
 
+## Filling forms: right value, right field
+
+`fill_fields` fills every field on the screen in one model turn (text boxes,
+text areas, dropdowns by option label or value, checkboxes, radios, dates,
+autocomplete boxes, shadow-DOM fields) and reads each one back
+(`PlaywrightDriver.setField`). Before anything is typed, code checks each value
+(`fieldPlacement.ts`); the same check guards `type_into` and the approval card:
+
+- **Source.** The value must be in this job's fields (`<job_fields>`) or the
+  person's own words in Chat, allowing reformatting (`972-555-0142` =
+  `(972) 555-0142`, `10/03/2026` = `2026-10-03`) and parts (the ZIP or city of
+  the property address). Anything else is refused, never typed.
+- **Placement.** The field's label must fit the kind of value: a claim number is
+  refused for "Policy number", an email for "Phone", a name for "Email". Neutral
+  labels ("Reference #") and labels that ask for either ("Claim/Policy #") pass.
+- **Read back.** Each field is reported as `✓ “Claim number” = “CLM-0042” (Job:
+  Claim number)` or `✗` with the reason (no such option, the mask rejected it,
+  disabled). Values that sites reformat still count as matching
+  (`fieldValues.ts`).
+- **Approval card.** A value from the job placed in a field whose label asks for
+  something else is shown as "check this", not verified.
+- Terms checkboxes still need approval; passwords and codes are never typed.
+  Audit rows record counts, never values.
+
+## Sign-in engine
+
+`PlaywrightDriver.fillSignIn` (tested against a real Chromium in
+`backend/test/computerSignInLab.test.ts`) handles one-page and username-first
+forms, forms inside iframes (only on hosts the login allows), sign-in buttons
+outside any `<form>`, open shadow roots, and username boxes with unhelpful
+names. After submitting it waits (up to 15 s) for the site to answer, so a slow
+single-page app is not read as a wrong password. A saved password is only
+marked "needs attention" when the site shows a sign-in error; "already signed
+in" is only reported when no password box is on the page.
+
 ## Metering
 
 Feature `computer` (label "Computer") in usage and billing:

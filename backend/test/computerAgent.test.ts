@@ -643,3 +643,40 @@ test('supply cart Approve records exactly the checked lines on the approval and 
   assert.deepEqual(detail.approvedLines.map((l) => l.sku), ['305213039']);
   assert.deepEqual(detail.excludedLines.map((l) => l.sku), ['202911152']);
 });
+
+test('fill_fields fills a form in one step: right values in, wrong field / made-up value / terms box refused', async () => {
+  let report = '';
+  const h = await setup({
+    turns: [
+      [
+        tool('fill_fields', {
+          fields: [
+            { ref: 0, value: 'Jane Testcase' },
+            { ref: 1, value: 'POL-TEST-9' },
+            { ref: 2, value: '1 Test Lane, Testville' },
+            { ref: 3, value: 'Roof replaced last spring' },
+            { ref: 5, value: 'checked' },
+          ],
+        }),
+      ],
+      (req) => {
+        report = resultText(lastToolResults(req)[0]);
+        return [tool('fill_fields', { fields: [{ ref: 1, value: 'CLM-TEST-001' }] })];
+      },
+      [tool('finish', { title: 'Form filled', fields: [], submitted: false })],
+    ],
+  });
+  const out = await h.run();
+  assert.equal(out?.status, 'succeeded');
+  assert.equal(h.site.values.insured, 'Jane Testcase');
+  assert.equal(h.site.values.address, '1 Test Lane, Testville');
+  assert.equal(h.site.values.claim, 'CLM-TEST-001', 'the claim number went in on the second call, not the policy number');
+  assert.equal(h.site.values.notes, undefined, 'a value from nowhere is never typed');
+  assert.notEqual(h.site.checked.terms, true, 'the terms box needs approval');
+  assert.match(report, /✓ “Insured name” = “Jane Testcase” \(Job brief: Insured name\)/);
+  assert.match(report, /✗ “Claim number”: not filled\. .*asks for a claim number, but this value is a policy number/);
+  assert.match(report, /✗ “Notes”: not filled\. .*not in this job's fields or the person's message/);
+  assert.match(report, /✗ “I agree to the terms of service”: .*needs the person's approval/);
+  const audit = JSON.stringify(h.store.audit.map((e) => e.detail));
+  assert.ok(!audit.includes('Jane Testcase') && !audit.includes('Roof replaced'), 'values never reach the audit log');
+});

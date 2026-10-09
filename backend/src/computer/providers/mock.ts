@@ -12,6 +12,7 @@ import type {
   DismissedOverlay,
   DownloadedFile,
   ElementTarget,
+  FieldSetResult,
   FormFieldReading,
   LocatedElement,
   LiveViewLink,
@@ -436,6 +437,20 @@ export class MockDriver implements ComputerDriver {
     const button = this.site.elements().find((e) => e.action === 'sign_in');
     if (button) this.site.activate(button);
     return 'submitted';
+  }
+
+  async setField(x: number, y: number, value: string): Promise<FieldSetResult> {
+    const el = this.site.at(x, y);
+    if (!el || el.password || el.otp || el.file || (!el.field && !el.checkbox)) return { kind: 'none', ok: false, actual: null, note: 'there is no form field there' };
+    this.site.actions.push(`set:${el.id}`);
+    if (el.checkbox) {
+      const want = /^(checked|yes|true|on)$/i.test(value.trim());
+      this.site.checked[el.id] = want;
+      return { kind: 'checkbox', ok: true, actual: want ? 'checked' : 'unchecked' };
+    }
+    this.site.values[el.id] = value;
+    this.site.focused = el.id;
+    return { kind: 'text', ok: true, actual: value };
   }
 
   async pageOutline(): Promise<PageOutline> {
