@@ -98,3 +98,43 @@ test('createSession sends solveCaptchas:false, persist context, keepAlive false'
   assert.equal(body.browserSettings.context.id, 'ctx_persist');
   assert.equal(body.keepAlive, false);
 });
+
+test('createSession adds no proxies by default, and an external office proxy when configured', async () => {
+  const mk = () =>
+    providerWithFetch((method, path) => {
+      if (method === 'POST' && path === '/v1/sessions') return { id: 's', connectUrl: 'wss://c/1' };
+      throw new Error(`unexpected ${method} ${path}`);
+    });
+
+  // Default: no egress config → no proxies field.
+  delete process.env.COMPUTER_EGRESS;
+  const a = mk();
+  await a.provider.createSession({ orgId: 'org-a', contextId: 'ctx', timeoutSec: 60 });
+  assert.equal((a.calls[0].body as { proxies?: unknown }).proxies, undefined);
+
+  // External office proxy for this org; credentials are not in the server URL.
+  process.env.COMPUTER_EGRESS = JSON.stringify({ 'org-a': { proxyUrl: 'http://u:p@office.example.com:3128' } });
+  const b = mk();
+  await b.provider.createSession({ orgId: 'org-a', contextId: 'ctx', timeoutSec: 60 });
+  const proxies = (b.calls[0].body as { proxies?: Array<Record<string, string>> }).proxies;
+  assert.deepEqual(proxies, [{ type: 'external', server: 'http://office.example.com:3128', username: 'u', password: 'p' }]);
+
+  // A different org with no entry still gets the default egress.
+  const c = mk();
+  await c.provider.createSession({ orgId: 'org-other', contextId: 'ctx', timeoutSec: 60 });
+  assert.equal((c.calls[0].body as { proxies?: unknown }).proxies, undefined);
+
+  delete process.env.COMPUTER_EGRESS;
+});
+
+test('createSession pins the provider pool to the org region when geolocation is set', async () => {
+  process.env.COMPUTER_EGRESS = JSON.stringify({ org: { geolocation: { city: 'Dallas', state: 'TX', country: 'us' } } });
+  const { provider, calls } = providerWithFetch((method, path) => {
+    if (method === 'POST' && path === '/v1/sessions') return { id: 's', connectUrl: 'wss://c/1' };
+    throw new Error(`unexpected ${method} ${path}`);
+  });
+  await provider.createSession({ orgId: 'org', contextId: 'ctx', timeoutSec: 60 });
+  const proxies = (calls[0].body as { proxies?: Array<Record<string, unknown>> }).proxies;
+  assert.deepEqual(proxies, [{ type: 'browserbase', geolocation: { country: 'US', city: 'Dallas', state: 'TX' } }]);
+  delete process.env.COMPUTER_EGRESS;
+});

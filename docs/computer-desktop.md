@@ -95,6 +95,27 @@ stays on before it is stopped.
   pricing — secondary sources suggest ~$200–500/seat/mo).
 - An **office PC** host removes the EC2 and disk cost entirely.
 
+## Login location for every surface (`COMPUTER_EGRESS`)
+
+Atmosphere represents **where the customer's team actually is**, not the data
+center the agent runs in — for every login, browser and desktop alike. This is
+for honest location, not for hiding automation.
+
+- **Cloud browser.** Set `COMPUTER_EGRESS` (JSON, org id → config) and each
+  org's browser sessions egress at that org's location:
+  ```json
+  { "<org-uuid>": { "proxyUrl": "http://user:pass@office.example.com:3128" } }
+  ```
+  for the office's own egress, or
+  ```json
+  { "<org-uuid>": { "geolocation": { "city": "Dallas", "state": "TX", "country": "US" } } }
+  ```
+  to pin the provider's pool to the org's region. Unset (the default) uses the
+  provider's normal egress.
+- **Windows desktop.** Egress is the host's network already: an office PC exits
+  at the office; route a cloud VM out through a connector on the customer's
+  network (above) to do the same.
+
 ## What stays the same
 
 Approvals (`gate.ts`), the per-org one-task rule, the allowlisted job
