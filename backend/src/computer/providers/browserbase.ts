@@ -19,6 +19,7 @@
  */
 import { chromium } from 'playwright-core';
 import { browserbaseCredentials } from '../config.js';
+import { browserbaseProxy, orgEgress } from '../egress.js';
 import type { ComputerDriver, ComputerProvider, ComputerSessionHandle, LiveViewLink } from '../types.js';
 import { PlaywrightDriver } from './playwrightDriver.js';
 
@@ -91,6 +92,13 @@ export class BrowserbaseProvider implements ComputerProvider {
           blockAds: true,
           recordSession: true,
         },
+        // Egress at the org's own location when configured, so a login
+        // represents where the team is rather than a data center. Default
+        // egress when there is none.
+        ...(() => {
+          const proxy = browserbaseProxy(orgEgress(input.orgId));
+          return proxy ? { proxies: [proxy] } : {};
+        })(),
         timeout: Math.min(21_600, Math.max(60, Math.round(input.timeoutSec))),
         // keepAlive stays false: a deploy still ends the CDP connection and the
         // agent loop is not durable yet. We re-fetch connectUrl on miss so a

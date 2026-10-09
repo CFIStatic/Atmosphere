@@ -9,7 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ApprovedOrderSelection } from './supplyOrder.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ApprovalField, ComputerTaskStatus, ConsequentialKind, NeedsYouReason, ProjectedJobField } from './types.js';
+import type { ApprovalField, ComputerProviderId, ComputerTaskStatus, ConsequentialKind, NeedsYouReason, ProjectedJobField } from './types.js';
 
 export interface ComputerTaskRow {
   id: string;
@@ -90,7 +90,7 @@ export interface ComputerApprovalRow {
 export interface ComputerSessionRow {
   id: string;
   org_id: string;
-  provider: 'browserbase' | 'mock';
+  provider: ComputerProviderId;
   provider_session_id: string | null;
   provider_context_id: string | null;
   status: 'starting' | 'active' | 'ended' | 'failed';

@@ -165,6 +165,9 @@ describe('ComputerTaskCard', () => {
     expect(isAllowedLiveViewUrl(LIVE, false)).toBe(true);
     expect(isAllowedLiveViewUrl('data:text/html,hi', false)).toBe(false);
     expect(isAllowedLiveViewUrl('http://www.browserbase.com/x', false)).toBe(false);
+    // Same-origin desktop live view is allowed; a look-alike host is not.
+    expect(isAllowedLiveViewUrl('/api/chat-computer/desktop-live/abc.def/', false)).toBe(true);
+    expect(isAllowedLiveViewUrl('https://evil.test/api/chat-computer/desktop-live/x/', false)).toBe(false);
   });
 
   it('approval card lists each field with value and source, and Approve calls the API', async () => {

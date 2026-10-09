@@ -342,12 +342,18 @@ export function computerCardTitle(task: ComputerTaskView): string {
   return site ? `${site}: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
 }
 
+/** The same-origin path that serves a Windows desktop live view. */
+export const DESKTOP_LIVE_PREFIX = '/api/chat-computer/desktop-live/';
+
 /**
- * Only frame live views from the browser service (and the demo's inline page).
- * The nginx CSP frame-src allows the same host.
+ * Only frame live views from the browser service, the same-origin desktop
+ * live view, or the demo's inline page. The nginx CSP frame-src allows 'self'
+ * and the browser service host.
  */
 export function isAllowedLiveViewUrl(url: string, demo = Boolean(import.meta.env.VITE_DEMO)): boolean {
   if (demo && url.startsWith('data:text/html')) return true;
+  // A desktop live view is a same-origin path, not an absolute URL.
+  if (url.startsWith(DESKTOP_LIVE_PREFIX)) return true;
   try {
     const u = new URL(url);
     return u.protocol === 'https:' && u.hostname === 'www.browserbase.com';
