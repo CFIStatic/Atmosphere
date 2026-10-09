@@ -214,6 +214,27 @@ a { color: inherit; }
   }
 }
 
+/* Drawer row that stands in for the bar's theme toggle on narrow phones. */
+.nav-panel-theme {
+  display: block; width: 100%; text-align: left; padding: 11px 0; margin: 0;
+  font: inherit; font-size: 16px; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+/* Phones: the bar must fit wordmark + Get started + menu inside 390px (and
+   360px) with no sideways scroll. The theme toggle moves into the drawer. */
+@media (max-width: 480px) {
+  .nav-inner { gap: 12px; }
+  .nav-links { gap: 8px; }
+  .nav-links a.btn { padding: 8px 16px; }
+  .nav-links .theme-toggle { display: none; }
+}
+@media (max-width: 400px) {
+  .nav-inner { padding-left: 16px; padding-right: 16px; }
+  .nav-panel { padding-left: 16px; padding-right: 16px; }
+}
+/* Backstop: nothing should ever scroll the page sideways. */
+html, body { overflow-x: clip; }
+
 /* Sticky "on this page" rail for long pages */
 .subnav {
   position: sticky; top: var(--nav-h); z-index: 40;
@@ -881,7 +902,7 @@ a { color: inherit; }
   border: 1px solid var(--line-strong); border-radius: 999px;
   padding: 7px 16px; font-size: 14px; color: var(--ink-soft); background: var(--card);
 }
-.work-line { margin-top: 22px; font-size: 13px; color: var(--ink-faint); letter-spacing: .06em; }
+.work-line { margin-top: 22px; font-size: 13px; color: var(--ink-faint); letter-spacing: .06em; word-spacing: .2em; overflow-wrap: anywhere; }
 .job-list { border-top: 1px solid var(--line-strong); margin-top: 8px; }
 .job-list .job-title { font-weight: 600; font-size: 15.5px; }
 .job-list .job-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }

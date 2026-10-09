@@ -12,7 +12,7 @@ holding/legal/billing only; Platform = office app; Field Capture = crew app.
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
 | `index.html`      | Home — Work Verification for service contractors, two-product overview |
-| `verification.html` | Evidence Platform — record, verify, store, and share |
+| `verification.html` | Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
 | `hardware.html`   | Field Capture Chest Mount — $99.99 hands-free phone kit |
@@ -23,13 +23,13 @@ holding/legal/billing only; Platform = office app; Field Capture = crew app.
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — Starter / Work Verification / Scale, extra seats, Chest Mount |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
-| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Evidence Platform, billing |
+| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Platform, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — software engineering and sales roles, hiring process, application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
 | `signin.html`     | Sign in — email and password                                  |
 | `signup.html`     | Create your organization — onboarding walkthrough and form  |
-| `investors.html`  | Investors — invite-only data-room sign-in (under Company)   |
+| `investors.html`  | Investors — invite-only data-room sign-in (reachable by URL only; not in nav, footer, or sitemap) |
 | `privacy.html`    | Privacy policy — plain-language draft pending counsel       |
 | `terms.html`      | Terms of service — plain-language draft pending counsel     |
 
@@ -70,7 +70,7 @@ published.
 ## Homepage focus
 
 The homepage sells **Atmosphere** Work Verification only (Field Capture +
-Evidence Platform). Do not market computer-use, Integrity agent, or Estimator
+Platform). Do not market computer-use, Integrity agent, or Estimator
 as live products — those pages are redirects or legacy stubs only.
 
 ## Forms (frontend + backend)

@@ -136,24 +136,43 @@
     toggle.setAttribute('title', themeLabel(pref) + ' mode. Click for ' + next + '.');
   }
 
-  var toggle = document.getElementById('theme-toggle');
-  if (toggle) {
-    var leftover = toggle.querySelector('.icon-system');
-    if (leftover) leftover.remove();
+  // The bar toggle (#theme-toggle) plus the row in the mobile drawer, which
+  // stands in for it on narrow phones where the bar has no room.
+  var toggles = Array.prototype.slice.call(
+    document.querySelectorAll('#theme-toggle, [data-theme-toggle]')
+  );
+  if (toggles.length) {
+    toggles.forEach(function (t) {
+      var leftover = t.querySelector('.icon-system');
+      if (leftover) leftover.remove();
+    });
+
+    function labelAll(pref) {
+      toggles.forEach(function (t) {
+        if (t.hasAttribute('data-theme-toggle')) {
+          // Drawer row: the visible text is the label.
+          t.textContent = 'Switch to ' + (pref === 'dark' ? 'light' : 'dark') + ' mode';
+        } else {
+          labelToggle(t, pref);
+        }
+      });
+    }
 
     function paintFromStore() {
       var pref = readThemePref();
       persistThemePref(pref);
       applyThemePref(pref);
-      labelToggle(toggle, pref);
+      labelAll(pref);
     }
     paintFromStore();
 
-    toggle.addEventListener('click', function () {
-      var next = readThemePref() === 'dark' ? 'light' : 'dark';
-      persistThemePref(next);
-      applyThemePref(next);
-      labelToggle(toggle, next);
+    toggles.forEach(function (t) {
+      t.addEventListener('click', function () {
+        var next = readThemePref() === 'dark' ? 'light' : 'dark';
+        persistThemePref(next);
+        applyThemePref(next);
+        labelAll(next);
+      });
     });
   }
   // Replay restarts the receipt animation — the audit trail's replay, embodied.

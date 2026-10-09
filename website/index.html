@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere — Work Verification for service contractors. Capture the work once; Atmosphere builds a complete job record with evidence attached — for everyday ops, and still there when work is questioned." />
+  <meta name="description" content="Atmosphere — intelligence for contractors. Capture the work once; Atmosphere builds a complete job record with evidence attached — for everyday ops, and still there when work is questioned." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Atmosphere — Work Verification for Service Contractors</title>
-  <meta property="og:title" content="Atmosphere — Work Verification for Service Contractors" />
-  <meta property="og:description" content="Atmosphere — Work Verification for service contractors. Capture the work once; Atmosphere builds a complete job record with evidence attached — for everyday ops, and still there when work is questioned." />
+  <title>Atmosphere — Intelligence for Contractors</title>
+  <meta property="og:title" content="Atmosphere — Intelligence for Contractors" />
+  <meta property="og:description" content="Atmosphere — intelligence for contractors. Capture the work once; Atmosphere builds a complete job record with evidence attached — for everyday ops, and still there when work is questioned." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/site.css?v=20260921-logo" />
+  <link rel="stylesheet" href="assets/site.css?v=20261008-cleanup" />
   <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark')p=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',p);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
 </head>
 <body>
@@ -39,7 +39,7 @@
           <a href="how-it-works.html">How it works <span>The full pipeline — film to share</span></a>
           <a href="field.html">Field Capture <span>Film and check work on site</span></a>
           <a href="hardware.html">Chest Mount <span>Hands-free Field Capture kit</span></a>
-          <a href="verification.html">Evidence Platform <span>Record, verify, store, and share</span></a>
+          <a href="verification.html">Platform <span>Record, verify, store, and share</span></a>
           <!-- Later products, pages kept and deliberately unlisted:
                platform.html · sales.html · operations.html · manager.html -->
         </div>
@@ -57,9 +57,8 @@
       <div class="nav-item">
         <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="about.html">About <span>The Work Verification company</span></a>
+          <a href="about.html">About <span>Intelligence for contractors</span></a>
           <a href="careers.html">Careers <span>Open roles</span></a>
-          <a href="investors.html">Investors <span>The data room</span></a>
           <a href="contact.html">Contact <span>Talk to a human</span></a>
         </div>
       </div>
@@ -76,7 +75,7 @@
   </div>
   <div class="nav-panel" id="nav-panel">
     <div class="grp mono">Product</div>
-    <a class="sub" href="verification.html">Evidence Platform</a>
+    <a class="sub" href="verification.html">Platform</a>
     <a class="sub" href="field.html">Field Capture</a>
     <a class="sub" href="hardware.html">Chest Mount</a>
     <a class="sub" href="how-it-works.html">How it works</a>
@@ -90,10 +89,10 @@
     <div class="grp mono">Company</div>
     <a class="sub" href="about.html">About</a>
     <a class="sub" href="careers.html">Careers</a>
-    <a class="sub" href="investors.html">Investors</a>
     <a class="sub" href="contact.html">Contact</a>
     <a href="signin.html">Sign in</a>
     <a href="signup.html">Create your organization</a>
+    <button class="nav-panel-theme" type="button" data-theme-toggle>Switch light / dark mode</button>
   </div>
 </nav>
 
@@ -103,7 +102,7 @@
 <section class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow mono fade-up">Work Verification for service contractors</div>
+      <div class="eyebrow mono fade-up">Intelligence for contractors</div>
       <h1 class="fade-up d1">The work gets done. The proof is attached.</h1>
       <p class="lede fade-up d2">
         Your crews do the work. Atmosphere builds the job record.
@@ -132,7 +131,7 @@
         <div class="r-divider" style="--d:1.6s">MATCHED TO SCOPE</div>
         <div class="r-line" style="--d:2.0s"><span class="r-time">17:34:02</span><span class="r-text">Read against the agreed scope — <em>3 lines</em></span></div>
         <div class="r-line" style="--d:2.4s"><span class="r-time">17:34:38</span><span class="r-text">"Equipment unchanged; no new work started."</span></div>
-        <div class="r-line" style="--d:2.8s"><span class="r-time">17:34:59</span><span class="r-text">Covered <em>4 of 5</em> shot-list steps — one named missing</span></div>
+        <div class="r-line" style="--d:2.8s"><span class="r-time">17:34:59</span><span class="r-text">Scope: <em>2 lines done</em> · 1 not visible yet</span></div>
         <div class="r-status" style="--d:3.3s">
           <span class="pill">ON THE RECORD</span>
           <span class="note">Ready to share — every view logged</span>
@@ -193,7 +192,7 @@
       <h2>From capture to a job record you can stand behind</h2>
       <p>
         Atmosphere automatically creates the record of what crews actually did —
-        every part backed by evidence. Verification is the moat; everyday ops ROI comes first.
+        every part backed by evidence.
       </p>
     </div>
     <div class="steps">
@@ -201,7 +200,7 @@
         <div class="num mono">01</div>
         <h3>Capture the work</h3>
         <p>
-          Crew follows a simple shot list while working.
+          Crew records the walk-through while working.
         </p>
       </div>
       <div class="step">
@@ -286,9 +285,9 @@
       <div class="eyebrow mono">The system</div>
       <h2>Two parts, one subscription</h2>
       <p>
-        <strong>Field Capture</strong> is the app on the truck — film the before-and-after.
-        The <strong>Evidence Platform</strong> is the record in the office — check, hold,
-        and share. Work Verification includes both, because capture without a job record
+        <strong>Field Capture</strong> is the app on the truck — record the walk-through.
+        The <strong>Platform</strong> is the record in the office — check, hold,
+        and share. Every plan includes both, because capture without a job record
         is just a camera roll.
       </p>
     </div>
@@ -298,12 +297,12 @@
         <div class="tag mono">01 · On site</div>
         <h3>Field Capture</h3>
         <p class="plat-line">Film the job</p>
-        <p>Film before-and-after clips against the shot list, then upload them to the Evidence Platform — built for gloved hands and loud rooms.</p>
+        <p>Record the walk-through on site and it uploads to the Platform — built for gloved hands and loud rooms.</p>
         <span class="plat-go">Explore&nbsp;→</span>
       </a>
       <a class="feature plat-card" href="verification.html">
         <div class="tag mono">02 · The record</div>
-        <h3>Evidence Platform</h3>
+        <h3>Platform</h3>
         <p class="plat-line">Hold the proof</p>
         <p>Checked at the door, matched to scope, held in a chain of custody both sides can open.</p>
         <span class="plat-go">Explore&nbsp;→</span>
@@ -320,13 +319,11 @@
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Teams</div>
-      <h2>Built first for restoration and construction</h2>
+      <h2>Built first for restoration, roofing and general contractors</h2>
       <p>
         Create an organization or join with a code. Everyone lands on the same record from
         their own side of it — crews capture on site, the office opens the job file, partners use
-        their link, customers and reviewers open the Verifier. Restoration and construction
-        are the beachhead; other service trades that work on site and get asked what happened
-        can follow the same path.
+        their link, customers and reviewers open the Verifier.
       </p>
     </div>
     <div class="roles">
@@ -335,7 +332,7 @@
       <span class="role-chip">Partner contractor → Their job link</span>
       <span class="role-chip">Customer &amp; reviewer → Verifier</span>
     </div>
-    <div class="work-line mono">RESTORATION&nbsp;&nbsp;·&nbsp;&nbsp;CONSTRUCTION&nbsp;&nbsp;·&nbsp;&nbsp;FACILITIES&nbsp;&nbsp;·&nbsp;&nbsp;HVAC&nbsp;&nbsp;·&nbsp;&nbsp;MORE</div>
+    <div class="work-line mono">RESTORATION &nbsp;· &nbsp;ROOFING &nbsp;· &nbsp;GENERAL CONTRACTING</div>
   </div>
 </section>
 
@@ -379,7 +376,7 @@
         <a href="how-it-works.html">How it works</a>
         <a href="field.html">Field Capture</a>
         <a href="hardware.html">Chest Mount</a>
-        <a href="verification.html">Evidence Platform</a>
+        <a href="verification.html">Platform</a>
         <!-- Later products: platform.html · sales.html · operations.html · manager.html -->
       </div>
       <div class="foot-col">
@@ -394,7 +391,6 @@
         <h4>Company</h4>
         <a href="about.html">About</a>
         <a href="careers.html">Careers</a>
-        <a href="investors.html">Investors</a>
         <a href="contact.html">Contact</a>
       </div>
       <div class="foot-col">
@@ -410,6 +406,6 @@
   </div>
 </footer>
 
-<script src="assets/site.js?v=20260820-moon"></script>
+<script src="assets/site.js?v=20261008-cleanup"></script>
 </body>
 </html>
