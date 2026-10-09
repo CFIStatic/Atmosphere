@@ -5,6 +5,8 @@ import {
   computerCardTitle,
   computerPill,
   computerStepLines,
+  computerProgress,
+  computerAttentionTitle,
   computerTaskIsActive,
   computerTaskRef,
   type ComputerPill,
@@ -127,11 +129,21 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   const liveAnchorRef = useRef<HTMLDivElement | null>(null);
   /** Once we auto-open control for a Needs-you pause, do not fight the person closing it. */
   const autoOpenedForNeedsYou = useRef<string | null>(null);
+  /** Watch opens by itself once while the task runs; closing it is respected. */
+  const autoWatched = useRef(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
       const { task: next } = await api.computerTask(taskId);
       setTask(next);
+      // Watch it work: a task the person just started opens its live view once.
+      // Reopening an older chat does not mint live links for everyone who looks.
+      if (!autoWatched.current && next.status === 'running' && next.canWatch) {
+        autoWatched.current = true;
+        const created = Date.parse(next.createdAt);
+        if (Number.isFinite(created) && Date.now() - created < 2 * 60_000) setLive((prev) => prev ?? 'watch');
+      }
       setError(null);
       return next;
     } catch (err) {
@@ -171,6 +183,25 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     });
     return () => window.cancelAnimationFrame(id);
   }, [task]);
+
+  // A clock for "time so far" while the task is going.
+  const isActive = task ? computerTaskIsActive(task.status) : false;
+  useEffect(() => {
+    if (!isActive) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isActive]);
+
+  // Tell a person in another tab that Computer is waiting on them.
+  const attention = task ? computerAttentionTitle(task.status) : null;
+  useEffect(() => {
+    if (!attention || typeof document === 'undefined') return;
+    const before = document.title;
+    document.title = `● ${attention} · ${before.replace(/^● [^·]+ · /, '')}`;
+    return () => {
+      document.title = before;
+    };
+  }, [attention]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -222,6 +253,16 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
         <p className="text-[13px] text-ink-600" data-testid="computer-task-now">
           {task.statusDetail || task.lastAction || (task.status === 'queued' ? 'Waiting for a browser…' : 'Working…')}
         </p>
+      ) : null}
+      {active ? <ComputerProgress task={task} now={now} /> : null}
+      {active && !showSteps && steps.length ? (
+        <ol className="space-y-0.5 text-[12px] text-ink-600" data-testid="computer-recent-steps" aria-label="Latest steps">
+          {steps.slice(-3).map((line, i, arr) => (
+            <li key={line.id} className={i === arr.length - 1 ? 'font-medium text-ink-800' : ''}>
+              {line.text}
+            </li>
+          ))}
+        </ol>
       ) : null}
 
       {task.status === 'awaiting_approval' && task.approval && task.approval.status === 'pending' ? (
@@ -348,5 +389,17 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ComputerProgress({ task, now }: { task: ComputerTaskView; now: number }) {
+  // Where it is and for how long. No step count: that is the spending cap, not progress.
+  const p = computerProgress(task, now);
+  if (!p.site && !p.elapsed) return null;
+  return (
+    <p className="flex items-center justify-between gap-2 text-[11px] text-ink-500" data-testid="computer-progress">
+      <span className="min-w-0 truncate">{p.site ? `On ${p.site}` : 'Working'}</span>
+      {p.elapsed ? <span className="tabular-nums" aria-label="Time so far">{p.elapsed}</span> : null}
+    </p>
   );
 }

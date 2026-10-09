@@ -31,11 +31,11 @@ export function excludeOfficeOnlyRows<Q extends EqQuery>(
 }
 
 const QUESTION_COLUMNS =
-  'id, question, answer, model, grounded_on, web_sources, created_at';
+  'id, question, answer, model, grounded_on, web_sources, created_at, supersedes_id';
 
 /** Owner reload may see which uploads were sent with the turn. */
 const OWNER_QUESTION_COLUMNS =
-  'id, question, answer, model, grounded_on, web_sources, document_ids, created_at';
+  'id, question, answer, model, grounded_on, web_sources, document_ids, created_at, supersedes_id';
 
 /**
  * True only for the office member reloading a thread they own. A coworker

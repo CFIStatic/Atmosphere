@@ -68,6 +68,19 @@ Job-scoped assistant under the **Chat** tab:
 - No model-name chrome in the UI (no “Live model” labels).
 - Machine citation trailers are stripped for display — never leave raw
   `[[web:…]]` junk in the bubble.
+- Office members can rate an answer (thumbs up / down with a reason), **pin**
+  it to the job so the whole team sees it (with a link to the pin), and
+  **edit** a question to ask again. An edit is a new row pointing at the old
+  one (`supersedes_id`); the old Q&A stays on the record, but it and what
+  followed leave the chat and the model's memory.
+- Under the latest answer, **action cards** offer next steps (punch list,
+  homeowner update, text the crew, do it in a browser). Each one goes back
+  through Chat, so the usual tools and approvals apply.
+- The chat-history rail has a **search box** over this person's chats on the
+  job (titles, questions and answers).
+- A Computer task started from Chat opens its live view while it runs, shows
+  the site, time so far and latest steps, and the browser tab says when it is
+  waiting on you.
 
 ## Computer (Chat's browser agent) and Logins
 

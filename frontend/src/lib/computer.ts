@@ -213,11 +213,20 @@ export function computerEventLabel(event: ComputerTaskEvent): string {
     const target = clickTarget(event);
     if (action === 'type') return field ? `Typed in “${field}”` : 'Typed on the page';
     if (action === 'key') return `Pressed ${String(d.key ?? 'a key')}`;
+    if (action === 'fill_fields') {
+      const filled = Number(d.filled ?? 0);
+      const total = Number(d.fields ?? filled);
+      return filled === total ? `Filled in ${filled} field${filled === 1 ? '' : 's'}` : `Filled in ${filled} of ${total} fields`;
+    }
     if (action.endsWith('click')) return target ? `Clicked “${target}”` : 'Clicked on the page';
     return base;
   }
   if (event.event === 'navigate' && d.host) return `Opened ${String(d.host)}`;
   if (event.event === 'blocked' && d.why === 'outside_task') return `Stayed on the task instead of opening ${String(d.host ?? 'another site')}`;
+  if (event.event === 'blocked' && d.why === 'placement') {
+    const field = cleanFieldLabel(d.field);
+    return field ? `Left “${field}” for the right value instead of guessing` : 'Did not type a value that did not fit the field';
+  }
   if (event.event === 'blocked' && d.label) return `Held “${String(d.label)}” for your approval`;
   if (event.event === 'approval_requested' && d.label) return `Asked you before clicking “${String(d.label)}”`;
   if (event.event === 'auto_sign_in') {
@@ -564,4 +573,33 @@ export function typedSiteHost(text: string): string {
   } catch {
     return '';
   }
+}
+
+
+function siteOfUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+/** Where a running task is and for how long ("On portal.example.test", "1:23"). */
+export function computerProgress(
+  task: Pick<ComputerTaskView, 'startedAt' | 'currentUrl'>,
+  nowMs: number,
+): { elapsed: string | null; site: string | null } {
+  const started = task.startedAt ? Date.parse(task.startedAt) : NaN;
+  const secs = Number.isFinite(started) && nowMs >= started ? Math.floor((nowMs - started) / 1000) : null;
+  const elapsed = secs == null ? null : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const site = siteOfUrl(task.currentUrl);
+  return { elapsed, site };
+}
+
+/** The browser tab says Computer is waiting, so a person in another tab notices. Null when it is not waiting. */
+export function computerAttentionTitle(status: ComputerTaskView['status']): string | null {
+  if (status === 'needs_you') return 'Computer needs you';
+  if (status === 'awaiting_approval') return 'Computer is waiting for your approval';
+  return null;
 }

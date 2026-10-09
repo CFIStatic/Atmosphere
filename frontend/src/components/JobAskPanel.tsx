@@ -4,6 +4,10 @@ import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type AskFeedback,
+  type AskFeedbackReason,
+  type AskPinnedAnswer,
+  type AskSearchHit,
   type AskThread,
   type ProofQuestion,
   type ProofResponse,
@@ -32,6 +36,10 @@ import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/Speak
 import { extractAskSources, isDocumentQuoteSource, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
+import { AskActionCards } from './ask/AskActionCards';
+import { AskAnswerToolbar } from './ask/AskAnswerToolbar';
+import { AskPinnedAnswers } from './ask/AskPinnedAnswers';
+import { askActionCards } from '../lib/askActionCards';
 import type { AskWebSource } from '../lib/askWebSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -605,6 +613,19 @@ function isComputerTaskAnswer(text: string): boolean {
   return extractAskSources(text).actions.some((action) => action.tool === 'start_computer_task');
 }
 
+/** The stored question behind a turn ("<uuid>-q" / "<uuid>-a"), or null for a turn not saved yet. */
+export function storedQuestionId(turnId: string): string | null {
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-[qa]$/i.exec(turnId);
+  return m ? m[1] : null;
+}
+
+/** A link to this job's Chat that opens a pinned answer. */
+function pinnedAnswerLink(questionId: string): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set('askPin', questionId);
+  return url.toString();
+}
+
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
  *
@@ -623,6 +644,7 @@ export function JobAskPanel({
   renameThread,
   onOpenHref,
   initialVerifications,
+  officeExtras = true,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -636,6 +658,8 @@ export function JobAskPanel({
   /** Open a cited job or video. Present when the panel sits inside the router. */
   onOpenHref?: (href: string) => void;
   initialVerifications?: SpeakerVerification[];
+  /** False for signed-in homeowners on a progress grant: no rate, pin, edit, action cards or search. */
+  officeExtras?: boolean;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
@@ -662,6 +686,18 @@ export function JobAskPanel({
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
   const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, AskFeedback>>({});
+  const feedbackAskedRef = useRef<Set<string>>(new Set());
+  const [pins, setPins] = useState<AskPinnedAnswer[]>([]);
+  const [editing, setEditing] = useState<{ turnId: string; text: string } | null>(null);
+  const [highlightTurnId, setHighlightTurnId] = useState<string | null>(null);
+  const threadsRef = useRef<AskThread[]>([]);
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
+  const [pinFocus] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('askPin'),
+  );
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef(false);
@@ -672,6 +708,12 @@ export function JobAskPanel({
   const { seek } = useVideoSeek();
   const { focus: focusJobFile } = useJobFileFocus();
   const record = file ? file.record : ownRecord;
+  /**
+   * Office extras (rate, pin, edit, action cards, search) need an office
+   * member. Share links (askFn) and signed-in homeowners on a progress grant
+   * get the plain chat.
+   */
+  const office = !askFn && officeExtras && record?.access !== 'viewer';
   const proofs = file ? file.proofs : ownProofs;
   const preloaded = file !== undefined;
 
@@ -909,6 +951,8 @@ export function JobAskPanel({
           try {
             const msgs = await loadThreadMessages(action.threadId);
             publishTurns(action.threadId, msgs);
+            // Opened from a search result: show that question.
+            if (action.questionId) setHighlightTurnId(`${action.questionId}-q`);
           } finally {
             setLoading(false);
             inputRef.current?.focus();
@@ -937,6 +981,133 @@ export function JobAskPanel({
   }, [jobId, askFn]);
 
   const analysisEvents = useMemo(() => analysisEventsFromProofs(proofs), [proofs]);
+
+  // Answers pinned to this job (the whole team sees them).
+  useEffect(() => {
+    if (!office) return;
+    let alive = true;
+    void Promise.resolve(api.askPins?.(jobId))
+      .then((res) => {
+        if (alive && res) setPins(res.pins ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [jobId, office]);
+
+  // This person's thumbs up / down on the answers in view.
+  useEffect(() => {
+    if (!office) return;
+    const ids = turns
+      .filter((t) => t.role === 'assistant')
+      .map((t) => storedQuestionId(t.id))
+      .filter((id): id is string => Boolean(id) && !feedbackAskedRef.current.has(id as string));
+    if (!ids.length) return;
+    ids.forEach((id) => feedbackAskedRef.current.add(id));
+    void Promise.resolve(api.askFeedback?.(jobId, ids))
+      .then((res) => {
+        if (res?.feedback) setFeedback((prev) => ({ ...prev, ...res.feedback }));
+      })
+      .catch(() => undefined);
+  }, [turns, jobId, office]);
+
+  // A search result or a shared link points at one question: scroll to it and mark it briefly.
+  useEffect(() => {
+    if (!highlightTurnId) return;
+    const el = scrollerRef.current?.querySelector(`[data-turn-id="${highlightTurnId}"]`);
+    if (!el) return;
+    (el as HTMLElement).scrollIntoView?.({ block: 'center' });
+    const timer = window.setTimeout(() => setHighlightTurnId(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [highlightTurnId, turns]);
+
+  async function rateTurn(questionId: string, rating: 1 | -1 | 0, reason?: AskFeedbackReason | null) {
+    const before = feedback[questionId];
+    setFeedback((prev) => {
+      const next = { ...prev };
+      if (rating === 0) delete next[questionId];
+      else next[questionId] = { rating, reason: rating === -1 ? (reason ?? null) : null };
+      return next;
+    });
+    try {
+      await api.rateAskAnswer(jobId, questionId, rating, reason ? { reason } : undefined);
+    } catch (err) {
+      setFeedback((prev) => {
+        const next = { ...prev };
+        if (before) next[questionId] = before;
+        else delete next[questionId];
+        return next;
+      });
+      setError(err instanceof ApiError ? err.message : 'Could not save that rating.');
+    }
+  }
+
+  async function setPinned(questionId: string, pin: boolean) {
+    try {
+      const res = pin ? await api.pinAskAnswer(jobId, questionId) : await api.unpinAskAnswer(jobId, questionId);
+      setPins(res.pins ?? []);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : pin ? 'Could not pin that answer.' : 'Could not unpin that answer.');
+    }
+  }
+
+  async function copyPinLink(questionId: string): Promise<boolean> {
+    try {
+      await navigator.clipboard?.writeText(pinnedAnswerLink(questionId));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function startEdit(turn: JobFileTurn) {
+    if (inFlight) return;
+    setEditing({ turnId: turn.id, text: displayMentionText(turn.content) || turn.content });
+  }
+
+  function submitEdit() {
+    const current = editing;
+    if (!current) return;
+    const questionId = storedQuestionId(current.turnId);
+    const text = current.text.trim();
+    setEditing(null);
+    if (!questionId || !text) return;
+    void ask(text, [], { edit: { questionId, turnId: current.turnId } });
+  }
+
+  function publishAskSearch(query: string, results: AskSearchHit[]) {
+    publishAskHistory({
+      jobId,
+      threads: threadsRef.current.map((thread) => ({ ...thread, title: displayMentionText(thread.title) || thread.title })),
+      activeThreadId: activeThreadIdRef.current,
+      search: { query, results },
+    });
+  }
+  async function searchChats(query: string) {
+    const q = query.trim();
+    if (q.length < 2 || !office) {
+      publishAskSearch(q, []);
+      return;
+    }
+    try {
+      const res = await api.searchAskChats(jobId, q);
+      publishAskSearch(q, res.results ?? []);
+    } catch {
+      publishAskSearch(q, []);
+    }
+  }
+
+  // The rail's search box (this person's chats on the job).
+  useEffect(() => {
+    return onAskHistoryAction((action) => {
+      if (action.jobId !== jobId || action.type !== 'search-threads') return;
+      void searchChats(action.query);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchChats reads only jobId, office and refs
+  }, [jobId, office]);
+
+
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -1016,7 +1187,11 @@ export function JobAskPanel({
     });
   }
 
-  async function ask(textRaw: string, attachments?: AskAttachment[] | null) {
+  async function ask(
+    textRaw: string,
+    attachments?: AskAttachment[] | null,
+    opts?: { edit?: { questionId: string; turnId: string } },
+  ) {
     const raw = textRaw.trim();
     if (!raw || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -1045,8 +1220,13 @@ export function JobAskPanel({
     const threadKey = activeThreadIdRef.current ?? `job:${jobId}`;
     const session = rememberUploads(threadKey, sent);
     const documentIds = session.map((file) => file.id);
-    setTurns((prev) => [
-      ...prev.filter((turn) => turn.id !== failedPendingId),
+    const edit = office ? (opts?.edit ?? null) : null;
+    setTurns((prev) => {
+      // An edit replaces that question and everything after it (they stay on the record).
+      const cut = edit ? prev.findIndex((turn) => turn.id === edit.turnId) : -1;
+      const kept = cut >= 0 ? prev.slice(0, cut) : prev;
+      return [
+      ...kept.filter((turn) => turn.id !== failedPendingId),
       {
         id: pendingId,
         role: 'user',
@@ -1055,7 +1235,8 @@ export function JobAskPanel({
         attachments: sent,
         ...(documentIds.length ? { documentIds } : {}),
       },
-    ]);
+      ];
+    });
     try {
       let res: {
         answer: string;
@@ -1070,6 +1251,7 @@ export function JobAskPanel({
       const officeOpts = {
         ...threadOpts,
         ...(documentIds.length ? { documentIds } : {}),
+        ...(edit ? { supersedesId: edit.questionId } : {}),
       };
       if (askFn) {
         res = await askFn(text, threadOpts);
@@ -1194,6 +1376,15 @@ export function JobAskPanel({
     abortRef.current?.abort();
   }
 
+  /** The question a given answer replied to. */
+  function questionBefore(turnId: string): string {
+    const index = turns.findIndex((turn) => turn.id === turnId);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (turns[i]?.role === 'user') return turns[i].content;
+    }
+    return '';
+  }
+
   function retryTurn(turnId: string) {
     const index = turns.findIndex((turn) => turn.id === turnId);
     for (let i = index - 1; i >= 0; i -= 1) {
@@ -1241,6 +1432,14 @@ export function JobAskPanel({
             <SpeakerVerificationPrompt verification={verifications[0]} onAnswer={(input) => void answerVerification(input)} />
           </div>
         ) : null}
+        {office ? (
+          <AskPinnedAnswers
+            pins={pins}
+            focusQuestionId={pinFocus}
+            onUnpin={(questionId) => void setPinned(questionId, false)}
+            onCopyLink={(questionId) => void copyPinLink(questionId)}
+          />
+        ) : null}
         {loading && turns.length === 0 ? (
           <p className="flex items-center gap-2 py-10 text-sm text-ink-500">
             <SpinnerIcon className="animate-spin" width={14} height={14} />
@@ -1276,8 +1475,9 @@ export function JobAskPanel({
               return (
               <li
                 key={turn.id}
-                className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2.5'}
+                className={`${turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2.5'} ${highlightTurnId === turn.id ? 'rounded-2xl ring-2 ring-brand-300 ring-offset-2' : ''}`}
                 data-ask-role={turn.role}
+                data-turn-id={turn.id}
               >
                 <div
                   data-ask-bubble={turn.role}
@@ -1315,10 +1515,62 @@ export function JobAskPanel({
                       onOpenSource={openAskSource}
                       onAskFollowUp={(question) => void ask(question)}
                     />
+                  ) : editing?.turnId === turn.id ? (
+                    <form
+                      data-testid="ask-edit-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        submitEdit();
+                      }}
+                      className="space-y-2"
+                    >
+                      <textarea
+                        autoFocus
+                        aria-label="Edit your question"
+                        value={editing.text}
+                        onChange={(event) => setEditing({ turnId: turn.id, text: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            submitEdit();
+                          } else if (event.key === 'Escape') {
+                            setEditing(null);
+                          }
+                        }}
+                        rows={Math.min(6, Math.max(2, Math.ceil(editing.text.length / 48)))}
+                        className="w-full min-w-[16rem] resize-none rounded-lg border-0 bg-paper-0 px-2.5 py-1.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                      />
+                      <div className="flex justify-end gap-1.5">
+                        <button type="button" onClick={() => setEditing(null)} className="rounded-full px-2.5 py-0.5 text-[11px] font-medium text-paper-0/80 hover:text-paper-0">
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          data-testid="ask-edit-send"
+                          disabled={!editing.text.trim()}
+                          className="rounded-full bg-paper-0 px-2.5 py-0.5 text-[11px] font-semibold text-ink-900 disabled:opacity-40"
+                        >
+                          Send
+                        </button>
+                      </div>
+                    </form>
                   ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed">
-                      <MentionText text={turn.content} onDark />
-                    </p>
+                    <>
+                      <p className="whitespace-pre-wrap leading-relaxed">
+                        <MentionText text={turn.content} onDark />
+                      </p>
+                      {office && storedQuestionId(turn.id) && !inFlight ? (
+                        <button
+                          type="button"
+                          data-testid="ask-edit"
+                          onClick={() => startEdit(turn)}
+                          className="mt-1 text-[11px] font-medium text-paper-0/60 transition hover:text-paper-0"
+                          title="Edit and ask again. The earlier answer stays on the job record."
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                    </>
                   )}
                   {turn.role === 'assistant' &&
                     turn.groundedOn != null &&
@@ -1328,7 +1580,7 @@ export function JobAskPanel({
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                   {showActions ? (
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         data-testid="ask-message-copy"
@@ -1351,7 +1603,29 @@ export function JobAskPanel({
                       >
                         {turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
                       </button>
+                      {office && storedQuestionId(turn.id) ? (
+                        <AskAnswerToolbar
+                          feedback={feedback[storedQuestionId(turn.id)!] ?? null}
+                          pinned={pins.some((pin) => pin.questionId === storedQuestionId(turn.id))}
+                          onRate={(rating, reason) => rateTurn(storedQuestionId(turn.id)!, rating, reason)}
+                          onPin={(pin) => setPinned(storedQuestionId(turn.id)!, pin)}
+                          onCopyLink={() => copyPinLink(storedQuestionId(turn.id)!)}
+                        />
+                      ) : null}
                     </div>
+                  ) : null}
+                  {office && turn.role === 'assistant' && turn.id === lastAssistantId && !inFlight ? (
+                    <AskActionCards
+                      cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
+                      onPick={(card) => {
+                        if (card.mode === 'send') {
+                          void ask(card.prompt);
+                        } else {
+                          setDraft(card.prompt);
+                          inputRef.current?.focus();
+                        }
+                      }}
+                    />
                   ) : null}
                 </div>
               </li>

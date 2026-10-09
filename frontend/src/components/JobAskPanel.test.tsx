@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AskSeekTarget } from '../lib/askSeek';
@@ -16,6 +16,12 @@ const askAboutProofsStream = vi.fn();
 const askThreads = vi.fn();
 const createAskThread = vi.fn();
 const answerSpeakerVerification = vi.fn();
+const rateAskAnswer = vi.fn();
+const askFeedback = vi.fn();
+const askPins = vi.fn();
+const pinAskAnswer = vi.fn();
+const unpinAskAnswer = vi.fn();
+const searchAskChats = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -36,6 +42,12 @@ vi.mock('../lib/api', () => ({
     askThreads: (...args: unknown[]) => askThreads(...args),
     createAskThread: (...args: unknown[]) => createAskThread(...args),
     answerSpeakerVerification: (...args: unknown[]) => answerSpeakerVerification(...args),
+    rateAskAnswer: (...args: unknown[]) => rateAskAnswer(...args),
+    askFeedback: (...args: unknown[]) => askFeedback(...args),
+    askPins: (...args: unknown[]) => askPins(...args),
+    pinAskAnswer: (...args: unknown[]) => pinAskAnswer(...args),
+    unpinAskAnswer: (...args: unknown[]) => unpinAskAnswer(...args),
+    searchAskChats: (...args: unknown[]) => searchAskChats(...args),
   },
 }));
 
@@ -116,6 +128,11 @@ describe('JobAskPanel', () => {
     askThreads.mockReset();
     createAskThread.mockReset();
     answerSpeakerVerification.mockReset();
+    for (const fn of [rateAskAnswer, askFeedback, askPins, pinAskAnswer, unpinAskAnswer, searchAskChats]) fn.mockReset();
+    rateAskAnswer.mockResolvedValue({ feedback: null });
+    askFeedback.mockResolvedValue({ feedback: {} });
+    askPins.mockResolvedValue({ pins: [] });
+    searchAskChats.mockResolvedValue({ results: [] });
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
     askThreads.mockResolvedValue({
       threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
@@ -1290,4 +1307,135 @@ describe('JobAskPanel', () => {
     expect(failure).toHaveTextContent(/didn't go through/);
   });
 
+
+  describe('answer feedback, pins, edits, action cards and search', () => {
+    const Q1 = '11111111-1111-4111-8111-111111111111';
+    const Q2 = '22222222-2222-4222-8222-222222222222';
+    const ANSWER = 'Two items are still outstanding: the base trim is not installed, and the crew has to come back Tuesday to patch the drywall.';
+
+    function streamAnswers() {
+      let n = 0;
+      askAboutProofsStream.mockImplementation(async (_jobId: string, question: string) => {
+        n += 1;
+        const id = n === 1 ? Q1 : Q2;
+        const answer = n === 1 ? ANSWER : `Edited answer for: ${question}`;
+        return { answer, groundedOn: 1, model: 'claude-opus', question: { id, question, answer, grounded_on: ['p1'], created_at: `2026-10-09T10:0${n}:00Z` } };
+      });
+    }
+
+    async function askOnce(user: ReturnType<typeof userEvent.setup>, text = 'What is left on the kitchen?') {
+      const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+      await user.type(box, text);
+      await user.click(screen.getByRole('button', { name: /ask this job/i }));
+      expect(await screen.findByText(/still outstanding/i)).toBeInTheDocument();
+    }
+
+    function renderPanel(props: Partial<Parameters<typeof JobAskPanel>[0]> = {}) {
+      return render(
+        <JobFileFocusProvider>
+          <VideoSeekProvider>
+            <JobAskPanel jobId="job-1038" file={{ record, proofs }} {...props} />
+          </VideoSeekProvider>
+        </JobFileFocusProvider>,
+      );
+    }
+
+    it('rates an answer thumbs down with a reason', async () => {
+      streamAnswers();
+      const user = userEvent.setup();
+      renderPanel();
+      await askOnce(user);
+      await user.click(screen.getByTestId('ask-thumbs-down'));
+      expect(rateAskAnswer).toHaveBeenCalledWith('job-1038', Q1, -1, undefined);
+      await user.click(within(screen.getByTestId('ask-feedback-reasons')).getByRole('button', { name: 'Incomplete' }));
+      expect(rateAskAnswer).toHaveBeenLastCalledWith('job-1038', Q1, -1, { reason: 'incomplete' });
+      expect(await screen.findByTestId('ask-feedback-thanks')).toBeInTheDocument();
+      expect(screen.getByTestId('ask-thumbs-down')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('pins an answer for the team and copies a link to it', async () => {
+      streamAnswers();
+      const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+      pinAskAnswer.mockResolvedValue({
+        pins: [{ id: 'pin-1', questionId: Q1, question: 'What is left on the kitchen?', answer: ANSWER, askedAt: '2026-10-09T10:01:00Z', pinnedAt: '2026-10-09T10:05:00Z', pinnedBy: 'Sam Office' }],
+      });
+      const user = userEvent.setup();
+      renderPanel();
+      await askOnce(user);
+      await user.click(screen.getByTestId('ask-pin'));
+      expect(pinAskAnswer).toHaveBeenCalledWith('job-1038', Q1);
+      expect(await screen.findByText('Pinned answers (1)')).toBeInTheDocument();
+      expect(screen.getByTestId('ask-pin')).toHaveTextContent('Unpin');
+      await user.click(screen.getByTestId('ask-copy-link'));
+      await waitFor(() => expect(writeText).toHaveBeenCalled());
+      expect(String(writeText.mock.calls.at(-1)?.[0])).toContain(`askPin=${Q1}`);
+    });
+
+    it('edits a question: asks again in place, pointing at the one it replaces', async () => {
+      streamAnswers();
+      const user = userEvent.setup();
+      renderPanel();
+      await askOnce(user);
+      await user.click(screen.getByTestId('ask-edit'));
+      const box = screen.getByRole('textbox', { name: 'Edit your question' });
+      await user.clear(box);
+      await user.type(box, 'What is left in the bathroom?');
+      await user.click(screen.getByTestId('ask-edit-send'));
+      expect(await screen.findByText('Edited answer for: What is left in the bathroom?')).toBeInTheDocument();
+      expect(askAboutProofsStream.mock.calls[1]?.[3]).toMatchObject({ supersedesId: Q1 });
+      expect(screen.queryByText('What is left on the kitchen?')).not.toBeInTheDocument();
+      expect(screen.queryByText(/still outstanding/i)).not.toBeInTheDocument();
+    });
+
+    it('offers next steps under the latest answer: send one, or start one in the box', async () => {
+      streamAnswers();
+      const user = userEvent.setup();
+      renderPanel();
+      await askOnce(user);
+      const cards = screen.getAllByTestId('ask-action-card').map((b) => b.getAttribute('data-action'));
+      expect(cards).toEqual(['punch', 'text-crew']);
+      await user.click(screen.getByRole('button', { name: /text the crew/i }));
+      expect(screen.getByPlaceholderText(/ask what you forgot/i)).toHaveValue('Text the crew about this: ');
+      await user.click(screen.getByRole('button', { name: /make a punch list/i }));
+      await waitFor(() => expect(askAboutProofsStream.mock.calls[1]?.[1]).toBe('Make a punch list from this.'));
+    });
+
+    it('searches past chats when the rail asks, and publishes the results', async () => {
+      searchAskChats.mockResolvedValue({ results: [{ threadId: 'thr-1', threadTitle: 'Roof', questionId: Q1, snippet: 'roof tarp', at: '2026-10-09T10:00:00Z' }] });
+      const { onAskHistory, publishAskHistoryAction } = await import('../lib/askHistoryBridge');
+      const seen: unknown[] = [];
+      const off = onAskHistory((payload) => {
+        if (payload.search) seen.push(payload.search);
+      });
+      renderPanel();
+      await screen.findByPlaceholderText(/ask what you forgot/i);
+      publishAskHistoryAction({ type: 'search-threads', jobId: 'job-1038', query: 'tarp' });
+      await waitFor(() => expect(seen).toEqual([{ query: 'tarp', results: [expect.objectContaining({ questionId: Q1 })] }]));
+      expect(searchAskChats).toHaveBeenCalledWith('job-1038', 'tarp');
+      off();
+    });
+
+    it('signed-in homeowners on a progress grant get none of the office extras', async () => {
+      streamAnswers();
+      const user = userEvent.setup();
+      renderPanel({ officeExtras: false });
+      await askOnce(user);
+      expect(screen.queryByTestId('ask-thumbs-down')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-edit')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-action-cards')).not.toBeInTheDocument();
+      expect(askPins).not.toHaveBeenCalled();
+    });
+
+    it('guests on a share link get none of the office extras', async () => {
+      const askFn = vi.fn().mockResolvedValue({ answer: ANSWER, groundedOn: 1, model: null, question: { id: Q1, question: 'x', answer: ANSWER, grounded_on: [], created_at: '2026-10-09T10:00:00Z' } });
+      const user = userEvent.setup();
+      renderPanel({ ask: askFn });
+      await askOnce(user);
+      expect(screen.queryByTestId('ask-thumbs-up')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-pin')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-edit')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-action-cards')).not.toBeInTheDocument();
+      expect(askPins).not.toHaveBeenCalled();
+    });
+  });
 });

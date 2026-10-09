@@ -1,3 +1,4 @@
+import { visibleAfterEdits } from './askEdits';
 import type {
   EvidenceItem,
   JobSummary,
@@ -305,7 +306,8 @@ export function restoreSessionUploads(
 }
 
 export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
-  const sorted = [...questions].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Edited questions replace the original and what followed (both stay on the record).
+  const sorted = visibleAfterEdits(questions);
   const unique: ProofQuestion[] = [];
   for (const question of sorted) {
     const prev = unique[unique.length - 1];
