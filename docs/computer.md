@@ -50,9 +50,11 @@ live view can load.
    CDP. The card polls `/api/chat-computer/tasks/:id` every 1.5 s for status.
 4. When the site wants a sign-in, a verification code, or shows a captcha, the
    task pauses as **Needs you**. The task card opens the live view for Take
-   control, the member finishes the step, and presses Resume. Computer never
-   types passwords or codes, never solves captchas (`solveCaptchas: false`),
-   and does not rapid-retry while paused.
+   control, the member finishes the step, and presses Resume. The one
+   exception is a site with a **saved password** on Logins (below): there the
+   server types the saved username and password itself. Computer never types
+   verification codes, never solves captchas (`solveCaptchas: false`), and
+   does not rapid-retry while paused.
 5. Before a consequential click, the agent must call `request_approval`. The
    approval card shows a screenshot, each filled field with its value and
    where it came from, and Approve / Take control / Cancel.
@@ -112,6 +114,46 @@ already works on any site, and keeps one place where actions are checked.
   opens the site on that profile, classifies signed-in vs login / MFA /
   captcha from the live page, reports a plain message, and releases the
   browser. It never invents credentials or types passwords.
+
+## Saved passwords (Logins)
+
+A Global Admin can save a username and password for a site on Logins, so
+Computer signs back in on its own when the site has logged the org out.
+
+- **Off unless configured.** Needs `COMPUTER_CREDENTIAL_KEY` (at least 32
+  characters, e.g. `openssl rand -base64 48`). Without it the page says saving
+  passwords isn't turned on, and everything else keeps working.
+- **Storage.** AES-256-GCM (`credentialCrypto.ts`), one random IV per value,
+  bound to its org, site and field so a value copied onto another row does
+  not open. Each row records the key's fingerprint. Table
+  `computer_login_credentials` is service-role only.
+- **Who.** Only a Global Admin can save, replace or delete a password, or see
+  the saved username. Nobody can read the password back.
+- **Typing it.** The agent calls `sign_in_saved` for a site the task names.
+  The server opens the credential and types it through the browser driver
+  (`autoSignIn.ts`). The plaintext never goes into a model message, a
+  screenshot for the model (password fields render masked), a log line or
+  the audit log. The audit row records only the site and the outcome.
+- **Where it is typed.** Only on the saved site's own pages, its catalog
+  sign-in hosts, or a common identity provider it hands off to
+  (`microsoftonline.com`, `live.com`, `accounts.google.com`, `okta.com`,
+  `auth0.com`, `b2clogin.com`, any subdomain). Anywhere else, Computer opens
+  the saved sign-in page first.
+- **When it fails.** A wrong password marks the login **Needs attention** and
+  the task pauses for the person. A code, a number to approve or a captcha
+  after the password goes to **Needs you**, as above.
+
+### Rotating the key
+
+1. Generate a new key. Set `COMPUTER_CREDENTIAL_KEY_PREVIOUS` to the current
+   value and `COMPUTER_CREDENTIAL_KEY` to the new one. Deploy.
+2. Saved passwords still work. Each is re-sealed with the new key the next
+   time Computer signs in with it.
+3. To finish at once: `cd backend && npm run rotate:computer-credentials`
+   (dry run), then again with `-- --apply`. It prints counts only, plus the
+   ids of any rows sealed with a key that is not configured (an admin must
+   save those again).
+4. Remove `COMPUTER_CREDENTIAL_KEY_PREVIOUS`.
 - **connectUrl recovery.** Browserbase session ids are stored on
   `computer_sessions`. `connect()` re-fetches `connectUrl` from
   `GET /v1/sessions/{id}` when the in-memory cache is gone (process restart).
@@ -135,13 +177,15 @@ already works on any site, and keeps one place where actions are checked.
 
 - `backend/src/computer/`: `types`, `config`, `gate`, `projection`,
   `prompt`, `agent`, `model`, `metering`, `store`, `worker`, `service`,
+  `logins`, `credentialCrypto`, `autoSignIn`, `rotateCredentials`,
   `providers/{browserbase,mock,playwrightDriver}`
 - `backend/src/routes/computer.ts`: mounted at `/api/chat-computer`
   (`/api/computer` was the removed desktop-agent product and stays unmounted)
 - `frontend/src/components/computer/`: task card, live view, approval card,
   Needs-you card
 - Tests:
-  - `backend/test/computer*.test.ts`
+  - `backend/test/computer*.test.ts` (saved passwords and key rotation:
+    `computerCredentials.test.ts`)
   - `frontend/src/components/computer/ComputerTaskCard.test.tsx`
   - `supabase/tests/08_computer_tasks.sh`
 

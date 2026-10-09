@@ -69,6 +69,22 @@ Job-scoped assistant under the **Chat** tab:
 - Machine citation trailers are stripped for display — never leave raw
   `[[web:…]]` junk in the bubble.
 
+## Computer (Chat's browser agent) and Logins
+
+From a job's Chat, an org member can ask **Computer** to do something on a
+website (fill a carrier portal claim form, build a supply order). It runs in a
+cloud browser (Browserbase), fills things in, and stops for a person's
+approval before every submit, send, pay, delete, sign, accept-terms or upload
+click. The gate is enforced in code (`backend/src/computer/gate.ts`), not just
+in the prompt.
+
+**Logins** (sidebar) lists the sites Computer may use for the org: a
+ready-to-go catalog plus custom websites. A Global Admin can save a username
+and password for a site so Computer signs itself back in; passwords are
+AES-256-GCM sealed with `COMPUTER_CREDENTIAL_KEY`, typed by the server, and
+never shown to the model. Off until Browserbase and the key are configured.
+Details, safety model and key rotation: [`docs/computer.md`](docs/computer.md).
+
 ## Connect (Settings)
 
 **Settings → Connect** (`/settings?section=connect`; legacy `/crm` redirects
@@ -101,9 +117,10 @@ they are **not** listed as a Connect CRM row. Details:
   across Platform, Field Capture, corporate site, and Internal. Do not restore
   retired Saturn / tile / split-Atmo marks (`frontend/src/components/Logo.tsx`).
 
-Atmosphere is **not** selling a sales platform, estimator, computer-use agent,
-or general ops OS. Those products were removed from the tree; git history keeps
-them.
+Atmosphere is **not** selling a sales platform, estimator, or general ops OS.
+Those products were removed from the tree; git history keeps them. (The old
+standalone desktop computer-use agent was removed too; **Computer**, above, is
+a different feature: a browser agent that works from a job's Chat.)
 
 ## Who it is for
 
@@ -271,6 +288,7 @@ builds on push (see `.github/workflows/`).
 | --- | --- |
 | [`docs/production.md`](docs/production.md) | Deploy + go-live checklist |
 | [`docs/crm-agent-credentials.md`](docs/crm-agent-credentials.md) | Settings → Connect agent credentials |
+| [`docs/computer.md`](docs/computer.md) | Computer (Chat's browser agent), Logins, saved passwords, key rotation |
 | [`docs/video-work-verification.md`](docs/video-work-verification.md) | Analysis / verification pipeline |
 | [`docs/child-privacy-redaction.md`](docs/child-privacy-redaction.md) | Always-on child blur |
 | [`docs/motion-clips.md`](docs/motion-clips.md) | Motion clips (staff / Internal) |
