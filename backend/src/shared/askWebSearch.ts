@@ -44,7 +44,7 @@ export type AskWebSearchProvider = 'brave' | 'serper' | 'tavily' | 'gemini';
  * Matches mid-sentence so misbehaved model trailers never stay in prose.
  */
 const WEB_TRAILER_RE =
-  /(?:⟦\s*web:\s*([^⟧]*)\s*⟧|\[\[\s*web:\s*((?:(?!\]\]).)*)\s*\]\]|\[\s*web:\s*([^\[\]]*)\s*\])/gi;
+  /(?:⟦\s*web:\s*([^⟧]*)\s*⟧|\[\[\s*web:\s*((?:(?!\]\]).)*)\s*\]\]|\[\s*web:\s*([^[\]]*)\s*\])/gi;
 const WEB_PAIR_RE = /([^|,][^|]*?)\|(https?:\/\/[^\s,⟧\]]+)/g;
 
 /** Prompt block when web hits were retrieved for this turn. */
@@ -1580,7 +1580,7 @@ export function webSourcesFromHits(hits: readonly AskWebHit[]): AskWebSource[] {
     const url = safeHttpResultUrl(hit?.url ?? '');
     if (!url || out.some((row) => row.url === url)) continue;
     out.push({
-      title: plainWebText(hit.title).replace(/[\[\]()]/g, '').trim() || 'Source',
+      title: plainWebText(hit.title).replace(/[[\]()]/g, '').trim() || 'Source',
       url,
       snippet: plainWebText(hit.snippet, 280),
     });
@@ -1792,7 +1792,7 @@ export function normalizeAskWebCitations(
   const capabilityOnly = question ? looksLikePureWebCapabilityAsk(question) : false;
 
   // Drop google homepage / "how to search" junk from citations always.
-  let cited = filterLowValueWebCitations(filterWebHitsToAllowed(parseWebTrailer(text), supplied));
+  const cited = filterLowValueWebCitations(filterWebHitsToAllowed(parseWebTrailer(text), supplied));
   const usableSupplied = filterLowValueWebCitations(supplied);
 
   text = stripWebTrailer(text);

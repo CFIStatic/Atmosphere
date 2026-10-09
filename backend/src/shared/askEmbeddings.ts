@@ -94,7 +94,6 @@ export async function embedTexts(
     });
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 200);
-      // eslint-disable-next-line no-console
       console.warn(`[ask-embed] OpenAI ${response.status}: ${detail}`);
       return null;
     }
@@ -112,7 +111,6 @@ export async function embedTexts(
     if (out.some((v) => !v)) return null;
     return out as number[][];
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn(`[ask-embed] failed: ${err instanceof Error ? err.message : String(err)}`.slice(0, 200));
     return null;
   }

@@ -78,7 +78,7 @@ export function sniffProofMediaType(bytes: Buffer): AllowedProofMimeType | null 
   const ftyp = bytes.indexOf(Buffer.from('ftyp'));
   if (ftyp >= 4 && ftyp <= 8) {
     const brand = bytes.slice(ftyp + 4, ftyp + 8).toString('ascii');
-    if (/^qt  $/i.test(brand)) return 'video/quicktime';
+    if (/^qt {2}$/i.test(brand)) return 'video/quicktime';
     // Common MP4 brands; QuickTime often uses isom/mp41 too — treat non-qt as mp4.
     return 'video/mp4';
   }

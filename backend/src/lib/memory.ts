@@ -56,11 +56,9 @@ export async function recordEvent(
       p_details: input.details ?? {},
     });
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn('[memory] could not record %s: %s', input.type, error.message);
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[memory] could not record %s:', input.type, err);
   }
 }

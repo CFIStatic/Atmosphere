@@ -30,6 +30,7 @@ import { autoSignIn, type AutoSignInOutcome } from './autoSignIn.js';
 import {
   CREDENTIALS_OFF_MESSAGE,
   CredentialsOffError,
+  canOpenFingerprint,
   credentialKeyFingerprint,
   credentialsEnabled,
   openCredential,
@@ -243,14 +244,14 @@ function credentialView(c: ComputerCredentialRow, who: Map<string, string>, canM
   let username: string | null = null;
   let status = c.status;
   let attentionReason = c.attention_reason;
-  const readable = credentialsEnabled() && c.key_fingerprint === credentialKeyFingerprint();
+  const readable = canOpenFingerprint(c.key_fingerprint);
   if (!readable && credentialsEnabled()) {
     status = 'needs_attention';
     attentionReason = 'This password was saved with a different encryption key. Save it again.';
   }
   if (canManage && readable) {
     try {
-      username = openCredential(c.username_sealed, c.org_id, c.login_id, 'username');
+      username = openCredential(c.username_sealed, c.org_id, c.login_id, 'username', c.key_fingerprint);
     } catch {
       status = 'needs_attention';
       attentionReason = "This saved login can't be read. Save it again.";

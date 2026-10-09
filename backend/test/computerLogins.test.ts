@@ -322,7 +322,7 @@ test('Check login: login page reports needs_sign_in', async () => {
 });
 
 test('Check login refuses when a task or sign-in holds the browser', async () => {
-  const h = setup();
+  setup();
   const s = await startSignIn({ orgId: ORG, userId: USER, url: 'gmail.com', label: 'Gmail' });
   const saved = await finishSignIn(ORG, s.sessionId, USER);
   await startSignIn({ orgId: ORG, userId: USER, url: 'outlook.office.com' });

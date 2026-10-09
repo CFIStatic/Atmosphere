@@ -3,7 +3,7 @@ import { createUserClient } from '../lib/supabase.js';
 import { HttpError, forbidden } from '../lib/errors.js';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
+   
   namespace Express {
     interface Request {
       orgId?: string;

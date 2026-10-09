@@ -70,7 +70,7 @@ test('job-share recording routes require a matching account', () => {
     'utf8',
   );
   assert.match(src, /assertInviteeAccount\(req, party\)/);
-  assert.match(src, /requireAuth,\n  attachShareToken/);
+  assert.match(src, /requireAuth,\n {2}attachShareToken/);
 });
 
 test('field-app Today does not list org jobs for capture invitees', () => {

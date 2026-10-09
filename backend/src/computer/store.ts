@@ -160,7 +160,9 @@ export type NewCredential = Pick<
   'login_id' | 'org_id' | 'username_sealed' | 'password_sealed' | 'key_fingerprint' | 'login_url'
 > & { user_id: string | null; at: string };
 
-export type CredentialPatch = Partial<Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at'>>;
+export type CredentialPatch = Partial<
+  Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at' | 'username_sealed' | 'password_sealed' | 'key_fingerprint'>
+>;
 
 export interface ComputerAuditRow {
   id: number;

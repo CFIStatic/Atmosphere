@@ -222,6 +222,7 @@ function parseDirectory(buf: Buffer): DirEntry[] {
     if (!type) continue;
     if (entries.length >= DOCUMENT_LIMITS.maxZipEntries) throw oleTooLarge();
     const nameLen = buf.readUInt16LE(i + 64);
+    // eslint-disable-next-line no-control-regex -- strips control characters on purpose
     const name = buf.slice(i, i + Math.max(0, nameLen - 2)).toString('utf16le').replace(/\u0000/g, '');
     entries.push({
       name,

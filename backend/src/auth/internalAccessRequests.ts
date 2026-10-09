@@ -1,3 +1,4 @@
+
 /**
  * Queue of employees asking to join Internal Growth Metrics.
  *
@@ -8,6 +9,7 @@
 
 import type { User } from '@supabase/supabase-js';
 import { createAdminClient } from '../lib/supabase.js';
+import { ilikeExact } from '../lib/ilikeExact.js';
 import { logger } from '../lib/logger.js';
 
 export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
@@ -81,13 +83,15 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const admin = createAdminClient();
   if (!admin) return null;
 
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('id')
-    .ilike('email', email)
-    .maybeSingle();
-  if (profile && typeof (profile as { id?: string }).id === 'string') {
-    return (profile as { id: string }).id;
+  // Exact (case-insensitive) match only: a wildcard match here would grant
+  // internal staff access to a lookalike account.
+  const pattern = ilikeExact(email);
+  const { data: profile } = pattern
+    ? await admin.from('profiles').select('id, email').ilike('email', pattern).maybeSingle()
+    : { data: null };
+  const found = profile as { id?: string; email?: string | null } | null;
+  if (found && typeof found.id === 'string' && found.email?.trim().toLowerCase() === email.trim().toLowerCase()) {
+    return found.id;
   }
 
   for (let page = 1; page <= 20; page += 1) {

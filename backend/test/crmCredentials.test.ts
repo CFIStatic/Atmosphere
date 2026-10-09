@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sealCrmPassword, openCrmPassword } from '../src/lib/crmCredentialCrypto.js';
+import { sealCrmPassword, openCrmPassword, openCrmPasswordDetailed } from '../src/lib/crmCredentialCrypto.js';
+import { config } from '../src/config.js';
 import { CRM_AGENT_SYSTEMS } from '../src/crm/types.js';
 import { createApp } from '../src/app.js';
 
@@ -11,6 +12,29 @@ test('crm password seal round-trips and never equals plaintext', () => {
   assert.ok(sealed.iv.length >= 16);
   assert.ok(sealed.tag.length >= 16);
   assert.equal(openCrmPassword(sealed), password);
+});
+
+test('crm key rotation: a previous key still opens old rows and marks them stale', () => {
+  const password = 'rotate-me-CRM-login!';
+  const original = config.crmCredentials.keyMaterial;
+  const savedPrevious = process.env.CRM_CREDENTIAL_KEY_PREVIOUS;
+  try {
+    const sealed = sealCrmPassword(password);
+    assert.deepEqual(openCrmPasswordDetailed(sealed), { password, stale: false });
+
+    (config.crmCredentials as { keyMaterial: string }).keyMaterial = 'a-brand-new-crm-credential-key-for-tests-0001';
+    delete process.env.CRM_CREDENTIAL_KEY_PREVIOUS;
+    assert.throws(() => openCrmPassword(sealed), 'old rows do not open without the previous key');
+
+    process.env.CRM_CREDENTIAL_KEY_PREVIOUS = `some-other-retired-key, ${original}`;
+    assert.deepEqual(openCrmPasswordDetailed(sealed), { password, stale: true });
+    const resealed = sealCrmPassword(password);
+    assert.deepEqual(openCrmPasswordDetailed(resealed), { password, stale: false });
+  } finally {
+    (config.crmCredentials as { keyMaterial: string }).keyMaterial = original;
+    if (savedPrevious === undefined) delete process.env.CRM_CREDENTIAL_KEY_PREVIOUS;
+    else process.env.CRM_CREDENTIAL_KEY_PREVIOUS = savedPrevious;
+  }
 });
 
 test('four CRM agent systems are defined', () => {

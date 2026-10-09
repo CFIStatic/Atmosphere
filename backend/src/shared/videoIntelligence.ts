@@ -386,7 +386,7 @@ async function dictateWithGemini(input: {
     });
   } catch (err) {
     if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-      throw new Error(`Gemini vision timed out after ${geminiDictationTimeoutMs()}ms`);
+      throw new Error(`Gemini vision timed out after ${geminiDictationTimeoutMs()}ms`, { cause: err });
     }
     throw err;
   }

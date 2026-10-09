@@ -1,3 +1,4 @@
+import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
 import { clipRoomChipSegments, matchRoomsAcrossClips, segmentClipRooms } from '../shared/roomIntelligence.js';
 import { refreshClipRooms, roomClipFromProofRow } from '../shared/roomPersist.js';
@@ -4256,6 +4257,9 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     let orgId: string;
     let userId: string;
     let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    // Progress-grant viewers (homeowners, guests) get the guest media rules:
+    // never a removed clip, never a raw original that has privacy redactions.
+    let guest = false;
     try {
       const ctx = await requireOrgContext(req);
       orgId = ctx.orgId;
@@ -4275,14 +4279,16 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       orgId = ctx.orgId;
       userId = ctx.userId;
       supabase = ctx.supabase;
+      guest = ctx.access === 'viewer';
     }
     const { data: proof } = await supabase
       .from('job_proofs')
-      .select('storage_path, job_id, work_date, phase')
+      .select('storage_path, job_id, work_date, phase, deleted_at, ai_findings')
       .eq('org_id', orgId)
       .eq('id', req.params.proofId)
       .maybeSingle();
-    if (!proof) throw new HttpError(404, 'No such video.', 'not_found');
+    if (!proof || (guest && (proof as any).deleted_at)) throw new HttpError(404, 'No such video.', 'not_found');
+    if (guest) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');

@@ -233,7 +233,7 @@ function tokenOverlap(left: string, right: string): number {
 }
 
 function collectTotals(text: string, location: string, into: QuotedFact[]) {
-  const re = /((?:grand\s+)?total|amount\s+due|balance\s+due)\s*[:\-]\s*(\$[\d,]+(?:\.\d{2})?)/gi;
+  const re = /((?:grand\s+)?total|amount\s+due|balance\s+due)\s*[:-]\s*(\$[\d,]+(?:\.\d{2})?)/gi;
   for (const match of text.matchAll(re)) {
     const quote = match[0]!.replace(/\s+/g, ' ').trim();
     if (!text.includes(match[0]! ) && !text.includes(quote)) continue;

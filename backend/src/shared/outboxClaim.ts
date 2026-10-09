@@ -136,7 +136,7 @@ export async function listClaimableVideoProcessingJobs(
   limit = 8,
   nowIso = new Date().toISOString(),
 ): Promise<Array<{ id: string; org_id: string; video_id: string; status: string; attempt_count?: number }>> {
-  let query = supabase
+  const query = supabase
     .from('video_processing_jobs')
     .select('id, org_id, video_id, status, attempt_count')
     .in('status', ['pending', 'running'])
@@ -258,7 +258,7 @@ export async function listClaimableProofWork(
           `${cols.status}.eq.running`,
         ].join(',');
 
-  let query = supabase
+  const query = supabase
     .from('job_proofs')
     .select('id, org_id, job_id, party_id, phase, work_date')
     .is('deleted_at', null)

@@ -56,6 +56,7 @@ import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
+import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -722,7 +723,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');
 
-    let proofRows = (data ?? []) as any[];
+    const proofRows = (data ?? []) as any[];
     // Global Admins also see clips queued for the 30-day purge so they can restore.
     if (isGlobalAdmin(role)) {
       const writer = writerForOrg(orgId, supabase).raw;
@@ -1228,11 +1229,12 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     // the screen can say it too, because "will this open for them" is the
     // question the sharer is standing there with.
     let recipientHasAccount = false;
-    if (admin && recipientEmail) {
+    const recipientPattern = ilikeExact(recipientEmail);
+    if (admin && recipientPattern) {
       const { data: existing } = await admin
         .from('profiles')
         .select('id')
-        .ilike('email', recipientEmail)
+        .ilike('email', recipientPattern)
         .limit(1)
         .maybeSingle();
       recipientHasAccount = Boolean(existing);
@@ -1645,6 +1647,8 @@ evidenceShareRouter.get(
         .select(PORTAL_PROOF_SELECT)
         .eq('job_id', share.job_id) // the scope: never a clip from another job
         .eq('id', req.params.proofId)
+        // Removed clips are gone for link holders too (the list already hides them).
+        .is('deleted_at', null)
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
 
@@ -1743,6 +1747,7 @@ evidenceShareRouter.post(
         .select(PORTAL_PROOF_SELECT)
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
+        .is('deleted_at', null)
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
 

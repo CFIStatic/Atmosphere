@@ -98,6 +98,9 @@ export const READ_FIELDS = String.raw`() => {
   return out;
 }`;
 
+/** Phrases sign-in pages use for a rejected username or password. */
+export const SIGN_IN_ERROR = /(incorrect|invalid|wrong|not recogni[sz]ed|(?:does ?n[o']t|do not|did ?n[o']t) match|unable to (?:sign|log) (?:you )?in|could ?n[o']t (?:sign|log) you in|(?:sign|log)[- ]?in failed|failed to (?:sign|log) in|authentication failed|account (?:is )?locked|try again)/i;
+
 export const READ_SIGNALS = String.raw`() => {
   const CAPTCHA = /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile|arkoselabs|funcaptcha|geetest/i;
   const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -129,8 +132,15 @@ export const READ_SIGNALS = String.raw`() => {
     // and it is not the same 2–3 digit approval number.
     if (m && m[1] !== approvalNumber && (m[1].length >= 4)) visibleOtpCode = m[1];
   }
+  // A sign-in error on screen (role=alert, live region or an error-styled box), for "the saved password didn't work".
+  const errRe = new RegExp(${JSON.stringify(SIGN_IN_ERROR.source)}, 'i');
+  const errBox = Array.from(document.querySelectorAll('[role="alert"], [aria-live="assertive"], [aria-live="polite"], [class*="error" i], [id*="error" i], [class*="alert" i]'))
+    .filter(visible)
+    .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim())
+    .find((t) => t && t.length <= 300 && errRe.test(t));
   return {
     url: location.href,
+    signInError: errBox ? errBox.slice(0, 160) : null,
     hasPasswordField: inputs.some((i) => i.type === 'password'),
     hasOneTimeCodeField: inputs.some((i) => (i.getAttribute('autocomplete') || '').toLowerCase() === 'one-time-code' || /\b(otp|one.?time|verification.?code|2fa|mfa)\b/i.test(i.name + ' ' + i.id + ' ' + i.placeholder)),
     hasCaptcha: frames.some((f) => CAPTCHA.test(f.src + ' ' + f.title)) || Boolean(document.querySelector('.g-recaptcha, .h-captcha, .cf-turnstile')),
@@ -348,4 +358,72 @@ export const FIND_FILE_INPUT = `(px, py) => {
   const box = el.closest('form, fieldset, section, div');
   const near = box ? box.querySelector('input[type=file]') : null;
   return near instanceof HTMLInputElement ? near : null;
+}`;
+
+
+/**
+ * The form control at a point (through labels and open shadow roots), marked
+ * with data-atmo-set so the driver can act on it, plus what kind it is.
+ */
+export const MARK_CONTROL_AT = String.raw`(x, y) => {
+  document.querySelectorAll('[data-atmo-set]').forEach((n) => n.removeAttribute('data-atmo-set'));
+  let el = document.elementFromPoint(x, y);
+  for (let i = 0; i < 5 && el && el.shadowRoot; i += 1) {
+    const inner = el.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === el) break;
+    el = inner;
+  }
+  if (!el) return null;
+  if (el.tagName === 'LABEL' && el.control) el = el.control;
+  const CONTROL = 'input, select, textarea, [contenteditable="true"], [contenteditable=""], [role="combobox"], [role="textbox"], [role="checkbox"], [role="radio"], [role="switch"]';
+  let c = el.closest ? el.closest(CONTROL) : null;
+  // A wrapper around one control (a styled field box), never the page or a whole form.
+  if (!c && el.querySelectorAll && !/^(BODY|HTML|FORM|MAIN)$/.test(el.tagName)) {
+    const inside = el.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    if (inside.length === 1) c = inside[0];
+  }
+  if (!c) { const lab = el.closest && el.closest('label'); if (lab && lab.control) c = lab.control; }
+  if (!c) return null;
+  if (c.getAttribute('role') === 'combobox' && !/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName)) {
+    const inner = c.querySelector('input');
+    if (inner) c = inner;
+  }
+  c.setAttribute('data-atmo-set', '1');
+  const tag = c.tagName.toLowerCase();
+  const type = tag === 'input' ? (c.type || 'text').toLowerCase() : null;
+  const role = (c.getAttribute('role') || '').toLowerCase();
+  let kind = 'text';
+  if (tag === 'select') kind = 'select';
+  else if (type === 'checkbox' || role === 'checkbox' || role === 'switch') kind = 'checkbox';
+  else if (type === 'radio' || role === 'radio') kind = 'radio';
+  else if (type === 'date' || type === 'datetime-local' || type === 'month') kind = 'date';
+  else if (type === 'password' || ['file', 'submit', 'button', 'image', 'reset', 'hidden'].includes(type || '')) kind = 'none';
+  else if (role === 'combobox' || c.getAttribute('aria-autocomplete') || c.getAttribute('list')) kind = 'combobox';
+  else if (tag !== 'input' && tag !== 'textarea') kind = 'editable';
+  return { kind, type };
+}`;
+
+/** In-page, called with the marked control: what it shows now (never a password). */
+export const READ_CONTROL = String.raw`(c) => {
+  const tag = c.tagName.toLowerCase();
+  if (tag === 'select') { const o = c.selectedOptions && c.selectedOptions[0]; return o ? o.text.trim() : ''; }
+  const type = (c.type || '').toLowerCase();
+  if (type === 'password') return null;
+  if (type === 'checkbox' || type === 'radio') return c.checked ? 'checked' : 'unchecked';
+  const aria = c.getAttribute('aria-checked');
+  if (aria === 'true' || aria === 'false') return aria === 'true' ? 'checked' : 'unchecked';
+  if ('value' in c && tag !== 'div' && tag !== 'span') return String(c.value);
+  return (c.innerText || c.textContent || '').trim();
+}`;
+
+/** In-page, called with a <select>: the option to choose for a wanted label or value (exact, then case-insensitive, then contains). */
+export const PICK_OPTION = String.raw`(c, want) => {
+  const norm = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const w = norm(want);
+  const opts = Array.from(c.options).filter((o) => !o.disabled);
+  const hit = opts.find((o) => o.text.trim() === String(want).trim()) || opts.find((o) => o.value === String(want))
+    || opts.find((o) => norm(o.text) === w) || opts.find((o) => norm(o.value) === w)
+    || (w.length >= 2 ? opts.find((o) => norm(o.text).startsWith(w)) : null)
+    || (w.length >= 3 ? opts.find((o) => norm(o.text).includes(w)) : null);
+  return hit ? hit.value : null;
 }`;

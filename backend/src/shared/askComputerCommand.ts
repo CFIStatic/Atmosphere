@@ -258,9 +258,9 @@ export function extractUserEmailSubjectBody(question: string): { subject: string
 
   let subject: string | null = null;
   const subjQuoted =
-    q.match(/\bsubject\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
-    q.match(/\bsubject\s+[\"“]([^\"”]+)[\"”]/i) ||
-    q.match(/\bwith\s+subject\s+[\"“]([^\"”]+)[\"”]/i);
+    q.match(/\bsubject\s*[:=]\s*["“]([^"”]+)["”]/i) ||
+    q.match(/\bsubject\s+["“]([^"”]+)["”]/i) ||
+    q.match(/\bwith\s+subject\s+["“]([^"”]+)["”]/i);
   if (subjQuoted) {
     subject = subjQuoted[1].trim();
   } else {
@@ -272,8 +272,8 @@ export function extractUserEmailSubjectBody(question: string): { subject: string
 
   let body: string | null = null;
   const bodyQuoted =
-    q.match(/\b(?:body|saying|message)\s*[:=]\s*[\"“]([^\"”]+)[\"”]/i) ||
-    q.match(/\b(?:body|saying|message)\s+[\"“]([^\"”]+)[\"”]/i);
+    q.match(/\b(?:body|saying|message)\s*[:=]\s*["“]([^"”]+)["”]/i) ||
+    q.match(/\b(?:body|saying|message)\s+["“]([^"”]+)["”]/i);
   if (bodyQuoted) {
     body = bodyQuoted[1].trim();
   } else {
@@ -500,7 +500,7 @@ export function resolveAdjusterFromJob(input: {
     const summary = String(doc.summary ?? '');
     const em = summary.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
     const ph = summary.match(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/);
-    const nm = summary.match(/(?:adjuster|assigned to)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+    const nm = summary.match(/(?:adjuster|assigned to)\s*[:-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
     if (em || ph || nm) {
       return {
         name: nm ? nm[1] : null,

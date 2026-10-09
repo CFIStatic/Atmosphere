@@ -6,7 +6,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chromium, type Browser } from 'playwright-core';
+import type { Browser } from 'playwright-core';
+import { launchTestChromium } from './helpers/chromium.js';
 import { classifyClick, classifyKey } from '../src/computer/gate.js';
 import { PlaywrightDriver } from '../src/computer/providers/playwrightDriver.js';
 
@@ -22,12 +23,7 @@ const PAGE = `<!doctype html><html><body style="margin:0;font:16px sans-serif">
 <p style="position:absolute;top:300px;left:20px">Enter the verification code we sent you.</p>
 </body></html>`;
 
-let browser: Browser | null = null;
-try {
-  browser = await chromium.launch({ headless: true });
-} catch {
-  browser = null;
-}
+const browser: Browser | null = await launchTestChromium();
 
 test('Playwright driver reads targets for the gate', { skip: browser ? false : 'no local Chromium' }, async () => {
   const context = await browser!.newContext({ viewport: { width: 1280, height: 800 } });

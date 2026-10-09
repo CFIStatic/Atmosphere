@@ -47,12 +47,26 @@ logins is intentionally stubbed in this PR.
 # Required in production. No fallback to INTEGRATIONS_CREDENTIAL_KEY or DEVICE_PEPPER.
 # Railway sets this as a reference to DEVICE_PEPPER so existing rows still open.
 CRM_CREDENTIAL_KEY=
+# CRM_CREDENTIAL_KEY_PREVIOUS=   # rotation only: retired key(s), comma separated
 # DEVICE_PEPPER=   # device PIN and internal TOTP only — not read for CRM passwords
 
 # Optional API bases for probes
 # JOBNIMBUS_API_BASE=https://app.jobnimbus.com/api1
 # ACCULYNX_API_BASE=https://api.acculynx.com/api/v2
 ```
+
+## Key rotation
+
+1. Generate a new key (`openssl rand -base64 48`).
+2. Set `CRM_CREDENTIAL_KEY_PREVIOUS` to the current value and
+   `CRM_CREDENTIAL_KEY` to the new one. Deploy.
+3. Existing rows still open. Each one is re-sealed with the new key the next
+   time the agent loads it (`crm_credentials_resealed` in the logs).
+4. Once every connected CRM has been used (or admins have reconnected), remove
+   `CRM_CREDENTIAL_KEY_PREVIOUS`.
+
+Production's key is currently a reference to `DEVICE_PEPPER`; rotating to a
+dedicated value stops one secret protecting both PINs and CRM passwords.
 
 ## Migration
 

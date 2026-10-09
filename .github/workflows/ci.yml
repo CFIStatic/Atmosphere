@@ -82,6 +82,11 @@ jobs:
         working-directory: backend
       - run: npm run typecheck
         working-directory: backend
+      # Lint errors fail the build. `any` is a warning capped at today's count,
+      # so it can only go down: lower the cap when you remove some.
+      - name: Lint (no new `any`)
+        run: npx eslint . --max-warnings 193
+        working-directory: backend
       - run: npm test
         working-directory: backend
       - run: npm run build
@@ -113,6 +118,39 @@ jobs:
       # `npm run build` runs `tsc -b` first, so this covers the typecheck too.
       - run: npm run build
         working-directory: frontend
+
+  mobile:
+    name: Mobile (App Store checks + Android build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Codemagic builds start by hand, so this is the only build a branch gets
+    # before merge. Mirrors codemagic.yaml's android-debug-apk workflow; the
+    # iOS build needs a Mac and stays on Codemagic.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - run: npm ci
+        working-directory: apps/mobile
+      - name: App Store basics (plist, privacy manifest, icons)
+        run: npm test
+        working-directory: apps/mobile
+      - name: Sync Capacitor Android project
+        run: |
+          npx cap sync android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+        working-directory: apps/mobile
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: apps/mobile/android
 
   internal:
     name: Internal site

@@ -1305,7 +1305,7 @@ export async function answerFromJobFile(input: {
   }
 
   // Run safe tools first so field updates apply before the model writes prose.
-  let toolResults: AskToolResult[] = [];
+  const toolResults: AskToolResult[] = [];
   let webHits: AskWebHit[] = [];
   if (input.toolContext && !sessionCovers) {
     const picks = heuristicPicks;

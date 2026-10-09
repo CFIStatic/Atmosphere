@@ -275,7 +275,6 @@ export function conversationChunks(transcript: string): StampChunk[] {
 
 function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
-  let anon = 0;
   let lastLabel: string | null = null;
   for (const chunk of chunks) {
     const pieces = chunk.text
@@ -298,7 +297,6 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
         text = part.trim();
       } else {
         // Unlabeled speech: who said it is not proven. Never make up "Speaker A".
-        anon += 1;
         speakerLabel = 'unknown';
         text = part.trim();
         lastLabel = speakerLabel;

@@ -8,7 +8,7 @@
  * line, an error message or the audit log. The audit row records only the
  * site and the outcome.
  */
-import { CREDENTIALS_OFF_MESSAGE, credentialKeyFingerprint, credentialsEnabled, openCredential } from './credentialCrypto.js';
+import { CREDENTIALS_OFF_MESSAGE, canOpenFingerprint, credentialsEnabled, openCredential, resealCredential } from './credentialCrypto.js';
 import { hostOfUrl, siteOf } from './sites.js';
 import type { ComputerCredentialRow, ComputerLoginRow, ComputerStore } from './store.js';
 import { catalogSiteForHost, signInHostsFor } from './catalog/sites.js';
@@ -143,13 +143,28 @@ export async function autoSignIn(input: {
   let username: string;
   let password: string;
   try {
-    if (credential.key_fingerprint !== credentialKeyFingerprint()) throw new Error('key changed');
-    username = openCredential(credential.username_sealed, login.org_id, login.id, 'username');
-    password = openCredential(credential.password_sealed, login.org_id, login.id, 'password');
+    if (!canOpenFingerprint(credential.key_fingerprint)) throw new Error('key changed');
+    username = openCredential(credential.username_sealed, login.org_id, login.id, 'username', credential.key_fingerprint);
+    password = openCredential(credential.password_sealed, login.org_id, login.id, 'password', credential.key_fingerprint);
   } catch {
     await needsAttention('This password was saved with a different encryption key. An admin needs to save it again.');
     await record('failed');
     return { outcome: 'failed', message: `The saved password for ${name} can't be read any more. An admin needs to save it again on Logins.` };
+  }
+
+  // Sealed with a previous key (rotation in progress): re-seal it with the
+  // current one now. Best effort; the sign-in goes ahead either way.
+  try {
+    const resealed = resealCredential({
+      org_id: login.org_id,
+      login_id: login.id,
+      username_sealed: credential.username_sealed,
+      password_sealed: credential.password_sealed,
+      key_fingerprint: credential.key_fingerprint,
+    });
+    if (resealed) await store.updateCredential(login.org_id, login.id, resealed);
+  } catch {
+    // Left for the rotation script.
   }
 
   let filled: Awaited<ReturnType<ComputerDriver['fillSignIn']>>;
@@ -179,13 +194,20 @@ export async function autoSignIn(input: {
     return { outcome: 'incomplete', message: `${name} sent the sign-in to a different website, so Computer didn't type the saved password there. Please finish signing in yourself.` };
   }
 
+  const signals = await driver.pageSignals().catch(() => null);
+
   if (filled === 'no_form') {
+    // No form we could fill. Only call that "signed in" when the page shows no
+    // password box anywhere (an embedded or unusual sign-in form is not a sign-in).
+    if (signals?.hasPasswordField || signals?.hasCaptcha) {
+      await record('incomplete');
+      return { outcome: 'incomplete', message: `Computer couldn't find a sign-in form it could fill on ${name}.` };
+    }
     await store.updateCredential(login.org_id, login.id, { last_used_at: at }).catch(() => undefined);
     await record('already_signed_in');
     return { outcome: 'already_signed_in', message: `Already signed in to ${name}.` };
   }
 
-  const signals = await driver.pageSignals().catch(() => null);
   let outcome: AutoSignInOutcome;
   let message: string;
   if (signals?.hasCaptcha) {
@@ -197,9 +219,15 @@ export async function autoSignIn(input: {
   } else if (signals?.hasOneTimeCodeField || signals?.mentionsVerificationCode) {
     outcome = 'two_factor';
     message = `The saved password worked. ${name} is asking for a verification code.`;
-  } else if (signals?.hasPasswordField) {
+  } else if (signals?.hasPasswordField && signals.signInError) {
+    // The site said no ("Incorrect password"): the saved login needs updating.
     outcome = 'failed';
     message = `The saved password for ${name} didn't work.`;
+  } else if (signals?.hasPasswordField) {
+    // Still on the form with no error: the site may want something else
+    // (a "remember me" step, a different account picker). Not proof the password is wrong.
+    outcome = 'incomplete';
+    message = `Computer filled in the saved login, but ${name} is still showing its sign-in form.`;
   } else if (filled === 'username_only') {
     outcome = 'incomplete';
     message = `Computer entered the username, but ${name} didn't ask for a password.`;
