@@ -87,7 +87,7 @@ export const COMPUTER_CUSTOM_TOOLS = [
   {
     name: 'open_url',
     description:
-      'Open a web address in the browser. Use it only for a site the task names (or the start URL). For links on a page, click them instead.',
+      'Open a web address in the browser, for a site the task names (or the start URL). On a desktop, use an "app://" address to launch a desktop app. For links on a page, click them instead.',
     input_schema: {
       type: 'object',
       properties: { url: { type: 'string', description: 'Absolute https:// URL.' } },
@@ -333,10 +333,16 @@ export function taskPrompt(input: {
   files?: Array<{ id: string; name: string; sizeKb: number }>;
   /** Starter hints for this kind of site, from the site catalog. */
   siteGuide?: string[];
+  /** 'desktop' when the task runs a Windows desktop app, not a website. */
+  surface?: 'browser' | 'desktop';
 }): string {
   const fields = input.projection.map((f) => ({ key: f.key, label: f.label, value: f.value }));
   const saved = input.savedSignIns ?? [];
+  const desktop = input.surface === 'desktop';
   return [
+    desktop
+      ? '<surface>You are on a Windows desktop computer, not in a web browser. The screenshot is the whole screen. Click and type on it; there is no address bar. Use open_url with an "app://" address to start a desktop app, or an https address to open the desktop browser. Everything else about your task, safety rules and approvals is unchanged.</surface>'
+      : '',
     `<task>\n${xmlEscape(input.instructions)}\n</task>`,
     input.startUrl ? `<start_url>${xmlEscape(input.startUrl)}</start_url>` : '<start_url>none given</start_url>',
     `<job_fields>\n${xmlEscape(JSON.stringify(fields, null, 1))}\n</job_fields>`,
@@ -351,6 +357,8 @@ export function taskPrompt(input: {
       : []),
     ...(input.siteGuide?.length ? [`<site_guide>\n${input.siteGuide.map((g) => `- ${xmlEscape(g)}`).join('\n')}\n</site_guide>`] : []),
     ...(input.note ? [`<server_note>\n${xmlEscape(input.note)}\n</server_note>`] : []),
-    'The screenshot shows the browser now. Start the task.',
-  ].join('\n\n');
+    desktop ? 'The screenshot shows the desktop now. Start the task.' : 'The screenshot shows the browser now. Start the task.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }

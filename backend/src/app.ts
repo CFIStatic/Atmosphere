@@ -38,6 +38,7 @@ import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
 import { childPrivacyRouter } from './routes/childPrivacy.js';
 import { computerRouter } from './routes/computer.js';
+import { desktopLiveRouter } from './routes/desktopLive.js';
 import { crmCredentialsRouter } from './routes/crmCredentials.js';
 import { speakerIdentityRouter } from './routes/speakerIdentity.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -189,6 +190,9 @@ export function createApp(): Express {
   app.use('/api/daily-report', dailyReportRouter);
   app.use('/api/child-privacy', childPrivacyRouter);
   app.use('/api/crm-credentials', crmCredentialsRouter);
+  // Desktop live view: token is the capability, so it is mounted before the
+  // Computer router's auth. Serves the same-origin viewer, its frames and input.
+  app.use('/api/chat-computer/desktop-live', desktopLiveRouter);
   // Chat's browser agent (org members only; service-role tables).
   app.use('/api/chat-computer', computerRouter);
   app.use('/api/playbooks', playbooksRouter);

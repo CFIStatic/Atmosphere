@@ -14,7 +14,8 @@ import {
 import type { JobFileAskContext } from '../shared/jobFileAsk.js';
 import { computerSettings, NOT_SET_UP_MESSAGE } from './config.js';
 import { projectJobForComputer } from './projection.js';
-import { computerProvider } from './providers/index.js';
+import { computerProvider, windowsDesktopProvider } from './providers/index.js';
+import { desktopAppForTask, desktopStartUrl } from './desktop/config.js';
 import type { ComputerAuditRow, ComputerApprovalRow, ComputerTaskRow } from './store.js';
 import { approvalPreviewIssues, isExactApprovalPreview } from './approvalPreview.js';
 import { assertComputerAiAllowed, computerStore, kickComputerWorker } from './worker.js';
@@ -90,12 +91,17 @@ export async function startComputerTask(input: {
     throw new ComputerServiceError(err instanceof Error ? err.message : 'AI is paused for this account.', 'ai_paused');
   }
   const settings = computerSettings();
+  // A request for a desktop app (Xactimate) that the operator has switched on
+  // for this org opens on the org's Windows computer; everything else opens in
+  // the cloud browser. With no desktop configured (the default), this is null.
+  const browserStartUrl = cleanUrl(input.startUrl) ?? startUrlFromText(instructions);
+  const desktopApp = desktopAppForTask(input.orgId, { startUrl: browserStartUrl, instructions });
   const task = await store.insertTask({
     org_id: input.orgId,
     job_id: input.jobId,
     created_by: input.userId,
     instructions,
-    start_url: cleanUrl(input.startUrl) ?? startUrlFromText(instructions),
+    start_url: desktopApp ? desktopStartUrl(desktopApp) : browserStartUrl,
     job_projection: projectJobForComputer(input.file ?? null, input.address ?? null),
     model_id: settings.model,
     max_steps: settings.maxSteps,
@@ -273,9 +279,11 @@ export async function mintLiveView(orgId: string, taskId: string, userId: string
   if (!session?.provider_session_id || session.status !== 'active') {
     throw new ComputerServiceError('The browser is not running for this task.', 'conflict');
   }
-  const provider = computerProvider();
+  // Use the provider that actually runs this session (cloud browser or the
+  // org's Windows desktop), not whichever is the default.
+  const provider = session.provider === 'windows' ? windowsDesktopProvider() : computerProvider();
   if (!provider.configured()) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
-  const link = await provider.liveViewUrl(session.provider_session_id, { expiresInSec: computerSettings().liveViewTtlSec });
+  const link = await provider.liveViewUrl(session.provider_session_id, { expiresInSec: computerSettings().liveViewTtlSec, control: mode === 'control' });
   if (mode === 'control' && task.human_control_by !== userId) {
     await store.updateTask(task.id, { human_control_by: userId, human_control_since: new Date().toISOString() });
     await audit(orgId, task, userId, 'took_control', { mode });

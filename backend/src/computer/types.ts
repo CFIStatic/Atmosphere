@@ -8,7 +8,7 @@
  * before it touches the page.
  */
 
-export type ComputerProviderId = 'browserbase' | 'mock';
+export type ComputerProviderId = 'browserbase' | 'windows' | 'mock';
 
 export interface ComputerSessionHandle {
   /** Provider's id for the session (Browserbase session id). */
@@ -37,7 +37,7 @@ export interface ComputerProvider {
    * A fresh, short-lived live-view URL for one viewer. The caller hands it
    * straight to that viewer and never stores or logs it.
    */
-  liveViewUrl(providerSessionId: string, opts: { expiresInSec: number }): Promise<LiveViewLink>;
+  liveViewUrl(providerSessionId: string, opts: { expiresInSec: number; control?: boolean }): Promise<LiveViewLink>;
   endSession(providerSessionId: string): Promise<void>;
 }
 
