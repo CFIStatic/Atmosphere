@@ -22,6 +22,9 @@ const askPins = vi.fn();
 const pinAskAnswer = vi.fn();
 const unpinAskAnswer = vi.fn();
 const searchAskChats = vi.fn();
+const askApproval = vi.fn();
+const approveAskApproval = vi.fn();
+const denyAskApproval = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -48,6 +51,9 @@ vi.mock('../lib/api', () => ({
     pinAskAnswer: (...args: unknown[]) => pinAskAnswer(...args),
     unpinAskAnswer: (...args: unknown[]) => unpinAskAnswer(...args),
     searchAskChats: (...args: unknown[]) => searchAskChats(...args),
+    askApproval: (...args: unknown[]) => askApproval(...args),
+    approveAskApproval: (...args: unknown[]) => approveAskApproval(...args),
+    denyAskApproval: (...args: unknown[]) => denyAskApproval(...args),
   },
 }));
 
@@ -128,7 +134,7 @@ describe('JobAskPanel', () => {
     askThreads.mockReset();
     createAskThread.mockReset();
     answerSpeakerVerification.mockReset();
-    for (const fn of [rateAskAnswer, askFeedback, askPins, pinAskAnswer, unpinAskAnswer, searchAskChats]) fn.mockReset();
+    for (const fn of [rateAskAnswer, askFeedback, askPins, pinAskAnswer, unpinAskAnswer, searchAskChats, askApproval, approveAskApproval, denyAskApproval]) fn.mockReset();
     rateAskAnswer.mockResolvedValue({ feedback: null });
     askFeedback.mockResolvedValue({ feedback: {} });
     askPins.mockResolvedValue({ pins: [] });
@@ -625,6 +631,105 @@ describe('JobAskPanel', () => {
     await waitFor(() => {
       expect(focused).toContain('scope');
     });
+  });
+
+  it('shows a text proposal as a card and sends only when Send is pressed', async () => {
+    const id = '7d2c1f0e-1a2b-4c3d-8e9f-0a1b2c3d4e5f';
+    const answer = `I drafted the text for Dana. Press Send when it looks right.\n\n⟦actions: send_job_sms|Text Dana|computer|ask-approval:${id}⟧`;
+    const pending = {
+      id,
+      kind: 'send_job_sms',
+      status: 'pending',
+      title: 'Send a text to Dana',
+      payload: { to: '+19725550142', body: 'Crew arrives at 8am tomorrow.', recipient: 'Dana' },
+      editable: true,
+      result: null,
+      decidedAt: null,
+      createdAt: '2026-10-09T12:00:00Z',
+      expiresAt: '2026-10-10T12:00:00Z',
+    };
+    askApproval.mockResolvedValue({ approval: pending });
+    approveAskApproval.mockResolvedValue({
+      approval: { ...pending, status: 'approved', result: 'Text sent to Dana.', decidedAt: '2026-10-09T12:01:00Z' },
+    });
+    askAboutProofsStream.mockImplementation(
+      async (_jobId: string, question: string, handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void }) => {
+        handlers.onStatus?.('Drafting the text…');
+        handlers.onToken?.('I drafted the text for Dana.');
+        return {
+          answer,
+          groundedOn: 0,
+          model: 'claude-opus',
+          question: { id: 'q-sms', question, answer, grounded_on: [], created_at: '2026-10-09T12:00:00Z' },
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    await user.type(await screen.findByPlaceholderText(/ask what you forgot/i), 'Text Dana that we arrive at 8');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    const card = await screen.findByTestId('ask-approval-card');
+    expect(card).toHaveTextContent(/Send a text to Dana/);
+    expect(card).toHaveTextContent(/Crew arrives at 8am tomorrow/);
+    expect(screen.queryByTestId('computer-task-card')).toBeNull();
+    expect(approveAskApproval).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ask-work-summary')).toHaveTextContent(/Worked for \d+s/);
+    await user.click(screen.getByTestId('ask-approval-approve'));
+    const receipt = await screen.findByTestId('ask-approval-receipt');
+    expect(receipt).toHaveAttribute('data-status', 'approved');
+    expect(receipt).toHaveTextContent(/Text sent to Dana/);
+    expect(approveAskApproval).toHaveBeenCalledWith('job-1038', id, null);
+  });
+
+  it('ticks off live steps while working and folds them into a summary after', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    askAboutProofsStream.mockImplementation(
+      async (_jobId: string, question: string, handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void }) => {
+        handlers.onStatus?.('Looking through clips…');
+        handlers.onStatus?.('internal_phase_name');
+        handlers.onStatus?.('Searching what was said…');
+        await gate;
+        handlers.onToken?.('The tarp came off.');
+        return {
+          answer: 'The tarp came off.',
+          groundedOn: 1,
+          model: 'claude-opus',
+          question: { id: 'q-steps', question, answer: 'The tarp came off.', grounded_on: [], created_at: '2026-10-09T12:00:00Z' },
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    await user.type(await screen.findByPlaceholderText(/ask what you forgot/i), 'What happened to the tarp?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    const live = await screen.findByTestId('ask-live-steps');
+    const items = live.querySelectorAll('li');
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toMatch(/Looking through clips/);
+    expect(items[1]!.textContent).toMatch(/Searching what was said…/);
+    expect(live.textContent).not.toMatch(/internal_phase_name/);
+    release();
+    expect(await screen.findByTestId('ask-answer-body')).toHaveTextContent(/tarp came off/i);
+    await waitFor(() => expect(screen.queryByTestId('ask-live-steps')).toBeNull());
+    const summary = screen.getByTestId('ask-work-summary');
+    expect(summary).toHaveTextContent(/Worked for \d+s · 2 steps/);
+    await user.click(within(summary).getByRole('button'));
+    expect(summary).toHaveTextContent(/Searching what was said/);
   });
 
   it('streams text, seeks a moment chip, and asks a follow-up', async () => {

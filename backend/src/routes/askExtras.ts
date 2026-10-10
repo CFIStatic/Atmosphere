@@ -5,6 +5,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireOrgContext } from '../lib/orgContext.js';
+import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
+import { approvePendingAction, denyPendingAction, getPendingAction, revokeWith } from '../shared/askApprovals.js';
 import {
   FEEDBACK_REASONS,
   listPinnedAnswers,
@@ -97,6 +99,49 @@ export async function searchAskChats(req: Request, res: Response, next: NextFunc
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const query = String(req.query.q ?? '').slice(0, 100);
     res.json({ results: await searchAskHistory(supabase, { orgId, jobId: uuid.parse(req.params.jobId), userId, query }) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Approvals are written by the server (members cannot write the table directly). */
+function approvalsDb() {
+  return unscopedAdminOrNull() ?? requireAdmin();
+}
+
+/** GET /api/operations/shared/:jobId/ask/approvals/:id — the card's state. */
+export async function getAskApproval(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId } = await requireOrgContext(req);
+    res.json({ approval: await getPendingAction(approvalsDb(), { orgId, jobId: uuid.parse(req.params.jobId), id: uuid.parse(req.params.id) }) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/operations/shared/:jobId/ask/approvals/:id/approve  { body? } — runs the action once. */
+export async function approveAskApproval(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const jobId = uuid.parse(req.params.jobId);
+    const input = z.object({ body: z.string().max(1600).optional().nullable() }).parse(req.body ?? {});
+    const admin = approvalsDb();
+    const approval = await approvePendingAction(
+      admin,
+      { orgId, jobId, id: uuid.parse(req.params.id), userId, editedBody: input.body ?? null },
+      { revoke: revokeWith(supabase, admin, orgId, jobId) },
+    );
+    res.json({ approval });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/operations/shared/:jobId/ask/approvals/:id/deny — nothing happens. */
+export async function denyAskApproval(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId } = await requireOrgContext(req);
+    res.json({ approval: await denyPendingAction(approvalsDb(), { orgId, jobId: uuid.parse(req.params.jobId), id: uuid.parse(req.params.id), userId }) });
   } catch (err) {
     next(err);
   }

@@ -54,6 +54,8 @@ export interface JobFileTurn {
   attachments?: Array<{ id: string; filename: string; typeLabel: string }>;
   /** Uploads in the session when this question was sent. */
   documentIds?: string[];
+  /** What Chat did while answering (this session only): the steps and how long it took. */
+  work?: { steps: string[]; ms: number };
 }
 
 function formatWorkDate(isoDate: string): string {
