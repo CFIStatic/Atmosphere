@@ -1292,6 +1292,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
             subject: mail.subject,
             text: mail.text,
             html: mail.html,
+            fromName: mail.fromName,
           });
           emailed = result.ok;
           if (!result.ok) mailWhy = result.why;

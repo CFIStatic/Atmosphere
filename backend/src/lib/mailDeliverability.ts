@@ -13,6 +13,13 @@ import { emailDomain } from './resendFrom.js';
 
 export const PLATFORM_FROM_NAME = 'Atmosphere';
 
+/**
+ * Mailbox that receives replies to platform mail. The From subdomain
+ * (invites.atmosphereteam.com) has no MX, so without a Reply-To a homeowner
+ * who hits Reply gets a bounce — and a From nobody can answer reads as junk.
+ */
+export const PLATFORM_REPLY_TO = 'hello@atmosphereteam.com';
+
 export type MailKind = 'transactional' | 'marketing';
 
 const MULTI_PART_PUBLIC_SUFFIXES = new Set(['co.uk', 'com.au', 'co.nz', 'com.br', 'co.jp']);
@@ -47,9 +54,29 @@ export function formatFromHeader(
   address: string,
   displayName = PLATFORM_FROM_NAME,
 ): string {
-  const cleanName = displayName.replace(/[\r\n"]/g, '').trim() || PLATFORM_FROM_NAME;
+  const cleanName =
+    displayName.replace(/[\r\n"\\<>]/g, '').replace(/\s+/g, ' ').trim() || PLATFORM_FROM_NAME;
   const cleanAddr = address.replace(/[\r\n<>]/g, '').trim();
-  return `${cleanName} <${cleanAddr}>`;
+  // RFC 5322: a display name with specials ("Acme, Inc.") must be quoted or
+  // receivers parse it as two addresses — a malformed From is a junk signal.
+  const name = /[()<>[\]:;@\\,."]/.test(cleanName) ? `"${cleanName}"` : cleanName;
+  return `${name} <${cleanAddr}>`;
+}
+
+/**
+ * "Acme Restoration via Atmosphere" — the homeowner knows the contractor,
+ * not Atmosphere. Recognized senders get opened instead of reported, and
+ * reports are what move Yahoo / Gmail placement for a young domain.
+ */
+export function viaAtmosphereFromName(orgName?: string | null): string {
+  const org = (orgName ?? '')
+    .replace(/[\r\n"\\<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 48)
+    .trim();
+  if (!org || org.toLowerCase() === PLATFORM_FROM_NAME.toLowerCase()) return PLATFORM_FROM_NAME;
+  return `${org} via ${PLATFORM_FROM_NAME}`;
 }
 
 /**
