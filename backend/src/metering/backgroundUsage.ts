@@ -140,6 +140,7 @@ export async function withVideoUsageScope<T>(
       userId,
       requestId: `video:${ref.proofId}:${randomUUID()}`,
       meterFeature: VIDEO_ANALYSIS_FEATURE,
+      proofId: ref.proofId,
     },
     fn,
   );

@@ -289,7 +289,7 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         // One frame, a short JSON observation. Gemini 3 thinks at "high" by
         // default and bills it as output; low keeps the reading and drops
         // most of that spend.
-        ...(/^gemini-3/i.test(opts.model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
+        ...(/^gemini-3/i.test(opts.model) && process.env.VERIFICATION_FRAME_THINKING_LOW === 'true' ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
       },
     };
     const response = await fetchFn(url, {

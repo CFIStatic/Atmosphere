@@ -148,7 +148,7 @@ jobs:
           TRANSCRIPTION_URL: ${{ secrets.TRANSCRIPTION_URL || vars.TRANSCRIPTION_URL }}
           TRANSCRIPTION_API_KEY: ${{ secrets.TRANSCRIPTION_API_KEY || vars.TRANSCRIPTION_API_KEY }}
           ANTHROPIC_MODEL: claude-sonnet-5
-          VERIFICATION_PRIMARY_MODEL: gemini-3.8-flash
+          VERIFICATION_PRIMARY_MODEL: gemini-3.6-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
         working-directory: backend
         run: node scripts/syncGithubEnvToRailway.mjs

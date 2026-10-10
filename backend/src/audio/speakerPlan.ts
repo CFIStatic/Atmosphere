@@ -48,6 +48,7 @@ export async function planClipSpeakers(input: {
             maxTokens: 500,
             mode: 'analysis',
             anthropicModel: config.technician.assistant.lightModel,
+            meterSource: 'speaker_plan',
             signal: AbortSignal.timeout(8000),
           })
       : input.complete;

@@ -114,6 +114,7 @@ export async function fuseVisionTranscriptEvidence(input: {
     const completed = await completeAskText({
       system: FUSION_SYSTEM,
       anthropicModel: config.technician.assistant.lightModel,
+      meterSource: 'evidence_fusion',
       user: [
         input.durationSeconds != null && Number.isFinite(Number(input.durationSeconds))
           ? `Clip length: ${Math.round(Number(input.durationSeconds))} seconds.`
