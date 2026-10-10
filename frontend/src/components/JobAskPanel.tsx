@@ -33,7 +33,7 @@ import {
 } from '../lib/askSeek';
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
-import { extractAskSources, isDocumentQuoteSource, type AskSourceChip } from '../lib/askSources';
+import { extractAskSources, isDocumentQuoteSource, tidyQuoteClipTitle, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
 import { AskActionCards } from './ask/AskActionCards';
@@ -144,7 +144,7 @@ function AskQuoteList({
 function quoteAttribution(quote: ReturnType<typeof extractAskSources>['quotes'][number]): string {
   return [
     isDocumentQuoteSource(quote.sourceId) ? '' : quote.speaker,
-    quote.clipTitle ?? '',
+    tidyQuoteClipTitle(quote.clipTitle),
     quote.atSeconds != null ? formatMomentClock(quote.atSeconds) : '',
   ]
     .map((part) => part.trim())

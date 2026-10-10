@@ -1386,3 +1386,12 @@ describe('JobAskPanel', () => {
     });
   });
 });
+
+describe('tidyQuoteClipTitle', () => {
+  it('drops cut-off AI descriptions and keeps real titles', async () => {
+    const { tidyQuoteClipTitle } = await import('../lib/askSources');
+    expect(tidyQuoteClipTitle('Short, Handheld Clip Filmed Inside a Home, Likely')).toBe('');
+    expect(tidyQuoteClipTitle('Kitchen walk-through · Oct 8')).toBe('Kitchen walk-through · Oct 8');
+    expect(tidyQuoteClipTitle(null)).toBe('');
+  });
+});

@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgressShareGuestView } from '../lib/api';
@@ -10,8 +11,14 @@ const progressShareAskThreads = vi.fn();
 const progressShareCreateAskThread = vi.fn();
 const progressShareAskQuestions = vi.fn();
 
+const { adoptUserMock, progressShareEmailSignIn, progressShareVerifyEmailSignIn } = vi.hoisted(() => ({
+  adoptUserMock: vi.fn(async () => null),
+  progressShareEmailSignIn: vi.fn(),
+  progressShareVerifyEmailSignIn: vi.fn(),
+}));
+
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ user: null, loading: false }),
+  useAuth: () => ({ user: null, loading: false, adoptUser: adoptUserMock }),
 }));
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -26,6 +33,8 @@ vi.mock('../lib/api', async (importOriginal) => {
       progressShareAskThreads: (...args: unknown[]) => progressShareAskThreads(...args),
       progressShareCreateAskThread: (...args: unknown[]) => progressShareCreateAskThread(...args),
       progressShareAskQuestions: (...args: unknown[]) => progressShareAskQuestions(...args),
+      progressShareEmailSignIn: (...args: unknown[]) => progressShareEmailSignIn(...args),
+      progressShareVerifyEmailSignIn: (...args: unknown[]) => progressShareVerifyEmailSignIn(...args),
     },
   };
 });
@@ -170,7 +179,7 @@ describe('JobProgressGuestPage', () => {
 
     expect(await screen.findByText('Job file')).toBeInTheDocument();
     expect(screen.getByText('Ortiz Restoration')).toBeInTheDocument();
-    expect(screen.getByText('board@cedarridgehoa.org')).toBeInTheDocument();
+    expect(screen.getAllByText('board@cedarridgehoa.org').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('homeowner-job-facts')).not.toBeInTheDocument();
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByText('Carrier declined them on revision 4.')).toBeInTheDocument();
@@ -181,15 +190,41 @@ describe('JobProgressGuestPage', () => {
     expect(
       screen.getAllByText('The north slope is stripped to decking.').length,
     ).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Save this job' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('intent=homeowner'),
-    );
-    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByTestId('guest-save-banner')).toHaveTextContent(/No password/);
+    expect(screen.getByRole('button', { name: 'Email me a link' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Use a password' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.getByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
+  });
+
+  it('emails a sign-in link to the invited address, then offers the code', async () => {
+    progressShareEmailSignIn.mockResolvedValue({ ok: true });
+    renderGuest();
+    const button = await screen.findByRole('button', { name: 'Email me a link' });
+    await userEvent.click(button);
+    expect(progressShareEmailSignIn).toHaveBeenCalledWith('demo-homeowner');
+    expect(await screen.findByText('Check your email.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sign-in code')).toBeInTheDocument();
+  });
+
+  it('signs in from the emailed link without a password', async () => {
+    progressShareVerifyEmailSignIn.mockResolvedValue({
+      ok: true,
+      user: { id: 'u1', email: 'board@cedarridgehoa.org' },
+      orgId: 'o1',
+      jobId: 'job-1038',
+      path: '/job-progress/job-1038',
+    });
+    renderGuest('/progress/demo-homeowner?signin=hash123&kind=invite');
+    await waitFor(() =>
+      expect(progressShareVerifyEmailSignIn).toHaveBeenCalledWith('demo-homeowner', {
+        tokenHash: 'hash123',
+        kind: 'invite',
+      }),
+    );
+    await waitFor(() => expect(adoptUserMock).toHaveBeenCalled());
   });
 
   it('opens Ask when the emailed Ask link is used', async () => {

@@ -31,6 +31,8 @@ function clip(partial: Partial<AskLookupClip> & Pick<AskLookupClip, 'proofId' | 
 }
 
 const TABLE_TITLE = 'Short Handheld Phone Clip Surveys a Dining Table';
+/** The auto-description title is replaced by a short name in quotes. */
+const TABLE_NAME = 'Walk-through · Sep 21';
 
 const catalog: AskLookupCatalog = {
   orgId: ORG,
@@ -108,8 +110,8 @@ test('the date filter keeps other days out, and reports them when the day has no
 test('the deterministic answer quotes both lines verbatim with clip and time, and the owner is unidentified', () => {
   const answer = composeTopicSpeech(QUESTION, catalog)!;
   assert.ok(answer);
-  assert.match(answer, /- “We just have to switch to LedgerPro cloud\.” \(Short Handheld Phone Clip Surveys a Dining Table, 0:15\)/);
-  assert.match(answer, /- “Okay, I'm going to set it up now\.” \(Short Handheld Phone Clip Surveys a Dining Table, 0:19\)/);
+  assert.match(answer, /- “We just have to switch to LedgerPro cloud\.” \(Walk-through · Sep 21, 0:15\)/);
+  assert.match(answer, /- “Okay, I'm going to set it up now\.” \(Walk-through · Sep 21, 0:19\)/);
   assert.match(answer, /unidentified speaker/);
   assert.doesNotMatch(answer, /All her life|best dog|door sticks|on paper/);
 });
@@ -139,7 +141,7 @@ test('the full pipeline returns both lines and quote cards with clip names, even
   assert.match(result.answer, /“Okay, I'm going to set it up now\.”/);
   const quotes = parseQuoteTrailer(result.answer);
   assert.deepEqual(quotes.map((q) => q.atSeconds), [14.6, 18.56]);
-  assert.ok(quotes.every((q) => q.clipTitle === TABLE_TITLE && q.speaker === 'Unidentified speaker'));
+  assert.ok(quotes.every((q) => q.clipTitle === TABLE_NAME && q.speaker === 'Unidentified speaker'));
   assert.ok(quotes.every((q) => q.sourceId.includes(`${TABLE}/`) && q.sourceId.includes('@')));
 });
 
@@ -196,7 +198,7 @@ test('an unverifiable quote is dropped with its sentence, and nothing is said ab
     { chunks, question: QUESTION },
   );
   assert.doesNotMatch(answer, /migrating everything/);
-  assert.match(answer, /“We just have to switch to LedgerPro cloud\.” \(Short Handheld Phone Clip Surveys a Dining Table, 0:15\)/);
+  assert.match(answer, /“We just have to switch to LedgerPro cloud\.” \(Walk-through · Sep 21, 0:15\)/);
   assert.equal(report.dropped, 1);
   assert.equal(report.verified, 1);
 });
@@ -204,7 +206,7 @@ test('an unverifiable quote is dropped with its sentence, and nothing is said ab
 test('a near-verbatim quote is rewritten to the exact transcript text, never paraphrased', () => {
   const { answer } = enforceQuoteGrounding('- "we just have to switch to ledgerpro cloud" (0:00)', { chunks, question: QUESTION });
   assert.match(answer, /“We just have to switch to LedgerPro cloud\.”/);
-  assert.match(answer, /\(Short Handheld Phone Clip Surveys a Dining Table, 0:15\)/);
+  assert.match(answer, /\(Walk-through · Sep 21, 0:15\)/);
   assert.doesNotMatch(answer, /0:00/);
 });
 
@@ -220,7 +222,7 @@ test('verified quotes become cards that open the exact moment, and fabricated ca
   assert.equal(quotes[0]!.speaker, 'Unidentified speaker');
   assert.doesNotMatch(quotes[0]!.speaker, /\(|Seated|Role/);
   assert.doesNotMatch(answer, /Person \d|Seated|Unknown Role/);
-  assert.equal(quotes[0]!.clipTitle, TABLE_TITLE);
+  assert.equal(quotes[0]!.clipTitle, TABLE_NAME);
   assert.doesNotMatch(answer, /migrating|Person 1/);
 });
 

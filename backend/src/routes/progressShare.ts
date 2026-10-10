@@ -36,6 +36,9 @@ import {
 } from '../shared/jobProgressGrants.js';
 import { composeHomeownerLiveStory } from '../shared/homeownerLiveStory.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
+import { sendProgressSignInLink, verifyProgressSignIn } from '../auth/progressEmailSignIn.js';
+import { setSessionCookies } from '../lib/session.js';
+import { publicUser } from '../auth/passwordAccount.js';
 
 /**
  * Guest access to a read-only job file.
@@ -228,6 +231,70 @@ progressShareRouter.post(
         userEmail: req.user!.email,
       });
       res.json({ ok: true, ...claimed });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const signInSendLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: 15 * 60_000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sign-in emails. Wait a few minutes and try again.', code: 'rate_limited' },
+});
+
+const signInVerifyLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: 15 * 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sign-in attempts. Wait a few minutes and try again.', code: 'rate_limited' },
+});
+
+/**
+ * POST /api/progress-share/:token/email-sign-in
+ * Emails the share's own recipient a one-time sign-in link + code. No password.
+ * The address is never taken from the request, so nothing can be enumerated.
+ */
+progressShareRouter.post(
+  '/:token/email-sign-in',
+  signInSendLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await sendProgressSignInLink(tokenFromProgressRequest(req));
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/progress-share/:token/email-sign-in/verify
+ * Link token hash or 6-digit code -> session cookies -> claim (same checks as /claim).
+ */
+progressShareRouter.post(
+  '/:token/email-sign-in/verify',
+  signInVerifyLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = z
+        .object({
+          tokenHash: z.string().trim().min(8).max(400).optional(),
+          kind: z.enum(['magiclink', 'invite']).optional(),
+          code: z.string().trim().regex(/^\d{6,10}$/).optional(),
+        })
+        .refine((b) => Boolean(b.tokenHash || b.code), 'tokenHash or code required')
+        .parse(req.body ?? {});
+      const token = tokenFromProgressRequest(req);
+      const { session, user } = await verifyProgressSignIn({ shareToken: token, ...body });
+      setSessionCookies(res, session, req.hostname);
+      const claimed = await claimProgressShareForUser({ token, userId: user.id, userEmail: user.email });
+      res.json({ ok: true, user: publicUser(user), ...claimed });
     } catch (err) {
       next(err);
     }

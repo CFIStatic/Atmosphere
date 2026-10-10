@@ -252,7 +252,12 @@ Rules:
 
 ` + ASK_PROSE_FORMAT_RULES;
 
-type CorpusRow = { at: number | null; text: string; kind: string };
+/** `match` holds extra search words (e.g. the raw action verb) that never reach the answer text. */
+type CorpusRow = { at: number | null; text: string; kind: string; match?: string };
+
+function rowHay(row: Pick<CorpusRow, 'text' | 'match'>): string {
+  return row.match ? `${row.text} ${row.match}` : row.text;
+}
 
 export function clipRecordFromEvidenceItem(item: {
   workDate?: string | null;
@@ -486,10 +491,12 @@ function tokensOverlap(query: string, hay: string): boolean {
 
 function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   const rows: CorpusRow[] = [];
-  const push = (at: number | null | undefined, text: string | null | undefined, kind: string) => {
+  const push = (at: number | null | undefined, text: string | null | undefined, kind: string, match?: string) => {
     const t = String(text || '').trim();
     if (!t) return;
-    rows.push({ at: at == null || !Number.isFinite(at) ? null : Number(at), text: t, kind });
+    const row: CorpusRow = { at: at == null || !Number.isFinite(at) ? null : Number(at), text: t, kind };
+    if (match?.trim()) row.match = match.trim();
+    rows.push(row);
   };
 
   push(null, record.dictation, 'dictation');
@@ -532,12 +539,11 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
     push(entry.atSeconds, entry.text || entry.note || entry.summary, 'beat');
   }
   for (const action of record.actions ?? []) {
-    const verb = String(action.action || '').replace(/_/g, ' ').trim();
-    const room = String(action.room || '').trim();
-    const object = String(action.objectLabel || action.object || '').trim();
-    const extras = (action.objects ?? []).filter(Boolean).join(' ');
-    const body = [room, verb, action.description, object, extras].filter(Boolean).join(' — ');
-    push(action.atSeconds, body, 'action');
+    const match = [action.action, action.room, action.objectLabel || action.object, ...(action.objects ?? [])]
+      .map(humanLabel)
+      .filter(Boolean)
+      .join(' ');
+    push(action.atSeconds, actionProse(action), 'action', match);
   }
   for (const window of record.timeline ?? []) {
     push(window.startSeconds, window.summary, 'window');
@@ -551,6 +557,94 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   for (const concern of record.concerns ?? []) push(null, concern, 'concern');
   for (const gap of record.couldNotTell ?? []) push(null, gap, 'gap');
   return rows;
+}
+
+const VAGUE_ACTION_VERBS = new Set(['other', 'unknown', 'none', 'n/a', 'misc', 'activity']);
+
+function humanLabel(value: unknown): string {
+  return String(value ?? '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * One plain-language sentence for an Analysis action, for Ask answers.
+ * Never the raw "living_room — other — living_room: … — laptop" field dump:
+ * lead with the description, add the room only when the description does not
+ * already say it, and drop placeholder verbs and duplicate object labels.
+ */
+export function actionProse(action: {
+  action?: string | null;
+  room?: string | null;
+  description?: string | null;
+  objectLabel?: string | null;
+  object?: string | null;
+}): string {
+  const room = humanLabel(action.room).toLowerCase();
+  let description = String(action.description ?? '').trim();
+  // Analysis sometimes prefixes the description with its own room key.
+  description = description.replace(/^[a-z]+(?:_[a-z]+)+\s*[:—-]\s*/i, '').trim();
+  const verb = humanLabel(action.action).toLowerCase();
+  const object = humanLabel(action.objectLabel || action.object).toLowerCase();
+  let sentence = description;
+  if (!sentence) {
+    const parts = [VAGUE_ACTION_VERBS.has(verb) ? '' : verb, object].filter(Boolean);
+    sentence = parts.join(' ');
+  }
+  if (!sentence) return '';
+  sentence = sentence.replace(/[.\s]+$/, '');
+  if (room && !VAGUE_ACTION_VERBS.has(room) && !sentence.toLowerCase().includes(room)) {
+    sentence = `${sentence} in the ${room}`;
+  }
+  return sentence[0].toUpperCase() + sentence.slice(1);
+}
+
+/** "from people in the room or from media on the laptop" -> the two option phrases. */
+function choiceOptions(question: string): [string, string] | null {
+  const first = (question.split('?')[0] ?? '').trim();
+  const at = first.toLowerCase().lastIndexOf(' or ');
+  if (at < 0) return null;
+  const leftClause = first.slice(0, at);
+  const right = first.slice(at + 4).trim();
+  const prep = /\b(from|by|in|on|at|inside|outside|with)\b/gi;
+  let start = -1;
+  for (const m of leftClause.matchAll(prep)) start = m.index ?? start;
+  const left = (start >= 0 ? leftClause.slice(start) : leftClause.split(/\s+/).slice(-3).join(' ')).trim();
+  return left && right ? [left, right] : null;
+}
+
+/**
+ * Answer "Is it A or B?" from what the reading actually says. Picks the option
+ * whose distinctive words appear in a timestamped reading row, then cites that
+ * row verbatim. Never states anything about the other option (no "nobody in
+ * the room" style absence claims); if neither option is supported, returns null.
+ */
+export function choiceAnswerFromClip(question: string, record: ClipAskRecord): string | null {
+  const options = choiceOptions(question);
+  if (!options) return null;
+  const [leftTok, rightTok] = options.map((o) => tokens(o));
+  const shared = new Set(leftTok!.filter((t) => rightTok!.includes(t)));
+  const distinct = [leftTok!.filter((t) => !shared.has(t)), rightTok!.filter((t) => !shared.has(t))];
+  const rows = clipCorpus(record).filter((row) => row.kind !== 'heard' && row.kind !== 'dictation' && row.kind !== 'summary');
+  let best: { option: number; row: CorpusRow; score: number } | null = null;
+  for (const row of rows) {
+    const hay = tokens(rowHay(row));
+    for (const option of [0, 1]) {
+      const score = distinct[option]!.filter((t) => hay.some((h) => tokensOverlap(t, h))).length;
+      if (score > 0 && (!best || score > best.score || (score === best.score && row.at != null && best.row.at == null))) {
+        best = { option, row, score };
+      }
+    }
+  }
+  if (!best) return null;
+  const other = distinct[1 - best.option]!;
+  const hay = tokens(rowHay(best.row));
+  // Both options equally supported by the same row: no basis to choose.
+  if (other.filter((t) => hay.some((h) => tokensOverlap(t, h))).length >= best.score) return null;
+  const verb = /\bcoming\b/i.test(question) ? 'coming ' : '';
+  const option = options[best.option]!.replace(/[.\s]+$/, '');
+  const clock = formatClipTime(best.row.at);
+  const text = best.row.text.replace(/[.\s]+$/, '');
+  const when = clock ? ` at ${clock}` : '';
+  return `It looks like it's ${verb}${option}: the clip shows “${text}”${when}.`;
 }
 
 function hasReading(record: ClipAskRecord): boolean {
@@ -671,6 +765,7 @@ const QUESTION_FRAME = new Set([
   'happen', 'happens', 'happened', 'does', 'doing', 'did', 'tell', 'know', 'which', 'many', 'much', 'there',
   'recording', 'camera', 'frame', 'filmed', 'film', 'see', 'can', 'you', 'your', 'describe', 'visible',
   'before', 'after', 'first', 'last', 'order', 'earlier', 'later', 'give', 'site', 'onsite', 'clip', 'video', 'shown', 'show',
+  'evidence', 'visual', 'supports', 'support', 'answer', 'proof', 'prove', 'proves',
 ]);
 const WORK_DONE = /^(install|installs|installed|installing|replace|replaced|replaces|replacing|repair|repaired|repairing|fix|fixed|fixing|finish|finished|finishing|complete|completed|completing|paint|painted|painting|patch|patched|remove|removed)$/;
 const DAMAGE_WORD = /^(damage|damaged|leak|leaks|leaking|mold|mould|crack|cracked|cracks|stain|stains|rot|rotted|broken)$/;
@@ -683,7 +778,7 @@ const LITERAL_DETAIL = /^(brand|brands|make|model|manufacturer|maker|serial|sku|
  * assumes something the evidence does not show.
  */
 export function missingFromEvidence(question: string, record: ClipAskRecord): { missing: string[]; literal: string[] } {
-  const hay = clipCorpus(record).flatMap((row) => tokens(row.text));
+  const hay = clipCorpus(record).flatMap((row) => tokens(rowHay(row)));
   const asked = tokens(question).filter((token) => !QUESTION_FRAME.has(token));
   const missing = asked.filter((token) => !hay.some((h) => tokensOverlap(token, h) || h.startsWith(token.slice(0, 5)) && token.length >= 6));
   // Work done (install, replace, repair, finish…) is never inferred from a nearby mention.
@@ -749,7 +844,7 @@ export function topicalSpeechAnswer(question: string, record: ClipAskRecord): st
   if (!asked.length) return null;
   const scored = heard
     .map((row) => {
-      const hay = tokens(row.text);
+      const hay = tokens(rowHay(row));
       return { row, score: asked.filter((token) => hay.some((h) => tokensOverlap(token, h))).length };
     })
     .filter((entry) => entry.score > 0);
@@ -765,12 +860,12 @@ export function topicalSpeechAnswer(question: string, record: ClipAskRecord): st
   const times = hits.map((entry) => formatClipTime(entry.row.at)).filter(Boolean) as string[];
   const when = times.length ? ` at ${times.length > 2 ? `${times.slice(0, -1).join(', ')}, and ${times[times.length - 1]}` : times.join(' and ')}` : '';
   const subject = asked
-    .filter((token) => hits.some((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h))))
+    .filter((token) => hits.some((entry) => tokens(rowHay(entry.row)).some((h) => tokensOverlap(token, h))))
     .slice(0, 3)
     .map((token) => `“${askedTerm(question, token)}”`)
     .join(' and ');
   const unmatched = asked
-    .filter((token) => !hits.some((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h))))
+    .filter((token) => !hits.some((entry) => tokens(rowHay(entry.row)).some((h) => tokensOverlap(token, h))))
     .slice(0, 3)
     .map((token) => `“${askedTerm(question, token)}”`);
   const heardMedia = mediaTags(record, heard);
@@ -799,7 +894,7 @@ export function topicalSpeechAnswer(question: string, record: ClipAskRecord): st
     const where = asked
       .slice(0, 3)
       .map((token) => {
-        const first = hits.find((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h)));
+        const first = hits.find((entry) => tokens(rowHay(entry.row)).some((h) => tokensOverlap(token, h)));
         const at = first ? formatClipTime(first.row.at) : null;
         return `“${askedTerm(question, token)}”${at ? ` at ${at}` : ''}`;
       })
@@ -977,8 +1072,15 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
   return `Exact words from the recording: ${lines.join(' ')}`;
 }
 
+/** "Is it A or B?" asks which one, not yes/no. */
+export function isChoiceQuestion(question: string): boolean {
+  const first = question.toLowerCase().split('?')[0] ?? '';
+  return /\b(is|are|was|were|does|do|did)\b.+\bor\b.+/.test(first) && !/\bor not\b/.test(first);
+}
+
 function isYesNoQuestion(question: string): boolean {
   const q = question.toLowerCase().trim();
+  if (isChoiceQuestion(q)) return false;
   return (
     /^(did|does|do|was|were|is|are|has|have|had|at any|anytime)\b/.test(q) ||
     /\b(go in|went in|go into|went into|enter|entered|ever go|at any point)\b/.test(q)
@@ -1200,6 +1302,10 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
+  if (isChoiceQuestion(q)) {
+    const choice = choiceAnswerFromClip(q, record);
+    if (choice) return choice;
+  }
   if (isRoomQuestion(q)) {
     const roomAnswer = answerRoomQuestion(
       q,
@@ -1313,7 +1419,7 @@ function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const need = Math.min(qTokens.length >= 2 ? 2 : 1, qTokens.length);
   const scored = rows
     .map((row) => {
-      const hay = tokens(row.text);
+      const hay = tokens(rowHay(row));
       const hits = qTokens.filter((token) => hay.some((h) => tokensOverlap(token, h)));
       return { row, score: hits.length };
     })
@@ -1462,9 +1568,7 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
     lines.push(`Beat${when ? ` @ ${when}` : ''}: ${text}`);
   }
   for (const action of record.actions ?? []) {
-    const verb = String(action.action || '').replace(/_/g, ' ');
-    const room = String(action.room || '').trim();
-    const body = [room, verb, action.description].filter(Boolean).join(' — ');
+    const body = actionProse(action);
     if (!body) continue;
     const when = formatClipTime(action.atSeconds);
     lines.push(`Action${when ? ` @ ${when}` : ''}: ${body}`);
@@ -1637,7 +1741,7 @@ export function relevantClipEvidence(question: string, record: ClipAskRecord, li
   const rows = clipCorpus(record).filter((row) => row.kind === 'heard' || row.at != null);
   return rows
     .map((row) => {
-      const hay = tokens(row.text);
+      const hay = tokens(rowHay(row));
       return { row, score: asked.filter((token) => hay.some((h) => tokensOverlap(token, h))).length };
     })
     .filter((entry) => entry.score > 0)

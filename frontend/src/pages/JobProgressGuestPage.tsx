@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, type JobScopeItem, type ProgressShareGuestView, type SharedJobRecord } from '../lib/api';
 import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
-import { loginHref, signupHref } from '../lib/authRedirect';
+import { loginHref } from '../lib/authRedirect';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
@@ -13,8 +13,10 @@ import { useAuth } from '../context/AuthContext';
  * Read-only job file for third parties — homeowners, attorneys, banks,
  * insurance companies. The token in the URL is the credential.
  *
- * After a quick email + password account (no payment / no Field Capture seat),
- * they claim this share and open the same /job-progress UI the office uses.
+ * To come back later they tap one button: we email the invited address a
+ * one-time sign-in link + code (no password, no payment), and the click claims
+ * this share and opens the same /job-progress UI the office uses. Viewers who
+ * already set a password can still use Sign in.
  */
 
 export function JobProgressGuestPage() {
@@ -22,7 +24,17 @@ export function JobProgressGuestPage() {
   const [searchParams] = useSearchParams();
   const openAsk = searchParams.get('ask') === '1';
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, adoptUser } = useAuth();
+  // Read the one-time sign-in params once, before the share exchange rewrites the URL.
+  const [emailSignIn] = useState(() => {
+    const hash = searchParams.get('signin');
+    const kind = searchParams.get('kind') === 'invite' ? 'invite' : 'magiclink';
+    return hash ? { tokenHash: hash, kind: kind as 'magiclink' | 'invite' } : null;
+  });
+  const [linkState, setLinkState] = useState<'idle' | 'sending' | 'sent' | 'verifying'>(
+    emailSignIn ? 'verifying' : 'idle',
+  );
+  const [code, setCode] = useState('');
   const [view, setView] = useState<ProgressShareGuestView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
@@ -76,8 +88,44 @@ export function JobProgressGuestPage() {
     }
   }
 
+  async function verifyEmailSignIn(input: { tokenHash?: string; kind?: 'magiclink' | 'invite'; code?: string }) {
+    try {
+      const res = await api.progressShareVerifyEmailSignIn(token, input);
+      await adoptUser(res.user);
+      navigate(res.path, { replace: true });
+    } catch (err) {
+      setLinkState(input.code ? 'sent' : 'idle');
+      setClaimError(err instanceof ApiError ? err.message : 'That sign-in link did not work. Send a new one.');
+    }
+  }
+
   useEffect(() => {
-    if (authLoading || !user || !token || !view) return;
+    if (!emailSignIn || !token) return;
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('signin');
+      url.searchParams.delete('kind');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search);
+    }
+    void verifyEmailSignIn(emailSignIn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailSignIn, token]);
+
+  async function sendSignInLink() {
+    if (linkState === 'sending') return;
+    setLinkState('sending');
+    setClaimError(null);
+    try {
+      await api.progressShareEmailSignIn(token);
+      setLinkState('sent');
+    } catch (err) {
+      setLinkState('idle');
+      setClaimError(err instanceof ApiError ? err.message : 'Could not send the sign-in email.');
+    }
+  }
+
+  useEffect(() => {
+    if (authLoading || !user || !token || !view || emailSignIn) return;
     const sessionEmail = user.email?.trim().toLowerCase() || '';
     if (!invitedEmail || sessionEmail !== invitedEmail) return;
     void claimAndOpen();
@@ -124,11 +172,6 @@ export function JobProgressGuestPage() {
     );
   }
 
-  const signupLink = signupHref({
-    intent: 'homeowner',
-    email: invitedEmail ?? undefined,
-    next: progressPath,
-  });
   const loginLink = loginHref(progressPath);
 
   return (
@@ -151,14 +194,11 @@ export function JobProgressGuestPage() {
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-line bg-paper-0 px-6 py-3">
+      <div className="shrink-0 border-b border-line bg-paper-0 px-4 py-3 sm:px-6" data-testid="guest-save-banner">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-ink-700">
-            Want to come back later? Save this job with the invited email and a password —{' '}
-            <span className="font-medium text-ink-800">free, no payment</span>.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {user ? (
+          {user ? (
+            <>
+              <p className="text-sm text-ink-700">Save this job to your account to find it again anytime.</p>
               <button
                 type="button"
                 onClick={() => void claimAndOpen()}
@@ -167,23 +207,83 @@ export function JobProgressGuestPage() {
               >
                 {claiming ? 'Opening…' : 'Open in my account'}
               </button>
-            ) : (
-              <>
-                <Link
-                  to={signupLink}
-                  className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0"
+            </>
+          ) : linkState === 'verifying' ? (
+            <p className="flex items-center gap-2 text-sm text-ink-700">
+              <SpinnerIcon className="animate-spin" width={16} height={16} /> Signing you in…
+            </p>
+          ) : linkState === 'sent' ? (
+            <form
+              className="flex w-full flex-wrap items-center justify-between gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!code.trim()) return;
+                setLinkState('verifying');
+                setClaimError(null);
+                void verifyEmailSignIn({ code: code.trim() });
+              }}
+            >
+              <p className="min-w-0 text-sm text-ink-700" role="status">
+                <span className="font-semibold text-ink-900">Check your email.</span> We sent a sign-in link to{' '}
+                <span className="font-medium text-ink-900">{invitedEmail}</span>. Tap it, or enter the code.
+              </p>
+              <div className="flex w-full gap-2 sm:w-auto">
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                  aria-label="Sign-in code"
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm tracking-widest text-ink-900 sm:w-36 sm:flex-none"
+                />
+                <button
+                  type="submit"
+                  disabled={code.trim().length < 6}
+                  className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 disabled:opacity-50"
                 >
-                  Save this job
-                </Link>
-                <Link
-                  to={loginLink}
-                  className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink-800"
+                  Open
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void sendSignInLink()}
+                  className="rounded-lg px-2 py-2 text-sm font-medium text-ink-600 hover:text-ink-900"
                 >
-                  Sign in
+                  Resend
+                </button>
+              </div>
+            </form>
+          ) : invitedEmail ? (
+            <>
+              <p className="min-w-0 text-sm text-ink-700">
+                Save this job — we&apos;ll email a sign-in link to{' '}
+                <span className="font-medium text-ink-900">{invitedEmail}</span>. No password, free.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void sendSignInLink()}
+                  disabled={linkState === 'sending'}
+                  className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 disabled:opacity-50"
+                >
+                  {linkState === 'sending' ? 'Sending…' : 'Email me a link'}
+                </button>
+                <Link to={loginLink} className="text-sm font-medium text-ink-600 hover:text-ink-900">
+                  Use a password
                 </Link>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-ink-700">Have an Atmosphere account? Sign in to save this job.</p>
+              <Link
+                to={loginLink}
+                className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink-800"
+              >
+                Sign in
+              </Link>
+            </>
+          )}
         </div>
         {claimError && (
           <p role="alert" className="mx-auto mt-2 max-w-3xl text-sm text-danger-600">

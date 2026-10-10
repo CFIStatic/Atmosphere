@@ -631,3 +631,20 @@ export function extractAskSources(answer: string): {
   });
   return { body: text, sources, webSources, actions, quotes, followUps };
 }
+
+/**
+ * Older answers can still carry a cut-off AI description as the clip name
+ * ("Short, Handheld Clip Filmed Inside a Home, Likely"). Drop it rather than
+ * show a fragment; speaker and time still identify the moment.
+ */
+export function tidyQuoteClipTitle(title: string | null | undefined): string {
+  const t = String(title ?? '').replace(/\s+/g, ' ').replace(/[\s,;:…]+$/, '').trim();
+  if (!t) return '';
+  const words = t.split(' ');
+  const fragment =
+    (/[,;:]/.test(t) && words.length >= 4) ||
+    /\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|showing|captured)\b/i.test(t) ||
+    /\b(a|an|the|and|of|with|in|on|to|from|inside)$/i.test(t) ||
+    words.length > 9;
+  return fragment ? '' : t;
+}
