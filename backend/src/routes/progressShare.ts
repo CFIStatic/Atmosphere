@@ -1,15 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
-import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
-import {
-  createSignedPlayableProofUrl,
-  PROOF_PLAYBACK_URL_TTL_SECONDS,
-} from '../lib/proofPlayableUrl.js';
 import {
   PROGRESS_SHARE_COOKIE,
   readShareCookie,
@@ -17,25 +11,12 @@ import {
   setShareCookie,
 } from '../lib/shareSession.js';
 import { shareState } from '../verifier/library.js';
-import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
-import { assertAiFeatureAllowed } from '../metering/aiBudgetService.js';
-import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
-import { listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
-import {
-  createAskThread,
-  renameAskThread,
-  ensureAskThreads,
-  presentAskThread,
-} from '../shared/askThreads.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   claimProgressShareForUser,
   enrichJobProgressGrants,
   listJobProgressGrants,
 } from '../shared/jobProgressGrants.js';
-import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
-import { composeHomeownerLiveStory } from '../shared/homeownerLiveStory.js';
-import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { sendProgressSignInLink, verifyProgressSignIn } from '../auth/progressEmailSignIn.js';
 import { setSessionCookies } from '../lib/session.js';
 import { publicUser } from '../auth/passwordAccount.js';
@@ -62,11 +43,6 @@ const shareLimiter = rateLimit({
 });
 progressShareRouter.use(shareLimiter);
 
-/** GET /api/progress-share/session — cookie only, so the token can leave the URL. */
-progressShareRouter.get('/session', async (req: Request, res: Response, next: NextFunction) => {
-  req.params.token = '';
-  return sendProgressGuest(req, res, next);
-});
 
 /** POST /api/progress-share/exchange — token → httpOnly cookie. Path tokens stay valid. */
 progressShareRouter.post('/exchange', async (req: Request, res: Response, next: NextFunction) => {
@@ -82,14 +58,6 @@ progressShareRouter.post('/exchange', async (req: Request, res: Response, next: 
   }
 });
 
-const askLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 60_000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many questions. Wait a minute and try again.', code: 'rate_limited' },
-});
 
 async function progressShareForToken(token: string) {
   const raw = requireAdmin();
@@ -128,96 +96,7 @@ function tokenFromProgressRequest(req: Request): string {
   return resolveShareToken(req.params.token, readShareCookie(req, PROGRESS_SHARE_COOKIE));
 }
 
-function progressFromRecord(scope: any[], proof: Awaited<ReturnType<typeof buildJobProofPayload>>) {
-  const actionable = scope.filter((item) => item.state !== 'excluded');
-  const scopeApproved = actionable.filter((item) => item.state === 'approved').length;
-  const scopePct = actionable.length
-    ? Math.round((scopeApproved / actionable.length) * 100)
-    : 0;
-  const verifiedDays = proof.days.filter((d) => d.payable || d.accepted).length;
-  const inProgress = proof.days.filter((d) => d.hasBefore && !d.hasAfter).length;
 
-  return {
-    scopePct,
-    scopeApproved,
-    scopeTotal: actionable.length,
-    daysLogged: proof.counts.days,
-    verifiedDays,
-    inProgress,
-  };
-}
-
-async function sendProgressGuest(req: Request, res: Response, next: NextFunction) {
-  try {
-    const token = tokenFromProgressRequest(req);
-    if (!token) throw new HttpError(401, 'No progress-share session.', 'no_share_session');
-    const { share, admin } = await progressShareForToken(token);
-
-    const [{ data: job }, { data: org }, { data: scopeRows }, { data: briefRows }, proof] =
-      await Promise.all([
-        admin
-          .from('crm_jobs')
-          .select('id, title, job_number, claim_number, status')
-          .eq('id', share.job_id)
-          .maybeSingle(),
-        admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
-        admin
-          .from('job_scope_items')
-          .select('id, party_id, state, title, detail, reason, revision, decided_at, created_at')
-          .eq('job_id', share.job_id)
-          .order('created_at'),
-        admin
-          .from('job_briefs')
-          .select('id, revision, facts, note')
-          .eq('job_id', share.job_id)
-          .order('revision', { ascending: false })
-          .limit(1),
-        buildJobProofPayload(admin, share.org_id, share.job_id),
-      ]);
-
-    await admin
-      .from('verifier_shares')
-      .update({
-        last_opened_at: new Date().toISOString(),
-        open_count: (share.open_count ?? 0) + 1,
-      })
-      .eq('id', share.id);
-
-    const scope = (scopeRows ?? []) as any[];
-    const guestProof = homeownerProofPayload(proof);
-    const jobFile = homeownerJobFileFromRows({
-      brief: (briefRows ?? [])[0] ?? null,
-      scope,
-    });
-
-    res.json({
-      share: {
-        label: share.label,
-        expiresAt: share.expires_at,
-        recipientEmail: share.recipient_email ?? null,
-      },
-      org: { name: (org as any)?.name ?? 'Contractor' },
-      job: job
-        ? {
-            id: (job as any).id,
-            title: (job as any).title,
-            jobNumber: (job as any).job_number,
-            claimNumber: (job as any).claim_number,
-            status: (job as any).status,
-          }
-        : null,
-      brief: jobFile.brief,
-      scope: jobFile.scope,
-      // Progress counts read the office payload; the guest only gets the
-      // homeowner-safe proof (no pay, disputes, punch list, checks, hashes).
-      progress: progressFromRecord(scope, proof),
-      liveStory: composeHomeownerLiveStory((guestProof as any).videos ?? []),
-      proof: guestProof,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
 
 /**
  * POST /api/progress-share/:token/claim
@@ -368,190 +247,20 @@ progressShareRouter.get(
   },
 );
 
-/** GET /api/progress-share/:token — read-only job progress for third parties. */
-progressShareRouter.get('/:token', sendProgressGuest);
-
 /**
- * POST /api/progress-share/:token/ask
- * Homeowner (or counsel / bank / adjuster) asks the same job file the office Ask
- * reads — token is the credential, no Atmosphere account.
- * After cookie exchange the client posts to /session/ask; resolveShareToken then
- * reads the httpOnly progress-share cookie.
+ * Retired: the anonymous share-data API (job file, Ask, video by token or
+ * guest cookie). Homeowners sign in by email and use the portal; a share token
+ * alone no longer reads job data. Kept as explicit 410s so old links and
+ * clients get a clean answer instead of a fallthrough.
  */
-progressShareRouter.get(
-  '/:token/ask/threads',
-  askLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const threads = await ensureAskThreads(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        owner: { kind: 'share', shareId: share.id },
-      });
-      res.json({
-        threads: threads.map(presentAskThread),
-        project: { kind: 'job', jobId: share.job_id },
-      });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-progressShareRouter.post(
-  '/:token/ask/threads',
-  askLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const input = z
-        .object({ title: z.string().trim().min(1).max(200).optional() })
-        .parse(req.body ?? {});
-      const thread = await createAskThread(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        owner: { kind: 'share', shareId: share.id },
-        title: input.title ?? 'New chat',
-      });
-      res.status(201).json({ thread: presentAskThread(thread) });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-progressShareRouter.patch(
-  '/:token/ask/threads/:threadId',
-  askLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const input = z
-        .object({ title: z.string().trim().min(1).max(200) })
-        .parse(req.body ?? {});
-      const thread = await renameAskThread(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        threadId: req.params.threadId,
-        owner: { kind: 'share', shareId: share.id },
-        title: input.title,
-      });
-      res.json({ thread: presentAskThread(thread) });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-progressShareRouter.get(
-  '/:token/ask/questions',
-  askLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
-      const questions = await listSharedProofQuestions(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        threadId,
-        access: 'share',
-      });
-      res.json({ questions });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-progressShareRouter.post(
-  '/:token/ask',
-  askLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const input = z
-        .object({
-          question: askQuestionText,
-          threadId: z.string().uuid().optional().nullable(),
-        })
-        .parse(req.body ?? {});
-      await assertAiFeatureAllowed(admin, share.org_id, { canManage: false });
-      const result = await runProofAsk({
-        supabase: admin,
-        orgId: share.org_id,
-        jobId: share.job_id,
-        question: input.question,
-        userId: null,
-        shareId: share.id,
-        threadId: input.threadId ?? null,
-        requestId: `ask:progress:${share.id}:${randomUUID()}`,
-        access: 'viewer',
-      });
-
-      await recordAccess(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        action: 'viewed',
-        actorLabel: `${share.label} — asked via job-file link`,
-        actorRole: 'external_reviewer',
-        detail: input.question.slice(0, 160),
-      });
-
-      res.status(201).json(result);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/**
- * GET /api/progress-share/:token/proof/:proofId/video — watch a clip through the share.
- * Soft-deleted proofs are excluded. When privacy/child redaction ranges exist,
- * refuse raw signed URLs (Phase 1 MVP — see guestMediaAccess).
- */
-progressShareRouter.get(
-  '/:token/proof/:proofId/video',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-
-      const { data: proof } = await admin
-        .from('job_proofs')
-        .select('id, storage_path, job_id, work_date, phase, deleted_at, ai_findings')
-        .eq('job_id', share.job_id)
-        .eq('id', req.params.proofId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (!proof) throw new HttpError(404, 'No such video on this job.', 'not_found');
-
-      assertGuestMayMintRawMedia((proof as any).ai_findings);
-
-      const playable = await createSignedPlayableProofUrl({
-        admin,
-        storagePath: (proof as any).storage_path,
-        expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
-        bucket: PROOF_BUCKET,
-        scheduleBuild: true,
-      });
-
-      await recordAccess(admin, {
-        orgId: share.org_id,
-        jobId: share.job_id,
-        proofId: req.params.proofId,
-        action: 'viewed',
-        actorLabel: `${share.label} — progress link`,
-        actorRole: 'external_reviewer',
-        detail: `via progress link — ${(proof as any).phase} · ${(proof as any).work_date}`,
-      });
-
-      res.json({
-        url: playable.url,
-        expiresInSeconds: playable.expiresInSeconds,
-        contentType: playable.contentType,
-      });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+function retiredGuestApi(_req: Request, res: Response) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(410).json({
+    error: 'This link now opens in the Atmosphere app. Open it again to sign in.',
+    code: 'share_api_retired',
+  });
+}
+progressShareRouter.all('/:token', retiredGuestApi);
+progressShareRouter.all('/:token/ask', retiredGuestApi);
+progressShareRouter.all('/:token/ask/*', retiredGuestApi);
+progressShareRouter.all('/:token/proof/*', retiredGuestApi);

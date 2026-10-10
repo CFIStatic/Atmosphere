@@ -85,7 +85,7 @@ export function ShareLinkGate() {
       <Shell>
         <h1 className="text-2xl font-semibold text-ink-900">Link unavailable</h1>
         <p className="mt-3 text-ink-600">{error}</p>
-        <a href={user ? HOMEOWNER_HUB_PATH : homeownerLoginHref(token, invited)} className="mt-6 inline-block font-semibold text-brand-600">
+        <a href={user ? HOMEOWNER_HUB_PATH : '/login'} data-testid="share-gate-error-link" className="mt-6 inline-block font-semibold text-brand-600">
           {user ? 'Go to your dashboard' : 'Sign in'}
         </a>
       </Shell>

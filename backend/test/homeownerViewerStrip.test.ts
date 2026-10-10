@@ -12,12 +12,10 @@ import { askToolsForAccess } from '../src/shared/askTools.js';
 const src = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const between = (text: string, start: string, end: string) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
 
-test('share link /progress/:token sends only the homeowner-safe proof', () => {
-  const fn = between(src('../src/routes/progressShare.ts'), 'async function sendProgressGuest', "progressShareRouter.get('/:token'");
-  assert.match(fn, /const guestProof = homeownerProofPayload\(proof\)/);
-  assert.match(fn, /proof: guestProof/);
-  assert.doesNotMatch(fn, /^\s*proof,\s*$/m);
-  assert.match(fn, /composeHomeownerLiveStory\(\(guestProof as any\)/);
+test('share link /progress/:token no longer serves job data anonymously', () => {
+  const route = src('../src/routes/progressShare.ts');
+  assert.match(route, /progressShareRouter\.all\('\/:token', retiredGuestApi\)/);
+  assert.doesNotMatch(route, /sendProgressGuest|buildJobProofPayload/);
 });
 
 test('homeownerProofPayload drops pay, verdicts, disputes, punch list, checks and hashes', () => {

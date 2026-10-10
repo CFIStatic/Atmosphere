@@ -96,5 +96,7 @@ describe('ShareLinkGate', () => {
     h.progressShareInvite.mockRejectedValue(new ApiError(404, 'This link does not exist.'));
     renderAt(`/progress/${TOKEN}`);
     expect(await screen.findByText('This link does not exist.')).toBeInTheDocument();
+    // A dead link goes to the plain sign-in page, not the homeowner email-link page.
+    expect(screen.getByTestId('share-gate-error-link')).toHaveAttribute('href', '/login');
   });
 });
