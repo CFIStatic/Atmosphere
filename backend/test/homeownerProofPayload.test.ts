@@ -24,7 +24,7 @@ const office = {
 };
 
 test('homeowner Videos payload keeps the videos, drops office-only data', () => {
-  const out: any = homeownerProofPayload(office);
+  const out = homeownerProofPayload(office) as typeof office;
   const json = JSON.stringify(out);
   for (const leak of ['GPS 2 mi off', 'internal note', 'internal', 'boom', 'abc', 'dev-1', 'payableBecause', 'evidenceLog']) {
     assert.ok(!json.includes(leak), `leaked ${leak}`);
