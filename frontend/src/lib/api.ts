@@ -4925,6 +4925,13 @@ export const api = {
       { method: 'GET' },
     ),
 
+  /** Office copy of the original file — signed as an attachment, logged on custody. */
+  proofDownloadUrl: (proofId: string) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/api/evidence-portal/evidence/${proofId}/download`,
+      { method: 'GET' },
+    ),
+
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),
 
