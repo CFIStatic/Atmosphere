@@ -1,7 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../lib/api';
-import { SpinnerIcon } from '../icons';
-import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
+import { ChevronRightIcon, SpinnerIcon } from '../icons';
+import { GlassModal } from './GlassModal';
+import {
+  planRequiredMessage,
+  UpgradePrompt,
+  useProductActionsLocked,
+} from '../billing/ProductActionLock';
 
 /**
  * Invite someone to the job file by email.
@@ -17,9 +22,7 @@ const STATE_STYLE: Record<EvidenceShare['state'], string> = {
 };
 
 const when = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    : null;
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
 
 export function ShareJobProgressPanel({
   jobId,
@@ -47,6 +50,7 @@ export function ShareJobProgressPanel({
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<CreateEvidenceShareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
 
   async function load() {
     try {
@@ -106,58 +110,73 @@ export function ShareJobProgressPanel({
   }
 
   const live = (shares ?? []).filter((s) => s.state === 'live');
+  const past = (shares ?? []).filter((s) => s.state !== 'live');
+  const pastLabel = past.every((s) => s.state === 'revoked') ? 'Revoked' : 'Past invites';
 
-  const panel = (
-    <section
-      id={modal ? undefined : 'share-job-progress'}
-      className={`rounded-xl glass-card p-5 ${modal ? 'shadow-xl' : ''}`}
+  const intro = (
+    <>
+      Email a job-progress link. They can create a quick email + password login — no payment, no
+      Field Capture seat. Not a film invite.
+    </>
+  );
+
+  const row = (share: EvidenceShare) => (
+    <li
+      key={share.id}
+      className={`flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 ${
+        modal ? 'glass-row' : 'border border-line'
+      }`}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h2 id="share-job-title" className="text-base font-semibold text-ink-900">
-            Share with homeowner
-          </h2>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Email a job-progress link. They can create a quick email + password login — no payment,
-            no Field Capture seat. Not a film invite.
-          </p>
-        </div>
-        {modal ? (
+      <div className="min-w-0">
+        <p
+          className={`truncate text-sm font-medium ${share.state === 'live' ? 'text-ink-900' : 'text-ink-600'}`}
+        >
+          {share.recipientEmail ?? share.label}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-500">
+          {share.openCount > 0
+            ? `Opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
+            : 'Not opened yet'}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATE_STYLE[share.state]}`}
+        >
+          {share.state === 'live' ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-success-600" aria-hidden />
+          ) : null}
+          {share.state}
+        </span>
+        {share.state === 'live' && (
           <button
             type="button"
-            onClick={onClose}
-            className="text-xs font-medium text-ink-500 hover:text-ink-800"
+            onClick={() => void revoke(share)}
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-ink-500 transition hover:bg-danger-50 hover:text-danger-600"
           >
-            Close
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setCreating(!creating);
-              setMade(null);
-            }}
-            className="text-xs font-medium text-ink-600 hover:text-ink-900"
-          >
-            {creating ? 'Cancel' : 'Invite'}
+            Revoke
           </button>
         )}
       </div>
+    </li>
+  );
 
+  const body = (
+    <>
       {actionsLocked ? (
-        <div className="mt-3">
+        <div className={modal ? 'mb-4' : 'mt-3'}>
           <UpgradePrompt />
         </div>
       ) : null}
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-danger-600">
+        <p role="alert" className={`text-xs text-danger-600 ${modal ? 'mb-3' : 'mt-3'}`}>
           {error}
         </p>
       )}
 
       {creating && (
-        <form onSubmit={create} className="mt-4 space-y-3">
+        <form onSubmit={create} className={`space-y-3 ${modal ? '' : 'mt-4'}`}>
           <label className="block">
             <span className="text-xs font-medium text-ink-700">Homeowner email</span>
             <input
@@ -167,13 +186,13 @@ export function ShareJobProgressPanel({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="homeowner@example.com"
-              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+              className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
             />
           </label>
           <button
             type="submit"
             disabled={busy || !email.trim()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
             Send homeowner invite
@@ -182,7 +201,11 @@ export function ShareJobProgressPanel({
       )}
 
       {made && (
-        <p className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-700">
+        <p
+          className={`mt-3 rounded-lg px-3 py-2 text-xs ${
+            made.emailed ? 'bg-success-50 text-success-600' : 'bg-danger-50 text-danger-600'
+          }`}
+        >
           {made.emailed
             ? `Invite sent to ${made.share.label}.`
             : `Invite created for ${made.share.label}, but the email did not send. Try again.`}
@@ -190,44 +213,41 @@ export function ShareJobProgressPanel({
       )}
 
       {shares === null ? (
-        <p className="mt-3 text-xs text-ink-500">Loading…</p>
+        <p className="mt-4 text-xs text-ink-500">Loading…</p>
       ) : shares.length === 0 ? (
-        <p className="mt-3 text-xs text-ink-500">Nobody has been invited yet.</p>
+        <p className="mt-4 text-xs text-ink-500">Nobody has been invited yet.</p>
       ) : (
-        <ul className="mt-3 space-y-2">
-          {shares.map((share) => (
-            <li
-              key={share.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-800">
-                  {share.recipientEmail ?? share.label}
-                </p>
-                <p className="text-[11px] text-ink-500">
-                  {share.openCount > 0
-                    ? `Opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
-                    : 'Not opened yet'}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${STATE_STYLE[share.state]}`}
-                >
-                  {share.state}
-                </span>
-                {share.state === 'live' && (
-                  <button
-                    onClick={() => void revoke(share)}
-                    className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-medium text-danger-600 hover:text-danger-700"
-                  >
-                    Revoke
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className={modal ? 'mt-6' : 'mt-3'}>
+          {modal ? (
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              Invites
+            </p>
+          ) : null}
+          {live.length > 0 ? (
+            <ul className="space-y-2">{live.map(row)}</ul>
+          ) : (
+            <p className="text-xs text-ink-500">No live invites.</p>
+          )}
+          {past.length > 0 ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setShowPast(!showPast)}
+                aria-expanded={showPast}
+                className="inline-flex items-center gap-1 rounded-md py-1 text-xs font-medium text-ink-500 transition hover:text-ink-800"
+              >
+                <ChevronRightIcon
+                  width={14}
+                  height={14}
+                  className={`transition-transform ${showPast ? 'rotate-90' : ''}`}
+                  aria-hidden
+                />
+                {pastLabel} ({past.length})
+              </button>
+              {showPast ? <ul className="mt-2 space-y-2">{past.map(row)}</ul> : null}
+            </div>
+          ) : null}
+        </div>
       )}
 
       {live.length > 0 && !creating && (
@@ -235,24 +255,36 @@ export function ShareJobProgressPanel({
           {live.length} invite{live.length === 1 ? '' : 's'} out right now.
         </p>
       )}
-    </section>
+    </>
   );
 
   if (modal) {
     return (
-      <div
-        className="fixed inset-0 z-50 flex items-start justify-center bg-ink-900/50 p-4 pt-[10vh] backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="share-job-title"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose?.();
-        }}
-      >
-        <div className="w-full max-w-md">{panel}</div>
-      </div>
+      <GlassModal title="Share with homeowner" description={intro} onClose={() => onClose?.()}>
+        {body}
+      </GlassModal>
     );
   }
 
-  return panel;
+  return (
+    <section id="share-job-progress" className="rounded-xl glass-card p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-ink-900">Share with homeowner</h2>
+          <p className="mt-0.5 text-xs text-ink-500">{intro}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setCreating(!creating);
+            setMade(null);
+          }}
+          className="text-xs font-medium text-ink-600 hover:text-ink-900"
+        >
+          {creating ? 'Cancel' : 'Invite'}
+        </button>
+      </div>
+      {body}
+    </section>
+  );
 }

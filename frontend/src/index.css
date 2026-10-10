@@ -304,6 +304,85 @@ body::before {
   transition: background-color 99999s ease-in-out 0s;
 }
 
+/* ---------- Dialogs ----------
+   A popup is the thickest glass in the app: a dark, heavily blurred pane over
+   a dimmed, blurred page. The scrim is always a shade of near-black — never
+   `ink`, which is near-white in the dark palette and fogs the page over. */
+.glass-scrim {
+  background-color: rgb(var(--scrim) / var(--scrim-alpha));
+  animation: glass-scrim-in 160ms ease-out both;
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-scrim {
+    -webkit-backdrop-filter: blur(var(--scrim-blur)) saturate(120%);
+    backdrop-filter: blur(var(--scrim-blur)) saturate(120%);
+  }
+}
+
+.glass-dialog {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgb(var(--glass-gloss) / var(--dialog-gloss)) 0%, transparent 38%),
+    rgb(var(--glass-tint) / var(--dialog-alpha));
+  border: 1px solid rgb(var(--glass-edge) / var(--dialog-edge));
+  box-shadow:
+    inset 0 1px 0 0 rgb(var(--glass-gloss) / var(--dialog-sheen)),
+    var(--dialog-shadow);
+  animation: glass-dialog-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-dialog {
+    -webkit-backdrop-filter: blur(32px) saturate(170%);
+    backdrop-filter: blur(32px) saturate(170%);
+  }
+}
+.glass-dialog .border-line {
+  border-color: rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+
+/* A row inside a dialog: a faint lift off the pane, brighter on hover. */
+.glass-row {
+  background-color: rgb(var(--glass-gloss) / var(--row-alpha));
+  border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+
+@keyframes glass-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes glass-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-scrim,
+  .glass-dialog { animation: none; }
+}
+
+:root,
+:root[data-theme='dark'] {
+  --scrim: 8 7 6;
+  --scrim-alpha: 0.4;
+  --scrim-blur: 8px;
+  --dialog-alpha: 0.6;
+  --dialog-gloss: 0.06;
+  --dialog-sheen: 0.12;
+  --dialog-edge: 0.13;
+  --dialog-shadow: 0 32px 80px -16px rgba(0, 0, 0, 0.7), 0 12px 32px -8px rgba(0, 0, 0, 0.45);
+  --row-alpha: 0.035;
+}
+:root[data-theme='light'] {
+  --scrim: 28 25 23;
+  --scrim-alpha: 0.28;
+  --scrim-blur: 10px;
+  --dialog-alpha: 0.8;
+  --dialog-gloss: 0.6;
+  --dialog-sheen: 0.9;
+  --dialog-edge: 0.1;
+  --dialog-shadow: 0 32px 80px -16px rgba(28, 25, 23, 0.28), 0 12px 32px -8px rgba(28, 25, 23, 0.14);
+  --row-alpha: 0.55;
+}
+
 /* Dividers inside a pane: light, not a drawn rule. */
 .glass-card .border-line,
 .glass-panel .border-line,
