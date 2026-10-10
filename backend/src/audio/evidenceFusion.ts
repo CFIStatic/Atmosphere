@@ -78,6 +78,30 @@ function parseFusionEntries(text: string): EvidenceLogEntry[] {
  * Merge a denser vision↔transcript fusion into an existing evidence log.
  * No-ops (returns input) when providers are missing or either modality is empty.
  */
+export const FUSION_CHUNK_CHARS = 10_000;
+export const FUSION_MAX_CHUNKS = 60;
+
+/** Transcript slices for fusion, split on line breaks. One slice when chunking is off or short. */
+export function fusionTranscriptChunks(transcript: string): string[] {
+  const raw = transcript.trim();
+  if (process.env.VIDEO_FUSION_CHUNKED === 'false' || raw.length <= FUSION_CHUNK_CHARS) {
+    return [raw.slice(0, FUSION_CHUNK_CHARS)];
+  }
+  const out: string[] = [];
+  let buf = '';
+  for (const line of raw.split('\n')) {
+    for (let i = 0; i < line.length; i += FUSION_CHUNK_CHARS) {
+      const piece = line.slice(i, i + FUSION_CHUNK_CHARS);
+      if (buf && buf.length + piece.length + 1 > FUSION_CHUNK_CHARS) {
+        out.push(buf);
+        buf = piece;
+      } else buf = buf ? `${buf}\n${piece}` : piece;
+    }
+  }
+  if (buf) out.push(buf);
+  return out.slice(0, FUSION_MAX_CHUNKS);
+}
+
 export async function fuseVisionTranscriptEvidence(input: {
   entries: EvidenceLogEntry[];
   narrationText?: string | null;
@@ -110,33 +134,42 @@ export async function fuseVisionTranscriptEvidence(input: {
       ).slice(0, 4_000)
     : '';
 
+  // Long recordings: one fusion pass per transcript chunk instead of reading
+  // only the first 10k characters (which dropped most of a long day).
+  // VIDEO_FUSION_CHUNKED=false restores the single truncated pass.
+  const chunks = fusionTranscriptChunks(transcript);
+  let entries = input.entries;
   try {
-    const completed = await completeAskText({
-      system: FUSION_SYSTEM,
-      anthropicModel: config.technician.assistant.lightModel,
-      meterSource: 'evidence_fusion',
-      user: [
-        input.durationSeconds != null && Number.isFinite(Number(input.durationSeconds))
-          ? `Clip length: ${Math.round(Number(input.durationSeconds))} seconds.`
-          : null,
-        `Vision dictation / summary:\n${(input.summary ? `${input.summary}\n\n` : '') + narration}`.slice(
-          0,
-          8_000,
-        ),
-        `Mic transcript (verbatim ground truth for speech):\n${transcript.slice(0, 10_000)}`,
-        existingSketch ? `Existing evidence rows (do not duplicate):\n${existingSketch}` : null,
-        conversationSketch ? `Conversation brief sketch:\n${conversationSketch}` : null,
-        'Return JSON only with NEW fused entries.',
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
-      maxTokens: EVIDENCE_FUSION_MAX_TOKENS,
-      mode: 'analysis',
-    });
-    if (!completed?.text) return input.entries;
-    const fused = parseFusionEntries(completed.text);
-    if (!fused.length) return input.entries;
-    return dedupeEvidenceLog([...input.entries, ...fused]);
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i]!;
+      const completed = await completeAskText({
+        system: FUSION_SYSTEM,
+        anthropicModel: config.technician.assistant.lightModel,
+        meterSource: 'evidence_fusion',
+        user: [
+          input.durationSeconds != null && Number.isFinite(Number(input.durationSeconds))
+            ? `Clip length: ${Math.round(Number(input.durationSeconds))} seconds.`
+            : null,
+          `Vision dictation / summary:\n${(input.summary ? `${input.summary}\n\n` : '') + narration}`.slice(
+            0,
+            8_000,
+          ),
+          chunks.length > 1 ? `Transcript chunk ${i + 1} of ${chunks.length}.` : null,
+          `Mic transcript (verbatim ground truth for speech):\n${chunk}`,
+          existingSketch ? `Existing evidence rows (do not duplicate):\n${existingSketch}` : null,
+          conversationSketch ? `Conversation brief sketch:\n${conversationSketch}` : null,
+          'Return JSON only with NEW fused entries.',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        maxTokens: EVIDENCE_FUSION_MAX_TOKENS,
+        mode: 'analysis',
+      });
+      if (!completed?.text) continue;
+      const fused = parseFusionEntries(completed.text);
+      if (fused.length) entries = dedupeEvidenceLog([...entries, ...fused]);
+    }
+    return entries;
   } catch (err) {
     logger.warn('evidence_fusion_failed', {
       detail: (err instanceof Error ? err.message : String(err)).slice(0, 200),

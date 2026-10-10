@@ -746,13 +746,21 @@ export async function completeAskText(input: CompleteAskTextInput): Promise<AskM
 type CompleteAskTextInput = Parameters<typeof completeAskTextUnmetered>[0];
 
 /**
- * Max paid background model calls per clip inside a rolling window.
- * VIDEO_MAX_MODEL_CALLS_PER_CLIP=0 turns the cap off. A normal clip makes
- * 5-10; the Oct 4-5 runs made 30-62, which is what this stops.
+ * Max paid background model calls per clip inside a rolling window:
+ * VIDEO_CALLS_BASE (30) + VIDEO_CALLS_PER_HOUR (25) x hours of footage.
+ * A normal 1-2 min clip makes 5-11; the Oct 3-4 runs made 30-62.
+ * VIDEO_MAX_MODEL_CALLS_PER_CLIP=0 turns the cap off; any other value is a flat override.
  */
-export function videoMaxModelCallsPerClip(): number {
-  const raw = Number(process.env.VIDEO_MAX_MODEL_CALLS_PER_CLIP ?? '25');
-  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 25;
+export function videoMaxModelCallsPerClip(durationSeconds?: number | null): number {
+  const flat = process.env.VIDEO_MAX_MODEL_CALLS_PER_CLIP;
+  if (flat != null && flat.trim() !== '') {
+    const n = Number(flat);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  const base = Number(process.env.VIDEO_CALLS_BASE ?? '30');
+  const perHour = Number(process.env.VIDEO_CALLS_PER_HOUR ?? '25');
+  const hours = Math.max(0, Number(durationSeconds) || 0) / 3600;
+  return Math.ceil((Number.isFinite(base) ? base : 30) + (Number.isFinite(perHour) ? perHour : 25) * hours);
 }
 
 const CLIP_CALL_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -767,7 +775,7 @@ export function resetBackgroundCallSlots(): void {
 export function takeBackgroundCallSlot(now = Date.now()): boolean {
   const scope = currentAiUsageScope();
   const proofId = scope?.meterFeature ? scope.proofId : null;
-  const cap = videoMaxModelCallsPerClip();
+  const cap = videoMaxModelCallsPerClip(scope?.durationSeconds ?? null);
   if (!proofId || cap === 0) return true;
   const recent = (clipCalls.get(proofId) ?? []).filter((t) => now - t < CLIP_CALL_WINDOW_MS);
   if (recent.length >= cap) {

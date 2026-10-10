@@ -109,21 +109,31 @@ export async function withVideoUsageScope<T>(
   let orgId = ref.orgId ?? null;
   let jobId = ref.jobId ?? null;
   let partyId = ref.partyId ?? null;
+  let durationSeconds: number | null = null;
   if (!orgId) {
     try {
       const { data } = await client
         .from('job_proofs')
-        .select('org_id, job_id, party_id')
+        .select('org_id, job_id, party_id, duration_seconds')
         .eq('id', ref.proofId)
         .maybeSingle();
       orgId = (data?.org_id as string | undefined) ?? null;
       jobId = jobId ?? ((data?.job_id as string | undefined) ?? null);
       partyId = partyId ?? ((data?.party_id as string | undefined) ?? null);
+      durationSeconds = Number(data?.duration_seconds) || null;
     } catch {
       orgId = null;
     }
   }
   if (!orgId) return fn();
+  if (durationSeconds == null) {
+    try {
+      const { data } = await client.from('job_proofs').select('duration_seconds').eq('id', ref.proofId).maybeSingle();
+      durationSeconds = Number(data?.duration_seconds) || null;
+    } catch {
+      durationSeconds = null;
+    }
+  }
   const userId = await resolveUsageActor(client, {
     orgId,
     userId: ref.userId ?? null,
@@ -141,6 +151,7 @@ export async function withVideoUsageScope<T>(
       requestId: `video:${ref.proofId}:${randomUUID()}`,
       meterFeature: VIDEO_ANALYSIS_FEATURE,
       proofId: ref.proofId,
+      durationSeconds,
     },
     fn,
   );
