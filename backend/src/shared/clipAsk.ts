@@ -597,6 +597,56 @@ export function actionProse(action: {
   return sentence[0].toUpperCase() + sentence.slice(1);
 }
 
+/** "from people in the room or from media on the laptop" -> the two option phrases. */
+function choiceOptions(question: string): [string, string] | null {
+  const first = (question.split('?')[0] ?? '').trim();
+  const at = first.toLowerCase().lastIndexOf(' or ');
+  if (at < 0) return null;
+  const leftClause = first.slice(0, at);
+  const right = first.slice(at + 4).trim();
+  const prep = /\b(from|by|in|on|at|inside|outside|with)\b/gi;
+  let start = -1;
+  for (const m of leftClause.matchAll(prep)) start = m.index ?? start;
+  const left = (start >= 0 ? leftClause.slice(start) : leftClause.split(/\s+/).slice(-3).join(' ')).trim();
+  return left && right ? [left, right] : null;
+}
+
+/**
+ * Answer "Is it A or B?" from what the reading actually says. Picks the option
+ * whose distinctive words appear in a timestamped reading row, then cites that
+ * row verbatim. Never states anything about the other option (no "nobody in
+ * the room" style absence claims); if neither option is supported, returns null.
+ */
+export function choiceAnswerFromClip(question: string, record: ClipAskRecord): string | null {
+  const options = choiceOptions(question);
+  if (!options) return null;
+  const [leftTok, rightTok] = options.map((o) => tokens(o));
+  const shared = new Set(leftTok!.filter((t) => rightTok!.includes(t)));
+  const distinct = [leftTok!.filter((t) => !shared.has(t)), rightTok!.filter((t) => !shared.has(t))];
+  const rows = clipCorpus(record).filter((row) => row.kind !== 'heard' && row.kind !== 'dictation' && row.kind !== 'summary');
+  let best: { option: number; row: CorpusRow; score: number } | null = null;
+  for (const row of rows) {
+    const hay = tokens(rowHay(row));
+    for (const option of [0, 1]) {
+      const score = distinct[option]!.filter((t) => hay.some((h) => tokensOverlap(t, h))).length;
+      if (score > 0 && (!best || score > best.score || (score === best.score && row.at != null && best.row.at == null))) {
+        best = { option, row, score };
+      }
+    }
+  }
+  if (!best) return null;
+  const other = distinct[1 - best.option]!;
+  const hay = tokens(rowHay(best.row));
+  // Both options equally supported by the same row: no basis to choose.
+  if (other.filter((t) => hay.some((h) => tokensOverlap(t, h))).length >= best.score) return null;
+  const verb = /\bcoming\b/i.test(question) ? 'coming ' : '';
+  const option = options[best.option]!.replace(/[.\s]+$/, '');
+  const clock = formatClipTime(best.row.at);
+  const text = best.row.text.replace(/[.\s]+$/, '');
+  const when = clock ? ` at ${clock}` : '';
+  return `It looks like it's ${verb}${option}: the clip shows “${text}”${when}.`;
+}
+
 function hasReading(record: ClipAskRecord): boolean {
   return clipCorpus(record).length > 0;
 }
@@ -1252,6 +1302,10 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
+  if (isChoiceQuestion(q)) {
+    const choice = choiceAnswerFromClip(q, record);
+    if (choice) return choice;
+  }
   if (isRoomQuestion(q)) {
     const roomAnswer = answerRoomQuestion(
       q,

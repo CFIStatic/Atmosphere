@@ -8,7 +8,7 @@ import {
 } from '../src/shared/clipAsk.js';
 
 const laptopClip: ClipAskRecord = {
-  summary: 'A handheld clip inside a home. The hacking discussion is coming from media playing on a laptop; visual check shows nobody physically in the room is speaking.',
+  transcript: '[0:02] So the hackers got into the network through an old router.',
   actions: [
     {
       atSeconds: 1,
@@ -41,6 +41,15 @@ test('progress-page Ask answers the laptop question in plain prose (regression)'
   );
   assert.doesNotMatch(answer, /living_room|—\s*other\s*—|—\s*laptop/);
   assert.doesNotMatch(answer, /^Yes\./);
-  assert.match(answer, /laptop screen/);
-  assert.match(answer, /1 second into the recording/);
+  assert.match(answer, /^It looks like it's coming from media playing on the laptop/);
+  assert.match(answer, /YouTube podcast broadcast playing on a laptop screen in the living room/);
+  assert.match(answer, /0:01/);
+  // Only what the reading says: no invented absence or speaker claims.
+  assert.doesNotMatch(answer, /\b(nobody|no one|no people|not speaking|isn't speaking|is not speaking|no one is)\b/i);
+  assert.doesNotMatch(answer, /physically in the room/i);
+});
+
+test('a choice question with no supporting reading row is not answered by the choice path', () => {
+  const answer = groundedAnswerFromClip('Is the tarp blue or green?', { actions: [{ atSeconds: 4, description: 'Crew carries shingles up a ladder.' }] });
+  assert.doesNotMatch(answer, /It looks like it's/);
 });
