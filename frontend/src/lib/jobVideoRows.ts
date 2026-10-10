@@ -27,10 +27,45 @@ export function shortClipId(id: string, clipId?: string | null): string {
 }
 
 /** The clip's name exactly as the Dashboard's Videos list prints it. */
-export function clipDisplayTitle(video: Pick<ProofVideoRecord, 'id'>, meta?: LibraryClipMeta | null): string {
+const CLIP_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CLIP_ROOMS = [
+  'living room', 'family room', 'dining room', 'kitchen', 'primary bathroom', 'bathroom', 'bedroom', 'basement',
+  'attic', 'roof', 'garage', 'laundry room', 'laundry', 'hallway', 'closet', 'office', 'crawlspace', 'exterior',
+];
+
+/** Same rule as the backend (#704): a cut-off AI description is not a title. */
+export function looksLikeDescriptionTitle(title: string): boolean {
+  const t = String(title ?? '').trim();
+  if (!t) return false;
+  const words = t.split(/\s+/);
+  if (/[,;:]/.test(t) && words.length >= 4) return true;
+  if (/\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|recording of|shows?|showing|captured|captures)\b/i.test(t)) return true;
+  if (/\b(a|an|the|and|of|with|in|on|to|from|inside|featuring)$/i.test(t)) return true;
+  if (/…$|\.\.\.$/.test(t)) return true;
+  return words.length > 9;
+}
+
+/** "Kitchen walk-through · Oct 8" — the room from the title or the clip's rooms, the local work day. */
+export function shortClipName(title: string, workDate?: string | null, roomHint?: string | null): string {
+  const lower = `${title} ${roomHint ?? ''}`.toLowerCase().replace(/[_-]+/g, ' ');
+  const room = CLIP_ROOMS.find((r) => lower.includes(r));
+  const m = String(workDate ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const day = m ? `${CLIP_MONTHS[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}` : '';
+  const head = room ? `${room[0]!.toUpperCase()}${room.slice(1)} walk-through` : 'Walk-through';
+  return day ? `${head} · ${day}` : head;
+}
+
+export function clipDisplayTitle(
+  video: Pick<ProofVideoRecord, 'id'> & { workDate?: string | null; rooms?: Array<{ roomName: string }> | null },
+  meta?: LibraryClipMeta | null,
+): string {
   const custom = String(meta?.customTitle ?? '').trim();
   if (custom) return custom;
   const stored = String(meta?.aiTitle ?? meta?.title ?? '').trim();
+  if (stored && looksLikeDescriptionTitle(stored)) {
+    const roomHint = (video.rooms ?? []).map((r) => r.roomName).find((n) => n && n !== 'room unclear') ?? null;
+    return shortClipName(stored, video.workDate, roomHint);
+  }
   if (stored) return stored;
   const short = shortClipId(video.id, meta?.clipId);
   return short ? `Video · ${short}` : 'Video';

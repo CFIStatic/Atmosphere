@@ -26,6 +26,8 @@
  * `unknown`, and unknown never counts as a pass.
  */
 
+import { dayDiff, localDateOf, localHour, resolveTimeZone } from '../lib/localDayKey.js';
+
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
 export interface ProofCheck {
@@ -66,6 +68,13 @@ export interface VerifyOptions {
   maxUploadLagHours?: number;
   /** Hashes already seen on this job, to catch a re-upload. */
   seenHashes?: Set<string>;
+  /**
+   * The job's / org's IANA timezone. The filed work day is a local day, so the
+   * capture time must be turned into a local day in the same zone before the
+   * two are compared. Comparing a UTC day to a local day flags every evening
+   * clip in the Americas.
+   */
+  timeZone?: string | null;
 }
 
 const DEFAULTS = {
@@ -87,12 +96,50 @@ export function milesBetween(a: SiteLocation, b: SiteLocation): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** The calendar date of a timestamp, in UTC. */
-function dateOf(iso: string | null): string | null {
-  if (!iso) return null;
-  const at = Date.parse(iso);
-  if (!Number.isFinite(at)) return null;
-  return new Date(at).toISOString().slice(0, 10);
+/** Late-night work that runs past midnight still belongs to the day it started. */
+const AFTER_MIDNIGHT_GRACE_HOURS = 4;
+
+function prettyDay(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  return d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+}
+
+/**
+ * Same-day check, in the job's local time.
+ * Exported for tests and for the backfill.
+ */
+export function sameDayCheck(
+  capturedAt: string | null,
+  workDate: string,
+  timeZone: string | null | undefined,
+): ProofCheck {
+  const zone = resolveTimeZone(timeZone);
+  const capturedDate = localDateOf(capturedAt, zone);
+  if (!capturedDate || !capturedAt) {
+    return {
+      key: 'same_day',
+      verdict: 'unknown',
+      detail: 'No capture time on the file, so only the upload time is known.',
+    };
+  }
+  if (capturedDate === workDate) {
+    return { key: 'same_day', verdict: 'pass', detail: `Filmed on ${prettyDay(capturedDate)}.` };
+  }
+  // Filmed shortly after local midnight, filed against the previous day: a
+  // late shift, not a mismatch.
+  const diff = dayDiff(workDate, capturedDate);
+  if (diff === 1 && localHour(new Date(capturedAt), zone) < AFTER_MIDNIGHT_GRACE_HOURS) {
+    return {
+      key: 'same_day',
+      verdict: 'pass',
+      detail: `Filmed just after midnight on ${prettyDay(capturedDate)}, part of the ${prettyDay(workDate)} work day.`,
+    };
+  }
+  return {
+    key: 'same_day',
+    verdict: 'fail',
+    detail: `Date mismatch: filmed ${prettyDay(capturedDate)} but filed under ${prettyDay(workDate)}. Needs a look.`,
+  };
 }
 
 function hoursBetween(a: string | null, b: string | null): number | null {
@@ -157,23 +204,8 @@ export function verifyProof(
     );
   }
 
-  // When it was filmed, against the day it is filed for.
-  const capturedDate = dateOf(upload.capturedAt);
-  if (!capturedDate) {
-    checks.push({
-      key: 'same_day',
-      verdict: 'unknown',
-      detail: 'No capture time on the file, so only the upload time is known.',
-    });
-  } else if (capturedDate === upload.workDate) {
-    checks.push({ key: 'same_day', verdict: 'pass', detail: `Filmed on ${capturedDate}.` });
-  } else {
-    checks.push({
-      key: 'same_day',
-      verdict: 'fail',
-      detail: `Filmed on ${capturedDate} but filed against ${upload.workDate}.`,
-    });
-  }
+  // When it was filmed, against the day it is filed for, both in local time.
+  checks.push(sameDayCheck(upload.capturedAt, upload.workDate, options.timeZone));
 
   // How long between filming and uploading. A day on a bad signal is normal; a
   // week is a story about where the footage has been.
@@ -337,7 +369,7 @@ export function verifyDay(input: {
   if (!before && !after) summary = 'Nothing filed for this day.';
   else if (!before) summary = 'Day film on file. The assistant describes the work from this clip.';
   else if (!after) summary = 'Started but not finished: no after video yet.';
-  else if (failed.length) summary = `${failed.length} check${failed.length === 1 ? '' : 's'} failed. Do not pay against this without asking.`;
+  else if (failed.length) summary = `${failed.length} thing${failed.length === 1 ? '' : 's'} need${failed.length === 1 ? 's' : ''} a look before paying against this.`;
   else if (unknown.length) summary = `Nothing contradicts it, but ${unknown.length} thing${unknown.length === 1 ? '' : 's'} could not be checked.`;
   else summary = 'Before and after both check out.';
 

@@ -224,6 +224,7 @@ import {
 } from '../shared/jobProofPack.js';
 import { clipProcessing } from '../shared/clipProcessing.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
+import { orgTimeZone } from '../lib/localDayKey.js';
 import type { JobAccessPerson } from '../shared/jobAccessRoster.js';
 import {
   proofPackFilename,
@@ -975,7 +976,7 @@ async function fileRecordedProof(party: any, admin: any, body: unknown) {
       accuracyM: input.accuracyM ?? null,
     },
     site,
-    { seenHashes },
+    { seenHashes, timeZone: await orgTimeZone(admin, party.org_id) },
   );
 
   // One live row per storage object. A legacy path is one object per party,
@@ -2438,6 +2439,7 @@ export async function liveObserve(req: Request, res: Response, next: NextFunctio
 export async function listPartyProofs(party: any, admin: any) {
   const rows = await listAllVisibleProofs(admin, { partyId: party.id });
   const site = await siteLocation(admin, party.org_id, party.job_id);
+  const timeZone = await orgTimeZone(admin, party.org_id);
   const byDate = new Map<string, any[]>();
   for (const row of rows) {
     const list = byDate.get(row.work_date) ?? [];
@@ -2454,6 +2456,7 @@ export async function listPartyProofs(party: any, admin: any) {
         before: before ? asUpload(before) : null,
         after: after ? asUpload(after) : null,
         site,
+        options: { timeZone },
       });
       return {
         workDate,
@@ -2544,6 +2547,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
     ]);
 
   const rows = proofRows;
+  const jobTimeZone = await orgTimeZone(supabase, orgId);
   const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
   const person = new Map(
     ((partyRows ?? []) as any[]).map((p) => [p.id, (p.contact_name as string | null) ?? null]),
@@ -2581,6 +2585,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       before: before ? asUpload(before) : null,
       after: after ? asUpload(after) : null,
       site,
+      options: { timeZone: jobTimeZone },
     });
     const pay = payable(verdict);
     const film = after ?? before;
@@ -2764,6 +2769,9 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       videos: videos.length,
       payable: days.filter((d) => d.payable && !d.accepted).length,
       contradicted: days.filter((d) => d.contradicted).length,
+      dateMismatches: days.filter((d) =>
+        d.checks.some((c: { key: string; verdict: string }) => /same_day$/.test(String(c.key)) && c.verdict === 'fail'),
+      ).length,
       disputes: disputes.length,
       punchList: punchList.length,
       analysing: days.filter(
@@ -2772,6 +2780,33 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       awaitingAfter: days.filter((d) => d.hasBefore && !d.hasAfter).length,
     },
     siteKnown: Boolean(site),
+  };
+}
+
+/**
+ * Homeowners and other viewers never see integrity checks or disputes. Those
+ * are for the contractor deciding whether to pay a sub; shown to a homeowner
+ * they read as an accusation. Strip them server-side, not just in the UI.
+ */
+type Row = Record<string, unknown>;
+export function redactIntegrityForViewer<T extends { days?: unknown; videos?: unknown; counts?: unknown }>(payload: T): T {
+  const strip = (o: unknown): unknown => {
+    if (!o || typeof o !== 'object') return o;
+    const { checks: _c, contradicted: _x, disputes: _d, ...rest } = o as Row;
+    return rest;
+  };
+  const stripDay = (o: unknown): unknown => {
+    const rest = strip(o);
+    // The day's verdict line ("1 thing needs a look…") is integrity wording.
+    if (rest && typeof rest === 'object') delete (rest as Row).summary;
+    return rest;
+  };
+  return {
+    ...payload,
+    days: Array.isArray(payload.days) ? payload.days.map(stripDay) : payload.days,
+    videos: Array.isArray(payload.videos) ? payload.videos.map(strip) : payload.videos,
+    disputes: [],
+    counts: { ...((payload.counts ?? {}) as Row), contradicted: 0, dateMismatches: 0, disputes: 0 },
   };
 }
 
@@ -2804,6 +2839,8 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
             receivedAt: row.received_at ?? null,
             workDate: String(row.work_date ?? ''),
           })),
+        new Date(),
+        await orgTimeZone(supabase, orgId),
       ),
     );
   } catch (err) {
@@ -2814,10 +2851,15 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, supabase, access, role } = (await resolveOrgOrViewerAccess(req, req.params.jobId)) as Awaited<
+      ReturnType<typeof resolveOrgOrViewerAccess>
+    > & { role?: string };
     const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
     // Invited homeowners get the videos, not the office's pay/dispute/integrity data.
-    res.json(access === 'viewer' ? homeownerProofPayload(payload) : payload);
+    // Org members with the viewer role never see integrity flags either.
+    if (access === 'viewer') res.json(redactIntegrityForViewer(homeownerProofPayload(payload)));
+    else if (role === 'viewer') res.json(redactIntegrityForViewer(payload));
+    else res.json(payload);
   } catch (err) {
     next(err);
   }

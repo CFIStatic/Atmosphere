@@ -368,12 +368,15 @@ const MONTHS_LONG = [
 /** Calendar tokens so "Aug 5", "2026-08-05", and "8/5/2026" all find the same day. */
 export function dateSearchTokens(value: string | null | undefined): string[] {
   if (!value) return [];
-  const isoDay = value.slice(0, 10);
-  const parsed = new Date(/T/.test(value) ? value : `${isoDay}T12:00:00Z`);
+  const parsed = new Date(/T/.test(value) ? value : `${value.slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return [value.toLowerCase()];
-  const year = parsed.getUTCFullYear();
-  const month = parsed.getUTCMonth() + 1;
-  const day = parsed.getUTCDate();
+  // A bare date is already a local work day; a full timestamp is read in the
+  // viewer's local time so a 7pm Central clip is not tokenised as tomorrow.
+  const dateOnly = !/T/.test(value);
+  const year = dateOnly ? parsed.getUTCFullYear() : parsed.getFullYear();
+  const month = (dateOnly ? parsed.getUTCMonth() : parsed.getMonth()) + 1;
+  const day = dateOnly ? parsed.getUTCDate() : parsed.getDate();
+  const isoDay = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const short = MONTHS_SHORT[month - 1];
   const long = MONTHS_LONG[month - 1];
   const paddedDay = String(day).padStart(2, '0');

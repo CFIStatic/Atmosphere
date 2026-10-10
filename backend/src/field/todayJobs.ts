@@ -1,4 +1,4 @@
-import { localDayKey } from '../lib/localDayKey.js';
+import { DEFAULT_TIME_ZONE, localDayKey } from '../lib/localDayKey.js';
 
 /**
  * Jobs Field Capture and the office overview can film.
@@ -10,7 +10,7 @@ import { localDayKey } from '../lib/localDayKey.js';
  * because nobody put it on a calendar.
  */
 
-export const DEFAULT_FIELD_TIMEZONE = 'America/New_York';
+export const DEFAULT_FIELD_TIMEZONE = DEFAULT_TIME_ZONE;
 
 const CLOSED = new Set(['cancelled']);
 const OPEN = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);

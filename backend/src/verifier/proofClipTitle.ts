@@ -1,3 +1,4 @@
+import { askClipName, looksLikeDescriptionTitle } from '../shared/mentions.js';
 /**
  * Short human titles for filed clips.
  *
@@ -29,6 +30,9 @@ export type ProofTitleSource = {
 };
 
 const MAX_TITLE_CHARS = 60;
+/** Hedged camera-description words that never belong in a clip title. */
+const DESCRIPTION_WORDS =
+  /\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|recording of|captures?|captured|featuring|video|clip)\b/i;
 const MAX_TITLE_WORDS = 8;
 const MIN_TITLE_CHARS = 2;
 
@@ -129,7 +133,9 @@ export function deriveProofClipTitle(input: ProofTitleSource): string | null {
     if (!text) continue;
     const clause = firstClause(text);
     const clipped = clampTitle(clause);
-    if (clipped) return clipped;
+    // A cut-off description ("Short, Handheld Clip Filmed Inside a Home,
+    // Likely") is not a title; fall through to actions/labels instead.
+    if (clipped && !DESCRIPTION_WORDS.test(clipped)) return clipped;
   }
 
   return fromActions(input.actions) ?? fromLabels(input.labels);
@@ -237,6 +243,8 @@ export function proofClipListLabel(input: {
   uploadedAt?: string | null;
   /** When true (nested under the job folder), never fall back to the job name. */
   underJob?: boolean;
+  /** Local work day (YYYY-MM-DD) for the "Kitchen walk-through · Oct 8" fallback. */
+  workDate?: string | null;
   jobName?: string | null;
   clipId?: string | null;
   proofId?: string | null;
@@ -251,7 +259,8 @@ export function proofClipListLabel(input: {
   const custom = normalizeCustomClipTitle(input.customTitle);
   if (custom) return custom;
   const stored = typeof input.title === 'string' ? input.title.trim() : '';
-  if (stored && !isPlaceholderClipTitle(stored)) return stored;
+  if (stored && !isPlaceholderClipTitle(stored) && !looksLikeDescriptionTitle(stored)) return stored;
+  if (stored && looksLikeDescriptionTitle(stored)) return askClipName(stored, input.workDate ?? null);
 
   const derived = deriveProofClipTitle({
     summary: input.summary,

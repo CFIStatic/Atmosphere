@@ -14,7 +14,7 @@ describe('clipDisplayTitle — same name as the Dashboard', () => {
         customTitle: '  ',
         aiTitle: 'Handheld Phone Video Shot Sideways Inside a Home,',
       }),
-    ).toBe('Handheld Phone Video Shot Sideways Inside a Home,');
+    ).toBe('Walk-through');
     expect(clipDisplayTitle(video, { id: video.id, title: 'Library title' })).toBe('Library title');
   });
 

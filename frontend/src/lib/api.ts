@@ -1263,6 +1263,8 @@ export interface ProofResponse {
     videos?: number;
     payable: number;
     contradicted: number;
+    /** Days whose clip was filmed on a different local day than it was filed under. */
+    dateMismatches?: number;
     disputes?: number;
     punchList?: number;
     awaitingAfter: number;
