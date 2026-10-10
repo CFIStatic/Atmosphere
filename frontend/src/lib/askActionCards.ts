@@ -7,7 +7,7 @@
  */
 
 export interface AskActionCard {
-  id: 'punch' | 'homeowner' | 'text-crew' | 'computer';
+  id: 'punch' | 'homeowner' | 'computer';
   label: string;
   prompt: string;
   mode: 'send' | 'prefill';
@@ -15,7 +15,6 @@ export interface AskActionCard {
 
 const PUNCH = /\b(punch|missing|not (?:yet )?(?:done|finished|complete|installed)|incomplete|outstanding|still needs?|needs? to be (?:fixed|redone|replaced|repaired)|left to do|remaining work|defects?|damaged?)\b/i;
 const HOMEOWNER = /\b(homeowners?|insured|customer|client|progress|completed|finished|wrapped up|dry(?:ing)?|moisture readings?)\b/i;
-const CREW = /\b(crew|subs?|subcontractors?|technicians?|foreman|come back|return trip|reschedul\w*|schedul\w*|tomorrow|next visit)\b/i;
 const PORTAL = /\b(portal|carrier|claim (?:form|portal)|supplier|order (?:the |more )?materials|materials? list|purchase order|submit (?:the )?(?:claim|invoice|estimate|form))\b/i;
 
 /** The answer as plain prose: no machine lines, artifacts kept (they count). */
@@ -39,9 +38,6 @@ export function askActionCards(input: { question: string; answer: string }): Ask
   }
   if (HOMEOWNER.test(both) && !/homeowner (?:update|summary|email)/i.test(input.question)) {
     cards.push({ id: 'homeowner', label: 'Update the homeowner', prompt: 'Draft a short progress update for the homeowner from this.', mode: 'send' });
-  }
-  if (CREW.test(both)) {
-    cards.push({ id: 'text-crew', label: 'Text the crew', prompt: 'Text the crew about this: ', mode: 'prefill' });
   }
   if (PORTAL.test(both)) {
     cards.push({ id: 'computer', label: 'Do it in a browser', prompt: 'Use Computer to ', mode: 'prefill' });

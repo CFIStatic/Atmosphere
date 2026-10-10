@@ -4,10 +4,10 @@ import { askActionCards } from './askActionCards';
 const ids = (question: string, answer: string) => askActionCards({ question, answer }).map((c) => c.id);
 
 describe('askActionCards', () => {
-  it('offers a punch list when work is left, and to text the crew when someone has to come back', () => {
+  it('offers a punch list when work is left, and no Text the crew button', () => {
     expect(
       ids('What is left on the kitchen?', 'Two items are still outstanding: the base trim is not installed and the crew has to come back Tuesday to patch the drywall. ⟦followups: a? ;; b?⟧'),
-    ).toEqual(['punch', 'text-crew']);
+    ).toEqual(['punch']);
   });
 
   it('offers a homeowner update when the work is finished', () => {

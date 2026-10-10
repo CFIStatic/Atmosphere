@@ -1335,15 +1335,14 @@ describe('JobAskPanel', () => {
       expect(screen.queryByText(/still outstanding/i)).not.toBeInTheDocument();
     });
 
-    it('offers next steps under the latest answer: send one, or start one in the box', async () => {
+    it('offers next steps under the latest answer, without Text the crew', async () => {
       streamAnswers();
       const user = userEvent.setup();
       renderPanel();
       await askOnce(user);
       const cards = screen.getAllByTestId('ask-action-card').map((b) => b.getAttribute('data-action'));
-      expect(cards).toEqual(['punch', 'text-crew']);
-      await user.click(screen.getByRole('button', { name: /text the crew/i }));
-      expect(screen.getByPlaceholderText(/ask what you forgot/i)).toHaveValue('Text the crew about this: ');
+      expect(cards).toEqual(['punch']);
+      expect(screen.queryByRole('button', { name: /text the crew/i })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /make a punch list/i }));
       await waitFor(() => expect(askAboutProofsStream.mock.calls[1]?.[1]).toBe('Make a punch list from this.'));
     });

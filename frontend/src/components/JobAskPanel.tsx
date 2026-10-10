@@ -109,7 +109,7 @@ function AskQuoteList({
 }) {
   if (!quotes.length) return null;
   return (
-    <div className="mt-2 space-y-1.5" data-testid="ask-quotes">
+    <div className="mt-1.5 space-y-1" data-testid="ask-quotes">
       {quotes.map((quote) => (
         <button
           key={`${quote.sourceId}-${quote.text}`}
@@ -127,10 +127,11 @@ function AskQuoteList({
               atSeconds: quote.atSeconds ?? undefined,
             })
           }
-          className="block w-full rounded-lg border border-line bg-paper-50 px-2.5 py-1.5 text-left"
+          title={quoteAttribution(quote)}
+          className="flex w-full items-baseline gap-3 rounded-md border border-line bg-paper-50 px-2.5 py-1 text-left leading-snug"
         >
-          <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
-          <span className="mt-0.5 block text-[11px] text-ink-500">
+          <span className="min-w-0 flex-1 text-[13px] text-ink-800">“{quote.text}”</span>
+          <span className="max-w-[45%] shrink-0 truncate text-[10.5px] text-ink-500">
             {quoteAttribution(quote)}
           </span>
         </button>
@@ -208,7 +209,7 @@ const ANSWER_ICON_BUTTON =
 
 /**
  * One compact row under an answer: icon actions, a closed-by-default
- * Steps / Sources toggle, and next-step buttons (Text the crew) on the right.
+ * Steps / Sources toggle, and next-step buttons (Make a punch list) on the right.
  * Steps and sources open underneath the row.
  */
 function AskAnswerFooter({
