@@ -17,12 +17,12 @@ const laptopClip: ClipAskRecord = {
       description: 'living_room: Watching a YouTube podcast broadcast playing on a laptop screen.',
       objectLabel: 'laptop',
       objects: ['laptop screen'],
-    } as any,
+    },
   ],
-} as any;
+};
 
 test('actionProse writes a sentence, not a field dump', () => {
-  const line = actionProse(laptopClip.actions![0] as any);
+  const line = actionProse(laptopClip.actions![0]!);
   assert.equal(line, 'Watching a YouTube podcast broadcast playing on a laptop screen in the living room');
   assert.equal(actionProse({ action: 'remove_drywall', room: 'kitchen' }), 'Remove drywall in the kitchen');
   assert.equal(actionProse({ action: 'other', room: 'other' }), '');
