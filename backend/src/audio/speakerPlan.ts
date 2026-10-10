@@ -5,6 +5,7 @@
  * written onto people.displayName.
  */
 
+import { config } from '../config.js';
 import { completeAskText } from '../lib/askModel.js';
 import type { PeoplePresent } from './peoplePresent.js';
 import { linesFromTranscript, pickupSpeakerNames, type TranscriptLine } from './speakerNamePickup.js';
@@ -42,7 +43,13 @@ export async function planClipSpeakers(input: {
   const complete =
     input.complete === undefined
       ? async (prompt: { system: string; user: string }) =>
-          completeAskText({ ...prompt, maxTokens: 500, mode: 'analysis', signal: AbortSignal.timeout(8000) })
+          completeAskText({
+            ...prompt,
+            maxTokens: 500,
+            mode: 'analysis',
+            anthropicModel: config.technician.assistant.lightModel,
+            signal: AbortSignal.timeout(8000),
+          })
       : input.complete;
   const guesses = await guessSpeakerRoles(lines, identified, complete);
   const identities = planIdentities({
