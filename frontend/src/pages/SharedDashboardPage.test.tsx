@@ -50,8 +50,8 @@ vi.mock('../components/shared/JobTimeline', () => ({
   ),
 }));
 
-vi.mock('../components/shared/EvidenceLocker', () => ({
-  EvidenceLocker: () => <div>Evidence locker</div>,
+vi.mock('../components/shared/JobFileReport', () => ({
+  JobFileReport: () => <div>Job file report</div>,
 }));
 
 vi.mock('../components/shared/ProofOfWork', () => ({
@@ -192,7 +192,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Evidence report' })).toBeInTheDocument();
-    expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
+    expect(screen.queryByText('Job file report')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
@@ -526,7 +526,7 @@ describe('SharedDashboardPage job file identity', () => {
       'true',
     );
     await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
-    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.getByText('Job file report')).toBeInTheDocument();
   });
 
   it('shows only the active section panel', async () => {
@@ -541,7 +541,7 @@ describe('SharedDashboardPage job file identity', () => {
       screen.getByTestId('job-ask-panel'),
     );
     expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
-    expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
+    expect(screen.queryByText('Job file report')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Timeline' }));
     expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
@@ -556,7 +556,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
-    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.getByText('Job file report')).toBeInTheDocument();
     expect(screen.queryByTestId('job-file-section-panel-videos')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Chat' }));

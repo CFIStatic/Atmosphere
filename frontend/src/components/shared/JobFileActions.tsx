@@ -2,13 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type SharedJobSummary } from '../../lib/api';
 import { suggestedDuplicateTitle } from '../../lib/jobFileCopy';
 import { SpinnerIcon } from '../icons';
+import { GlassModal } from './GlassModal';
 
 /**
  * Rename or duplicate the open job file.
  *
- * A duplicate is a full copy of the job file: videos, transcripts, Chat,
- * files, brief, scope and people. Share links and the custody history stay on
- * the original.
+ * A duplicate is a new folder with the same site, brief, and scope. Clips
+ * and invites stay on the original — those are the record, not a template.
  * Product UI never deletes job files or evidence.
  */
 
@@ -113,32 +113,21 @@ export function JobFileActions({
       </div>
 
       {mode && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-ink-900/40 p-4"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) close();
-          }}
+        <GlassModal
+          title={mode === 'rename' ? 'Rename this job file' : 'Duplicate this job file'}
+          description={
+            mode === 'rename'
+              ? 'The name is what shows on the dashboard and in the library.'
+              : 'Creates a full copy: videos, transcripts, Chat, files, brief, scope and people. Share links are not copied, so invite people to the copy again.'
+          }
+          onClose={close}
+          closeDisabled={busy}
         >
-          <form
-            onSubmit={(event) => void submit(event)}
-            className="w-full max-w-md rounded-xl border border-line bg-paper-0 p-5 shadow-lg"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="job-file-action-title"
-          >
-            <h2 id="job-file-action-title" className="text-base font-semibold text-ink-900">
-              {mode === 'rename' ? 'Rename this job file' : 'Duplicate this job file'}
-            </h2>
-            <p className="mt-1 text-sm text-ink-600">
-              {mode === 'rename'
-                ? 'The name is what shows on the dashboard and in the library.'
-                : 'Creates a full copy: videos, transcripts, Chat, files, brief, scope and people. Share links are not copied, so invite people to the copy again.'}
-            </p>
-            <label className="mt-4 block text-xs font-medium text-ink-600">
+          <form onSubmit={(event) => void submit(event)}>
+            <label className="block text-xs font-medium text-ink-700">
               Name
               <input
-                className="glass-field mt-1 w-full rounded-lg px-3 py-2.5 text-sm text-ink-900"
+                className="glass-field mt-1.5 h-10 w-full rounded-lg px-3 text-sm text-ink-900 focus:ring-2 focus:ring-brand-500/25"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 required
@@ -154,26 +143,26 @@ export function JobFileActions({
                 {error}
               </p>
             )}
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={close}
                 disabled={busy}
-                className="rounded-lg px-3.5 py-2 text-sm font-medium text-ink-600 hover:text-ink-800"
+                className="h-9 rounded-lg px-3.5 text-sm font-medium text-ink-600 transition hover:bg-ink-900/5 hover:text-ink-900"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy}
-                className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 hover:bg-ink-800 disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:opacity-60"
               >
                 {busy ? <SpinnerIcon className="animate-spin" width={14} /> : null}
                 {mode === 'rename' ? 'Save name' : 'Create copy'}
               </button>
             </div>
           </form>
-        </div>
+        </GlassModal>
       )}
     </>
   );

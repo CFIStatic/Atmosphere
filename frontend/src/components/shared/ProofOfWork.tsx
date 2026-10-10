@@ -35,7 +35,7 @@ import { loadOrgMentions } from '../mentions/useOrgMentions';
  *
  * One clip list: expand/Play shows the player and transcript (Copy) together.
  * Dense punch / playbook / Glance walls stay with the clip player / Ask —
- * not piled onto the job file. Evidence custody stays in EvidenceLocker.
+ * not piled onto the job file. Evidence custody goes in the job file report (JobFileReport).
  */
 
 function matchSeekVideo(

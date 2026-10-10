@@ -1,8 +1,12 @@
 /**
- * Job proof pack — structured report model for insurers / GC / homeowners.
+ * Job file report (proof pack) — structured report model for insurers / GC /
+ * homeowners.
  *
- * What happened, who was there, decisions, next steps, timed quotes, and
- * key-frame slots. Privacy-redacted ranges never leak private frames or quotes.
+ * Everything in the job file: job details, what happened, who was there,
+ * decisions, next steps, and for every file its metadata, AI title and
+ * summary, analysis results, full transcript with speakers and timestamps,
+ * key frames and custody record; then the job timeline and who has access.
+ * Privacy-redacted ranges never leak private frames, quotes or transcript.
  */
 
 import {
@@ -30,8 +34,65 @@ export type ProofPackFrameSlot = {
   jpeg?: Buffer | null;
 };
 
+export type ProofPackTranscriptLine = {
+  tSec: number | null;
+  speaker: string | null;
+  text: string;
+};
+
+export type ProofPackCustodyEntry = {
+  at: string;
+  action: string;
+  actor: string | null;
+  role: string | null;
+  detail: string | null;
+};
+
+export type ProofPackCheck = {
+  key: string;
+  verdict: string;
+  detail: string | null;
+};
+
+export type ProofPackFileMeta = {
+  title: string | null;
+  category: string | null;
+  tags: string[];
+  filedBy: string | null;
+  trade: string | null;
+  capturedAt: string | null;
+  receivedAt: string | null;
+  durationSeconds: number | null;
+  byteSize: number | null;
+  contentHash: string | null;
+  hasLocation: boolean;
+  device: string | null;
+  processing: string | null;
+  review: string;
+  viewCount: number | null;
+  lastViewedAt: string | null;
+  legalHold: boolean;
+  retentionUntil: string | null;
+};
+
+export type ProofPackAnalysis = {
+  checks: ProofPackCheck[];
+  rooms: Array<{
+    name: string;
+    startSeconds: number | null;
+    endSeconds: number | null;
+    findings: Array<{ text: string; atSeconds: number | null }>;
+  }>;
+  events: Array<{ atSeconds: number; text: string }>;
+};
+
 export type ProofPackClip = {
   id: string;
+  file: ProofPackFileMeta;
+  analysis: ProofPackAnalysis;
+  transcript: ProofPackTranscriptLine[];
+  /** Null when the requester may not see the custody record (viewer access). */
+  custody: ProofPackCustodyEntry[] | null;
   workDate: string;
   phase: string;
   company: string;
@@ -99,6 +160,18 @@ export type JobProofPack = {
     ownerLabel: string | null;
     proofId: string | null;
   }>;
+  /** Chronological record of the job, oldest first. */
+  timeline: Array<{ at: string; kind: string; text: string; actor: string | null }>;
+  /** Everyone with access to the job file. Null for viewer access. */
+  access: Array<{
+    name: string;
+    accessType: string;
+    state: string;
+    grantedBy: string | null;
+    grantedAt: string | null;
+    lastAccessedAt: string | null;
+  }> | null;
+  exportedBy: string | null;
   privacyNotice: string;
 };
 
@@ -259,6 +332,11 @@ function collectQuotes(
   };
 }
 
+function phaseWord(phase: string): string {
+  const w = String(phase || '').toLowerCase();
+  return w ? w[0]!.toUpperCase() + w.slice(1).replace(/_/g, ' ') : 'Video';
+}
+
 function peopleNames(peoplePayload: unknown): string[] {
   if (!peoplePayload || typeof peoplePayload !== 'object') return [];
   const people = (peoplePayload as { people?: unknown }).people;
@@ -296,6 +374,137 @@ function concernsFromFindings(findings: Record<string, unknown> | null | undefin
   );
 }
 
+/** Custody action words as a customer reads them. */
+export const CUSTODY_ACTION_LABEL: Record<string, string> = {
+  uploaded: 'Filed',
+  viewed: 'Opened',
+  downloaded: 'Downloaded',
+  analysed: 'Read by the assistant',
+  accepted: 'Day accepted',
+  rejected: 'Day rejected',
+  held: 'Placed on hold',
+  released: 'Hold lifted',
+  shared: 'Link shared',
+  exported: 'Report exported',
+  deleted: 'Removed from library',
+  restored: 'Restored to library',
+  duplicated: 'Copied between job files',
+};
+
+export function custodyActionLabel(action: string | null | undefined): string {
+  const word = String(action ?? '').trim().toLowerCase();
+  if (!word) return 'Recorded';
+  return CUSTODY_ACTION_LABEL[word] ?? word[0]!.toUpperCase() + word.slice(1).replace(/_/g, ' ');
+}
+
+function finiteOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function reviewLabel(state: string | null | undefined): string {
+  const word = String(state ?? '').trim().toLowerCase();
+  if (word === 'accepted') return 'Accepted';
+  if (word === 'rejected') return 'Rejected';
+  return 'Not reviewed';
+}
+
+function deviceLine(device: unknown): string | null {
+  if (!device || typeof device !== 'object') return null;
+  const d = device as Record<string, unknown>;
+  const parts = [d.make ?? d.manufacturer, d.model, d.os ?? d.platform, d.appVersion ? `app ${d.appVersion}` : null]
+    .map((v) => clean(v, 60))
+    .filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+function checksOf(raw: unknown): ProofPackCheck[] {
+  return asFactList(raw)
+    .map((c) => ({
+      key: clean(c.key ?? c.id ?? c.label, 60) ?? 'check',
+      verdict: clean(c.verdict ?? (c.ok === true ? 'pass' : c.ok === false ? 'fail' : null), 20) ?? 'unknown',
+      detail: clean(c.detail ?? c.message, 300),
+    }))
+    .slice(0, 30);
+}
+
+/** Longest transcript kept per clip — protects the PDF from a runaway file. */
+export const TRANSCRIPT_LINE_CAP = 2000;
+
+/**
+ * The clip's transcript, line by line, with speakers and timestamps.
+ * Lines inside a private range collapse to one redaction marker per range.
+ */
+export function transcriptLines(
+  video: Pick<ProofPackVideoInput, 'conversation' | 'transcriptSegments'>,
+  ranges: PrivacyRedactionRange[],
+): ProofPackTranscriptLine[] {
+  const conv = video.conversation ?? null;
+  const segments = asFactList(conv?.transcriptSegments).length
+    ? asFactList(conv?.transcriptSegments)
+    : asFactList(video.transcriptSegments);
+  const turns = asFactList(conv?.conversationTurns);
+  const segmentsHaveSpeakers = segments.some((s) => clean(s.speakerLabel, 80));
+  const turnsHaveSpeakers = turns.some((t) => clean(t.speakerLabel, 80));
+  const source = !segments.length || (!segmentsHaveSpeakers && turnsHaveSpeakers) ? turns : segments;
+
+  const out: ProofPackTranscriptLine[] = [];
+  let lastRedacted: PrivacyRedactionRange | null = null;
+  for (const row of source) {
+    const text = clean(row.text, 4000);
+    if (!text) continue;
+    const tSec = finiteOrNull(row.tSec ?? row.atSeconds);
+    const range = tSec != null ? secondsInPrivacyRange(tSec, ranges) : null;
+    if (range || text === PRIVACY_REDACTED_LABEL) {
+      if (range && lastRedacted === range) continue;
+      lastRedacted = range;
+      out.push({ tSec, speaker: null, text: 'Private moment redacted' });
+    } else {
+      lastRedacted = null;
+      out.push({ tSec, speaker: clean(row.speakerLabel ?? row.speaker, 80), text });
+    }
+    if (out.length >= TRANSCRIPT_LINE_CAP) break;
+  }
+  return out;
+}
+
+function analysisOf(video: ProofPackVideoInput, ranges: PrivacyRedactionRange[]): ProofPackAnalysis {
+  const isPrivate = (t: number | null) => t != null && secondsInPrivacyRange(t, ranges) != null;
+  const rooms = (video.rooms ?? [])
+    .map((room) => ({
+      name: clean(room?.roomName, 80) ?? 'Room',
+      startSeconds: finiteOrNull(room?.startSeconds),
+      endSeconds: finiteOrNull(room?.endSeconds),
+      findings: (room?.findings ?? [])
+        .map((f) => ({ text: clean(f?.text, 300) ?? '', atSeconds: finiteOrNull(f?.atSeconds) }))
+        .filter((f) => f.text && !isPrivate(f.atSeconds))
+        .slice(0, 20),
+    }))
+    .slice(0, 30);
+  const events = (video.events ?? [])
+    .map((e) => ({ atSeconds: Number(e?.atSeconds), text: clean(e?.text, 300) ?? '' }))
+    .filter((e) => Number.isFinite(e.atSeconds) && e.text && !isPrivate(e.atSeconds))
+    .sort((a, b) => a.atSeconds - b.atSeconds)
+    .slice(0, 80);
+  return { checks: checksOf(video.checks), rooms, events };
+}
+
+function custodyEntry(row: ProofPackCustodyInput): ProofPackCustodyEntry | null {
+  const at = clean(row.occurredAt, 40);
+  if (!at) return null;
+  return {
+    at,
+    action: custodyActionLabel(row.action),
+    actor: clean(row.actorLabel, 120),
+    role: clean(row.actorRole, 60),
+    detail: clean(row.detail, 400),
+  };
+}
+
+const TIMELINE_ACTIONS_SKIPPED = new Set(['viewed', 'uploaded']);
+export const TIMELINE_CAP = 600;
+
 export function formatProofPackClock(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds)) return '—';
   const n = Math.max(0, Math.floor(seconds));
@@ -313,6 +522,23 @@ export type ProofPackVideoInput = {
   company?: string | null;
   person?: string | null;
   aiSummary?: string | null;
+  durationSeconds?: number | null;
+  capturedAt?: string | null;
+  receivedAt?: string | null;
+  contentHash?: string | null;
+  device?: unknown;
+  checks?: unknown;
+  proofState?: string | null;
+  /** Customer label for the clip's processing state ("Analyzed", "1 check failed"). */
+  processingLabel?: string | null;
+  transcriptSegments?: Array<{ tSec?: number | null; text?: string; speakerLabel?: string | null }> | null;
+  rooms?: Array<{
+    roomName?: string | null;
+    startSeconds?: number | null;
+    endSeconds?: number | null;
+    findings?: Array<{ text?: string | null; atSeconds?: number | null }>;
+  }> | null;
+  events?: Array<{ atSeconds?: number; text?: string }> | null;
   conversation?: Record<string, unknown> | null;
   evidenceLog?: Array<Record<string, unknown>> | null;
   people?: unknown;
@@ -332,6 +558,40 @@ export type ProofPackDayInput = {
   materialChange?: string | null;
   aiFindings?: Record<string, unknown> | null;
   proofIds?: string[];
+};
+
+export type ProofPackEvidenceInput = {
+  title?: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  trade?: string | null;
+  byteSize?: number | null;
+  hasLocation?: boolean;
+  viewCount?: number | null;
+  lastViewedAt?: string | null;
+  legalHold?: boolean | null;
+  retentionUntil?: string | null;
+};
+
+export type ProofPackCustodyInput = {
+  proofId?: string | null;
+  action?: string | null;
+  actorLabel?: string | null;
+  actorRole?: string | null;
+  detail?: string | null;
+  occurredAt?: string | null;
+};
+
+export type ProofPackAccessInput = {
+  displayName?: string | null;
+  name?: string | null;
+  email?: string | null;
+  accessType?: string | null;
+  state?: string | null;
+  grantedByName?: string | null;
+  grantedByEmail?: string | null;
+  grantedAt?: string | null;
+  lastAccessedAt?: string | null;
 };
 
 export type ProofPackFrameInput = {
@@ -405,7 +665,27 @@ export function buildJobProofPack(input: {
     proofId?: string | null;
   }>;
   framesByProof?: Map<string, ProofPackFrameInput[]>;
+  evidenceByProof?: Map<string, ProofPackEvidenceInput>;
+  /**
+   * Custody rows for the job (per file and job-wide). Leave undefined for
+   * viewer access: the report then omits custody, access and their timeline rows.
+   */
+  custody?: ProofPackCustodyInput[];
+  access?: ProofPackAccessInput[];
+  exportedBy?: string | null;
 }): JobProofPack {
+  const includeRecords = input.custody !== undefined;
+  const custodyByProof = new Map<string, ProofPackCustodyEntry[]>();
+  for (const row of input.custody ?? []) {
+    if (!row.proofId) continue;
+    const entry = custodyEntry(row);
+    if (!entry) continue;
+    const list = custodyByProof.get(row.proofId) ?? [];
+    list.push(entry);
+    custodyByProof.set(row.proofId, list);
+  }
+  for (const list of custodyByProof.values()) list.sort((a, b) => a.at.localeCompare(b.at));
+
   const workDateFilter = clean(input.workDateFilter, 32);
   const videos = input.videos.filter((v) =>
     workDateFilter ? String(v.workDate) === workDateFilter : true,
@@ -422,13 +702,39 @@ export function buildJobProofPack(input: {
       ranges,
     );
     const frames = selectPublicFrames(input.framesByProof?.get(video.id) ?? [], ranges, 4);
+    const evidence = input.evidenceByProof?.get(video.id) ?? {};
+    const company = clean(video.company, 120) ?? 'Company';
+    const person = clean(video.person, 120);
     return {
       id: video.id,
+      file: {
+        title: clean(evidence.title, 200),
+        category: clean(evidence.category, 40),
+        tags: uniqueStrings(evidence.tags ?? [], 20),
+        filedBy: person ? `${person} (${company})` : company,
+        trade: clean(evidence.trade, 80),
+        capturedAt: clean(video.capturedAt, 40),
+        receivedAt: clean(video.receivedAt, 40),
+        durationSeconds: finiteOrNull(video.durationSeconds),
+        byteSize: finiteOrNull(evidence.byteSize),
+        contentHash: clean(video.contentHash, 128),
+        hasLocation: evidence.hasLocation === true,
+        device: deviceLine(video.device),
+        processing: clean(video.processingLabel, 60),
+        review: reviewLabel(video.proofState),
+        viewCount: includeRecords ? finiteOrNull(evidence.viewCount) : null,
+        lastViewedAt: includeRecords ? clean(evidence.lastViewedAt, 40) : null,
+        legalHold: evidence.legalHold === true,
+        retentionUntil: clean(evidence.retentionUntil, 40),
+      },
+      analysis: analysisOf(video, ranges),
+      transcript: transcriptLines(video, ranges),
+      custody: includeRecords ? (custodyByProof.get(video.id) ?? []) : null,
       workDate: String(video.workDate),
       phase: String(video.phase || 'unknown'),
-      company: clean(video.company, 120) ?? 'Company',
-      person: clean(video.person, 120),
-      summary: clean(video.aiSummary, 1200),
+      company,
+      person,
+      summary: clean(video.aiSummary, 4000),
       people: peopleNames(video.people),
       whatHappened: uniqueStrings([video.aiSummary], 6),
       decisions: collected.decisions,
@@ -545,6 +851,58 @@ export function buildJobProofPack(input: {
 
   const redactedRangeCount = clips.reduce((n, c) => n + c.privacyRangesRedacted, 0);
 
+  const access = includeRecords
+    ? (input.access ?? []).map((p) => ({
+        name: clean(p.displayName ?? p.name ?? p.email, 160) ?? 'Unnamed',
+        accessType: clean(p.accessType, 80) ?? 'Access',
+        state: clean(p.state, 20) ?? 'live',
+        grantedBy: clean(p.grantedByName ?? p.grantedByEmail, 120),
+        grantedAt: clean(p.grantedAt, 40),
+        lastAccessedAt: clean(p.lastAccessedAt, 40),
+      }))
+    : null;
+
+  const clipName = new Map(
+    clips.map((c) => [c.id, c.file.title ?? `${phaseWord(c.phase)} clip, ${c.workDate}`]),
+  );
+  const timeline: JobProofPack['timeline'] = [];
+  for (const clip of clips) {
+    const name = clipName.get(clip.id)!;
+    if (clip.file.capturedAt) {
+      timeline.push({ at: clip.file.capturedAt, kind: 'clip', text: `Filmed: ${name}`, actor: clip.file.filedBy });
+    }
+    if (clip.file.receivedAt) {
+      timeline.push({ at: clip.file.receivedAt, kind: 'clip', text: `Filed: ${name}`, actor: clip.file.filedBy });
+    }
+  }
+  if (includeRecords) {
+    for (const row of input.custody ?? []) {
+      const action = String(row.action ?? '').toLowerCase();
+      if (TIMELINE_ACTIONS_SKIPPED.has(action)) continue;
+      if (row.proofId && workDateFilter && !clipName.has(row.proofId)) continue;
+      const entry = custodyEntry(row);
+      if (!entry) continue;
+      const about = row.proofId ? clipName.get(row.proofId) : null;
+      const detail = entry.detail ? ` (${entry.detail})` : '';
+      timeline.push({
+        at: entry.at,
+        kind: 'custody',
+        text: `${entry.action}${about ? `: ${about}` : ''}${detail}`,
+        actor: entry.actor,
+      });
+    }
+    for (const person of access ?? []) {
+      if (!person.grantedAt) continue;
+      timeline.push({
+        at: person.grantedAt,
+        kind: 'access',
+        text: `Access given to ${person.name} (${person.accessType})`,
+        actor: person.grantedBy,
+      });
+    }
+  }
+  timeline.sort((a, b) => a.at.localeCompare(b.at));
+
   return {
     schema: JOB_PROOF_PACK_SCHEMA,
     exportedAt: input.exportedAt ?? new Date().toISOString(),
@@ -567,6 +925,9 @@ export function buildJobProofPack(input: {
     clips,
     disputes,
     punchList,
+    timeline: timeline.slice(-TIMELINE_CAP),
+    access,
+    exportedBy: clean(input.exportedBy, 160),
     privacyNotice:
       redactedRangeCount > 0
         ? `Private moments were redacted (${redactedRangeCount} interval${redactedRangeCount === 1 ? '' : 's'}). Private frames and quotes are omitted from this report.`

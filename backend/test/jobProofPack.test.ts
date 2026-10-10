@@ -7,7 +7,13 @@ import {
   selectPublicFrames,
 } from '../src/shared/jobProofPack.js';
 import { PRIVACY_REDACTED_LABEL } from '../src/audio/privacyRedactions.js';
-import { renderJobProofPackPdf, proofPackFilename } from '../src/shared/jobProofPackPdf.js';
+import {
+  formatLength,
+  formatReportTime,
+  renderJobProofPackPdf,
+  proofPackFilename,
+  safeTimeZone,
+} from '../src/shared/jobProofPackPdf.js';
 
 test('formatProofPackClock formats m:ss and h:mm:ss', () => {
   assert.equal(formatProofPackClock(65), '1:05');
@@ -155,10 +161,10 @@ test('renderJobProofPackPdf returns a PDF buffer', async () => {
   const pdf = await renderJobProofPackPdf(pack);
   assert.ok(pdf.length > 200);
   assert.equal(pdf.subarray(0, 4).toString('utf8'), '%PDF');
-  assert.equal(proofPackFilename(pack), 'atmosphere-proof-pack-job-9.pdf');
+  assert.equal(proofPackFilename(pack), 'atmosphere-job-9-report.pdf');
   assert.equal(
     proofPackFilename({ ...pack, workDateFilter: '2026-09-01' }),
-    'atmosphere-proof-pack-job-9-2026-09-01.pdf',
+    'atmosphere-job-9-report-2026-09-01.pdf',
   );
 });
 
@@ -184,4 +190,96 @@ test('punch list items appear in pack and PDF when provided', async () => {
   assert.equal(pack.punchList[0]!.text, 'Remount chest cam');
   const pdf = await renderJobProofPackPdf(pack);
   assert.ok(pdf.subarray(0, 5).toString() === '%PDF-');
+});
+
+test('job file report carries file metadata, full transcript, custody and access', async () => {
+  const pack = buildJobProofPack({
+    exportedAt: '2026-10-10T18:00:00.000Z',
+    job: { id: 'job-2', number: 7, name: 'Maple Ave' },
+    days: [],
+    videos: [
+      {
+        id: 'pf-a',
+        workDate: '2026-10-08',
+        phase: 'after',
+        company: 'Field Capture',
+        person: 'Dana',
+        aiSummary: 'Drywall patched in the kitchen.',
+        durationSeconds: 53,
+        capturedAt: '2026-10-08T23:12:00.000Z',
+        receivedAt: '2026-10-08T23:14:00.000Z',
+        contentHash: 'abc123',
+        proofState: 'accepted',
+        processingLabel: 'Analyzed',
+        checks: [{ key: 'same_day', verdict: 'pass', detail: 'Filmed on 2026-10-08.' }],
+        privacyRedactions: {
+          version: 1,
+          ranges: [{ startSec: 20, endSec: 30, reason: 'bathroom', confidence: 0.9, source: 'vision' }],
+        },
+        conversation: {
+          transcriptSegments: [
+            { tSec: 2, speakerLabel: 'Dana', text: 'Starting on the kitchen wall.' },
+            { tSec: 22, speakerLabel: 'Homeowner', text: 'private one' },
+            { tSec: 25, speakerLabel: 'Homeowner', text: 'private two' },
+            { tSec: 41, speakerLabel: 'Homeowner', text: 'Looks good.' },
+          ],
+        },
+        rooms: [{ roomName: 'Kitchen', startSeconds: 0, endSeconds: 53, findings: [{ text: 'Patch dry', atSeconds: 40 }] }],
+        events: [{ atSeconds: 10, text: 'Sanding the patch' }, { atSeconds: 24, text: 'private event' }],
+      },
+    ],
+    evidenceByProof: new Map([
+      ['pf-a', { title: 'Kitchen drywall patch', category: 'after', tags: ['drywall'], viewCount: 3, byteSize: 2048 }],
+    ]),
+    custody: [
+      { proofId: 'pf-a', action: 'viewed', actorLabel: 'Jo', occurredAt: '2026-10-09T10:00:00.000Z' },
+      { proofId: 'pf-a', action: 'uploaded', actorLabel: 'Dana', occurredAt: '2026-10-08T23:14:00.000Z' },
+      { proofId: null, action: 'exported', actorLabel: 'Jo', occurredAt: '2026-10-09T11:00:00.000Z' },
+    ],
+    access: [
+      { displayName: 'Pat — Homeowner', accessType: 'Progress link', state: 'live', grantedByName: 'Jo', grantedAt: '2026-10-01T12:00:00.000Z' },
+    ],
+    exportedBy: 'Jo',
+  });
+  const clip = pack.clips[0]!;
+  assert.equal(clip.file.title, 'Kitchen drywall patch');
+  assert.equal(clip.file.review, 'Accepted');
+  assert.equal(clip.file.viewCount, 3);
+  assert.deepEqual(
+    clip.transcript.map((l) => [l.tSec, l.speaker, l.text]),
+    [
+      [2, 'Dana', 'Starting on the kitchen wall.'],
+      [22, null, 'Private moment redacted'],
+      [41, 'Homeowner', 'Looks good.'],
+    ],
+  );
+  assert.ok(!clip.analysis.events.some((e) => /private/.test(e.text)));
+  assert.equal(clip.analysis.rooms[0]!.name, 'Kitchen');
+  assert.deepEqual(clip.custody!.map((c) => c.action), ['Filed', 'Opened']);
+  assert.equal(pack.access!.length, 1);
+  assert.ok(pack.timeline.some((t) => /Report exported/.test(t.text)));
+  assert.ok(pack.timeline.some((t) => /Access given to Pat/.test(t.text)));
+  assert.ok(!pack.timeline.some((t) => /^Opened/.test(t.text)));
+  const pdf = await renderJobProofPackPdf(pack, { timeZone: 'America/New_York' });
+  assert.equal(pdf.subarray(0, 4).toString('utf8'), '%PDF');
+});
+
+test('viewer access leaves custody and access out of the report', () => {
+  const pack = buildJobProofPack({
+    job: { id: 'job-3' },
+    days: [],
+    videos: [{ id: 'v', workDate: '2026-10-01', company: 'Crew' }],
+    evidenceByProof: new Map([['v', { viewCount: 9 }]]),
+  });
+  assert.equal(pack.access, null);
+  assert.equal(pack.clips[0]!.custody, null);
+  assert.equal(pack.clips[0]!.file.viewCount, null);
+});
+
+test('report formatting helpers', () => {
+  assert.equal(formatLength(142), '2 min 22 sec');
+  assert.equal(formatLength(53), '53 sec');
+  assert.equal(safeTimeZone('Not/AZone'), null);
+  assert.equal(safeTimeZone('America/Chicago'), 'America/Chicago');
+  assert.match(formatReportTime('2026-10-08T23:12:00.000Z', 'America/New_York'), /Oct 8, 2026.*7:12/);
 });

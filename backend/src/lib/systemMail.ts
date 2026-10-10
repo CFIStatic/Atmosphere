@@ -7,6 +7,7 @@ import {
   alignedReplyTo,
   deliverabilityHeaders,
   type MailKind,
+  PLATFORM_REPLY_TO,
   formatFromHeader,
   resendTags,
   smtpFromMatchesAccount,
@@ -149,6 +150,7 @@ async function postResend(input: {
   from: string;
   headers?: Record<string, string>;
   kind?: MailKind;
+  fromName?: string | null;
 }): Promise<{ ok: true } | { ok: false; why: string; status?: number; body?: string }> {
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -158,7 +160,7 @@ async function postResend(input: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: formatFromHeader(input.from),
+        from: formatFromHeader(input.from, input.fromName ?? undefined),
         to: [input.to],
         subject: input.subject,
         text: input.text,
@@ -196,6 +198,7 @@ async function sendViaResend(input: {
   headers?: Record<string, string>;
   keepReplyTo?: boolean;
   kind?: MailKind;
+  fromName?: string | null;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -259,13 +262,17 @@ export async function sendSystemMail(input: {
    */
   kind?: MailKind;
   unsubscribeUrl?: string | null;
+  /** Display name on From, e.g. "Acme Restoration via Atmosphere". */
+  fromName?: string | null;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();
   const driver = driverOverride();
   const requestedReplyTo = input.replyTo?.trim() || defaultReplyTo();
+  // A cross-org Reply-To (CAREERS_FROM_EMAIL=jack@jettx.ai) is dropped; fall
+  // back to the Atmosphere inbox so replies never go to the MX-less From.
   const replyTo = input.keepReplyTo
     ? requestedReplyTo
-    : alignedReplyTo(from, requestedReplyTo);
+    : alignedReplyTo(from, requestedReplyTo) ?? alignedReplyTo(from, PLATFORM_REPLY_TO);
   const sendId = randomUUID();
   const kind: MailKind = input.kind ?? 'transactional';
   const headers = deliverabilityHeaders({ kind, sendId, unsubscribeUrl: input.unsubscribeUrl });
@@ -300,7 +307,7 @@ export async function sendSystemMail(input: {
       }
       try {
         await getTransporter().sendMail({
-          from: formatFromHeader(from),
+          from: formatFromHeader(from, input.fromName ?? undefined),
           to: input.to,
           subject: input.subject,
           text: input.text,
