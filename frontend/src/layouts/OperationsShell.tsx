@@ -7,6 +7,7 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useT } from '../lib/i18n';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
+import type { OperationsOutletContext } from './operationsOutlet';
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
@@ -33,6 +34,8 @@ export function OperationsShell() {
   const isJobFile = isJobFilePath(pathname);
   const phone = usePhoneShell();
   const [railOpen, setRailOpen] = useState(false);
+  /** Pages put their own title and actions here (the job file does). */
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   useFeatureTimer('verifier_library', isLibrary);
 
   useEffect(() => {
@@ -93,6 +96,11 @@ export function OperationsShell() {
                 <MenuIcon width={22} height={22} />
               </button>
             )}
+            <div
+              ref={setHeaderSlot}
+              className="flex min-w-0 flex-1 items-center gap-3 empty:hidden"
+              data-operations-header-slot=""
+            />
             <div className="ms-auto shrink-0">
               <HeaderAccountChip />
             </div>
@@ -111,7 +119,7 @@ export function OperationsShell() {
             {/* Pages load on demand; suspend here so the shell and the
                 persistent Verifier iframe stay mounted while a page chunk loads. */}
             <Suspense fallback={null}>
-              <Outlet context={{ chrome: 'operations' as const }} />
+              <Outlet context={{ chrome: 'operations', headerSlot } satisfies OperationsOutletContext} />
             </Suspense>
           </div>
         </main>

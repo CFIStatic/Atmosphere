@@ -202,7 +202,7 @@ export function JobFileAskChrome({
       data-ask-width={askPlacement === 'split' ? askWidth : undefined}
     >
       {askPlacement === 'section' ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-6 pb-4 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-2 pb-3 sm:px-4">
           {shownBack ? (
             <div className="shrink-0" data-testid="job-file-back">
               {shownBack}

@@ -1,5 +1,6 @@
 import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../lib/appShell';
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Check, Copy, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   api,
@@ -158,83 +159,96 @@ function formatMomentClock(seconds: number): string {
 }
 
 
-function AskStepsSourcesPanel({
+function AskStepsSourcesBody({
   sources,
   webSources,
-  quotes,
   actions,
   onOpenSource,
 }: {
   sources: AskSourceChip[];
   webSources?: readonly AskWebSource[] | null;
-  quotes: ReturnType<typeof extractAskSources>['quotes'];
   actions: ReturnType<typeof extractAskSources>['actions'];
   onOpenSource: (source: AskSourceChip) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const webCount = (webSources ?? []).length;
-  const count = sources.length + webCount + quotes.length + actions.length;
-  if (!count) return null;
   return (
-    <div className="mt-2" data-testid="ask-steps-sources">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
-        aria-expanded={open}
-        data-testid="ask-steps-sources-toggle"
-      >
-        {open ? 'Hide steps / sources' : `Steps / Sources (${count})`}
-      </button>
-      {open ? (
-        <div className="mt-1.5 space-y-2 rounded-lg border border-line bg-paper-50 p-2.5" data-testid="ask-steps-sources-body">
-          {actions.length ? (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Steps</p>
-              <ol className="mt-1 list-decimal space-y-0.5 ps-5 text-[12px] text-ink-700">
-                {actions.map((action, i) => (
-                  <li key={`${action.tool}-${i}`}>{action.label}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-          {sources.length || quotes.length || webCount ? (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Sources</p>
-              <div className="mt-1">
-                <AskSourceChips sources={sources} onOpen={onOpenSource} />
-                <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
-                <AskWebResults sources={webSources} />
-              </div>
-            </div>
-          ) : null}
+    <div className="mt-1.5 space-y-2 rounded-lg border border-line bg-paper-50 p-2.5" data-testid="ask-steps-sources-body">
+      {actions.length ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Steps</p>
+          <ol className="mt-1 list-decimal space-y-0.5 ps-5 text-[12px] text-ink-700">
+            {actions.map((action, i) => (
+              <li key={`${action.tool}-${i}`}>{action.label}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {sources.length || webCount ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Sources</p>
+          <div className="mt-1">
+            <AskSourceChips sources={sources} onOpen={onOpenSource} />
+            <AskWebResults sources={webSources} />
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-function AskFollowUps({
-  questions,
-  onAsk,
+/** Steps a reply took, minus the ones it already shows as cards (approvals, Computer tasks). */
+function answerStepActions(text: string) {
+  return extractAskSources(text).actions.filter(
+    (a) => a.tool !== 'start_computer_task' && !(a.path ?? '').startsWith('ask-approval:'),
+  );
+}
+
+const ANSWER_ICON_BUTTON =
+  'inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
+
+/**
+ * One compact row under an answer: icon actions, a closed-by-default
+ * Steps / Sources toggle, and next-step buttons (Text the crew) on the right.
+ * Steps and sources open underneath the row.
+ */
+function AskAnswerFooter({
+  text,
+  sources,
+  webSources,
+  onOpenSource,
+  children,
+  trailing,
 }: {
-  questions: string[];
-  onAsk: (question: string) => void;
+  text: string;
+  sources: AskSourceChip[];
+  webSources?: readonly AskWebSource[] | null;
+  onOpenSource: (source: AskSourceChip) => void;
+  children?: ReactNode;
+  trailing?: ReactNode;
 }) {
-  if (questions.length < 2) return null;
+  const [open, setOpen] = useState(false);
+  const actions = answerStepActions(text);
+  const count = sources.length + (webSources ?? []).length + actions.length;
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-followups">
-      {questions.slice(0, 3).map((question) => (
-        <button
-          key={question}
-          type="button"
-          data-testid="ask-followup"
-          onClick={() => onAsk(question)}
-          className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-left text-[12px] text-ink-700 transition hover:border-brand-200 hover:bg-brand-50"
-        >
-          {question}
-        </button>
-      ))}
+    <div className="mt-1.5" data-testid="ask-answer-footer">
+      <div className="flex flex-wrap items-center gap-0.5">
+        {children}
+        {count ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-ink-500 transition hover:bg-paper-100 hover:text-ink-800"
+            aria-expanded={open}
+            data-testid="ask-steps-sources-toggle"
+          >
+            {open ? 'Hide steps / sources' : `Steps / Sources (${count})`}
+          </button>
+        ) : null}
+        {trailing ? <div className="ms-auto flex flex-wrap items-center gap-1.5">{trailing}</div> : null}
+      </div>
+      {open && count ? (
+        <AskStepsSourcesBody sources={sources} webSources={webSources} actions={actions} onOpenSource={onOpenSource} />
+      ) : null}
     </div>
   );
 }
@@ -445,23 +459,17 @@ function AskAnswerBody({
   text,
   events,
   onSeek,
-  sources,
-  webSources,
   onOpenSource,
-  onAskFollowUp,
 }: {
   /** For approval cards (they load and decide by job). */
   jobId?: string;
   text: string;
   events: number[];
   onSeek: (atSeconds: number) => void;
-  sources: AskSourceChip[];
-  webSources?: readonly AskWebSource[] | null;
   onOpenSource: (source: AskSourceChip) => void;
-  onAskFollowUp?: (question: string) => void;
 }) {
   const extracted = extractAskSources(text);
-  const { quotes, followUps } = extracted;
+  const { quotes } = extracted;
   // A proposal waiting on the person (send a text, remove access) renders as an approval card.
   const approvals = extracted.actions.flatMap((action) => {
     const m = /^ask-approval:([0-9a-f-]{36})$/i.exec(action.path ?? '');
@@ -491,14 +499,6 @@ function AskAnswerBody({
         <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
       ))}
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
-      <AskStepsSourcesPanel
-        sources={sources}
-        webSources={webSources}
-        quotes={[]}
-        actions={extracted.actions.filter((a) => a.tool !== 'start_computer_task' && !(a.path ?? '').startsWith('ask-approval:'))}
-        onOpenSource={onOpenSource}
-      />
-      {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
     </div>
   );
 }
@@ -581,16 +581,6 @@ export type JobAskFn = (
   threadId?: string | null;
   webSources?: AskWebSource[];
 }>;
-
-/**
- * A reply built from web results with no job source in it is not "From this
- * job file". The server already sends groundedOn 0 for these; this guards
- * older stored turns.
- */
-function isWebOnlyAnswer(text: string, webSources?: readonly AskWebSource[] | null): boolean {
-  if (!webSources?.length) return false;
-  return extractAskSources(text).sources.length === 0;
-}
 
 /** Status line under the dots while Ask works. Web and Computer say so; the rest say Thinking. */
 /**
@@ -687,11 +677,6 @@ function askPhaseLabel(phase: string | null | undefined): string {
   if (/computer|browser/i.test(value)) return 'Starting Computer…';
   if (/writing/i.test(value)) return 'Writing…';
   return 'Thinking';
-}
-
-/** A Computer task reply is about the browser, not the job file: no "From this job file" line. */
-function isComputerTaskAnswer(text: string): boolean {
-  return extractAskSources(text).actions.some((action) => action.tool === 'start_computer_task');
 }
 
 /** The stored question behind a turn ("<uuid>-q" / "<uuid>-a"), or null for a turn not saved yet. */
@@ -1487,7 +1472,7 @@ export function JobAskPanel({
         data-ask-scroller=""
         className={
           fill
-            ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4'
+            ? 'min-h-0 flex-1 overflow-y-auto px-4 py-3'
             : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
         }
       >
@@ -1572,10 +1557,7 @@ export function JobAskPanel({
                         )
                         .map((event) => event.atSeconds)}
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
-                      sources={extractAskSources(turn.content).sources}
-                      webSources={turn.webSources}
                       onOpenSource={openAskSource}
-                      onAskFollowUp={(question) => void ask(question)}
                     />
                     </>
                   ) : editing?.turnId === turn.id ? (
@@ -1635,36 +1617,52 @@ export function JobAskPanel({
                       ) : null}
                     </>
                   )}
-                  {turn.role === 'assistant' &&
-                    turn.groundedOn != null &&
-                    turn.groundedOn > 0 &&
-                    !isComputerTaskAnswer(turn.content) &&
-                    !isWebOnlyAnswer(turn.content, turn.webSources) && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
-                  )}
                   {showActions ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <AskAnswerFooter
+                      text={turn.content}
+                      sources={extractAskSources(turn.content).sources}
+                      webSources={turn.webSources}
+                      onOpenSource={openAskSource}
+                      trailing={
+                        office && turn.id === lastAssistantId && !inFlight ? (
+                          <AskActionCards
+                            cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
+                            onPick={(card) => {
+                              if (card.mode === 'send') {
+                                void ask(card.prompt);
+                              } else {
+                                setDraft(card.prompt);
+                                inputRef.current?.focus();
+                              }
+                            }}
+                          />
+                        ) : null
+                      }
+                    >
                       <button
                         type="button"
                         data-testid="ask-message-copy"
+                        aria-label={copiedTurnId === turn.id ? 'Copied' : 'Copy'}
+                        title={copiedTurnId === turn.id ? 'Copied' : 'Copy'}
                         onClick={() => {
                           void navigator.clipboard?.writeText(copyableAskText(stripLegacyDocumentNote(turn.content))).then(() => {
                             setCopiedTurnId(turn.id);
                           });
                         }}
-                        className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+                        className={ANSWER_ICON_BUTTON}
                       >
-                        {copiedTurnId === turn.id ? 'Copied' : 'Copy'}
+                        {copiedTurnId === turn.id ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
                       </button>
                       <button
                         type="button"
                         data-testid="ask-retry"
                         aria-label={turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
+                        title={turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
                         disabled={inFlight}
                         onClick={() => retryTurn(turn.id)}
-                        className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900 disabled:opacity-35"
+                        className={ANSWER_ICON_BUTTON}
                       >
-                        {turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
+                        <RotateCcw size={14} aria-hidden />
                       </button>
                       {office && storedQuestionId(turn.id) ? (
                         <AskAnswerToolbar
@@ -1675,20 +1673,7 @@ export function JobAskPanel({
                           onCopyLink={() => copyPinLink(storedQuestionId(turn.id)!)}
                         />
                       ) : null}
-                    </div>
-                  ) : null}
-                  {office && turn.role === 'assistant' && turn.id === lastAssistantId && !inFlight ? (
-                    <AskActionCards
-                      cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
-                      onPick={(card) => {
-                        if (card.mode === 'send') {
-                          void ask(card.prompt);
-                        } else {
-                          setDraft(card.prompt);
-                          inputRef.current?.focus();
-                        }
-                      }}
-                    />
+                    </AskAnswerFooter>
                   ) : null}
                 </div>
               </li>

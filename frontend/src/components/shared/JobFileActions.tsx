@@ -27,12 +27,15 @@ export function JobFileActions({
   onRenamed,
   onDuplicated,
   onShare,
+  compact = false,
 }: {
   jobId: string;
   title: string;
   onRenamed: (title: string) => void;
   onDuplicated: (created: { jobId: string; title: string; summary: SharedJobSummary }) => void;
   onShare: () => void;
+  /** Smaller buttons for the top bar. */
+  compact?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>(null);
   const [draft, setDraft] = useState(title);
@@ -80,27 +83,29 @@ export function JobFileActions({
     }
   }
 
+  const pad = compact ? 'px-2.5 py-1.5 text-[13px]' : 'px-3.5 py-2 text-sm';
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex flex-wrap items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
         <button
           type="button"
           onClick={() => setMode('rename')}
-          className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink-700 transition hover:bg-paper-50"
+          className={`rounded-lg border border-line font-semibold text-ink-700 transition hover:bg-paper-50 ${pad}`}
         >
           Rename
         </button>
         <button
           type="button"
           onClick={() => setMode('duplicate')}
-          className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink-700 transition hover:bg-paper-50"
+          className={`rounded-lg border border-line font-semibold text-ink-700 transition hover:bg-paper-50 ${pad}`}
         >
           Duplicate
         </button>
         <button
           type="button"
           onClick={onShare}
-          className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 transition hover:bg-ink-800"
+          className={`rounded-lg bg-ink-900 font-semibold text-paper-0 transition hover:bg-ink-800 ${pad}`}
         >
           Share with homeowner
         </button>
