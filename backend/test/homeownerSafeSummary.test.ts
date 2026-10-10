@@ -20,7 +20,7 @@ test('viewer payload never carries raw analysis; junk clips get a neutral line',
   const office = {
     days: [{ workDate: '2026-10-01', aiSummary: JUNK, proofIds: ['a'] }, { workDate: '2026-10-02', aiSummary: ASR, proofIds: ['b'] }],
     videos: [
-      { id: 'a', aiSummary: JUNK, conversation: { executiveSummary: JUNK, keyMoments: ['YouTube podcast playing'] }, transcriptText: 'チョコレートチップス', dictationEntries: [{ text: JUNK }] },
+      { id: 'a', aiSummary: JUNK, people: { peoplePresent: [{ label: 'Media (YouTube video on monitor)' }], peopleSpeakers: [{ speakerLabel: 'Media (YouTube video on monitor)' }] }, conversation: { executiveSummary: JUNK, keyMoments: ['YouTube podcast playing'] }, transcriptText: 'チョコレートチップス', dictationEntries: [{ text: JUNK }] },
       { id: 'b', aiSummary: ASR, conversation: { executiveSummary: ASR, keyMoments: [{ text: 'Drywall cut out to 2 ft' }, { text: 'ASR artifact' }] } },
     ],
   };

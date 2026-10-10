@@ -182,6 +182,8 @@ export function homeownerSafeVideo<V extends Record<string, any>>(video: V): V {
     next.transcriptSegments = [];
     next.transcriptWords = [];
     next.rooms = (video.rooms ?? []).map((r: any) => ({ ...r, findings: [] }));
+    // Who was "present" in a non-job clip is the analyst's note (e.g. a TV), not a crew.
+    next.people = video.people ? { ...video.people, peoplePresent: [], peopleSpeakers: [] } : video.people;
     return next;
   }
   const summary = homeownerSafeText(video.aiSummary);
