@@ -25,11 +25,13 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
+const progressShareEmailSignIn = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => ({ ok: true })));
 const progressShareGrants = vi.hoisted(() => vi.fn(async () => ({ grants: [] as unknown[] })));
 
 vi.mock('../lib/api', () => ({
   api: {
     progressShareGrants: () => progressShareGrants(),
+    progressShareEmailSignIn: (...a: unknown[]) => progressShareEmailSignIn(...a),
   },
   ApiError: class ApiError extends Error {
     status = 401;
@@ -258,5 +260,23 @@ describe('LoginPage in the iPhone/Android app shell', () => {
     const link = screen.getByRole('link', { name: 'Create an account' });
     expect(link.getAttribute('href')).toMatch(/^\/signup/);
     expect(link.getAttribute('target')).toBeNull();
+  });
+});
+
+describe('LoginPage from a homeowner share link', () => {
+  it('prefills the invited email and offers Email me a link, sent to the share (not the typed address)', async () => {
+    authState.user = null;
+    renderLogin('/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com');
+    expect(screen.getByLabelText('Email')).toHaveValue('home@owner.com');
+    expect(screen.getByText('Sign in to see the job shared with you.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
+    expect(progressShareEmailSignIn).toHaveBeenCalledWith('tok_0123456789abcdef0123');
+    expect(await screen.findByRole('status')).toHaveTextContent('home@owner.com');
+  });
+
+  it('plain /login has no homeowner link option', () => {
+    authState.user = null;
+    renderLogin('/login');
+    expect(screen.queryByRole('button', { name: 'Email me a link' })).toBeNull();
   });
 });

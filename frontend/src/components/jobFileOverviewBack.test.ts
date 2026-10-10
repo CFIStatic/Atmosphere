@@ -32,13 +32,6 @@ describe('job file chrome has no Overview back', () => {
     expect(src).toContain('<JobFileAskChrome');
   });
 
-  it('does not pass a back control from the guest job file', () => {
-    const src = read('../pages/JobProgressGuestPage.tsx');
-    expect(src).toContain('<JobFileAskChrome');
-    expect(src).not.toMatch(/\bback=/);
-    expect(src).not.toMatch(/>\s*Overview\s*</);
-  });
-
   it('keeps Job Files back on JobDetailPage and never labels it Overview', () => {
     const src = read('../pages/JobDetailPage.tsx');
     expect(src).toContain('back={back}');
@@ -54,7 +47,6 @@ describe('job file chrome has no Overview back', () => {
     const scoped = [
       resolve(frontendSrc, 'pages/SharedDashboardPage.tsx'),
       resolve(frontendSrc, 'pages/JobDetailPage.tsx'),
-      resolve(frontendSrc, 'pages/JobProgressGuestPage.tsx'),
       resolve(frontendSrc, 'pages/JobIntakePage.tsx'),
       resolve(frontendSrc, 'components/JobFileAskChrome.tsx'),
       resolve(frontendSrc, 'layouts/OperationsShell.tsx'),

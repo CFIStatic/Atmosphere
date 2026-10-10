@@ -5,6 +5,8 @@ import { ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
 import { isInAppShell, WEBSITE_SIGNUP_URL } from '../lib/appShell';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
+import { shareTokenFromLogin } from '../lib/homeownerLogin';
+import { HomeownerEmailLink } from '../components/HomeownerEmailLink';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
@@ -69,6 +71,7 @@ export function LoginPage() {
 
   const fieldEmbed = isFieldEmbedMarked() || isFieldEmbedQuery(location.search);
   const switchAccount = searchParams.get('switch') === '1';
+  const shareToken = shareTokenFromLogin(searchParams.get('share'));
 
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
@@ -178,8 +181,12 @@ export function LoginPage() {
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome back</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
-                  Sign in to your Atmosphere workspace.
+                  {shareToken
+                    ? 'Sign in to see the job shared with you.'
+                    : 'Sign in to your Atmosphere workspace.'}
                 </p>
+
+                {shareToken && <HomeownerEmailLink token={shareToken} email={searchParams.get('email')} />}
 
                 {user && (
                   <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">

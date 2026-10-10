@@ -58,8 +58,8 @@ const LoginsPage = lazy(() => import('./pages/LoginsPage').then((m) => ({ defaul
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
-const JobProgressGuestPage = lazy(() =>
-  import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
+const ShareLinkGate = lazy(() =>
+  import('./pages/ShareLinkGate').then((m) => ({ default: m.ShareLinkGate })),
 );
 
 const TERMS_EXEMPT_PREFIXES = [
@@ -421,12 +421,12 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Read-only job file for homeowners, counsel, banks — no login.
-              /progress = cookied guest session; /progress/:token = emailed link.
-              /progress-view kept as an alias for older links. */}
-          <Route path="/progress-view" element={<JobProgressGuestPage />} />
-          <Route path="/progress" element={<JobProgressGuestPage />} />
-          <Route path="/progress/:token" element={<JobProgressGuestPage />} />
+          {/* Homeowner share links: sign in (same page as contractors), then the
+              job opens in the portal. /progress and /progress-view are older
+              aliases; ?token= is forwarded, otherwise the Dashboard. */}
+          <Route path="/progress-view" element={<LegacyProgressRedirect />} />
+          <Route path="/progress" element={<LegacyProgressRedirect />} />
+          <Route path="/progress/:token" element={<ShareLinkGate />} />
 
           <Route
             path="/onboarding"
@@ -483,4 +483,12 @@ export default function App() {
       </AuthProvider>
     </Router>
   );
+}
+
+/** Older share URLs without a path token: forward ?token=, else the Dashboard. */
+function LegacyProgressRedirect() {
+  const location = useLocation();
+  const token = new URLSearchParams(location.search).get('token')?.trim();
+  if (token) return <Navigate to={`/progress/${encodeURIComponent(token)}`} replace />;
+  return <Navigate to={HOMEOWNER_HUB_PATH} replace />;
 }

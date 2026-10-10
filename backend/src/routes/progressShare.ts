@@ -331,6 +331,43 @@ progressShareRouter.get(
   },
 );
 
+/**
+ * GET /api/progress-share/:token/invite
+ * What the sign-in page needs to send an invited homeowner into the portal:
+ * the invited email (prefilled; the token holder is the invitee), contractor
+ * and job title. No job data, no open count. Unknown/revoked tokens 404/410.
+ */
+const inviteLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: 15 * 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Wait a few minutes and try again.', code: 'rate_limited' },
+});
+
+progressShareRouter.get(
+  '/:token/invite',
+  inviteLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
+      const [{ data: org }, { data: job }] = await Promise.all([
+        admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
+        admin.from('crm_jobs').select('title').eq('id', share.job_id).maybeSingle(),
+      ]);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        recipientEmail: share.recipient_email ?? null,
+        orgName: (org as any)?.name ?? 'Your contractor',
+        jobTitle: (job as any)?.title ?? null,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /** GET /api/progress-share/:token — read-only job progress for third parties. */
 progressShareRouter.get('/:token', sendProgressGuest);
 
