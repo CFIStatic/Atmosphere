@@ -32,7 +32,6 @@ import {
 } from '../lib/askSeek';
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
-import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
 import { extractAskSources, isDocumentQuoteSource, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
@@ -584,26 +583,6 @@ export type JobAskFn = (
 }>;
 
 /**
- * Someone else with a role and no name closes the tentative role guess.
- * The server can still return that card. Drop it, and any other role-only
- * card for the same speaker on the same clip, so Ask does not ask again.
- * Titles repeat, so the clip is the proof id. A card with no proof id stays.
- */
-function dropStaleRoleGuess(
-  verifications: SpeakerVerification[],
-  input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string },
-  answered: SpeakerVerification | undefined,
-): SpeakerVerification[] {
-  const roleOnly = input.answer === 'other' && !input.displayName?.trim() && Boolean(input.role);
-  if (!roleOnly) return verifications;
-  return verifications.filter((row) => {
-    if (row.id === input.id) return false;
-    if (row.candidateName || !row.role || !answered?.proofId || !row.proofId) return true;
-    return row.speakerLabel !== answered.speakerLabel || row.proofId !== answered.proofId;
-  });
-}
-
-/**
  * A reply built from web results with no job source in it is not "From this
  * job file". The server already sends groundedOn 0 for these; this guards
  * older stored turns.
@@ -745,7 +724,6 @@ export function JobAskPanel({
   createThread,
   renameThread,
   onOpenHref,
-  initialVerifications,
   officeExtras = true,
 }: {
   jobId: string;
@@ -759,7 +737,6 @@ export function JobAskPanel({
   renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
   /** Open a cited job or video. Present when the panel sits inside the router. */
   onOpenHref?: (href: string) => void;
-  initialVerifications?: SpeakerVerification[];
   /** False for signed-in homeowners on a progress grant: no rate, pin, edit, action cards or search. */
   officeExtras?: boolean;
 }) {
@@ -789,7 +766,6 @@ export function JobAskPanel({
   const documentCatalogRef = useRef<AskAttachment[]>([]);
   const documentCatalogKey = docs.documents.map((doc) => doc.id).join('|');
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
-  const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Record<string, AskFeedback>>({});
   const feedbackAskedRef = useRef<Set<string>>(new Set());
@@ -808,7 +784,6 @@ export function JobAskPanel({
   const inFlightRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
-  const answeringRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(null);
   const { seek } = useVideoSeek();
   const { focus: focusJobFile } = useJobFileFocus();
@@ -897,33 +872,6 @@ export function JobAskPanel({
       }
       return next.slice(-8);
     });
-  }
-
-  useEffect(() => {
-    if (initialVerifications) return;
-    const load = (api as { speakerVerifications?: (id: string) => Promise<{ verifications: SpeakerVerification[] }> }).speakerVerifications;
-    if (!load) return;
-    void load(jobId)
-      .then((res) => setVerifications(res.verifications ?? []))
-      .catch(() => undefined);
-  }, [jobId, initialVerifications]);
-
-  async function answerVerification(input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string }) {
-    if (answeringRef.current) return;
-    answeringRef.current = true;
-    const answered = verifications.find((row) => row.id === input.id);
-    try {
-      const res = await api.answerSpeakerVerification(jobId, input.id, input);
-      // Yes confirms every same-name and same-voiceprint row. The response is
-      // the queue that is still open; dropping only this id leaves those cards up.
-      // Someone else with only a role also drops a stale tentative role guess
-      // the server may still echo, so that guess is not asked again.
-      setVerifications(dropStaleRoleGuess(res.verifications ?? [], input, answered));
-    } catch {
-      /* keep the card; a failed save must not look like the question was resolved */
-    } finally {
-      answeringRef.current = false;
-    }
   }
 
   useEffect(() => {
@@ -1543,11 +1491,6 @@ export function JobAskPanel({
             : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
         }
       >
-        {verifications[0] ? (
-          <div className="mb-4">
-            <SpeakerVerificationPrompt verification={verifications[0]} onAnswer={(input) => void answerVerification(input)} />
-          </div>
-        ) : null}
         {office ? (
           <AskPinnedAnswers
             pins={pins}
