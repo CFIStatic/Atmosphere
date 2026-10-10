@@ -22,6 +22,7 @@ import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
+import { displayRoomName, integrityNotice, mergeRoomsByName } from './proofIntegrityCopy';
 import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
 import { SpeakerRenameControl, type ClipSpeaker } from '../analysis/SpeakerRenameControl';
 import { expandMentionTokens } from '../../lib/mentions';
@@ -179,8 +180,10 @@ export function ProofOfWork({
             {data.counts.payable > 0 && (
               <span className="text-success-600">{data.counts.payable} ready to pay</span>
             )}
-            {data.counts.contradicted > 0 && (
-              <span className="text-danger-600">{data.counts.contradicted} failed a check</span>
+            {!readOnly && integrityNotice(data.counts) && (
+              <span className="text-caution-700" data-testid="integrity-notice">
+                {integrityNotice(data.counts)}
+              </span>
             )}
             {(data.counts.analysing ?? 0) > 0 && (
               <span className="text-ink-500">{data.counts.analysing} being read</span>
@@ -199,7 +202,7 @@ export function ProofOfWork({
         stays with Ask, not piled onto this file.
       </p>
 
-      {data && ((data.disputes?.length ?? 0) > 0) && (
+      {!readOnly && data && ((data.disputes?.length ?? 0) > 0) && (
         <div className="mt-3">
           <ShowDispute
             disputes={data.disputes ?? []}
@@ -527,7 +530,7 @@ function JobRooms({
     <div className="mt-3 rounded-lg border border-line px-3 py-2.5" data-testid="job-rooms">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Rooms</p>
       <ul className="mt-2 space-y-2">
-        {rooms.map((room) => {
+        {mergeRoomsByName(rooms).map((room) => {
           const span = [roomDay(room.firstSeen), roomDay(room.lastSeen)].filter(Boolean);
           const when = span.length > 1 && span[0] !== span[1] ? `${span[0]} – ${span[1]}` : span[0] ?? null;
           return (
@@ -675,8 +678,8 @@ function VideoCatalog({
                         <button
                           key={`${room.roomKey}-${room.startSeconds}`}
                           type="button"
-                          title={`${room.roomName} · ${momentClock(room.startSeconds)}`}
-                          aria-label={`Jump to ${room.roomName} at ${momentClock(room.startSeconds)}`}
+                          title={`${displayRoomName(room.roomName)} · ${momentClock(room.startSeconds)}`}
+                          aria-label={`Jump to ${displayRoomName(room.roomName)} at ${momentClock(room.startSeconds)}`}
                           onClick={() => {
                             setOpenId(video.id);
                             onSeek?.(video.id, room.startSeconds);
@@ -686,7 +689,7 @@ function VideoCatalog({
                           <span className="font-semibold tabular-nums text-brand-700">
                             {momentClock(room.startSeconds)}
                           </span>
-                          <span className="truncate">{room.roomName}</span>
+                          <span className="truncate">{displayRoomName(room.roomName)}</span>
                         </button>
                       ))}
                     </div>

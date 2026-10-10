@@ -6,6 +6,8 @@
  * "3 unread" is not an action and "Meridian Ave — 2 clips waiting" is.
  */
 
+import { DEFAULT_TIME_ZONE, localDateOf, localDayKey } from '../lib/localDayKey.js';
+
 export interface ProofPulseClip {
   jobId?: string | null;
   analysisStatus: string | null;
@@ -49,20 +51,17 @@ function emptyJob(jobId: string): ProofPulseJob {
   };
 }
 
-function isSamePulseDay(iso: string | null, now: Date): boolean {
+/** Same local day as `now` in the org's zone. A bare work date is already local. */
+function isSamePulseDay(iso: string | null, now: Date, timeZone: string): boolean {
   if (!iso) return false;
-  const d = new Date(iso.length <= 10 ? `${iso}T12:00:00Z` : iso);
-  if (Number.isNaN(d.getTime())) return false;
-  return (
-    d.getUTCFullYear() === now.getUTCFullYear() &&
-    d.getUTCMonth() === now.getUTCMonth() &&
-    d.getUTCDate() === now.getUTCDate()
-  );
+  const day = localDateOf(iso, timeZone);
+  return day !== null && day === localDayKey(now, timeZone);
 }
 
 function classifyClip(
   clip: ProofPulseClip,
   now: Date,
+  timeZone: string,
   into: {
     clips: number;
     read: number;
@@ -81,12 +80,16 @@ function classifyClip(
   else into.unread += 1;
 
   if (clip.transcriptStatus === 'done') into.heard += 1;
-  if (isSamePulseDay(clip.receivedAt, now) || isSamePulseDay(clip.workDate, now)) {
+  if (isSamePulseDay(clip.receivedAt, now, timeZone) || isSamePulseDay(clip.workDate, now, timeZone)) {
     into.filmedToday += 1;
   }
 }
 
-export function summarizeProofPulse(clips: ProofPulseClip[], now = new Date()): ProofPulse {
+export function summarizeProofPulse(
+  clips: ProofPulseClip[],
+  now = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): ProofPulse {
   const totals: Omit<ProofPulse, 'byJob'> = {
     clips: 0,
     read: 0,
@@ -99,11 +102,11 @@ export function summarizeProofPulse(clips: ProofPulseClip[], now = new Date()): 
   const jobs = new Map<string, ProofPulseJob>();
 
   for (const clip of clips) {
-    classifyClip(clip, now, totals);
+    classifyClip(clip, now, timeZone, totals);
     const jobId = clip.jobId?.trim();
     if (!jobId) continue;
     const row = jobs.get(jobId) ?? emptyJob(jobId);
-    classifyClip(clip, now, row);
+    classifyClip(clip, now, timeZone, row);
     jobs.set(jobId, row);
   }
 

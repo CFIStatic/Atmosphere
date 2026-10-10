@@ -1136,7 +1136,7 @@ export function looksLikeDescriptionTitle(title: string): boolean {
   if (!t) return false;
   const words = t.split(/\s+/);
   if (/[,;:]/.test(t) && words.length >= 4) return true;
-  if (/\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|recording of|shows?|showing|captured)\b/i.test(t)) return true;
+  if (/\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|recording of|shows?|showing|captured|captures|featuring)\b/i.test(t)) return true;
   if (/\b(a|an|the|and|of|with|in|on|to|from|inside)$/i.test(t)) return true;
   if (/…$|\.\.\.$/.test(t)) return true;
   return words.length > 9;

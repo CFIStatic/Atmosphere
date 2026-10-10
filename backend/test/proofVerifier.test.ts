@@ -78,7 +78,7 @@ test('a video filed against the wrong day is caught', () => {
   );
   const sameDay = checks.find((c) => c.key === 'same_day');
   assert.equal(sameDay?.verdict, 'fail');
-  assert.match(sameDay!.detail, /filed against 2026-08-05/);
+  assert.match(sameDay!.detail, /Date mismatch: filmed Aug 4 but filed under Aug 5/);
 });
 
 test('footage sat on for a week fails; a day on a bad signal does not', () => {
@@ -224,7 +224,7 @@ test('unproven and disproven read differently', () => {
     site: SITE,
   });
   assert.equal(disproven.contradicted, true);
-  assert.match(disproven.summary, /Do not pay against this/);
+  assert.match(disproven.summary, /needs a look before paying/);
 });
 
 test('payment refuses an incomplete day, a contradicted day, and an unproven one', () => {

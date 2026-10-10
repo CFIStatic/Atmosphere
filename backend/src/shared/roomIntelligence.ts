@@ -129,7 +129,8 @@ export function roomDisplayName(identity: RoomIdentity): string {
  * "room unclear" — never a guessed room.
  */
 export function parseRoomLabel(raw: unknown): RoomIdentity {
-  const text = clean(raw, 80).toLowerCase();
+  // "living_room", "Living-Room" and "living room" are the same room.
+  const text = clean(typeof raw === 'string' ? raw.replace(/[_-]+/g, ' ') : raw, 80).toLowerCase();
   if (!text) return { roomType: 'unclear', qualifier: null };
   if (/\broom unclear\b|\bunidentified\b|\bunknown room\b|\bcannot tell\b|\bcan't tell\b/.test(text)) {
     return { roomType: 'unclear', qualifier: null };

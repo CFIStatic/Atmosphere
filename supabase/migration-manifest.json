@@ -225,7 +225,8 @@
     "20261009120000_ask_feedback_pins_edits.sql",
     "20261010090000_ask_pending_actions.sql",
     "20261010200000_job_evidence_duplicated.sql",
-    "20261010200100_duplicate_job_file_contents.sql"
+    "20261010200100_duplicate_job_file_contents.sql",
+    "20261010230000_same_day_check_local_time.sql"
   ],
   "migrations": [
     {
@@ -6860,6 +6861,16 @@
         "function|private.job_dup_remap_jsonb",
         "function|public.duplicate_job_file_contents"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261010230000_same_day_check_local_time",
+      "file": "20261010230000_same_day_check_local_time.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

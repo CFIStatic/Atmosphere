@@ -20,7 +20,7 @@ import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { assertAiFeatureAllowed } from '../metering/aiBudgetService.js';
-import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
+import { buildJobProofPayload, redactIntegrityForViewer, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 import { listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
 import {
   createAskThread,
@@ -172,7 +172,9 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
           .eq('job_id', share.job_id)
           .order('revision', { ascending: false })
           .limit(1),
-        buildJobProofPayload(admin, share.org_id, share.job_id).then(redactProofDeviceIdentity),
+        buildJobProofPayload(admin, share.org_id, share.job_id)
+          .then(redactIntegrityForViewer)
+          .then(redactProofDeviceIdentity),
       ]);
 
     await admin

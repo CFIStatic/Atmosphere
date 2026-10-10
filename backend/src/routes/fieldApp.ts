@@ -44,6 +44,7 @@ import {
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
+import { localToday, orgTimeZone } from '../lib/localDayKey.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { isDisplayableAvatarUrl } from '../lib/avatar.js';
 import { fieldStartJobSchema } from '../lib/validation.js';
@@ -777,8 +778,9 @@ const workDateSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional();
 
-function todayWorkDate(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Today in the org's zone; a UTC "today" files evening clips under tomorrow. */
+async function todayWorkDate(supabase: unknown, orgId: string): Promise<string> {
+  return localToday(await orgTimeZone(supabase, orgId));
 }
 
 /**
@@ -799,7 +801,7 @@ fieldAppRouter.get(
     try {
       const { orgId, userId, supabase } = await requireOrgContext(req);
       const jobId = z.string().uuid().parse(req.params.jobId);
-      const workDate = workDateSchema.parse(req.query.workDate) ?? todayWorkDate();
+      const workDate = workDateSchema.parse(req.query.workDate) ?? (await todayWorkDate(supabase, orgId));
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -844,7 +846,7 @@ fieldAppRouter.post(
           workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         })
         .parse(req.body ?? {});
-      const workDate = input.workDate ?? todayWorkDate();
+      const workDate = input.workDate ?? (await todayWorkDate(supabase, orgId));
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')

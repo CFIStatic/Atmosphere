@@ -1,3 +1,4 @@
+import { localToday, orgTimeZone } from '../lib/localDayKey.js';
 import { approveAskApproval, denyAskApproval, getAskApproval, listAskFeedback, listAskPins, pinAskAnswer, rateAskAnswer, searchAskChats, unpinAskAnswer } from './askExtras.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -1720,7 +1721,7 @@ jobShareRouter.get(
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/)
           .optional()
-          .parse(req.query.workDate) ?? new Date().toISOString().slice(0, 10);
+          .parse(req.query.workDate) ?? localToday(await orgTimeZone(admin, party.org_id));
       const status = await loadRecordingAckStatus({
         admin,
         jobId: party.job_id,
@@ -1752,7 +1753,7 @@ jobShareRouter.post(
           workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         })
         .parse(req.body ?? {});
-      const workDate = input.workDate ?? new Date().toISOString().slice(0, 10);
+      const workDate = input.workDate ?? localToday(await orgTimeZone(admin, party.org_id));
       const ack = await recordRecordingAcknowledgment({
         admin,
         jobId: party.job_id,

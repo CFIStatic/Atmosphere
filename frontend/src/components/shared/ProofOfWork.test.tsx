@@ -532,9 +532,9 @@ describe('ProofOfWork video collection', () => {
       ],
     };
     render(<ProofOfWork jobId="job-1" heading="Videos" initialData={withRooms} />);
-    expect(screen.getByTestId('job-rooms')).toHaveTextContent('kitchen');
+    expect(screen.getByTestId('job-rooms')).toHaveTextContent('Kitchen');
     expect(screen.getByTestId('job-rooms')).toHaveTextContent('Installs the cabinet boxes along the east wall.');
-    const chip = screen.getByRole('button', { name: 'Jump to kitchen at 0:12' });
+    const chip = screen.getByRole('button', { name: 'Jump to Kitchen at 0:12' });
     expect(screen.getByTestId('clip-room-chips')).toContainElement(chip);
     expect(screen.queryByRole('button', { name: /room unclear/i })).toBeNull();
     await user.click(chip);
