@@ -18,6 +18,7 @@ import { PersonAvatar } from '../PersonAvatar';
 import { JobFilePlayer } from './JobFilePlayer';
 import { formatViewerTime } from '../../lib/viewerTime';
 import { loadJobTimelineSource } from './jobTimelineLoad';
+import { GlassModal } from './GlassModal';
 import {
   TIMELINE_FILTERS,
   buildJobTimeline,
@@ -244,11 +245,17 @@ export function JobTimeline({
           Nothing on this job yet.
         </p>
       ) : filtered.length === 0 ? (
-        <p role="status" className="rounded-xl border border-line bg-paper-50 px-4 py-6 text-sm text-ink-500">
+        <p
+          role="status"
+          className="rounded-xl border border-line bg-paper-50 px-4 py-6 text-sm text-ink-500"
+        >
           Nothing matches these filters.
         </p>
       ) : (
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" data-testid="job-timeline-scroll">
+        <div
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+          data-testid="job-timeline-scroll"
+        >
           {ordered.live.length > 0 ? (
             <div className="rounded-xl border border-brand-500/50 bg-paper-50">
               <div className="sticky top-0 z-20 flex items-center gap-2 rounded-t-xl bg-paper-50/95 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-brand-500 backdrop-blur">
@@ -295,39 +302,24 @@ export function JobTimeline({
       ) : null}
 
       {player ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
-          role="presentation"
-          onClick={() => setPlayer(null)}
+        <GlassModal
+          title={<span className="line-clamp-2 text-[15px]">{player.event.sentence}</span>}
+          onClose={() => setPlayer(null)}
+          width="max-w-3xl"
+          align="center"
+          bodyClassName="p-0"
+          testId="timeline-player"
         >
-          <div
-            role="dialog"
-            aria-label="Clip"
-            data-testid="timeline-player"
-            className="w-full max-w-3xl overflow-hidden rounded-xl border border-line bg-paper-100 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 px-3 py-2">
-              <p className="min-w-0 truncate text-sm text-ink-800">{player.event.sentence}</p>
-              <button
-                type="button"
-                onClick={() => setPlayer(null)}
-                className="shrink-0 text-xs font-medium text-ink-500 hover:text-ink-900"
-              >
-                Close
-              </button>
-            </div>
-            <JobFilePlayer
-              src={player.url}
-              poster={player.event.posterUrl}
-              knownDurationSeconds={player.event.durationSeconds}
-              seekTo={timelineSeekTarget(player.event)}
-              privacyRedactions={player.event.privacyRedactions?.ranges ?? null}
-              childPrivacyRedactions={player.event.childPrivacyRedactions?.ranges ?? null}
-              className="aspect-video w-full bg-black"
-            />
-          </div>
-        </div>
+          <JobFilePlayer
+            src={player.url}
+            poster={player.event.posterUrl}
+            knownDurationSeconds={player.event.durationSeconds}
+            seekTo={timelineSeekTarget(player.event)}
+            privacyRedactions={player.event.privacyRedactions?.ranges ?? null}
+            childPrivacyRedactions={player.event.childPrivacyRedactions?.ranges ?? null}
+            className="aspect-video w-full bg-black"
+          />
+        </GlassModal>
       ) : null}
     </section>
   );
@@ -374,13 +366,25 @@ function TimelineRow({
         </button>
       ) : null}
       {event.actorName ? (
-        <PersonAvatar fullName={event.actorName} email={event.actorEmail} avatarUrl={event.avatarUrl} size="sm" />
+        <PersonAvatar
+          fullName={event.actorName}
+          email={event.actorEmail}
+          avatarUrl={event.avatarUrl}
+          size="sm"
+        />
       ) : (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-paper-200 text-ink-500" aria-hidden>
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-paper-200 text-ink-500"
+          aria-hidden
+        >
           <Icon className="h-4 w-4" />
         </span>
       )}
-      {when ? <time className="w-24 shrink-0 pt-1 text-right text-xs tabular-nums text-ink-500">{when}</time> : null}
+      {when ? (
+        <time className="w-24 shrink-0 pt-1 text-right text-xs tabular-nums text-ink-500">
+          {when}
+        </time>
+      ) : null}
     </li>
   );
 }

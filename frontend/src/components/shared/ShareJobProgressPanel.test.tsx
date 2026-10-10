@@ -61,7 +61,9 @@ describe('ShareJobProgressPanel', () => {
   it('is just an email field and a send button — no label, expiry, or copy link', async () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
-    expect(await screen.findByRole('heading', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Share with homeowner' }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/job-progress link/i)).toBeInTheDocument();
     expect(screen.getByText(/Not a film invite/i)).toBeInTheDocument();
     expect(screen.getByText('jack@example.com')).toBeInTheDocument();
@@ -133,5 +135,31 @@ describe('ShareJobProgressPanel', () => {
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
     await user.click(screen.getByRole('button', { name: /send homeowner invite/i }));
     expect(createProgressShare).not.toHaveBeenCalled();
+  });
+
+  it('folds revoked invites under a toggle and closes from the icon button', async () => {
+    evidenceShares.mockResolvedValue({
+      shares: [
+        liveShare,
+        {
+          ...liveShare,
+          id: 'old-1',
+          recipientEmail: 'old@example.com',
+          label: 'old@example.com',
+          state: 'revoked',
+        },
+      ],
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={onClose} />);
+
+    expect(await screen.findByText('jack@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('old@example.com')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Revoked (1)' }));
+    expect(screen.getByText('old@example.com')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalled();
   });
 });
