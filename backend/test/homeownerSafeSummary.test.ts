@@ -33,3 +33,35 @@ test('viewer payload never carries raw analysis; junk clips get a neutral line',
   assert.deepEqual(out.videos[1].conversation.keyMoments, [{ text: 'Drywall cut out to 2 ft' }]);
   assert.doesNotMatch(JSON.stringify(composeHomeownerLiveStory(out.videos)), BANNED);
 });
+
+test('viewer conversation is an allowlist; speaker notes, details and junk transcript lines are gone', () => {
+  const office = {
+    days: [],
+    videos: [
+      {
+        id: 'c',
+        aiSummary: 'Dehumidifiers and air movers staged in the basement.',
+        conversation: {
+          conversationExecutiveSummary:
+            'Because nobody narrates, the office has no recorded agreements from this video.',
+          conversationDetails: ['Transcript is limited to repeated ASR noise/hallucination artifacts.'],
+          conversationUnresolvedQuestions: [{ quote: 'チョコレートチップス' }],
+          transcriptSegments: [{ text: 'チョコレートチップス' }],
+        },
+        transcriptText: '[0:29] チョコレートチップス\n[0:40] Moving the fan here.',
+        transcriptSegments: [{ text: 'チョコレートチップス' }, { text: 'Moving the fan here.' }],
+        people: { peoplePresent: [{ label: 'Media (YouTube video on monitor)' }, { label: 'Technician' }] },
+      },
+    ],
+  };
+  const out: any = homeownerProofPayload(office as any);
+  assert.doesNotMatch(JSON.stringify(out), /nobody narrates|the office has|ASR|チョコ|YouTube/);
+  assert.equal(out.videos[0].transcriptText, '[0:40] Moving the fan here.');
+  assert.deepEqual(out.videos[0].people.peoplePresent, [{ label: 'Technician' }]);
+  const story = composeHomeownerLiveStory(out.videos);
+  assert.match(story.moments[0].glance ?? '', /Dehumidifiers/);
+});
+
+test('cut-off upstream text never ends in half a word', () => {
+  assert.equal(homeownerSafeText('Fans were set. Areas covered include a utility corner and a hom'), 'Fans were set.');
+});
