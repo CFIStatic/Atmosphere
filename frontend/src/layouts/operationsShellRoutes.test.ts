@@ -60,12 +60,13 @@ describe('isJobFilePath', () => {
 });
 
 describe('job-file viewport lock', () => {
-  it('locks the job file to the viewport so Ask can stay pinned on the right', () => {
+  it('locks the job file to the viewport at every desktop width, so only its panels scroll', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
-    expect(shell).toContain('lg:h-screen lg:overflow-hidden');
+    expect(shell).toContain("'operations-main flex h-screen flex-col overflow-hidden'");
+    expect(shell).not.toContain('lg:h-screen lg:overflow-hidden');
     expect(shell).toContain('overflow-hidden');
     expect(shell).toMatch(/isJobFile[\s\S]*phone[\s\S]*overflow-hidden/);
   });

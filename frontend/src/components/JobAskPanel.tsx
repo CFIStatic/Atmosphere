@@ -205,7 +205,7 @@ function answerStepActions(text: string) {
 }
 
 const ANSWER_ICON_BUTTON =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
+  'relative inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
 
 /**
  * One compact row under an answer: icon actions, a closed-by-default
@@ -1473,8 +1473,8 @@ export function JobAskPanel({
         data-ask-scroller=""
         className={
           fill
-            ? 'min-h-0 flex-1 overflow-y-auto px-4 py-3'
-            : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
+            ? 'relative min-h-0 flex-1 overflow-y-auto px-4 py-3'
+            : 'relative max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
         }
       >
         {office ? (

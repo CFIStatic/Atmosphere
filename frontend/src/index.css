@@ -436,6 +436,25 @@ body::before {
   background: transparent;
 }
 
+/* Job file: the page fills the window and only its panels scroll, so give
+   every one of them the same slim scrollbar. */
+[data-testid='job-file'],
+[data-testid='job-file'] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--paper-400)) transparent;
+}
+[data-testid='job-file'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+[data-testid='job-file'] ::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--paper-400));
+  border-radius: 999px;
+}
+[data-testid='job-file'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Field Capture iframe: lock the office to the phone web frame. */
 html[data-field-embed],
 html[data-field-embed] body,
