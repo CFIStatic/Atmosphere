@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HOMEOWNER_HUB_PATH } from './homeownerHub';
+import { HOMEOWNER_HUB_PATH, LEGACY_HOMEOWNER_HUB_PATH } from './homeownerHub';
 import { postAuthDestination, resolveNoOrgDestination } from './postAuth';
 
 describe('postAuthDestination', () => {
@@ -18,7 +18,9 @@ describe('postAuthDestination', () => {
   it('opens a claimed job or progress link without forcing workspace setup', () => {
     expect(postAuthDestination(null, '/job-progress?job=abc')).toBe('/job-progress?job=abc');
     expect(postAuthDestination(null, '/progress/tok123')).toBe('/progress/tok123');
-    expect(postAuthDestination(null, HOMEOWNER_HUB_PATH)).toBe(HOMEOWNER_HUB_PATH);
+    expect(postAuthDestination(null, LEGACY_HOMEOWNER_HUB_PATH)).toBe(LEGACY_HOMEOWNER_HUB_PATH);
+    // The Dashboard itself is grant-checked by the route gate, not trusted here.
+    expect(postAuthDestination(null, HOMEOWNER_HUB_PATH)).toBe('/signup?next=%2Fverifier-library');
   });
 
   it('keeps the Field Capture phone embed after sign-in', () => {

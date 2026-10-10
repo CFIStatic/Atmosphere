@@ -1,8 +1,20 @@
-/** Platform home for grant-only homeowners — not `/my-jobs` (subs / field identity). */
-export const HOMEOWNER_HUB_PATH = '/my-job-files';
+/**
+ * Homeowners land on the same Dashboard URL as the office. What they see there
+ * is only the jobs shared with their email (the API decides, not the UI).
+ */
+export const HOMEOWNER_HUB_PATH = '/verifier-library';
 
+/** The old standalone list; now redirects to the Dashboard. */
+export const LEGACY_HOMEOWNER_HUB_PATH = '/my-job-files';
+
+/** Legacy hub only — `/verifier-library` still needs a grant check for no-org accounts. */
 export function isHomeownerHubPath(pathname: string): boolean {
-  return pathname === HOMEOWNER_HUB_PATH || pathname.startsWith(`${HOMEOWNER_HUB_PATH}/`);
+  return pathname === LEGACY_HOMEOWNER_HUB_PATH || pathname.startsWith(`${LEGACY_HOMEOWNER_HUB_PATH}/`);
+}
+
+/** Shell pages an invited homeowner (no org) may open once they hold a live invite. */
+export function isHomeownerPortalPath(pathname: string): boolean {
+  return pathname === HOMEOWNER_HUB_PATH || pathname === '/settings';
 }
 
 /** Progress guest, claimed job file, or the homeowner hub. */

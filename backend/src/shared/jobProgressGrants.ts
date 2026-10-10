@@ -87,20 +87,78 @@ function missingGrantsTable(error: { message?: string; code?: string } | null | 
   return /job_progress_grants|does not exist|schema cache/i.test(blob);
 }
 
-export async function listJobProgressGrants(
+type GrantRow = {
+  org_id: string;
+  job_id: string;
+  share_id: string | null;
+  recipient_email: string;
+  revoked_at?: string | null;
+};
+
+/**
+ * A grant opens a job only while it is live: not revoked, its invite
+ * (verifier_shares row) still exists, is not revoked, and is still addressed
+ * to the grant's email — and, when we know who is signed in, that email is
+ * theirs. Mirrors private.has_job_progress_grant in RLS.
+ */
+export function liveGrantRows<T extends GrantRow>(
+  rows: T[],
+  shares: Array<{ id: string; job_id: string; revoked_at: string | null; recipient_email: string | null }>,
+  userEmail?: string | null,
+): T[] {
+  const shareById = new Map(shares.map((s) => [s.id, s]));
+  const email = userEmail?.trim().toLowerCase() || null;
+  return rows.filter((row) => {
+    if (row.revoked_at) return false;
+    if (!row.share_id) return false;
+    const share = shareById.get(row.share_id);
+    if (!share || share.revoked_at || share.job_id !== row.job_id) return false;
+    const recipient = row.recipient_email?.trim().toLowerCase() || '';
+    if ((share.recipient_email?.trim().toLowerCase() || '') !== recipient) return false;
+    if (email && email !== recipient) return false;
+    return true;
+  });
+}
+
+async function selectGrantRows(
   admin: SupabaseClient,
   userId: string,
-): Promise<JobProgressGrant[]> {
-  const { data, error } = await admin
-    .from('job_progress_grants')
-    .select('org_id, job_id, share_id, recipient_email')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+  jobId?: string,
+): Promise<GrantRow[] | null> {
+  const run = (columns: string) => {
+    let q = admin.from('job_progress_grants').select(columns).eq('user_id', userId);
+    if (jobId) q = q.eq('job_id', jobId);
+    return q.order('created_at', { ascending: false });
+  };
+  let { data, error } = await run('org_id, job_id, share_id, recipient_email, revoked_at, access_kind');
+  // Before 20261010210000 lands there is no revoked_at / access_kind.
+  if (error && /revoked_at|access_kind|schema cache|column .* does not exist/i.test(error.message ?? '')) {
+    ({ data, error } = await run('org_id, job_id, share_id, recipient_email'));
+  }
   if (error) {
-    if (missingGrantsTable(error)) return [];
+    if (missingGrantsTable(error)) return null;
     throw new HttpError(500, error.message, 'grants_lookup_failed');
   }
-  return (data ?? []).map((row: any) => ({
+  // Homeowner grants only — subcontractor grants (future) open in their own org.
+  return ((data ?? []) as any[]).filter((row) => !row.access_kind || row.access_kind === 'homeowner');
+}
+
+async function liveGrants(
+  admin: SupabaseClient,
+  rows: GrantRow[],
+  userEmail?: string | null,
+): Promise<JobProgressGrant[]> {
+  const shareIds = [...new Set(rows.map((r) => r.share_id).filter((id): id is string => Boolean(id)))];
+  let shares: Array<{ id: string; job_id: string; revoked_at: string | null; recipient_email: string | null }> = [];
+  if (shareIds.length) {
+    const { data, error } = await admin
+      .from('verifier_shares')
+      .select('id, job_id, revoked_at, recipient_email')
+      .in('id', shareIds);
+    if (error) throw new HttpError(500, error.message, 'grants_lookup_failed');
+    shares = (data ?? []) as any[];
+  }
+  return liveGrantRows(rows, shares, userEmail).map((row) => ({
     orgId: row.org_id,
     jobId: row.job_id,
     shareId: row.share_id ?? null,
@@ -108,28 +166,27 @@ export async function listJobProgressGrants(
   }));
 }
 
+/** Every live job this person was invited to, across contractor orgs, newest first. */
+export async function listJobProgressGrants(
+  admin: SupabaseClient,
+  userId: string,
+  userEmail?: string | null,
+): Promise<JobProgressGrant[]> {
+  const rows = await selectGrantRows(admin, userId);
+  if (!rows) return [];
+  return liveGrants(admin, rows, userEmail);
+}
+
 export async function findJobProgressGrant(
   admin: SupabaseClient,
   userId: string,
   jobId: string,
+  userEmail?: string | null,
 ): Promise<JobProgressGrant | null> {
-  const { data, error } = await admin
-    .from('job_progress_grants')
-    .select('org_id, job_id, share_id, recipient_email')
-    .eq('user_id', userId)
-    .eq('job_id', jobId)
-    .maybeSingle();
-  if (error) {
-    if (missingGrantsTable(error)) return null;
-    throw new HttpError(500, error.message, 'grants_lookup_failed');
-  }
-  if (!data) return null;
-  return {
-    orgId: (data as any).org_id,
-    jobId: (data as any).job_id,
-    shareId: (data as any).share_id ?? null,
-    recipientEmail: (data as any).recipient_email,
-  };
+  const rows = await selectGrantRows(admin, userId, jobId);
+  if (!rows) return null;
+  const [grant] = await liveGrants(admin, rows, userEmail);
+  return grant ?? null;
 }
 
 /**
@@ -264,7 +321,7 @@ export async function resolveOrgOrViewerAccess(
     if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
     const admin = unscopedAdminOrNull() ?? requireAdmin();
     if (jobId) {
-      const grant = await findJobProgressGrant(admin, req.user!.id, jobId);
+      const grant = await findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
       if (!grant) throw err;
       return {
         access: 'viewer',
@@ -276,7 +333,7 @@ export async function resolveOrgOrViewerAccess(
         readOnly: true,
       };
     }
-    const grants = await listJobProgressGrants(admin, req.user!.id);
+    const grants = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
     if (!grants.length) throw err;
     return {
       access: 'viewer',

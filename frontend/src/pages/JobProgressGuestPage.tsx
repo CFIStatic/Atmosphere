@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { forgetHomeownerCache } from '../lib/homeownerPortal';
+import { HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
 import { api, ApiError, type JobScopeItem, type ProgressShareGuestView, type SharedJobRecord } from '../lib/api';
 import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
 import { loginHref } from '../lib/authRedirect';
@@ -91,8 +93,10 @@ export function JobProgressGuestPage() {
   async function verifyEmailSignIn(input: { tokenHash?: string; kind?: 'magiclink' | 'invite'; code?: string }) {
     try {
       const res = await api.progressShareVerifyEmailSignIn(token, input);
+      forgetHomeownerCache();
       await adoptUser(res.user);
-      navigate(res.path, { replace: true });
+      // Land on the Dashboard: every job shared with this email, this one included.
+      navigate(HOMEOWNER_HUB_PATH, { replace: true });
     } catch (err) {
       setLinkState(input.code ? 'sent' : 'idle');
       setClaimError(err instanceof ApiError ? err.message : 'That sign-in link did not work. Send a new one.');

@@ -55,7 +55,8 @@ import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
-import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
+import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
+import { listJobProgressGrants } from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
@@ -700,6 +701,83 @@ async function settleClipQuestionInScope(opts: {
 evidencePortalRouter.use(requireAuth);
 
 /** GET /api/evidence-portal/library — every job file, plus every clip, newest first. */
+/**
+ * The Dashboard for an invited homeowner: every job shared with their email,
+ * across every contractor org, in the same shape as the office library.
+ * Read-only, live invites only (revoked invites drop out), live clips only,
+ * and no raw poster for a clip with privacy redactions. `company` on each job
+ * is the contractor who shared it.
+ */
+export async function viewerLibraryPayload(
+  admin: any,
+  userId: string,
+  userEmail: string | null | undefined,
+): Promise<Record<string, unknown> | null> {
+  const grants = await listJobProgressGrants(admin, userId, userEmail);
+  if (!grants.length) return null;
+  const jobIdsByOrg = new Map<string, string[]>();
+  for (const g of grants) {
+    const list = jobIdsByOrg.get(g.orgId) ?? [];
+    if (!list.includes(g.jobId)) list.push(g.jobId);
+    jobIdsByOrg.set(g.orgId, list);
+  }
+  const orgIds = [...jobIdsByOrg.keys()];
+  const { data: orgRows } = await admin.from('orgs').select('id, name').in('id', orgIds);
+  const orgName = new Map<string, string>(
+    ((orgRows ?? []) as any[]).map((o) => [o.id as string, (o.name as string | null)?.trim() || 'Contractor']),
+  );
+
+  const items: any[] = [];
+  const jobs: Array<Record<string, unknown>> = [];
+  for (const [orgId, jobIds] of jobIdsByOrg) {
+    const [{ data: proofs, error: proofsError }, { data: jobRows, error: jobsError }] = await Promise.all([
+      admin
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .in('job_id', jobIds)
+        .is('deleted_at', null)
+        .order('received_at', { ascending: false })
+        .limit(500),
+      admin
+        .from('crm_jobs')
+        .select('id, title, job_number, created_at, property_id, claim_number')
+        .eq('org_id', orgId)
+        .in('id', jobIds)
+        .is('deleted_at', null),
+    ]);
+    if (proofsError) throw new HttpError(500, proofsError.message, 'library_failed');
+    if (jobsError) throw new HttpError(500, jobsError.message, 'library_failed');
+    const proofRows = (proofs ?? []) as any[];
+    const redacted = new Set(
+      proofRows.filter((p) => proofFindingsHavePrivacyRedactions(p.ai_findings)).map((p) => p.id as string),
+    );
+    const orgItems = await assembleLibrary(admin, orgId, proofRows);
+    for (const item of orgItems as any[]) {
+      if (redacted.has(item.id)) item.posterUrl = null;
+      items.push(item);
+    }
+    const addr = await propertyAddresses(admin, ((jobRows ?? []) as any[]).map((j) => j.property_id));
+    for (const j of (jobRows ?? []) as any[]) {
+      const address = addr.get(j.property_id) ?? null;
+      jobs.push({
+        jobId: j.id,
+        jobName: displayJobFileName(j.title, address ?? ''),
+        jobNumber: j.job_number ?? null,
+        address,
+        claimNumber: j.claim_number ?? null,
+        company: orgName.get(orgId) ?? 'Contractor',
+        person: null,
+        createdAt: j.created_at ?? null,
+      });
+    }
+  }
+  // Newest invite first — the order grants come back in.
+  const rank = new Map(grants.map((g, i) => [g.jobId, i]));
+  jobs.sort((a, b) => (rank.get(a.jobId as string) ?? 0) - (rank.get(b.jobId as string) ?? 0));
+  return { items, jobs, viewer: true };
+}
+
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { q, jobId } = z
@@ -711,7 +789,20 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: z.string().uuid().optional(),
       })
       .parse(req.query);
-    const { supabase, orgId, role } = await requireOrgContext(req);
+    let orgCtx: Awaited<ReturnType<typeof requireOrgContext>>;
+    try {
+      orgCtx = await requireOrgContext(req);
+    } catch (err) {
+      // Not in any org: an invited homeowner gets the jobs shared with them.
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+      const admin = unscopedAdminOrNull();
+      if (!admin) throw err;
+      const payload = await viewerLibraryPayload(admin, req.user!.id, req.user!.email);
+      if (!payload) throw err;
+      res.json(payload);
+      return;
+    }
+    const { supabase, orgId, role } = orgCtx;
     let proofsQuery = supabase
       .from('job_proofs')
       .select(PORTAL_PROOF_SELECT)

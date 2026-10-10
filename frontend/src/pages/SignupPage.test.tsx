@@ -487,7 +487,7 @@ describe('SignupPage', () => {
     );
 
     await waitFor(() => {
-      expect(queueRedirect).toHaveBeenCalledWith('/my-job-files');
+      expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     });
     expect(apiMocks.createOrg).not.toHaveBeenCalled();
   });
