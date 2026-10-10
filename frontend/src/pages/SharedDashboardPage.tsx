@@ -6,7 +6,7 @@ import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobAskPanel } from '../components/JobAskPanel';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
-import { EvidenceLocker } from '../components/shared/EvidenceLocker';
+import { JobFileReport } from '../components/shared/JobFileReport';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { UnpaidJobEvaluation } from '../components/shared/UnpaidJobEvaluation';
@@ -543,7 +543,7 @@ function JobFileSections({
           <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
         ) : null}
 
-        {active === 'evidence' && !viewerOnly ? <EvidenceLocker jobId={record.job.id} /> : null}
+        {active === 'evidence' && !viewerOnly ? <JobFileReport jobId={record.job.id} /> : null}
       </div>
     </div>
   );
