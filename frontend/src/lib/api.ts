@@ -4664,6 +4664,12 @@ export const api = {
     );
   },
 
+  progressShareInvite: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>(
+      progressShareApiPath(token, '/invite'),
+      { method: 'GET' },
+    ),
+
   claimProgressShare: (token: string) =>
     request<{ ok: boolean; orgId: string; jobId: string; path: string }>(
       progressShareApiPath(token, '/claim'),

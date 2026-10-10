@@ -5,6 +5,8 @@ import { ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
 import { isInAppShell, WEBSITE_SIGNUP_URL } from '../lib/appShell';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
+import { shareTokenFromLogin } from '../lib/homeownerLogin';
+import { HomeownerEmailLink } from '../components/HomeownerEmailLink';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
@@ -69,6 +71,7 @@ export function LoginPage() {
 
   const fieldEmbed = isFieldEmbedMarked() || isFieldEmbedQuery(location.search);
   const switchAccount = searchParams.get('switch') === '1';
+  const shareToken = shareTokenFromLogin(searchParams.get('share'));
 
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
@@ -124,6 +127,28 @@ export function LoginPage() {
           <SpinnerIcon className="animate-spin" width={28} height={28} />
           <p className="text-sm font-medium text-ink-700">Opening your workspace…</p>
         </div>
+      </div>
+    );
+  }
+
+  // Opened from a homeowner share link: email-only, no password or sign-up.
+  if (shareToken) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper-100">
+        <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
+          <Logo size="lg" />
+          <ThemeToggle />
+        </header>
+        <main className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-md animate-fade-in-up">
+            <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10" data-testid="homeowner-login">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Your job</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome</h1>
+              <p className="mt-1.5 text-sm text-ink-600">Sign in to see the job shared with you.</p>
+              <HomeownerEmailLink token={shareToken} email={searchParams.get('email')} />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
