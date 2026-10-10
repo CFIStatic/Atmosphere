@@ -2228,6 +2228,14 @@
   }
   @keyframes summary-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .summary-processing-dot { animation: none; } }
+  /* Invited homeowner: same app, contractor-only controls removed. The API
+     only ever returns jobs shared with them; this just hides what they cannot use. */
+  body[data-atm-viewer] #nav-start-job,
+  body[data-atm-viewer] #nav-logins,
+  body[data-atm-viewer] .job-acts,
+  body[data-atm-viewer] .clip-rename,
+  body[data-atm-viewer] tr.cliprow .kebab { display: none !important; }
+  .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
 <body>
@@ -2480,7 +2488,7 @@
   </button>
   <button role="menuitem" data-job-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>
-    Share with homeowner
+    Share
   </button>
   <button role="menuitem" data-job-act="invite" title="Invite crew to film">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -2503,8 +2511,8 @@
       </button>
     </div>
     <div class="jf-tabs" role="tablist">
-      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Share with homeowner</button>
-      <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Invite to film</button>
+      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Homeowner</button>
+      <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Crew</button>
     </div>
     <div class="jf-body" id="jf-body"></div>
   </div>
@@ -4556,6 +4564,16 @@
     return key;
   }
 
+  var VIEWER = false;
+  function setViewer(on) {
+    var next = Boolean(on);
+    if (next === VIEWER) return;
+    VIEWER = next;
+    if (VIEWER) document.body.setAttribute('data-atm-viewer', '');
+    else document.body.removeAttribute('data-atm-viewer');
+    if (typeof render === 'function' && libraryLoaded) render();
+  }
+
   function canOpenJobRecord(key) {
     return Boolean(key) && key !== 'shared';
   }
@@ -4634,26 +4652,6 @@
     if (role === 'general_contractor') return 'General contractor';
     if (role === 'subcontractor') return 'Subcontractor';
     return role || 'On the job';
-  }
-
-  function parseInviteKind(value) {
-    if (value && value.indexOf('role:') === 0) return { role: value.slice(5), trade: null };
-    if (value && value.indexOf('trade:') === 0) return { role: 'subcontractor', trade: value.slice(6) };
-    return { role: 'subcontractor', trade: null };
-  }
-
-  function inviteKindOptionsHtml() {
-    var html = '<option value="" disabled selected>Choose a trade or role</option>';
-    html += '<optgroup label="Trade">';
-    JOB_TRADES.forEach(function (t) {
-      html += '<option value="trade:' + t.value + '">' + esc(t.label) + '</option>';
-    });
-    html += '</optgroup><optgroup label="On this job">';
-    JOB_PARTY_ROLES.forEach(function (r) {
-      html += '<option value="role:' + r.value + '">' + esc(r.label) + '</option>';
-    });
-    html += '</optgroup>';
-    return html;
   }
 
   function boardFromClips(key, items) {
@@ -4808,6 +4806,8 @@
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
       : '—';
     var nameInner = esc(job.name);
+    // Homeowners see who shared the job with them.
+    if (VIEWER && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
@@ -4816,7 +4816,7 @@
         '<button type="button" class="job-act" data-job-act="invite" title="Invite crew to film" aria-label="Invite crew to film on ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
         '</button>' +
-        '<button type="button" class="job-act" data-job-act="share" title="Share with homeowner" aria-label="Share with homeowner for ' + esc(job.name) + '">' +
+        '<button type="button" class="job-act" data-job-act="share" title="Share" aria-label="Share ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>' +
         '</button>' +
         '<button type="button" class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(job.name) + '">' +
@@ -4863,7 +4863,9 @@
       if (!hasRows) {
         if (!EVIDENCE.length && !jobFileKeys.length) {
           if (emptyTitle) emptyTitle.textContent = 'No jobs yet';
-          if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
+          if (emptyBody) emptyBody.textContent = VIEWER
+            ? 'Jobs your contractors share with you show up here.'
+            : 'Start a job and the name shows up here. Footage files under it as crews film.';
         } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'Waiting for first clip';
           if (emptyBody) emptyBody.textContent = 'This job is open. The first clip shows up here when Field Capture files it.';
@@ -5320,8 +5322,7 @@
   }
 
   function jobFileSheetTitle(tab) {
-    if (tab === 'invite') return 'Invite a crew to film';
-    if (tab === 'share') return 'Share with homeowner';
+    if (tab === 'invite' || tab === 'share') return 'Share';
     if (tab === 'rename') return 'Rename this job file';
     if (tab === 'duplicate') return 'Duplicate this job file';
     return 'Share this job file';
@@ -5405,17 +5406,12 @@
     }
     if (jobSheet.tab === 'invite') {
       body.innerHTML =
-        '<p class="jf-note">Invite a trade or crew to film this job. Atmosphere emails a Field Capture link. Homeowners use <strong>Share with homeowner</strong> instead — they get a job-progress link, not a film invite.</p>' +
+        '<p class="jf-note">Invite a trade or crew to film this job. Atmosphere emails a Field Capture link. Homeowners use the <strong>Homeowner</strong> tab instead — they get a job-progress link, not a film invite.</p>' +
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
         (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
           (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
         '<form id="jf-invite-form">' +
-          '<div class="row2">' +
-            '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
-            '<label><span>Trade / role</span><select name="kind" required>' +
-              inviteKindOptionsHtml() +
-            '</select></label>' +
-          '</div>' +
+          '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
           '<label><span>Email</span><input name="email" type="email" required placeholder="crew@example.com" /></label>' +
           '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Email invite</button>' +
         '</form>' +
@@ -5634,12 +5630,9 @@
   function submitInvite(form) {
     var key = jobSheet.key;
     var company = (form.company.value || '').trim();
-    var kind = form.kind.value || '';
-    var parsed = parseInviteKind(kind);
-    var role = parsed.role;
-    var trade = parsed.trade;
+    var role = 'subcontractor';
     var email = (form.email.value || '').trim();
-    if (!company || !kind) return;
+    if (!company) return;
     if (!email) {
       jobSheet.error = 'Enter an email so Atmosphere can send the invite on web and on Field Capture.';
       paintJobFileSheet();
@@ -5649,7 +5642,7 @@
     jobSheet.error = null;
     paintJobFileSheet();
     if (!canOpenJobRecord(key)) {
-      DEMO_PEOPLE[key] = (DEMO_PEOPLE[key] || []).concat([{ name: company, role: role, trade: trade, email: email || null }]);
+      DEMO_PEOPLE[key] = (DEMO_PEOPLE[key] || []).concat([{ name: company, role: role, email: email || null }]);
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
       jobSheet.busy = false;
@@ -5665,7 +5658,6 @@
       body: JSON.stringify({
         company: company,
         role: role,
-        trade: trade || null,
         email: email
       })
     }).then(function (r) {
@@ -6327,6 +6319,8 @@
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
+    // Homeowners watch clips on the job page (guest media rules apply there).
+    if (VIEWER) { openJobRecord(item.job); return; }
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
@@ -9289,6 +9283,7 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
+    if (d && d.atmosphere === 'viewer') setViewer(d.on);
     if (d && d.atmosphere === 'layout') {
       setRailOnly(!!d.railOnly);
       setPhoneDrawer(!!d.phoneDrawer);
@@ -9959,6 +9954,7 @@
 
   function applyOrgLibrary(payload) {
     ORG_MODE = true;
+    if (payload && payload.viewer) setViewer(true);
     var nextJobs = {};
     (payload.jobs || []).forEach(function (j) {
       if (!j || !j.jobId) return;

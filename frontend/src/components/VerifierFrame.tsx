@@ -18,6 +18,7 @@ import { notifyLibraryChanged } from '../lib/libraryChanged';
 import { openPlatformSupport } from '../lib/contactSupport';
 import { nameFromMetadata } from '../lib/display';
 import { verifierSessionUser } from '../lib/verifierSession';
+import { useHomeownerPortal } from '../lib/homeownerPortal';
 import {
   onAskHistory,
   publishAskHistoryAction,
@@ -43,6 +44,8 @@ export function VerifierFrame({
   const { theme, locale } = usePreferences();
   const { user, profile, membership, logout } = useAuth();
   const phone = usePhoneShell();
+  // Invited homeowner: the frame hides Start a job, Logins and job actions.
+  const { homeowner } = useHomeownerPortal();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
@@ -83,6 +86,7 @@ export function VerifierFrame({
   const syncFrame = useCallback(() => {
     postToFrame({ atmosphere: 'layout', railOnly, phoneDrawer: phone && railOnly });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
+    postToFrame({ atmosphere: 'viewer', on: homeowner });
     postToFrame({ atmosphere: 'theme', preference: theme });
     postToFrame({
       atmosphere: 'locale',
@@ -90,7 +94,7 @@ export function VerifierFrame({
       chrome: verifierChromeStrings(locale, theme),
     });
     postSession();
-  }, [location.pathname, locale, phone, postSession, postToFrame, railOnly, theme]);
+  }, [homeowner, location.pathname, locale, phone, postSession, postToFrame, railOnly, theme]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();

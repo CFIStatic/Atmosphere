@@ -197,7 +197,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Rename' }));
     const field = screen.getByLabelText(/^Name$/i);
@@ -389,7 +389,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
   });
 
-  it('links a grant viewer back to Your job files', async () => {
+  it('shows a grant viewer no contractor job actions (the sidebar Dashboard is home)', async () => {
     authMembership.current = null;
     sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
 
@@ -399,9 +399,10 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId('your-job-files')).toHaveAttribute('href', '/my-job-files');
-    expect(screen.getByRole('link', { name: 'Your job files' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Share with homeowner' })).not.toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('your-job-files')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
   it('hides Who-has-access for grant / homeowner viewers', async () => {
@@ -414,7 +415,7 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId('your-job-files')).toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
   });
@@ -513,7 +514,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
     expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
     expect(screen.queryByTestId('claim-ready-packet')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
     unmount();
 
     render(
@@ -589,7 +590,7 @@ describe('SharedDashboardPage job file identity', () => {
         <SharedDashboardPage />
       </MemoryRouter>,
     );
-    expect(await screen.findByTestId('your-job-files')).toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
     expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
   });

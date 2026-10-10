@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 204,
+    "migrationCount": 205,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -226,6 +226,7 @@
     "20261010090000_ask_pending_actions.sql",
     "20261010200000_job_evidence_duplicated.sql",
     "20261010200100_duplicate_job_file_contents.sql",
+    "20261010210000_homeowner_portal_grants.sql",
     "20261010230000_same_day_check_local_time.sql"
   ],
   "migrations": [
@@ -6860,6 +6861,26 @@
       "expect": [
         "function|private.job_dup_remap_jsonb",
         "function|public.duplicate_job_file_contents"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261010210000_homeowner_portal_grants",
+      "file": "20261010210000_homeowner_portal_grants.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_progress_grants.access_kind",
+        "column|public.job_progress_grants.grantee_org_id",
+        "column|public.job_progress_grants.revoked_at",
+        "function|private.has_job_progress_grant",
+        "function|private.revoke_job_progress_grants_on_share",
+        "index|public.job_progress_grants.job_progress_grants_grantee_org_idx",
+        "policy|public.crm_jobs.crm_jobs_select_progress_grant",
+        "policy|public.job_proofs.job_proofs_select_progress_grant",
+        "trigger|public.verifier_shares.verifier_shares_revoke_grants"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

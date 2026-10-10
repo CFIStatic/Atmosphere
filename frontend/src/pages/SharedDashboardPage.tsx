@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, type SharedJobSummary, type SharedJobRecord, type IntakeCaptureInvite } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobAskPanel } from '../components/JobAskPanel';
-import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
+import { SharePopup } from '../components/shared/SharePopup';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { JobFileReport } from '../components/shared/JobFileReport';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
@@ -23,7 +23,6 @@ import { jobFilePath } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useAuth } from '../context/AuthContext';
-import { HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
 import { useOperationsHeaderSlot } from '../layouts/operationsOutlet';
 import { usePhoneShell } from '../lib/usePhoneShell';
 
@@ -293,15 +292,7 @@ export function SharedDashboardPage() {
 
   const fileActions = (
     <>
-      {grantViewer ? (
-        <Link
-          to={HOMEOWNER_HUB_PATH}
-          className="text-sm font-medium text-brand-600 hover:text-brand-700"
-          data-testid="your-job-files"
-        >
-          Your job files
-        </Link>
-      ) : record && !viewerOnly ? (
+      {grantViewer ? null : record && !viewerOnly ? (
         <JobFileActions
           jobId={record.job.id}
           title={record.job.title}
@@ -458,13 +449,7 @@ export function SharedDashboardPage() {
       }}
       extra={
         shareFormOpen && record ? (
-          <ShareJobProgressPanel
-            jobId={record.job.id}
-            creating
-            modal
-            onClose={() => setShareFormOpen(false)}
-            onCreatingChange={setShareFormOpen}
-          />
+          <SharePopup jobId={record.job.id} onClose={() => setShareFormOpen(false)} />
         ) : null
       }
     >
@@ -496,12 +481,10 @@ function JobFileSections({
       { id: 'timeline', label: 'Timeline' },
     ];
     if (!grantViewer) next.push({ id: 'access', label: 'Access' });
-    if (!viewerOnly) {
-      next.push(
-        { id: 'videos', label: 'Videos' },
-        { id: 'evidence', label: 'Evidence report' },
-      );
-    }
+    // Invited homeowners watch the videos too (read-only, guest media rules
+    // on the server); the evidence report stays with the contractor.
+    next.push({ id: 'videos', label: 'Videos' });
+    if (!viewerOnly) next.push({ id: 'evidence', label: 'Evidence report' });
     return next;
   }, [grantViewer, viewerOnly]);
 
@@ -539,8 +522,13 @@ function JobFileSections({
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
 
-        {active === 'videos' && !viewerOnly ? (
-          <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
+        {active === 'videos' ? (
+          <ProofOfWork
+            jobId={record.job.id}
+            heading="Videos"
+            showCollectionAsk={false}
+            readOnly={viewerOnly}
+          />
         ) : null}
 
         {active === 'evidence' && !viewerOnly ? <JobFileReport jobId={record.job.id} /> : null}

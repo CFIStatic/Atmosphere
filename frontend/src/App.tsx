@@ -35,7 +35,8 @@ import { OperationsShell } from './layouts/OperationsShell';
 import { getPlatform } from './lib/usePlatform';
 import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
 import { packetTimelineLocation } from './components/shared/jobTimeline';
-import { HOMEOWNER_HUB_PATH, isHomeownerHubPath } from './lib/homeownerHub';
+import { HOMEOWNER_HUB_PATH, LEGACY_HOMEOWNER_HUB_PATH, isHomeownerHubPath, isHomeownerPortalPath } from './lib/homeownerHub';
+import { useHomeownerPortal } from './lib/homeownerPortal';
 import { resolveNoOrgDestination } from './lib/postAuth';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
@@ -46,7 +47,6 @@ const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').the
 const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
 const PlatformHomePage = lazy(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
 const MyJobsPage = lazy(() => import('./pages/MyJobsPage').then((m) => ({ default: m.MyJobsPage })));
-const MyJobFilesPage = lazy(() => import('./pages/MyJobFilesPage').then((m) => ({ default: m.MyJobFilesPage })));
 const JobSharePage = lazy(() => import('./pages/JobSharePage').then((m) => ({ default: m.JobSharePage })));
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
@@ -143,8 +143,12 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
   const jobProgressViewer =
     location.pathname === '/job-progress' || location.pathname.startsWith('/jobs/');
   const homeownerHub = isHomeownerHubPath(location.pathname);
+  const homeownerPortal = isHomeownerPortalPath(location.pathname);
 
   if (membershipLoading) return <FullScreenSpinner />;
+  if (!membership && homeownerPortal && !fieldEmbed) {
+    return <HomeownerPortalGate from={`${location.pathname}${location.search}${location.hash}`}>{children}</HomeownerPortalGate>;
+  }
   if (!membership) {
     // Embed sessions skip the workspace wizard so Field Capture can open
     // Platform. A null office membership is a finished read, not a hang.
@@ -155,6 +159,17 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     return <NoOrgOfficeRedirect from={returnPath} />;
   }
   return <RequireBillingSetup>{children}</RequireBillingSetup>;
+}
+
+/**
+ * Dashboard and Settings for someone with no org: open only for an invited
+ * homeowner (a live job invite to their email). Anyone else goes to setup.
+ */
+function HomeownerPortalGate({ from, children }: { from: string; children: ReactNode }) {
+  const { loading, homeowner } = useHomeownerPortal();
+  if (loading) return <FullScreenSpinner />;
+  if (!homeowner) return <NoOrgOfficeRedirect from={from} />;
+  return <>{children}</>;
 }
 
 /** Org creators must finish Stripe before the dashboard; joiners skip when not required. */
@@ -170,7 +185,8 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     !membership &&
     (location.pathname === '/job-progress' ||
       location.pathname.startsWith('/jobs/') ||
-      isHomeownerHubPath(location.pathname));
+      isHomeownerHubPath(location.pathname) ||
+      isHomeownerPortalPath(location.pathname));
 
   useEffect(() => {
     let cancelled = false;
@@ -383,16 +399,11 @@ export default function App() {
               member of none of. */}
           <Route path="/my-jobs" element={<MyJobsPage />} />
 
-          {/* Homeowner / grant-only hub. Same isolation as /my-jobs: the list
-              spans vendors the person is a member of none of. Atmosphere auth
-              is required; they are not org_members and do not use a seat. */}
+          {/* Old homeowner list. Homeowners now use the office Dashboard
+              (/verifier-library), which lists only the jobs shared with them. */}
           <Route
-            path={HOMEOWNER_HUB_PATH}
-            element={
-              <ProtectedRoute>
-                <MyJobFilesPage />
-              </ProtectedRoute>
-            }
+            path={LEGACY_HOMEOWNER_HUB_PATH}
+            element={<Navigate to={HOMEOWNER_HUB_PATH} replace />}
           />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has

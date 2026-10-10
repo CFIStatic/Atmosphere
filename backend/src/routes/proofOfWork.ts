@@ -25,6 +25,7 @@ import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../mete
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
+import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
   ensureAskThreads,
@@ -2850,12 +2851,15 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const access = await resolveOrgOrViewerAccess(req, req.params.jobId);
-    const { orgId, supabase } = access;
+    const { orgId, supabase, access, role } = (await resolveOrgOrViewerAccess(req, req.params.jobId)) as Awaited<
+      ReturnType<typeof resolveOrgOrViewerAccess>
+    > & { role?: string };
     const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
-    // Homeowners (job progress grants) and org viewers never see integrity flags.
-    const viewer = access.access === 'viewer' || (access as { role?: string }).role === 'viewer';
-    res.json(viewer ? redactIntegrityForViewer(payload) : payload);
+    // Invited homeowners get the videos, not the office's pay/dispute/integrity data.
+    // Org members with the viewer role never see integrity flags either.
+    if (access === 'viewer') res.json(redactIntegrityForViewer(homeownerProofPayload(payload)));
+    else if (role === 'viewer') res.json(redactIntegrityForViewer(payload));
+    else res.json(payload);
   } catch (err) {
     next(err);
   }

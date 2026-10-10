@@ -50,7 +50,6 @@ function renderLogin(initialEntry = '/login') {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/verifier-library" element={<div>Workspace home</div>} />
         <Route path="/signup" element={<div>Signup</div>} />
-        <Route path="/my-job-files" element={<div>Your job files hub</div>} />
         <Route path="/progress/:token" element={<div>Progress job</div>} />
       </Routes>
     </MemoryRouter>,
@@ -129,14 +128,14 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
   });
 
-  it('sends a grant-only account to Your job files instead of office Overview', async () => {
+  it('sends a grant-only account to their Dashboard of invited jobs', async () => {
     authState.user = signedInUser;
     authState.membership = null;
     progressShareGrants.mockResolvedValue({ grants: [{ jobId: 'job-1' }] });
 
     renderLogin();
 
-    expect(await screen.findByText('Your job files hub')).toBeInTheDocument();
+    expect(await screen.findByText('Workspace home')).toBeInTheDocument();
     expect(screen.queryByText('Signup')).toBeNull();
   });
 

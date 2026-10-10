@@ -18,7 +18,7 @@ vi.mock('../../lib/api', () => ({
   },
 }));
 
-import { ShareJobProgressPanel } from './ShareJobProgressPanel';
+import { SharePopup } from './SharePopup';
 
 const liveShare: EvidenceShare = {
   id: 'share-1',
@@ -48,7 +48,7 @@ const created: CreateEvidenceShareResult = {
   recipientHasAccount: false,
 };
 
-describe('ShareJobProgressPanel', () => {
+describe('Share popup — homeowner', () => {
   beforeEach(() => {
     evidenceShares.mockReset();
     createProgressShare.mockReset();
@@ -59,10 +59,10 @@ describe('ShareJobProgressPanel', () => {
   });
 
   it('is just an email field and a send button — no label, expiry, or copy link', async () => {
-    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
+    render(<SharePopup jobId="job-1" onClose={() => undefined} />);
 
     expect(
-      await screen.findByRole('heading', { name: 'Share with homeowner' }),
+      await screen.findByRole('heading', { name: 'Share' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/job-progress link/i)).toBeInTheDocument();
     expect(screen.getByText(/Not a film invite/i)).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('ShareJobProgressPanel', () => {
 
   it('emails the invite and does not show the link', async () => {
     const user = userEvent.setup();
-    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
+    render(<SharePopup jobId="job-1" onClose={() => undefined} />);
 
     await screen.findByText('jack@example.com');
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
@@ -107,7 +107,7 @@ describe('ShareJobProgressPanel', () => {
       new Error('Atmosphere mail is not configured, so the invite was not sent.'),
     );
     const user = userEvent.setup();
-    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
+    render(<SharePopup jobId="job-1" onClose={() => undefined} />);
 
     await screen.findByText('jack@example.com');
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
@@ -124,7 +124,7 @@ describe('ShareJobProgressPanel', () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1']}>
-        <ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />
+        <SharePopup jobId="job-1" onClose={() => undefined} />
       </MemoryRouter>,
     );
 
@@ -152,7 +152,7 @@ describe('ShareJobProgressPanel', () => {
     });
     const onClose = vi.fn();
     const user = userEvent.setup();
-    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={onClose} />);
+    render(<SharePopup jobId="job-1" onClose={onClose} />);
 
     expect(await screen.findByText('jack@example.com')).toBeInTheDocument();
     expect(screen.queryByText('old@example.com')).toBeNull();

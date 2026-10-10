@@ -214,7 +214,7 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grants = await listJobProgressGrants(admin, req.user!.id);
+      const grants = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
       if (!grants.length) throw err;
       const jobIds = grants.map((g) => g.jobId);
       const { data: jobs } = await admin
@@ -346,7 +346,7 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grant = await findJobProgressGrant(admin, req.user!.id, req.params.jobId);
+      const grant = await findJobProgressGrant(admin, req.user!.id, req.params.jobId, req.user!.email);
       if (!grant) throw err;
       orgId = grant.orgId;
       supabase = admin as typeof supabase;
