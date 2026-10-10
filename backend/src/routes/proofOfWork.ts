@@ -25,7 +25,7 @@ import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../mete
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
-import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
+import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
   ensureAskThreads,
@@ -3475,7 +3475,7 @@ async function runProofAskTurn(input: {
           )
         : {};
 
-    const file: JobFileAskContext = {
+    const officeFile: JobFileAskContext = {
       job: jobRow
         ? {
             title: jobRow.title ?? null,
@@ -3534,6 +3534,10 @@ async function runProofAskTurn(input: {
       ],
       clips,
     };
+    // Invited homeowners / share-link viewers: never the office's notes,
+    // tasks, logs, documents or model concerns (homeownerAskJobFile).
+    const file: JobFileAskContext =
+      askAccess === 'viewer' ? homeownerAskJobFile(officeFile) : officeFile;
 
     const propertyId = propertyIdEarly;
     const prop = propRes.data as {
@@ -3552,7 +3556,7 @@ async function runProofAskTurn(input: {
     const profile = profileRes.data as { full_name?: string | null; email?: string | null } | null;
     const authorLabel = profile?.full_name ?? profile?.email ?? null;
 
-    const memoryClips = proofRows.map((row) => {
+    const officeMemoryClips = proofRows.map((row) => {
         const party = partyRows.find((item) => item.id === row.party_id);
         return clipFromProofRow(row, {
           orgId,
@@ -3561,6 +3565,7 @@ async function runProofAskTurn(input: {
           partyCreatedBy: party?.created_by ?? null,
         });
       });
+    const memoryClips = askAccess === 'viewer' ? homeownerAskClips(officeMemoryClips) : officeMemoryClips;
     const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
     const officeOnlyPairIds = new Set(
       (conversationRows as Array<Record<string, unknown>>)
@@ -4990,7 +4995,9 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
     const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();
     const workDateFilter = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
 
-    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    const officePayload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    // A homeowner's PDF carries the videos, not pay/dispute/integrity data.
+    const payload = access === 'viewer' ? homeownerProofPayload(officePayload) : officePayload;
 
     const { data: jobRow } = await supabase
       .from('crm_jobs')

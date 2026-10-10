@@ -59,3 +59,48 @@ export function homeownerProofPayload<T extends Record<string, any>>(payload: T)
     },
   };
 }
+
+/**
+ * The job file a homeowner's Ask may read. Office notes and messages, task
+ * details, crew, work logs, memory events, uploaded documents (estimates,
+ * contracts) and model "concerns" on clips stay with the contractor. Job
+ * identity, the brief and scope (as the share page already shows them),
+ * invited companies and what the videos show/say remain.
+ */
+export function homeownerAskJobFile<
+  F extends {
+    messages?: unknown[] | null;
+    tasks?: unknown[] | null;
+    crew?: unknown[] | null;
+    workLogs?: unknown[] | null;
+    memory?: unknown[] | null;
+    documents?: unknown[] | null;
+    clips?: Array<Record<string, any>> | null;
+  },
+>(file: F): F {
+  return {
+    ...file,
+    messages: [],
+    tasks: [],
+    crew: [],
+    workLogs: [],
+    memory: [],
+    documents: [],
+    clips: (file.clips ?? []).map((clip) => ({ ...clip, concerns: [] })),
+  };
+}
+
+const FINDINGS_OFFICE_KEYS = ['concerns', 'scopeVerdicts', 'materialChange', 'disputes', 'checks', 'payable'];
+
+/** Model findings a homeowner's Ask may read: what was seen and said, not the office's verdicts. */
+export function homeownerFindings(findings: unknown): unknown {
+  if (!findings || typeof findings !== 'object' || Array.isArray(findings)) return findings;
+  const next: Record<string, unknown> = { ...(findings as Record<string, unknown>) };
+  for (const key of FINDINGS_OFFICE_KEYS) delete next[key];
+  return next;
+}
+
+/** Clip records a homeowner's Ask can quote, without office verdicts in their findings. */
+export function homeownerAskClips<C extends { findings?: unknown }>(clips: C[]): C[] {
+  return clips.map((clip) => ({ ...clip, findings: homeownerFindings(clip.findings) }));
+}

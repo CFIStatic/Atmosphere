@@ -18,7 +18,6 @@ import {
 } from '../lib/shareSession.js';
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
-import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { assertAiFeatureAllowed } from '../metering/aiBudgetService.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 import { listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
@@ -34,6 +33,7 @@ import {
   enrichJobProgressGrants,
   listJobProgressGrants,
 } from '../shared/jobProgressGrants.js';
+import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
 import { composeHomeownerLiveStory } from '../shared/homeownerLiveStory.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { sendProgressSignInLink, verifyProgressSignIn } from '../auth/progressEmailSignIn.js';
@@ -172,7 +172,7 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
           .eq('job_id', share.job_id)
           .order('revision', { ascending: false })
           .limit(1),
-        buildJobProofPayload(admin, share.org_id, share.job_id).then(redactProofDeviceIdentity),
+        buildJobProofPayload(admin, share.org_id, share.job_id),
       ]);
 
     await admin
@@ -184,6 +184,7 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
       .eq('id', share.id);
 
     const scope = (scopeRows ?? []) as any[];
+    const guestProof = homeownerProofPayload(proof);
     const jobFile = homeownerJobFileFromRows({
       brief: (briefRows ?? [])[0] ?? null,
       scope,
@@ -207,9 +208,11 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
         : null,
       brief: jobFile.brief,
       scope: jobFile.scope,
+      // Progress counts read the office payload; the guest only gets the
+      // homeowner-safe proof (no pay, disputes, punch list, checks, hashes).
       progress: progressFromRecord(scope, proof),
-      liveStory: composeHomeownerLiveStory((proof as any).videos ?? []),
-      proof,
+      liveStory: composeHomeownerLiveStory((guestProof as any).videos ?? []),
+      proof: guestProof,
     });
   } catch (err) {
     next(err);
