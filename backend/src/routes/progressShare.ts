@@ -310,7 +310,7 @@ progressShareRouter.get(
       const admin = unscopedAdminOrNull() ?? requireAdmin();
       const grants = await enrichJobProgressGrants(
         admin,
-        await listJobProgressGrants(admin, req.user!.id),
+        await listJobProgressGrants(admin, req.user!.id, req.user!.email),
       );
       res.json({
         grants: grants.map((g) => ({

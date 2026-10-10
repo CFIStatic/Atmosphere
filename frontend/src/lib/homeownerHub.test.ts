@@ -9,7 +9,7 @@ import {
 
 describe('homeowner hub paths', () => {
   it('does not collide with the sub /my-jobs list', () => {
-    expect(HOMEOWNER_HUB_PATH).toBe('/my-job-files');
+    expect(HOMEOWNER_HUB_PATH).toBe('/verifier-library');
     expect(isHomeownerHubPath('/my-jobs')).toBe(false);
     expect(isHomeownerHubPath('/my-job-files')).toBe(true);
   });

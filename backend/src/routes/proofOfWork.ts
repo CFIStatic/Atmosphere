@@ -25,6 +25,7 @@ import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../mete
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
+import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
   ensureAskThreads,
@@ -2813,8 +2814,10 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
-    res.json(await buildJobProofPayload(supabase, orgId, req.params.jobId));
+    const { orgId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    // Invited homeowners get the videos, not the office's pay/dispute/integrity data.
+    res.json(access === 'viewer' ? homeownerProofPayload(payload) : payload);
   } catch (err) {
     next(err);
   }

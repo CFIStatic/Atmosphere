@@ -40,6 +40,7 @@ import {
   PlugIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useHomeownerPortal } from '../lib/homeownerPortal';
 import { CrmConnectPanel } from './CrmConnectPage';
 import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
 import { TeamVoiceList } from '../components/settings/TeamVoiceList';
@@ -70,6 +71,8 @@ export function SettingsPage() {
   const t = useT();
   const { membership, user } = useAuth();
   const showBilling = canManageBilling(membership?.role);
+  // Invited homeowners (no org): their profile and sign-out, nothing else.
+  const { homeowner } = useHomeownerPortal();
   const ALL_SECTIONS: SettingsSection[] = [
     { id: 'profile', label: t('settings.section.profile'), blurb: t('settings.section.profileBlurb'), icon: UserIcon },
     { id: 'security', label: t('settings.section.security'), blurb: t('settings.section.securityBlurb'), icon: ShieldIcon },
@@ -99,6 +102,7 @@ export function SettingsPage() {
     },
   ];
   const SECTIONS = ALL_SECTIONS.filter((section) => {
+    if (homeowner) return section.id === 'profile';
     if (section.id === 'billing' && !showBilling) return false;
     if (section.id === 'connect' && !SHOW_SETTINGS_CONNECT) return false;
     return true;
@@ -163,7 +167,7 @@ export function SettingsPage() {
         </nav>
 
         <div className="mt-8 min-w-0 space-y-6">
-          {active === 'profile' && <ProfileSection />}
+          {active === 'profile' && <ProfileSection homeowner={homeowner} />}
           {active === 'security' && <SecuritySection />}
           {active === 'organization' && (
             <>
@@ -302,7 +306,7 @@ function formatDate(value: string | null | undefined, locale: string): string {
  * Profile
  * -------------------------------------------------------------------------- */
 
-function ProfileSection() {
+function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
   const t = useT();
   const { locale } = usePreferences();
   const { user, profile, setProfile } = useAuth();
@@ -419,7 +423,11 @@ function ProfileSection() {
     <>
       <Card
         title={t('settings.profile.title')}
-        description={t('settings.profile.description')}
+        description={
+          homeowner
+            ? 'Your contractors see this name on the jobs they share with you.'
+            : t('settings.profile.description')
+        }
       >
         <div className="flex items-center gap-4">
           <label className="relative shrink-0 cursor-pointer">
@@ -499,7 +507,7 @@ function ProfileSection() {
             <p className="text-sm text-ink-600">
               Service title: <span className="font-semibold text-ink-900">Homeowner</span>
               <span className="mt-1 block text-xs text-ink-500">
-                Set automatically from a job progress invite — Analysis always labels you as Homeowner.
+                Set from your contractor's invite.
               </span>
             </p>
           ) : (
@@ -523,7 +531,7 @@ function ProfileSection() {
         </div>
       </Card>
 
-      <VoiceEnrollmentCard />
+      {homeowner ? null : <VoiceEnrollmentCard />}
 
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
         <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
@@ -555,6 +563,7 @@ function ProfileSection() {
           </div>
         </div>
       </Card>
+      {homeowner ? <SignOutCard /> : null}
     </>
   );
 }

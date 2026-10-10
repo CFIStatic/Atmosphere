@@ -40,16 +40,13 @@ describe('office rail routes', () => {
   });
 });
 
-describe('homeowner hub', () => {
-  it('keeps Your job files outside the office shell and away from /my-jobs', () => {
-    expect(appSrc).toContain('path={HOMEOWNER_HUB_PATH}');
-    expect(appSrc).toContain('<MyJobFilesPage />');
-    const start = appSrc.indexOf('<OperationsShell');
-    const end = appSrc.indexOf('path="/billing"');
-    const shell = appSrc.slice(start, end);
-    expect(shell).not.toContain('MyJobFilesPage');
+describe('homeowner portal', () => {
+  it('uses the office shell Dashboard; the old list redirects there; subs keep /my-jobs', () => {
+    expect(appSrc).toContain('path={LEGACY_HOMEOWNER_HUB_PATH}');
+    expect(appSrc).toContain('<Navigate to={HOMEOWNER_HUB_PATH} replace />');
+    expect(appSrc).not.toContain('MyJobFilesPage');
+    expect(appSrc).toContain('<HomeownerPortalGate');
     expect(appSrc).toContain('path="/my-jobs"');
-    expect(appSrc.indexOf('MyJobFilesPage')).toBeLessThan(start);
   });
 });
 

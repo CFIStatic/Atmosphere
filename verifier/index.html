@@ -2228,6 +2228,14 @@
   }
   @keyframes summary-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .summary-processing-dot { animation: none; } }
+  /* Invited homeowner: same app, contractor-only controls removed. The API
+     only ever returns jobs shared with them; this just hides what they cannot use. */
+  body[data-atm-viewer] #nav-start-job,
+  body[data-atm-viewer] #nav-logins,
+  body[data-atm-viewer] .job-acts,
+  body[data-atm-viewer] .clip-rename,
+  body[data-atm-viewer] tr.cliprow .kebab { display: none !important; }
+  .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
 <body>
@@ -4556,6 +4564,16 @@
     return key;
   }
 
+  var VIEWER = false;
+  function setViewer(on) {
+    var next = Boolean(on);
+    if (next === VIEWER) return;
+    VIEWER = next;
+    if (VIEWER) document.body.setAttribute('data-atm-viewer', '');
+    else document.body.removeAttribute('data-atm-viewer');
+    if (typeof render === 'function' && libraryLoaded) render();
+  }
+
   function canOpenJobRecord(key) {
     return Boolean(key) && key !== 'shared';
   }
@@ -4788,6 +4806,8 @@
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
       : '—';
     var nameInner = esc(job.name);
+    // Homeowners see who shared the job with them.
+    if (VIEWER && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
@@ -4843,7 +4863,9 @@
       if (!hasRows) {
         if (!EVIDENCE.length && !jobFileKeys.length) {
           if (emptyTitle) emptyTitle.textContent = 'No jobs yet';
-          if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
+          if (emptyBody) emptyBody.textContent = VIEWER
+            ? 'Jobs your contractors share with you show up here.'
+            : 'Start a job and the name shows up here. Footage files under it as crews film.';
         } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'Waiting for first clip';
           if (emptyBody) emptyBody.textContent = 'This job is open. The first clip shows up here when Field Capture files it.';
@@ -6297,6 +6319,8 @@
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
+    // Homeowners watch clips on the job page (guest media rules apply there).
+    if (VIEWER) { openJobRecord(item.job); return; }
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
@@ -9259,6 +9283,7 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
+    if (d && d.atmosphere === 'viewer') setViewer(d.on);
     if (d && d.atmosphere === 'layout') {
       setRailOnly(!!d.railOnly);
       setPhoneDrawer(!!d.phoneDrawer);
@@ -9929,6 +9954,7 @@
 
   function applyOrgLibrary(payload) {
     ORG_MODE = true;
+    if (payload && payload.viewer) setViewer(true);
     var nextJobs = {};
     (payload.jobs || []).forEach(function (j) {
       if (!j || !j.jobId) return;
