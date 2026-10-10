@@ -25,14 +25,20 @@ export type NameCandidate = {
 const ROLE_OR_FILLER =
   /^(?:speaker|person|homeowner|owner|crew|adjuster|inspector|subcontractor|contractor|customer|client|tech|technician|guy|man|woman|someone|hey|hi|hello|yo|the|a|an|i|im|it's|its)$/i;
 
+/** Capitalized at the start of a sentence, but not a name. */
+const COMMON_WORD =
+  /^(?:just|only|really|actually|basically|literally|probably|definitely|not|so|now|here|there|this|that|what|all|good|great|fine|okay|ok|sure|right|well|yes|yeah|no|done|ready|going|gonna|me|him|her|us|them|you|we|they|everyone|everybody|nobody|today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|video|recording|clip)$/i;
+
+// Names must be capitalized in the transcript. Only the lead-in words ignore
+// case, so "this is just a video" never yields the name "Just".
 const NAME = String.raw`[A-Z][a-z]+(?:['’-][A-Z][a-z]+)?(?:\s+[A-Z][a-z]+(?:['’-][A-Z][a-z]+)?){0,2}`;
 
 const SELF_INTRO = new RegExp(
-  String.raw`\b(?:i\s*am|i['’]?m|my name is|this is|it['’]?s|name['’]?s)\s+(${NAME})\b`,
-  'gi',
+  String.raw`\b(?:[Ii]\s*am|[Ii]['’]?m|[Mm]y name is|[Tt]his is|[Ii]t['’]?s|[Nn]ame['’]?s)\s+(${NAME})\b`,
+  'g',
 );
 
-const DIRECT_ADDRESS = new RegExp(String.raw`\b(?:hey|hi|hello|yo)\s+(${NAME})\b`, 'gi');
+const DIRECT_ADDRESS = new RegExp(String.raw`\b(?:[Hh]ey|[Hh]i|[Hh]ello|[Yy]o)\s+(${NAME})\b`, 'g');
 
 const VOCATIVE = new RegExp(String.raw`^(${NAME}),\s+\S`);
 
@@ -46,7 +52,15 @@ function cleanName(raw: string): string | null {
   if (!name || name.length > 60) return null;
   const parts = name.split(' ');
   if (parts.some((part) => ROLE_OR_FILLER.test(part))) return null;
+  if (COMMON_WORD.test(parts[0]!)) return null;
   return name;
+}
+
+/** False for a candidate an older pickup kept that is a common word, like "Just". */
+export function plausibleSpeakerName(raw: string | null | undefined): boolean {
+  const name = String(raw ?? '').trim();
+  if (!/^[A-Z]/.test(name)) return false;
+  return cleanName(name) != null;
 }
 
 function quoteFor(line: string, name: string): string | null {

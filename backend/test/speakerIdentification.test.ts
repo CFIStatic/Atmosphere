@@ -95,6 +95,36 @@ test('a direct address with nobody else to attach is not assigned to the speaker
   assert.deepEqual(pickupSpeakerNames(lines), []);
 });
 
+test('a lowercase word after "this is" is not picked up as a name', () => {
+  const lines = linesFromTranscript("[0:00] we're recording. This is just a video. Okay");
+  assert.deepEqual(pickupSpeakerNames(lines), []);
+  const more = linesFromTranscript('[0:05] Speaker 1: hey there, it\'s really cold\n[0:07] Speaker 2: Okay, so this is the kitchen');
+  assert.deepEqual(pickupSpeakerNames(more), []);
+});
+
+test('an unlabeled speaker question reads as a sentence and quotes the clip title', () => {
+  assert.equal(
+    verificationQuestion({
+      speakerLabel: 'Unidentified speaker',
+      clipTitle: 'Short, Handheld Clip Filmed Inside a Home,',
+      tSec: 0,
+      candidateName: 'Marco',
+    }),
+    'Is this speaker Marco? Heard at 0:00 in “Short, Handheld Clip Filmed Inside a Home”.',
+  );
+  assert.equal(
+    verificationQuestion({ speakerLabel: 'Speaker 3', clipTitle: '', tSec: null, role: 'homeowner' }),
+    'Is Speaker 3 the homeowner? Heard in this clip.',
+  );
+});
+
+test('Ask drops an older pending name that is a common word', () => {
+  const identities = [
+    row({ id: 'a', proofId: 'clip-1', speakerLabel: 'Unidentified speaker', displayName: 'Just', method: 'name_pickup' }),
+  ];
+  assert.deepEqual(pendingQuestions(identities), []);
+});
+
 test('the same voice sample matches itself and a different tone matches less', () => {
   const a = embedPcm(tone(140), 16_000);
   const again = embedPcm(tone(140), 16_000);
@@ -351,10 +381,10 @@ test('Ask asks the pending name with the clip and timestamp', () => {
   const identities = [row({ id: 'a', proofId: 'clip-1', speakerLabel: 'Speaker 2', sourceTSec: 42 })];
   const [question] = pendingQuestions(identities);
   assert.equal(question!.proofId, 'clip-1');
-  assert.equal(question!.question, 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?');
+  assert.equal(question!.question, 'Is Speaker 2 Marco? Heard at 0:42 in “North slope walkthrough”.');
   assert.equal(
     verificationQuestion({ speakerLabel: 'Speaker 2', clipTitle: 'North slope walkthrough', tSec: 42, candidateName: 'Marco' }),
-    'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
+    'Is Speaker 2 Marco? Heard at 0:42 in “North slope walkthrough”.',
   );
 });
 
