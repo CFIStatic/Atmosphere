@@ -208,6 +208,12 @@ export const config = {
       // for no visible gain. Narration and the day comparison stay on the
       // stronger model — they write records people act on.
       liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5',
+      // Background video passes nobody reads verbatim: the 6-still day-film
+      // read (the Gemini dictation already wrote the clip's summary), evidence
+      // fusion and speaker-role guesses. Half Sonnet's price. The conversation
+      // summary, scope narration and escalations stay on `model`.
+      // Off by default (quality bar): set VIDEO_LIGHT_MODEL only after an eval shows equal output.
+      lightModel: (process.env.VIDEO_LIGHT_MODEL ?? '').trim() || undefined,
       // Per-org, per-day ceiling on live observations. At the default cadence
       // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
       // day — genuinely heavy use — while capping the worst case (a camera

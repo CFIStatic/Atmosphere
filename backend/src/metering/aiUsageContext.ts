@@ -24,6 +24,10 @@ export type AiUsageScope = {
   userId?: string | null;
   /** When set, provider calls in this scope are metered under this feature. */
   meterFeature?: string | null;
+  /** Background video work: the clip this scope is analysing (per-clip call cap). */
+  proofId?: string | null;
+  /** Clip length, so the per-clip call cap scales with footage. */
+  durationSeconds?: number | null;
 };
 
 const storage = new AsyncLocalStorage<AiUsageScope>();

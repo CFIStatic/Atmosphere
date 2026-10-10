@@ -218,6 +218,21 @@ export function parseNarration(
   return { entries, coverage, report: parsed.report.trim().slice(0, 2000), actions };
 }
 
+/** NARRATION_MAX_FRAMES (default 0 = no cap; off until an eval shows equal output). */
+export function narrationMaxFrames(): number {
+  const raw = Number(process.env.NARRATION_MAX_FRAMES ?? '0');
+  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+}
+
+/** Evenly thin frames to at most `max`, always keeping the first and last. */
+export function capNarrationFrames<T>(frames: T[], max: number): T[] {
+  if (max <= 0 || frames.length <= max) return frames;
+  if (max === 1) return [frames[0]!];
+  const out: T[] = [];
+  for (let i = 0; i < max; i += 1) out.push(frames[Math.round((i * (frames.length - 1)) / (max - 1))]!);
+  return out;
+}
+
 export async function narrateProofVideo(input: {
   frames: Array<{ atSeconds: number; base64: string }>;
   steps: StageStep[];
@@ -227,6 +242,10 @@ export async function narrateProofVideo(input: {
 }): Promise<VideoNarration | null> {
   if (!isModelProviderConfigured()) return null;
   if (!input.frames.length || !input.steps.length) return null;
+  // Frames arrive already de-duplicated by scene change; cap how many go to the
+  // model (each image is ~1.6k input tokens). Entries are still mapped back to
+  // the real timestamps of the frames sent.
+  input = { ...input, frames: capNarrationFrames(input.frames, narrationMaxFrames()) };
 
   const list = input.steps.map((s, i) => `${i}. [${s.kind}] ${s.label}`).join('\n');
   const scope = input.scopeTitles.length
@@ -234,7 +253,7 @@ export async function narrateProofVideo(input: {
     : '(no scope recorded)';
 
   const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
+    model: (process.env.VIDEO_NARRATION_MODEL ?? '').trim() || config.technician.assistant.model,
     max_tokens: 900,
     system: NARRATE_SYSTEM,
     messages: [
