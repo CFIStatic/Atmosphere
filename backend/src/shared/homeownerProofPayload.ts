@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { redactProofDeviceIdentity } from './deviceIdentity.js';
+import { homeownerSafeText, homeownerSafeVideo, NEUTRAL_CLIP_LINE } from './homeownerSafeSummary.js';
 
 /**
  * What an invited homeowner may see of a job's videos. The office payload
@@ -33,14 +34,21 @@ const VIDEO_DROP = [
 
 export function homeownerProofPayload<T extends Record<string, any>>(payload: T): T {
   const safe: any = redactProofDeviceIdentity(payload as any);
-  const days = ((safe.days ?? []) as any[]).map((day) => {
-    const next: any = { ...day, summary: day.aiSummary ?? '' };
-    for (const key of DAY_DROP) delete next[key];
+  const videos = ((safe.videos ?? []) as any[]).map((video) => {
+    const next: any = homeownerSafeVideo(video);
+    for (const key of VIDEO_DROP) delete next[key];
     return next;
   });
-  const videos = ((safe.videos ?? []) as any[]).map((video) => {
-    const next: any = { ...video };
-    for (const key of VIDEO_DROP) delete next[key];
+  const videoById = new Map(videos.map((v: any) => [v.id, v]));
+  const days = ((safe.days ?? []) as any[]).map((day) => {
+    // Raw analysis never reaches a viewer: the day reads its clips' cleaned
+    // summaries, else its own cleaned text, else a neutral line.
+    const fromClips = ((day.proofIds ?? []) as string[])
+      .map((id) => videoById.get(id)?.aiSummary)
+      .find((t: unknown) => typeof t === 'string' && t && t !== NEUTRAL_CLIP_LINE);
+    const clean = fromClips ?? homeownerSafeText(day.aiSummary) ?? (day.aiSummary ? NEUTRAL_CLIP_LINE : null);
+    const next: any = { ...day, aiSummary: clean, summary: clean ?? '', homeownerSummary: clean ?? '' };
+    for (const key of DAY_DROP) delete next[key];
     return next;
   });
   return {
