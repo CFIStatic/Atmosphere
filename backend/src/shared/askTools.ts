@@ -181,7 +181,7 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
     name: 'get_crm_record',
     description:
       'Pull claim, contact, and job fields from the connected CRM (JobNimbus, AccuLynx, Salesforce, ServiceTitan) plus Atmosphere-native fields for this job. Soft-fails with Atmosphere fields only when no external CRM is connected. Cite CRM as a source when used.',
-    audience: 'both',
+    audience: 'org',
     input_schema: {
       type: 'object',
       properties: {
@@ -215,7 +215,7 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: 'get_punch_list',
     description: 'Build the open punch / next-steps list from video analysis already on file.',
-    audience: 'both',
+    audience: 'org',
     input_schema: {
       type: 'object',
       properties: {
