@@ -11,7 +11,7 @@ holding/legal/billing only; Platform = office app; Field Capture = crew app.
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification for service contractors, two-product overview |
+| `index.html`      | Home — intelligence for contractors: walk the job, Ask, Computer, end of day, crew, trust, trades, pricing teaser |
 | `verification.html` | Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
