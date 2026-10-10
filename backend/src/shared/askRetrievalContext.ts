@@ -1,3 +1,4 @@
+import { askClipName } from './mentions.js';
 /**
  * Hybrid Ask context: retrieval block + stuffed job card.
  *
@@ -56,7 +57,7 @@ export function chunkClipAnalysis(clip: AskLookupClip): AnalysisChunk[] {
       key: `${clip.proofId}#${kind}:${out.length}`,
       proofId: clip.proofId,
       jobId: clip.jobId,
-      clipTitle: clip.title,
+      clipTitle: askClipName(clip.title, clip.workDate),
       workDate: clip.workDate ?? null,
       kind,
       startSec,

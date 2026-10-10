@@ -1123,3 +1123,36 @@ export function textMentionsPerson(body: string, userId: string, roster: Mention
   if (new RegExp(`@\\[[^\\]\\n]{1,80}\\]\\(mention:${id}\\)`).test(body)) return true;
   return resolveMentions(body, roster).mentions.some((mention) => mention.userId === userId);
 }
+
+const CLIP_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CLIP_ROOMS = [
+  'living room', 'family room', 'dining room', 'kitchen', 'primary bathroom', 'bathroom', 'bedroom', 'basement',
+  'attic', 'roof', 'garage', 'laundry room', 'laundry', 'hallway', 'closet', 'office', 'crawlspace', 'exterior',
+];
+
+/** True when a "title" is really a cut-off AI description ("Short, Handheld Clip Filmed Inside a Home, Likely"). */
+export function looksLikeDescriptionTitle(title: string): boolean {
+  const t = String(title ?? '').trim();
+  if (!t) return false;
+  const words = t.split(/\s+/);
+  if (/[,;:]/.test(t) && words.length >= 4) return true;
+  if (/\b(likely|appears?|probably|possibly|seems?|filmed|handheld|footage|recording of|shows?|showing|captured)\b/i.test(t)) return true;
+  if (/\b(a|an|the|and|of|with|in|on|to|from|inside)$/i.test(t)) return true;
+  if (/…$|\.\.\.$/.test(t)) return true;
+  return words.length > 9;
+}
+
+/**
+ * Short clip name for Ask quotes and sources: the clip's real title when it
+ * is one, else "Kitchen walk-through · Oct 8" from the room and work date.
+ */
+export function askClipName(title: string | null | undefined, workDate?: string | null): string {
+  const raw = cleanMentionTitle(String(title ?? '')).replace(/\s+/g, ' ');
+  if (raw && !looksLikeDescriptionTitle(raw)) return raw;
+  const lower = raw.toLowerCase();
+  const room = CLIP_ROOMS.find((r) => lower.includes(r));
+  const m = String(workDate ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const day = m ? `${CLIP_MONTHS[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}` : '';
+  const head = room ? `${room[0]!.toUpperCase()}${room.slice(1)} walk-through` : 'Walk-through';
+  return day ? `${head} · ${day}` : room ? head : 'Clip';
+}

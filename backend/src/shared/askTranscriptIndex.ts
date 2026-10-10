@@ -33,7 +33,7 @@ import {
   type AskLookupClip,
 } from './askLookup.js';
 import { clipMatchesAskDate, formatAskClock, parseAskDate, type AskCalendarDate } from './askMoments.js';
-import { cleanMentionTitle } from './mentions.js';
+import { askClipName } from './mentions.js';
 import { diarizationLabel, speakerLabelOrUnidentified, UNIDENTIFIED_SPEAKER } from './askSpeakers.js';
 
 export type TranscriptChunk = {
@@ -158,7 +158,7 @@ function chunkSpeaker(raw: string | null): string | null {
 
 /** Split one clip's raw transcript into timed chunks. Redacted speech is skipped, never returned. */
 export function chunkClipTranscript(clip: AskLookupClip): TranscriptChunk[] {
-  const clipTitle = cleanMentionTitle(clip.title) || clip.title || 'Clip';
+  const clipTitle = askClipName(clip.title, clip.workDate);
   const base = { proofId: clip.proofId, jobId: clip.jobId, orgId: clip.orgId, clipTitle, workDate: clip.workDate ?? null };
   const out: TranscriptChunk[] = [];
   const push = (start: number | null, end: number | null, raw: string, speaker: string | null) => {
@@ -214,7 +214,7 @@ export function summaryDoc(clip: AskLookupClip): SummaryDoc | null {
     key: `${clip.proofId}#summary`,
     proofId: clip.proofId,
     jobId: clip.jobId,
-    clipTitle: cleanMentionTitle(clip.title) || clip.title || 'Clip',
+    clipTitle: askClipName(clip.title, clip.workDate),
     workDate: clip.workDate ?? null,
     text,
     cite: askClipCite(clip, null),

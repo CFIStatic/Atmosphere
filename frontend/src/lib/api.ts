@@ -4661,6 +4661,21 @@ export const api = {
       { method: 'POST', body: JSON.stringify({}) },
     ),
 
+  progressShareEmailSignIn: (token: string) =>
+    request<{ ok: boolean }>(progressShareApiPath(token, '/email-sign-in'), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  progressShareVerifyEmailSignIn: (
+    token: string,
+    input: { tokenHash?: string; kind?: 'magiclink' | 'invite'; code?: string },
+  ) =>
+    request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
+      progressShareApiPath(token, '/email-sign-in/verify'),
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
   progressShareGrants: () =>
     request<{
       grants: Array<{
