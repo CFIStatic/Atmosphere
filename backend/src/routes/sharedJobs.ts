@@ -105,6 +105,7 @@ import {
 import {
   jobFileIsTombstoned,
   listTombstonedJobIds,
+  writeJobFileDeleteTombstone,
 } from '../lib/jobFileDelete.js';
 import { renameCrmJobTitle } from '../lib/jobFileRename.js';
 
@@ -725,10 +726,20 @@ async function insertCopiedJob(writer: any, row: Record<string, unknown>) {
   throw intakeWriteError(first.error, 'Could not duplicate the job file.', 'job_failed');
 }
 
+/** Job columns a duplicate carries over. Invoiced and paid stay with the original. */
+const DUPLICATE_JOB_COLUMNS =
+  'id, title, status, claim_number, policy_number, work_type, description, property_id, ' +
+  'lead_id, contact_id, account_id, owner_id, loss_type, priority, carrier_account_id, ' +
+  'adjuster_contact_id, deductible, loss_date, scheduled_start, scheduled_end, actual_start, ' +
+  'actual_end, contract_amount';
+
 /**
  * POST /api/operations/shared/:jobId/duplicate
- * A new job file with the same site, brief, and scope. Clips, parties,
- * messages, and legal holds stay on the original.
+ * A new job file with everything in the original: site, brief and scope
+ * history, parties, videos with their transcripts, speakers, rooms and AI
+ * results, Chat, pins and files (duplicate_job_file_contents). Stored objects
+ * are shared, not re-uploaded. Share links, custody history and live sessions
+ * stay on the original; parties get fresh links.
  */
 sharedJobsRouter.post(
   '/shared/:jobId/duplicate',
@@ -738,23 +749,21 @@ sharedJobsRouter.post(
       const input = duplicateSchema.parse(req.body ?? {});
       const writer = writerForOrg(orgId, supabase).raw;
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: sourceRow, error: sourceError } = await supabase
         .from('crm_jobs')
-        .select(
-          'id, title, status, claim_number, policy_number, work_type, description, property_id',
-        )
+        .select(DUPLICATE_JOB_COLUMNS)
         .eq('org_id', orgId)
         .eq('id', req.params.jobId)
         .is('deleted_at', null)
         .maybeSingle();
       if (sourceError) throw new HttpError(500, sourceError.message, 'job_read_failed');
+      const source = sourceRow as Record<string, any> | null;
       if (!source) throw new HttpError(404, 'No such job.', 'job_not_found');
       if (await jobFileIsTombstoned(writer, orgId, source.id)) {
         throw new HttpError(404, 'No such job.', 'job_not_found');
       }
 
       const record = await loadRecord(supabase, orgId, source.id);
-      const currentRevision = record.briefs[0]?.revision ?? null;
       const nextTitle = normalizeJobFileTitle(
         input.title ?? suggestedDuplicateTitle(String(source.title ?? 'Job')),
       );
@@ -799,15 +808,14 @@ sharedJobsRouter.post(
         }
       }
 
+      const { id: _sourceId, title: _sourceTitle, property_id: _sourceProperty, ...carried } = source;
       const job = await insertCopiedJob(writer, {
+        ...carried,
         org_id: orgId,
         title: nextTitle,
         work_type: source.work_type || 'mitigation',
         property_id: propertyId,
-        claim_number: source.claim_number ?? null,
-        policy_number: source.policy_number ?? null,
-        description: source.description ?? null,
-        status: 'scheduled',
+        status: source.status ?? 'scheduled',
         created_by: userId,
       });
 
@@ -825,67 +833,46 @@ sharedJobsRouter.post(
         console.warn('[shared] job_intake insert on duplicate failed:', intakeError.message);
       }
 
-      const latestBrief = record.briefs[0] ?? null;
-      const { data: brief, error: briefError } = await writer
-        .from('job_briefs')
-        .insert({
-          org_id: orgId,
-          job_id: job.id,
-          revision: 0,
-          facts: latestBrief?.facts ?? {},
-          note: latestBrief?.note ?? null,
-          created_by: userId,
-        })
-        .select('id, revision')
-        .single();
-      if (briefError || !brief) {
-        throw intakeWriteError(briefError, 'Could not copy the brief.', 'brief_failed');
+      const { data: actor } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', userId)
+        .maybeSingle();
+      const { data: copied, error: copyError } = await writer.rpc('duplicate_job_file_contents', {
+        p_org_id: orgId,
+        p_source_job_id: source.id,
+        p_target_job_id: job.id,
+        p_actor_id: userId,
+        p_actor_label: (actor as any)?.full_name || (actor as any)?.email || 'Office',
+      });
+      if (copyError) {
+        // Do not leave a half-copied file in the library.
+        await writeJobFileDeleteTombstone(writer, {
+          orgId,
+          jobId: job.id as string,
+          title: nextTitle,
+          actorId: userId,
+        }).catch((err) =>
+          console.warn('[shared] duplicate cleanup failed:', err instanceof Error ? err.message : err),
+        );
+        console.warn('[shared] duplicate_job_file_contents failed:', copyError.message);
+        throw new HttpError(500, 'Could not copy the job file.', 'duplicate_failed');
       }
-      const revision = (brief as any).revision ?? 1;
+      const counts = (copied ?? {}) as Record<string, number>;
 
-      const scopeLines = scopeLinesForDuplicate(record.scope, currentRevision);
-      if (scopeLines.length) {
-        const inserted = await writer
-          .from('job_scope_items')
-          .insert(
-            scopeLines.map((line) => ({
-              org_id: orgId,
-              job_id: job.id,
-              title: line.title,
-              state: line.state,
-              detail: line.detail,
-              reason: line.reason,
-              amount: Number.isFinite(line.amount as number) ? line.amount : null,
-              revision,
-              created_by: userId,
-            })),
-          )
-          .select('id');
-        if (inserted.error) {
-          throw intakeWriteError(inserted.error, 'Could not copy scope lines.', 'scope_failed');
-        }
-      }
-
+      const revision = record.briefs[0]?.revision ?? null;
+      const currentScope = scopeLinesForDuplicate(record.scope, revision);
       const summary = {
         jobId: job.id as string,
         jobNumber: job.job_number ?? null,
         title: job.title as string,
         status: (job.status as string) ?? 'scheduled',
-        parties: 0,
+        parties: record.parties.filter((p: any) => !p.revoked_at).length,
         currentRevision: revision,
         behind: 0,
         awaiting: 0,
-        exclusions: scopeLines.filter((s) => s.state === 'excluded').length,
+        exclusions: currentScope.filter((s) => s.state === 'excluded').length,
       };
-
-      await recordAccess(supabase, {
-        orgId,
-        jobId: job.id,
-        action: 'uploaded',
-        actorId: userId,
-        actorLabel: 'Office',
-        detail: `Duplicated from ${source.title} — ${scopeLines.length} scope lines, brief r${revision}`,
-      }).catch(() => undefined);
 
       res.status(201).json({
         job: {
@@ -894,7 +881,8 @@ sharedJobsRouter.post(
           jobNumber: job.job_number ?? null,
         },
         briefRevision: revision,
-        scopeSaved: scopeLines.length,
+        scopeSaved: counts.job_scope_items ?? 0,
+        copied: counts,
         jobFile: summary,
       });
     } catch (err) {

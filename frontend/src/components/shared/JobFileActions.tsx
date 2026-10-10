@@ -118,7 +118,7 @@ export function JobFileActions({
           description={
             mode === 'rename'
               ? 'The name is what shows on the dashboard and in the library.'
-              : 'Creates a new job file with the same site, brief, and scope. Footage and people stay on the original.'
+              : 'Creates a full copy: videos, transcripts, Chat, files, brief, scope and people. Share links are not copied, so invite people to the copy again.'
           }
           onClose={close}
           closeDisabled={busy}

@@ -223,7 +223,9 @@
     "20261005220000_computer_supply_orders.sql",
     "20261006150000_computer_iq.sql",
     "20261009120000_ask_feedback_pins_edits.sql",
-    "20261010090000_ask_pending_actions.sql"
+    "20261010090000_ask_pending_actions.sql",
+    "20261010200000_job_evidence_duplicated.sql",
+    "20261010200100_duplicate_job_file_contents.sql"
   ],
   "migrations": [
     {
@@ -6834,6 +6836,29 @@
         "policy|public.ask_pending_actions.ask_pending_actions_org_read",
         "rls|public.ask_pending_actions",
         "table|public.ask_pending_actions"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261010200000_job_evidence_duplicated",
+      "file": "20261010200000_job_evidence_duplicated.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261010200100_duplicate_job_file_contents",
+      "file": "20261010200100_duplicate_job_file_contents.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|private.job_dup_remap_jsonb",
+        "function|public.duplicate_job_file_contents"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

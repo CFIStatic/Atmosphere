@@ -388,6 +388,7 @@ export const CUSTODY_ACTION_LABEL: Record<string, string> = {
   exported: 'Report exported',
   deleted: 'Removed from library',
   restored: 'Restored to library',
+  duplicated: 'Copied between job files',
 };
 
 export function custodyActionLabel(action: string | null | undefined): string {

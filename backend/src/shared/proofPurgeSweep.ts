@@ -28,6 +28,31 @@ export type PurgeCandidate = {
   scheduled_purge_at: string;
 };
 
+/**
+ * Storage paths in `paths` that another clip or frame still uses, or null when
+ * that cannot be checked (then nothing is removed; the bytes merely linger).
+ */
+async function pathsStillInUse(
+  admin: any,
+  proofId: string,
+  paths: string[],
+): Promise<Set<string> | null> {
+  if (!paths.length) return new Set();
+  const [clips, frames] = await Promise.all([
+    admin.from('job_proofs').select('storage_path').in('storage_path', paths).neq('id', proofId),
+    admin.from('job_proof_frames').select('storage_path').in('storage_path', paths).neq('proof_id', proofId),
+  ]);
+  if (clips.error || frames.error) {
+    console.warn('[purge] shared-path check failed:', (clips.error ?? frames.error).message);
+    return null;
+  }
+  const used = new Set<string>();
+  for (const row of [...(clips.data ?? []), ...(frames.data ?? [])] as Array<{ storage_path?: string | null }>) {
+    if (row.storage_path) used.add(row.storage_path);
+  }
+  return used;
+}
+
 export async function permanentlyPurgeProof(
   admin: any,
   proof: PurgeCandidate,
@@ -51,11 +76,16 @@ export async function permanentlyPurgeProof(
     if (row.storage_path) paths.push(row.storage_path);
   }
 
-  if (paths.length) {
+  // A duplicated job file shares its stored objects with the original, so
+  // only remove what no other clip or frame still points at.
+  const inUse = await pathsStillInUse(admin, proof.id, paths);
+  const removable = inUse ? paths.filter((path) => !inUse.has(path)) : [];
+
+  if (removable.length) {
     // Storage remove is best-effort; DB row delete is the source of truth that
     // the clip is gone. Retry on a later sweep if bytes linger.
     try {
-      await admin.storage.from(PROOF_BUCKET).remove(paths);
+      await admin.storage.from(PROOF_BUCKET).remove(removable);
     } catch (err) {
       console.warn('[purge] storage remove failed:', err instanceof Error ? err.message : err);
     }
