@@ -37,6 +37,14 @@ const ANALYST_SENTENCE = new RegExp(
     'low confidence',
     '\\bframes?\\b',
     'the diary of a ceo',
+    'nobody narrates',
+    'no narration',
+    'the office\\b',
+    'no intelligible',
+    'no recorded',
+    'speaker label',
+    '\\bmedia\\b',
+    'attribut',
   ].join('|'),
   'i',
 );
@@ -52,6 +60,7 @@ const NON_JOB_CLIP = new RegExp(
     'podcast',
     'every word of audio comes from',
     'no relevant (?:content|footage|activity)',
+    'no (?:renovation|trade|construction) (?:or trade )?work is shown',
   ].join('|'),
   'i',
 );
@@ -84,7 +93,10 @@ export function homeownerSafeText(text: unknown, maxLength = 600): string | null
   const t = text.trim();
   if (!t) return null;
   if (isNonJobClipText(t)) return null;
-  const kept = sentences(t).filter((s) => !isAnalystSentence(s));
+  const kept = sentences(t)
+    .filter((s) => !isAnalystSentence(s))
+    // Upstream text is sometimes cut mid-word; never show a half sentence.
+    .filter((s, i, all) => i < all.length - 1 || all.length === 1 || /[.!?"')\]]$/.test(s));
   if (!kept.length) return null;
   let out = kept.join(' ');
   if (out.length > maxLength) {
@@ -138,6 +150,17 @@ function clipAnalysisTexts(video: any): string[] {
   );
 }
 
+/** Verbatim transcript minus lines that are only transcription artifacts. */
+function cleanTranscript(text: unknown): string | null {
+  if (typeof text !== 'string') return null;
+  const out = text
+    .split('\n')
+    .filter((line) => !FOREIGN_RUN.test(line))
+    .join('\n')
+    .trim();
+  return out || null;
+}
+
 export function isNonJobClip(video: any): boolean {
   return clipAnalysisTexts(video).some((t) => isNonJobClipText(t));
 }
@@ -165,14 +188,42 @@ export function homeownerSafeVideo<V extends Record<string, any>>(video: V): V {
   next.aiSummary = summary;
   next.homeownerSummary = summary ?? NEUTRAL_CLIP_LINE;
   if (video.conversation && typeof video.conversation === 'object') {
-    const conv: any = { ...video.conversation };
+    // Allowlist: only cleaned summaries and short fact lists. Details,
+    // unresolved questions, speaker notes and raw segments stay with the office.
+    const src: any = video.conversation;
+    const conv: any = {};
     for (const key of CONVERSATION_TEXT_KEYS) {
-      if (key in conv) conv[key] = homeownerSafeText(conv[key]);
+      if (key in src) conv[key] = homeownerSafeText(src[key]);
     }
     for (const key of CONVERSATION_LIST_KEYS) {
-      if (key in conv) conv[key] = homeownerSafeList(conv[key], itemText);
+      if (key in src) conv[key] = homeownerSafeList(src[key], itemText);
     }
     next.conversation = conv;
+  }
+  next.transcriptText = cleanTranscript(video.transcriptText);
+  next.heardOnMic = cleanTranscript(video.heardOnMic);
+  if (Array.isArray(video.transcriptSegments)) {
+    next.transcriptSegments = video.transcriptSegments.filter((seg: any) => !FOREIGN_RUN.test(String(seg?.text ?? '')));
+  }
+  if (Array.isArray(video.transcriptWords)) {
+    next.transcriptWords = video.transcriptWords.filter((w: any) => !FOREIGN_RUN.test(String(w?.text ?? '')));
+  }
+  if (Array.isArray(video.events)) {
+    next.events = homeownerSafeList(video.events, itemText);
+  }
+  if (video.people && typeof video.people === 'object') {
+    const people: any = { ...video.people };
+    for (const key of ['peoplePresent', 'peopleSpeakers']) {
+      if (Array.isArray(people[key])) {
+        people[key] = people[key].filter(
+          (p: any) =>
+            ![p?.label, p?.speakerLabel, p?.displayName, p?.role].some(
+              (t) => typeof t === 'string' && (isAnalystSentence(t) || /youtube|\bmedia\b|\btv\b|radio/i.test(t)),
+            ),
+        );
+      }
+    }
+    next.people = people;
   }
   if (Array.isArray(video.dictationEntries)) {
     next.dictationEntries = video.dictationEntries

@@ -56,7 +56,12 @@ function scrubText(text: string | null | undefined, privacyProtected: boolean): 
   if (privacyProtected && isPrivateMomentText(t)) return null;
   if (privacyProtected && isChildPresenceText(t)) return CHILD_PRIVACY_REDACTED_LABEL;
   if (isPrivateMomentText(t)) return null;
-  return t.replace(/\s+/g, ' ').trim().slice(0, 400);
+  const flat = t.replace(/\s+/g, ' ').trim();
+  if (flat.length <= 400) return flat;
+  // Cut at a sentence end so the timeline never shows a half word.
+  const cut = flat.slice(0, 400);
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  return end > 60 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
 }
 
 function pushUnique(points: string[], text: string | null | undefined): void {
