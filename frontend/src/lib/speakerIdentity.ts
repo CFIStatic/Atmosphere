@@ -29,13 +29,16 @@ export function verificationQuestion(input: {
   candidateName?: string | null;
   role?: SpeakerRole | null;
 }): string {
-  const who = input.speakerLabel.trim() || 'Unidentified speaker';
-  const clip = input.clipTitle.trim() || 'this clip';
+  const label = input.speakerLabel.replace(/\s+/g, ' ').trim();
+  const who = !label || /^unidentified speaker$/i.test(label) ? 'this speaker' : label;
+  const title = input.clipTitle.replace(/\s+/g, ' ').trim().replace(/[\s,;:–—-]+$/, '');
+  const clip = title && title.toLowerCase() !== 'this clip' ? `“${title}”` : 'this clip';
   const at = speakerClock(input.tSec);
-  const where = at ? `in ${clip} at ${at}` : `in ${clip}`;
-  if (input.candidateName?.trim()) return `Is ${who} ${where} ${input.candidateName.trim()}?`;
-  if (input.role) return `Is ${who} ${where} the ${input.role}?`;
-  return `Who is ${who} ${where}?`;
+  const heard = at ? `Heard at ${at} in ${clip}.` : `Heard in ${clip}.`;
+  const name = input.candidateName?.replace(/\s+/g, ' ').trim();
+  if (name) return `Is ${who} ${name}? ${heard}`;
+  if (input.role) return `Is ${who} the ${input.role}? ${heard}`;
+  return `Who is ${who}? ${heard}`;
 }
 
 /** Name, or "Speaker 3 (likely homeowner)" while a role is still a guess. */

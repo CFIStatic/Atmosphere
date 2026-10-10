@@ -11,7 +11,7 @@ describe('speaker identity labels', () => {
         tSec: 42,
         candidateName: 'Marco',
       }),
-    ).toBe('Is Speaker 2 in North slope walkthrough at 0:42 Marco?');
+    ).toBe('Is Speaker 2 Marco? Heard at 0:42 in “North slope walkthrough”.');
   });
 
   it('marks a role as a guess and closes the parenthesis', () => {

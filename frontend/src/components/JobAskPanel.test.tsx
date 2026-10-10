@@ -964,7 +964,7 @@ describe('JobAskPanel', () => {
     const marco = {
       id: 'v-marco',
       proofId: 'clip-north',
-      question: 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
+      question: 'Is Speaker 2 Marco? Heard at 0:42 in “North slope walkthrough”.',
       speakerLabel: 'Speaker 2',
       clipTitle: 'North slope walkthrough',
       tSec: 42,
