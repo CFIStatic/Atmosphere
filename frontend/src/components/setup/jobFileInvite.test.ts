@@ -53,10 +53,12 @@ async function waitFor(document: Document, selector: string) {
 }
 
 describe('Dashboard job-file invite to film', () => {
-  it('does not offer Homeowner on Invite to film — that is Share with homeowner', () => {
-    expect(verifierHtml).toContain('Invite to film');
-    expect(verifierHtml).toContain('Share with homeowner');
+  it('asks only for a name and email — no trade or role picker', () => {
+    expect(verifierHtml).toMatch(/data-jf-tab="invite"[^>]*>Crew</);
     expect(verifierHtml).toMatch(/Invite a trade or crew to film this job/);
+    expect(verifierHtml).not.toContain('Trade / role');
+    expect(verifierHtml).not.toContain('Choose a trade or role');
+    expect(verifierHtml).not.toContain('select name="kind"');
     const roles = verifierHtml.match(/var JOB_PARTY_ROLES = \[[\s\S]*?\];/);
     expect(roles).not.toBeNull();
     expect(roles![0]).not.toContain("value: 'owner'");
@@ -154,15 +156,12 @@ describe('Dashboard job-file invite to film', () => {
     const company = document.querySelector(
       '#jf-invite-form input[name="company"]',
     ) as HTMLInputElement;
-    const kind = document.querySelector('#jf-invite-form select[name="kind"]') as HTMLSelectElement;
     const email = document.querySelector('#jf-invite-form input[name="email"]') as HTMLInputElement;
     company.value = 'Jack Smith';
-    kind.value = 'trade:drywall';
     email.value = INVITE_EMAIL;
     // jsdom does not expose named controls as form.company the way a browser does.
     Object.defineProperties(form, {
       company: { configurable: true, get: () => company },
-      kind: { configurable: true, get: () => kind },
       email: { configurable: true, get: () => email },
     });
     form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
@@ -246,14 +245,11 @@ describe('Dashboard job-file invite to film', () => {
     const company = document.querySelector(
       '#jf-invite-form input[name="company"]',
     ) as HTMLInputElement;
-    const kind = document.querySelector('#jf-invite-form select[name="kind"]') as HTMLSelectElement;
     const email = document.querySelector('#jf-invite-form input[name="email"]') as HTMLInputElement;
     company.value = 'Jack Smith';
-    kind.value = 'trade:drywall';
     email.value = INVITE_EMAIL;
     Object.defineProperties(form, {
       company: { configurable: true, get: () => company },
-      kind: { configurable: true, get: () => kind },
       email: { configurable: true, get: () => email },
     });
     form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));

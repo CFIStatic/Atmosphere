@@ -197,7 +197,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Rename' }));
     const field = screen.getByLabelText(/^Name$/i);
@@ -401,7 +401,7 @@ describe('SharedDashboardPage job file identity', () => {
 
     expect(await screen.findByTestId('your-job-files')).toHaveAttribute('href', '/my-job-files');
     expect(screen.getByRole('link', { name: 'Your job files' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Share with homeowner' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
   it('hides Who-has-access for grant / homeowner viewers', async () => {
@@ -513,7 +513,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
     expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
     expect(screen.queryByTestId('claim-ready-packet')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
     unmount();
 
     render(

@@ -8,9 +8,9 @@ const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html
 
 describe('Dashboard job-file share', () => {
   it('is a homeowner email field — progress share, not Field Capture', () => {
-    expect(verifierHtml).toContain("return 'Share with homeowner'");
+    expect(verifierHtml).toContain("if (tab === 'invite' || tab === 'share') return 'Share';");
     expect(verifierHtml).toContain('data-jf-tab="share"');
-    expect(verifierHtml).toMatch(/data-jf-tab="share"[\s\S]*?>Share with homeowner</);
+    expect(verifierHtml).toMatch(/data-jf-tab="share"[\s\S]*?>Homeowner</);
 
     expect(verifierHtml).toContain('id="jf-share-form"');
     expect(verifierHtml).toContain(
