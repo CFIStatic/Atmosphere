@@ -49,7 +49,7 @@ export function JobFileSectionBar({
               data-testid={`job-file-section-tab-${tab.id}`}
               onClick={() => onChange(tab.id)}
               className={cn(
-                'relative shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition sm:px-5',
+                'relative shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium transition sm:px-5',
                 selected
                   ? 'bg-paper-200/50 text-ink-900'
                   : 'text-ink-500 hover:bg-paper-50/60 hover:text-ink-700',

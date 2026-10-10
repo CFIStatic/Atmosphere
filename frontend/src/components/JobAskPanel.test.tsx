@@ -196,7 +196,7 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('From this job file')).toBeInTheDocument();
+    expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
     expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
   });
 
@@ -237,7 +237,7 @@ describe('JobAskPanel', () => {
     });
     expect(askAboutProofs).not.toHaveBeenCalled();
     expect(await screen.findByText('From the guest file.')).toBeInTheDocument();
-    expect(await screen.findByText('From this job file')).toBeInTheDocument();
+    expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
     expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
   });
 
@@ -574,7 +574,8 @@ describe('JobAskPanel', () => {
     expect(results.querySelector('a')?.getAttribute('href')).toBe('https://example.com/nfl');
     const body = screen.getByTestId('ask-answer-body');
     const hrefs = [...body.querySelectorAll('a')].map((node) => node.getAttribute('href'));
-    expect(hrefs).toEqual(['https://example.com/nfl']);
+    // Web results open from Steps / Sources under the answer, never as links in the prose.
+    expect(hrefs).toEqual([]);
     expect(body.textContent).toContain('steal');
     expect(body.textContent).not.toContain('attacker.example');
   });
@@ -729,7 +730,7 @@ describe('JobAskPanel', () => {
     expect(summary).toHaveTextContent(/Searching what was said/);
   });
 
-  it('streams text, seeks a moment chip, and asks a follow-up', async () => {
+  it('streams text and seeks a moment chip, with no follow-up chips', async () => {
     const job = 'job-1038';
     const proof = 'proof-tarp';
     const cite = `video/${job}/${proof}/north-slope@18`;
@@ -786,8 +787,8 @@ describe('JobAskPanel', () => {
     await waitFor(() => {
       expect(seeks.at(-1)).toMatchObject({ atSeconds: 18, proofId: proof });
     });
-    await user.click(screen.getByRole('button', { name: /skylights/i }));
-    expect(await screen.findByText(/does not mention skylights/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('ask-followups')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /skylights/i })).not.toBeInTheDocument();
   });
 
   it('renders a comparison table and copies the finished note', async () => {

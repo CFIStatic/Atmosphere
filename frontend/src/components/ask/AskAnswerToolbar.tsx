@@ -13,6 +13,10 @@ const REASONS: Array<{ id: AskFeedbackReason; label: string }> = [
 const CHIP =
   'inline-flex items-center gap-1 rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900 disabled:opacity-35';
 
+/** Icon-only, matching Copy and Regenerate in the answer row. */
+const ICON =
+  'inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
+
 /**
  * Rate, pin and share one stored answer. Office members only (the panel hides
  * it for share links and homeowners).
@@ -52,9 +56,9 @@ export function AskAnswerToolbar({
         aria-pressed={up}
         disabled={busy}
         onClick={() => void run(() => onRate(up ? 0 : 1))}
-        className={`${CHIP} ${up ? 'border-brand-300 bg-brand-50 text-ink-900' : ''}`}
+        className={`${ICON} ${up ? 'bg-brand-50 text-brand-700' : ''}`}
       >
-        <ThumbsUp size={12} aria-hidden />
+        <ThumbsUp size={14} aria-hidden />
       </button>
       <button
         type="button"
@@ -73,9 +77,9 @@ export function AskAnswerToolbar({
             }
           })
         }
-        className={`${CHIP} ${down ? 'border-danger-200 bg-danger-50 text-ink-900' : ''}`}
+        className={`${ICON} ${down ? 'bg-danger-50 text-danger-600' : ''}`}
       >
-        <ThumbsDown size={12} aria-hidden />
+        <ThumbsDown size={14} aria-hidden />
       </button>
       <button
         type="button"
@@ -83,11 +87,11 @@ export function AskAnswerToolbar({
         aria-pressed={pinned}
         disabled={busy}
         onClick={() => void run(() => onPin(!pinned))}
-        className={CHIP}
+        className={`${ICON} ${pinned ? 'text-brand-700' : ''}`}
         title={pinned ? 'Remove from the pinned answers on this job' : 'Pin to this job so the whole team sees it'}
       >
-        {pinned ? <PinOff size={12} aria-hidden /> : <Pin size={12} aria-hidden />}
-        {pinned ? 'Unpin' : 'Pin'}
+        {pinned ? <PinOff size={14} aria-hidden /> : <Pin size={14} aria-hidden />}
+        <span className="sr-only">{pinned ? 'Unpin' : 'Pin'}</span>
       </button>
       {pinned ? (
         <button
@@ -101,11 +105,11 @@ export function AskAnswerToolbar({
               }
             })
           }
-          className={CHIP}
+          className={ICON}
           title="Copy a link to this pinned answer for your team"
         >
-          <Link2 size={12} aria-hidden />
-          {linkCopied ? 'Link copied' : 'Copy link'}
+          <Link2 size={14} aria-hidden />
+          <span className="sr-only">{linkCopied ? 'Link copied' : 'Copy link'}</span>
         </button>
       ) : null}
       {askingWhy && down ? (

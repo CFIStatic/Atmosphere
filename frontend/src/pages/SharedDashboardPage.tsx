@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, type SharedJobSummary, type SharedJobRecord, type IntakeCaptureInvite } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
@@ -23,6 +24,8 @@ import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useAuth } from '../context/AuthContext';
 import { HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
+import { useOperationsHeaderSlot } from '../layouts/operationsOutlet';
+import { usePhoneShell } from '../lib/usePhoneShell';
 
 type HandoffState = {
   freshJob?: SharedJobSummary;
@@ -79,6 +82,8 @@ function placeholderRecord(
 export function SharedDashboardPage() {
   const { membership } = useAuth();
   const actionsLocked = useProductActionsLocked();
+  const headerSlot = useOperationsHeaderSlot();
+  const phone = usePhoneShell();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -273,54 +278,92 @@ export function SharedDashboardPage() {
 
   const jobId = record?.job.id ?? requestedJob ?? '';
 
+  const fileTitle = (
+    <h1
+      className={
+        headerSlot
+          ? 'min-w-0 truncate text-lg font-semibold tracking-tight text-ink-900'
+          : 'min-w-0 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl'
+      }
+      title={record?.job.title ?? undefined}
+    >
+      {record?.job.title ?? 'Job'}
+    </h1>
+  );
+
+  const fileActions = (
+    <>
+      {grantViewer ? (
+        <Link
+          to={HOMEOWNER_HUB_PATH}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+          data-testid="your-job-files"
+        >
+          Your job files
+        </Link>
+      ) : record && !viewerOnly ? (
+        <JobFileActions
+          jobId={record.job.id}
+          title={record.job.title}
+          onShare={openShare}
+          compact={Boolean(headerSlot)}
+          onRenamed={(nextTitle) => {
+            setRecord((prev) =>
+              prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
+            );
+            setList((prev) =>
+              (prev ?? []).map((job) =>
+                job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
+              ),
+            );
+            if (requestedJob === record.job.id) {
+              const next: Record<string, string> = { job: record.job.id, title: nextTitle };
+              if (requestedNumber) next.number = requestedNumber;
+              if (section === 'timeline') next.section = 'timeline';
+              else if (openAsk) next.ask = '1';
+              setSearchParams(next, { replace: true, state: location.state });
+            }
+          }}
+          onDuplicated={({ jobId: nextId, title: nextTitle, summary }) => {
+            ensureListed(summary);
+            navigate(jobFilePath(nextId, { title: nextTitle }), {
+              state: { freshJob: summary },
+            });
+          }}
+        />
+      ) : null}
+    </>
+  );
+
+  // Title and actions sit in the top bar beside the account chip, so the
+  // tabs and Chat start right under it. A phone bar only has room for the title.
+  const actionsInBar = Boolean(headerSlot) && !phone;
+  const barContent = headerSlot
+    ? createPortal(
+        <>
+          {fileTitle}
+          {actionsInBar ? <div className="ms-auto shrink-0">{fileActions}</div> : null}
+        </>,
+        headerSlot,
+      )
+    : null;
+
   const fileBody = (
     <div className="flex min-h-0 flex-1 flex-col" data-job-section={section}>
-      <header
-        className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3"
-        data-job-file-header=""
-      >
-        <h1 className="min-w-0 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          {record?.job.title ?? 'Job'}
-        </h1>
-        {grantViewer ? (
-          <Link
-            to={HOMEOWNER_HUB_PATH}
-            className="text-sm font-medium text-brand-600 hover:text-brand-700"
-            data-testid="your-job-files"
-          >
-            Your job files
-          </Link>
-        ) : record && !viewerOnly ? (
-          <JobFileActions
-            jobId={record.job.id}
-            title={record.job.title}
-            onShare={openShare}
-            onRenamed={(nextTitle) => {
-              setRecord((prev) =>
-                prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
-              );
-              setList((prev) =>
-                (prev ?? []).map((job) =>
-                  job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
-                ),
-              );
-              if (requestedJob === record.job.id) {
-                const next: Record<string, string> = { job: record.job.id, title: nextTitle };
-                if (requestedNumber) next.number = requestedNumber;
-                if (section === 'timeline') next.section = 'timeline';
-                else if (openAsk) next.ask = '1';
-                setSearchParams(next, { replace: true, state: location.state });
-              }
-            }}
-            onDuplicated={({ jobId: nextId, title: nextTitle, summary }) => {
-              ensureListed(summary);
-              navigate(jobFilePath(nextId, { title: nextTitle }), {
-                state: { freshJob: summary },
-              });
-            }}
-          />
-        ) : null}
-      </header>
+      {barContent}
+      {!headerSlot || !actionsInBar ? (
+        <header
+          className={
+            headerSlot
+              ? 'mb-2 flex shrink-0 flex-wrap items-center justify-end gap-2'
+              : 'mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3'
+          }
+          data-job-file-header=""
+        >
+          {headerSlot ? null : fileTitle}
+          {fileActions}
+        </header>
+      ) : null}
 
       {actionsLocked && record ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
 
@@ -465,7 +508,7 @@ function JobFileSections({
   const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4" data-job-file-sections="">
+    <div className="flex min-h-0 flex-1 flex-col gap-2" data-job-file-sections="">
       <div className="shrink-0">
         <JobFileSectionBar tabs={tabs} active={active} onChange={onSectionChange} />
       </div>

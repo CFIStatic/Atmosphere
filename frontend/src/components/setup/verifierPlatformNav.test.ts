@@ -124,6 +124,11 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('-webkit-line-clamp: 2');
     expect(verifierHtml).toContain("type: 'rename-thread'");
     expect(verifierHtml).toContain('ask-hist-rename');
+    // One line per chat, empty chats hidden, same-titled chats told apart by date, foldable.
+    expect(verifierHtml).toContain('thread.lastMessageAt !== null');
+    expect(verifierHtml).toContain('ask-hist-date');
+    expect(verifierHtml).toContain('id="ask-history-toggle"');
+    expect(verifierHtml).toContain('text-overflow: ellipsis');
     expect(verifierHtml).not.toContain('id="evidence-nav"');
     expect(verifierHtml).not.toMatch(/<h3[^>]*>Videos<\/h3>/);
     expect(verifierHtml).not.toContain('data-i18n-chrome="videos"');
