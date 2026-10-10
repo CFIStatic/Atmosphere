@@ -98,6 +98,8 @@ jobs:
         run: bash backend/scripts/railwayUp.healthcheck.test.sh
       - name: Railway CLI install pin
         run: bash scripts/installRailwayCli.test.sh
+      - name: docker build retry wrapper
+        run: bash scripts/dockerBuildRetry.test.sh
 
   frontend:
     name: Frontend
@@ -179,7 +181,12 @@ jobs:
     # never points at a Supabase project.
     services:
       postgres:
-        image: mirror.gcr.io/library/postgres:16
+        # Pulled from AWS ECR Public's mirror of the official image, not Docker
+        # Hub: a `services:` container is pulled by the runner before any step,
+        # so it cannot be wrapped in a retry, and Docker Hub throttles
+        # unauthenticated pulls from shared runners (toomanyrequests). The
+        # mirror is the same upstream postgres image with no such limit.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_PASSWORD: postgres
         ports: ['5432:5432']
@@ -209,7 +216,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build backend image
-        run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend
+        run: bash scripts/dockerBuildRetry.sh -f backend/Dockerfile -t atmosphere-backend:ci ./backend
 
   docker-app:
     name: Office app image
@@ -223,7 +230,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build office app image
-        run: docker build -f frontend/Dockerfile -t atmosphere-app:ci .
+        run: bash scripts/dockerBuildRetry.sh -f frontend/Dockerfile -t atmosphere-app:ci .
       - name: Serve the office app with an unusable API_UPSTREAM
         run: |
           set -euo pipefail
@@ -259,7 +266,7 @@ jobs:
       - name: Build and serve the marketing site image
         run: |
           set -euo pipefail
-          docker build -f website/Dockerfile -t atmosphere-website:ci .
+          bash scripts/dockerBuildRetry.sh -f website/Dockerfile -t atmosphere-website:ci .
           # Same unresolved-reference value the office app is booted on: a
           # Railway reference that matches no service resolves to an empty
           # string, so the container receives "http://:".
@@ -280,7 +287,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build internal site image
-        run: docker build -f internal/Dockerfile -t atmosphere-internal:ci .
+        run: bash scripts/dockerBuildRetry.sh -f internal/Dockerfile -t atmosphere-internal:ci .
 
   docker-fieldcapture:
     name: Field Capture image
@@ -290,7 +297,7 @@ jobs:
       - name: Build and serve the Field Capture image
         run: |
           set -euo pipefail
-          docker build -f fieldcapture/Dockerfile -t atmosphere-fieldcapture:ci .
+          bash scripts/dockerBuildRetry.sh -f fieldcapture/Dockerfile -t atmosphere-fieldcapture:ci .
           docker run -d --name atmosphere-fieldcapture-ci \
             -e PORT=8080 -p 18082:8080 atmosphere-fieldcapture:ci
           trap 'docker logs atmosphere-fieldcapture-ci || true; docker rm -f atmosphere-fieldcapture-ci >/dev/null 2>&1 || true' EXIT

@@ -7,7 +7,7 @@
 # This image is not the Work Verification API. A service that inherits
 # `node dist/index.js` fails the deploy probe and never listens on PORT.
 
-FROM mirror.gcr.io/library/nginx:1.27-alpine AS runtime
+FROM nginx:1.27-alpine AS runtime
 
 ENV PORT=8080
 # Local default only. On Railway this is the BFF's private domain (api.upstream,
