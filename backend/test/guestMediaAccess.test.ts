@@ -73,13 +73,9 @@ test('assertGuestMayMintRawMedia allows clean proofs and refuses redacted ones',
   );
 });
 
-test('progress-share video excludes soft-deleted proofs and gates privacy redactions', () => {
-  const start = progressShare.indexOf("'/:token/proof/:proofId/video'");
-  assert.ok(start > 0);
-  const body = progressShare.slice(start, start + 1800);
-  assert.match(body, /\.is\('deleted_at',\s*null\)/);
-  assert.match(body, /assertGuestMayMintRawMedia/);
-  assert.match(body, /ai_findings/);
+test('progress-share video by token is retired (no raw media without sign-in)', () => {
+  assert.match(progressShare, /progressShareRouter\.all\('\/:token\/proof\/\*', retiredGuestApi\)/);
+  assert.doesNotMatch(progressShare, /createSignedPlayableProofUrl/);
 });
 
 test('progress-share token lookup rejects soft-deleted jobs', () => {

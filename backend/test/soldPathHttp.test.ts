@@ -172,8 +172,8 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     assert.equal(session.body.code, 'no_share_session');
 
     const progressSession = await json(url, '/api/progress-share/session');
-    assert.equal(progressSession.status, 401);
-    assert.equal(progressSession.body.code, 'no_share_session');
+    assert.equal(progressSession.status, 410);
+    assert.equal(progressSession.body.code, 'share_api_retired');
 
     const share = await json(url, '/api/job-share/not-a-real-token-xx');
     assert.ok(share.status === 404 || share.status === 503, `job-share got ${share.status}`);
