@@ -28,7 +28,10 @@ export function mergeRoomsByName(rooms: ProofJobRoom[]): ProofJobRoom[] {
       lastSeen: last,
       datesWorked: [...new Set([...(prior.datesWorked ?? []), ...(room.datesWorked ?? [])])].sort(),
       traits: [...new Set([...(prior.traits ?? []), ...(room.traits ?? [])])],
-      sightings: [...prior.sightings, ...room.sightings],
+      // The same moment seen under both spellings is one sighting.
+      sightings: [...prior.sightings, ...room.sightings].filter(
+        (s, i, all) => all.findIndex((o) => o.proofId === s.proofId && o.startSeconds === s.startSeconds) === i,
+      ),
     });
   }
   return [...byName.values()];

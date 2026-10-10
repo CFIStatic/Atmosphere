@@ -181,7 +181,7 @@ export function ProofOfWork({
               <span className="text-success-600">{data.counts.payable} ready to pay</span>
             )}
             {!readOnly && integrityNotice(data.counts) && (
-              <span className="text-caution-700" data-testid="integrity-notice">
+              <span className="text-caution-600" data-testid="integrity-notice">
                 {integrityNotice(data.counts)}
               </span>
             )}
