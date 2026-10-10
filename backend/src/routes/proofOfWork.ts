@@ -216,7 +216,14 @@ import {
   buildJobCustodyExport,
   parseDeviceMetadata,
 } from '../shared/custodyExport.js';
-import { buildJobProofPack } from '../shared/jobProofPack.js';
+import {
+  buildJobProofPack,
+  type ProofPackCustodyInput,
+  type ProofPackEvidenceInput,
+} from '../shared/jobProofPack.js';
+import { clipProcessing } from '../shared/clipProcessing.js';
+import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
+import type { JobAccessPerson } from '../shared/jobAccessRoster.js';
 import {
   proofPackFilename,
   renderJobProofPackPdf,
@@ -4964,14 +4971,19 @@ export async function restoreEvidence(req: Request, res: Response, next: NextFun
 }
 
 /**
- * GET /api/operations/shared/:jobId/proof-pack.pdf?date=YYYY-MM-DD
- * Downloadable PDF proof pack for insurer / GC / homeowner.
- * Optional `date` (or `workDate`) limits the pack to one work day.
- * Privacy-redacted ranges omit private frames and quotes.
+ * GET /api/operations/shared/:jobId/proof-pack.pdf?date=YYYY-MM-DD&tz=Area/City
+ * Downloadable job file report (PDF) for insurer / GC / homeowner: job
+ * details, every file with its metadata, AI summary, analysis, transcript and
+ * custody record, the timeline, and who has access.
+ * Optional `date` (or `workDate`) limits the report to one work day; `tz`
+ * prints times in the requester's zone.
+ * Privacy-redacted ranges omit private frames, quotes and transcript lines.
+ * Custody, access and their timeline rows are office-only: viewer (homeowner)
+ * access gets the report without them.
  */
 export async function jobProofPackPdf(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();
     const workDateFilter = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
 
@@ -5026,6 +5038,68 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
       }
     }
 
+    const includeRecords = access === 'org';
+    const evidenceByProof = new Map<string, ProofPackEvidenceInput>();
+    const custody: ProofPackCustodyInput[] = [];
+    let accessPeople: JobAccessPerson[] = [];
+    if (proofIds.length) {
+      const { data: evidenceRows } = await supabase
+        .from('job_evidence_items')
+        .select('id, title, category, tags, party_trade, byte_size, lat, lon, view_count, last_viewed_at, legal_hold, retention_until')
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId);
+      for (const row of (evidenceRows ?? []) as any[]) {
+        evidenceByProof.set(String(row.id), {
+          title: row.title ?? null,
+          category: row.category ?? null,
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          trade: row.party_trade ?? null,
+          byteSize: row.byte_size == null ? null : Number(row.byte_size),
+          hasLocation: row.lat != null && row.lon != null,
+          viewCount: Number(row.view_count ?? 0),
+          lastViewedAt: row.last_viewed_at ?? null,
+          legalHold: row.legal_hold === true,
+          retentionUntil: row.retention_until ?? null,
+        });
+      }
+    }
+    if (includeRecords) {
+      for (let from = 0; from < 20_000; from += JOB_PROOF_PAGE) {
+        const { data: accessRows, error: accessError } = await supabase
+          .from('job_evidence_access')
+          .select('proof_id, action, actor_label, actor_role, detail, occurred_at')
+          .eq('org_id', orgId)
+          .eq('job_id', req.params.jobId)
+          .order('occurred_at', { ascending: true })
+          .range(from, from + JOB_PROOF_PAGE - 1);
+        if (accessError) break;
+        const batch = (accessRows ?? []) as any[];
+        for (const row of batch) {
+          custody.push({
+            proofId: row.proof_id ?? null,
+            action: row.action,
+            actorLabel: row.actor_label,
+            actorRole: row.actor_role,
+            detail: row.detail ? displayMentionText(row.detail) : null,
+            occurredAt: row.occurred_at,
+          });
+        }
+        if (batch.length < JOB_PROOF_PAGE) break;
+      }
+      try {
+        accessPeople = await loadJobAccessPeople(
+          supabase,
+          admin ?? supabase,
+          orgId,
+          req.params.jobId,
+        );
+      } catch {
+        // The report still ships without the roster.
+        accessPeople = [];
+      }
+    }
+
+    const actor = await actorFor(supabase, userId);
     const pack = buildJobProofPack({
       workDateFilter,
       job: {
@@ -5037,10 +5111,34 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
         workType: (jobRow as any)?.work_type ?? null,
       },
       days: (payload.days ?? []) as any[],
-      videos: videos as any[],
+      videos: videos.map((v) => ({
+        ...v,
+        processingLabel: clipProcessing({
+          proofState: v.proofState,
+          analysisStatus: v.analysisStatus,
+          transcriptStatus: v.transcriptStatus,
+          narrationStatus: v.narrationStatus,
+          summaryState: v.summaryState,
+          hasSummary: v.hasSummary,
+          noSpeech: v.noSpeech,
+          uploading: v.uploading,
+          retrying: v.retrying,
+          transcriptActive: v.transcriptActive,
+          analysisActive: v.analysisActive,
+          narrationActive: v.narrationActive,
+          summaryActive: v.summaryActive,
+          failedChecks: Array.isArray(v.checks)
+            ? v.checks.filter((c: any) => c?.verdict === 'fail').length
+            : 0,
+        }).label,
+      })),
       disputes: (payload.disputes ?? []) as any[],
       punchList: (payload.punchList ?? []) as any[],
       framesByProof,
+      evidenceByProof,
+      custody: includeRecords ? custody : undefined,
+      access: includeRecords ? accessPeople : undefined,
+      exportedBy: actor.actorLabel ?? null,
     });
 
     // Download selected public frame JPEGs (best-effort).
@@ -5060,18 +5158,17 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
       }
     }
 
-    const pdf = await renderJobProofPackPdf(pack);
+    const pdf = await renderJobProofPackPdf(pack, { timeZone: String(req.query.tz ?? '') });
     const filename = proofPackFilename(pack);
 
-    const actor = await actorFor(supabase, userId);
     await recordAccess(supabase, {
       orgId,
       jobId: req.params.jobId,
       proofId: null,
       action: 'exported',
       detail: workDateFilter
-        ? `proof-pack.pdf · work date ${workDateFilter}`
-        : 'proof-pack.pdf · full job',
+        ? `Job file report (PDF) · work date ${workDateFilter}`
+        : 'Job file report (PDF) · full job',
       ...actor,
     });
 

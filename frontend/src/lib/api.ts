@@ -4485,15 +4485,19 @@ export const api = {
       { method: 'GET' },
     ),
 
-  jobProofPackPdf: async (jobId: string, workDate?: string) => {
-    const qs = workDate ? `?date=${encodeURIComponent(workDate)}` : '';
+  jobProofPackPdf: async (jobId: string, workDate?: string, timeZone?: string) => {
+    const params = new URLSearchParams();
+    if (workDate) params.set('date', workDate);
+    if (timeZone) params.set('tz', timeZone);
+    const query = params.toString();
+    const qs = query ? `?${query}` : '';
     const { blob, filename } = await requestBlob(
       `/api/operations/shared/${encodeURIComponent(jobId)}/proof-pack.pdf${qs}`,
       { method: 'GET' },
     );
     return {
       blob,
-      filename: filename ?? `atmosphere-proof-pack-${jobId}.pdf`,
+      filename: filename ?? `atmosphere-job-${jobId}-report.pdf`,
     };
   },
 
