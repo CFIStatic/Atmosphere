@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, type SharedJobSummary, type SharedJobRecord, type IntakeCaptureInvite } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobAskPanel } from '../components/JobAskPanel';
-import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
+import { SharePopup } from '../components/shared/SharePopup';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { JobFileReport } from '../components/shared/JobFileReport';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
@@ -449,13 +449,7 @@ export function SharedDashboardPage() {
       }}
       extra={
         shareFormOpen && record ? (
-          <ShareJobProgressPanel
-            jobId={record.job.id}
-            creating
-            modal
-            onClose={() => setShareFormOpen(false)}
-            onCreatingChange={setShareFormOpen}
-          />
+          <SharePopup jobId={record.job.id} onClose={() => setShareFormOpen(false)} />
         ) : null
       }
     >

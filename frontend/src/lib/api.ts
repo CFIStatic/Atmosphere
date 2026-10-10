@@ -3951,7 +3951,12 @@ export const api = {
     jobId: string,
     input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
   ) =>
-    request<{ party: JobParty }>(`/api/operations/shared/${jobId}/parties`, {
+    request<{
+      party: JobParty;
+      emailed?: boolean;
+      sharePath?: string | null;
+      fieldCapturePath?: string | null;
+    }>(`/api/operations/shared/${jobId}/parties`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

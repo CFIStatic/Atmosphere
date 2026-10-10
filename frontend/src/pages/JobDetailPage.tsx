@@ -11,7 +11,7 @@ import {
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
-import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
+import { SharePopup } from '../components/shared/SharePopup';
 import { ChevronLeftIcon, ShareIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import {
@@ -239,13 +239,7 @@ export function JobDetailPage() {
       back={back}
       extra={
         shareOpen ? (
-          <ShareJobProgressPanel
-            jobId={job.id}
-            creating
-            modal
-            onClose={() => setShareOpen(false)}
-            onCreatingChange={setShareOpen}
-          />
+          <SharePopup jobId={job.id} onClose={() => setShareOpen(false)} />
         ) : null
       }
     >

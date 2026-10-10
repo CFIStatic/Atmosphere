@@ -108,7 +108,7 @@ export function JobFileActions({
           onClick={onShare}
           className={`rounded-lg bg-ink-900 font-semibold text-paper-0 transition hover:bg-ink-800 ${pad}`}
         >
-          Share with homeowner
+          Share
         </button>
       </div>
 

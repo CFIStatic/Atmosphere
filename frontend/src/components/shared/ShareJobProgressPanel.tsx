@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../lib/api';
-import { ChevronRightIcon, SpinnerIcon } from '../icons';
-import { GlassModal } from './GlassModal';
+import { SpinnerIcon } from '../icons';
+import { InviteList } from './InviteList';
 import {
   planRequiredMessage,
   UpgradePrompt,
@@ -15,11 +15,9 @@ import {
  * and every recording — no account, no copy-paste, no expiry picker.
  */
 
-const STATE_STYLE: Record<EvidenceShare['state'], string> = {
-  live: 'bg-success-50 text-success-600',
-  expired: 'bg-paper-200/60 text-ink-500',
-  revoked: 'bg-danger-50 text-danger-600',
-};
+/** What the homeowner tab says it does. Shown under the popup title. */
+export const HOMEOWNER_SHARE_INTRO =
+  'Email a job-progress link. They sign in with a link sent to their email: no payment, no Field Capture seat. Not a film invite.';
 
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
@@ -29,13 +27,12 @@ export function ShareJobProgressPanel({
   creating: creatingProp,
   onCreatingChange,
   modal = false,
-  onClose,
 }: {
   jobId: string;
   creating?: boolean;
   onCreatingChange?: (open: boolean) => void;
+  /** Inside the Share popup: just the form and invite list, no card. */
   modal?: boolean;
-  onClose?: () => void;
 }) {
   const actionsLocked = useProductActionsLocked();
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
@@ -50,7 +47,6 @@ export function ShareJobProgressPanel({
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<CreateEvidenceShareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showPast, setShowPast] = useState(false);
 
   async function load() {
     try {
@@ -104,62 +100,12 @@ export function ShareJobProgressPanel({
     }
   }
 
-  async function revoke(share: EvidenceShare) {
-    await api.revokeEvidenceShare(share.id);
+  async function revoke(id: string) {
+    await api.revokeEvidenceShare(id);
     await load();
   }
 
   const live = (shares ?? []).filter((s) => s.state === 'live');
-  const past = (shares ?? []).filter((s) => s.state !== 'live');
-  const pastLabel = past.every((s) => s.state === 'revoked') ? 'Revoked' : 'Past invites';
-
-  const intro = (
-    <>
-      Email a job-progress link. They can create a quick email + password login — no payment, no
-      Field Capture seat. Not a film invite.
-    </>
-  );
-
-  const row = (share: EvidenceShare) => (
-    <li
-      key={share.id}
-      className={`flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 ${
-        modal ? 'glass-row' : 'border border-line'
-      }`}
-    >
-      <div className="min-w-0">
-        <p
-          className={`truncate text-sm font-medium ${share.state === 'live' ? 'text-ink-900' : 'text-ink-600'}`}
-        >
-          {share.recipientEmail ?? share.label}
-        </p>
-        <p className="mt-0.5 text-xs text-ink-500">
-          {share.openCount > 0
-            ? `Opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
-            : 'Not opened yet'}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATE_STYLE[share.state]}`}
-        >
-          {share.state === 'live' ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-success-600" aria-hidden />
-          ) : null}
-          {share.state}
-        </span>
-        {share.state === 'live' && (
-          <button
-            type="button"
-            onClick={() => void revoke(share)}
-            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-ink-500 transition hover:bg-danger-50 hover:text-danger-600"
-          >
-            Revoke
-          </button>
-        )}
-      </div>
-    </li>
-  );
 
   const body = (
     <>
@@ -212,43 +158,24 @@ export function ShareJobProgressPanel({
         </p>
       )}
 
-      {shares === null ? (
-        <p className="mt-4 text-xs text-ink-500">Loading…</p>
-      ) : shares.length === 0 ? (
-        <p className="mt-4 text-xs text-ink-500">Nobody has been invited yet.</p>
-      ) : (
-        <div className={modal ? 'mt-6' : 'mt-3'}>
-          {modal ? (
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              Invites
-            </p>
-          ) : null}
-          {live.length > 0 ? (
-            <ul className="space-y-2">{live.map(row)}</ul>
-          ) : (
-            <p className="text-xs text-ink-500">No live invites.</p>
-          )}
-          {past.length > 0 ? (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => setShowPast(!showPast)}
-                aria-expanded={showPast}
-                className="inline-flex items-center gap-1 rounded-md py-1 text-xs font-medium text-ink-500 transition hover:text-ink-800"
-              >
-                <ChevronRightIcon
-                  width={14}
-                  height={14}
-                  className={`transition-transform ${showPast ? 'rotate-90' : ''}`}
-                  aria-hidden
-                />
-                {pastLabel} ({past.length})
-              </button>
-              {showPast ? <ul className="mt-2 space-y-2">{past.map(row)}</ul> : null}
-            </div>
-          ) : null}
-        </div>
-      )}
+      <InviteList
+        glass={modal}
+        heading={modal}
+        onRevoke={(id) => void revoke(id)}
+        items={
+          shares === null
+            ? null
+            : shares.map((share) => ({
+                id: share.id,
+                title: share.recipientEmail ?? share.label,
+                meta:
+                  share.openCount > 0
+                    ? `Opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
+                    : 'Not opened yet',
+                state: share.state,
+              }))
+        }
+      />
 
       {live.length > 0 && !creating && (
         <p className="mt-2 text-[10.5px] text-ink-400">
@@ -258,20 +185,14 @@ export function ShareJobProgressPanel({
     </>
   );
 
-  if (modal) {
-    return (
-      <GlassModal title="Share with homeowner" description={intro} onClose={() => onClose?.()}>
-        {body}
-      </GlassModal>
-    );
-  }
+  if (modal) return body;
 
   return (
     <section id="share-job-progress" className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-ink-900">Share with homeowner</h2>
-          <p className="mt-0.5 text-xs text-ink-500">{intro}</p>
+          <p className="mt-0.5 text-xs text-ink-500">{HOMEOWNER_SHARE_INTRO}</p>
         </div>
         <button
           type="button"
