@@ -131,6 +131,28 @@ export function LoginPage() {
     );
   }
 
+  // Opened from a homeowner share link: email-only, no password or sign-up.
+  if (shareToken) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper-100">
+        <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
+          <Logo size="lg" />
+          <ThemeToggle />
+        </header>
+        <main className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-md animate-fade-in-up">
+            <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10" data-testid="homeowner-login">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Your job</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome</h1>
+              <p className="mt-1.5 text-sm text-ink-600">Sign in to see the job shared with you.</p>
+              <HomeownerEmailLink token={shareToken} email={searchParams.get('email')} />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const canSubmit = emailValid && passwordValid && !submitting;
@@ -181,12 +203,8 @@ export function LoginPage() {
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome back</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
-                  {shareToken
-                    ? 'Sign in to see the job shared with you.'
-                    : 'Sign in to your Atmosphere workspace.'}
+                  Sign in to your Atmosphere workspace.
                 </p>
-
-                {shareToken && <HomeownerEmailLink token={shareToken} email={searchParams.get('email')} />}
 
                 {user && (
                   <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">

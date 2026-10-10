@@ -268,7 +268,14 @@ describe('LoginPage from a homeowner share link', () => {
     authState.user = null;
     renderLogin('/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com');
     expect(screen.getByLabelText('Email')).toHaveValue('home@owner.com');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
     expect(screen.getByText('Sign in to see the job shared with you.')).toBeInTheDocument();
+    // Email-only: no password, no contractor sign-in or sign-up.
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Sign in$/ })).toBeNull();
+    expect(screen.queryByText(/Create an account/)).toBeNull();
+    expect(screen.queryByText(/use a password|forgot password/i)).toBeNull();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toContain('Email me a link');
     await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
     expect(progressShareEmailSignIn).toHaveBeenCalledWith('tok_0123456789abcdef0123');
     expect(await screen.findByRole('status')).toHaveTextContent('home@owner.com');
@@ -278,5 +285,7 @@ describe('LoginPage from a homeowner share link', () => {
     authState.user = null;
     renderLogin('/login');
     expect(screen.queryByRole('button', { name: 'Email me a link' })).toBeNull();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByText(/Create an account/)).toBeInTheDocument();
   });
 });

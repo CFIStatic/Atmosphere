@@ -46,7 +46,7 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
   }
 
   return (
-    <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/70 p-4" data-testid="homeowner-email-link">
+    <div className="mt-6" data-testid="homeowner-email-link">
       {state === 'sent' || state === 'verifying' ? (
         <form onSubmit={verify} className="space-y-3">
           <p className="text-sm text-ink-700" role="status">
@@ -77,20 +77,30 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
         </form>
       ) : (
         <>
-          <p className="text-sm text-ink-700">
-            No password needed. We&apos;ll email a one-tap sign-in link
-            {email ? <> to <span className="font-medium text-ink-900">{email}</span></> : null}.
-          </p>
+          {email && (
+            <div>
+              <label htmlFor="homeowner-email" className="mb-1.5 block text-sm font-medium text-ink-700">
+                Email
+              </label>
+              <input
+                id="homeowner-email"
+                type="email"
+                value={email}
+                readOnly
+                className="w-full rounded-lg border border-line bg-paper-100 px-3.5 py-2.5 text-ink-900 outline-none"
+              />
+            </div>
+          )}
+          <p className="mt-3 text-sm text-ink-600">No password needed. We&apos;ll email you a one-tap sign-in link.</p>
           <button
             type="button"
             onClick={() => void send()}
             disabled={state === 'sending'}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 disabled:opacity-50"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 disabled:opacity-50"
           >
             {state === 'sending' && <SpinnerIcon className="animate-spin" />}
             Email me a link
           </button>
-          <p className="mt-3 text-center text-xs text-ink-500">Or sign in with a password below.</p>
         </>
       )}
       {error && (
