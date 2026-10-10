@@ -36,7 +36,11 @@ const record = {
   brief: null,
   revisions: [],
   currentRevision: 1,
-  parties: [],
+  parties: [
+    { id: 'p-1', company: 'Delgado Roofing', trade: null, contactName: null, email: 'crew@delgadoroofing.com', phone: null, role: 'subcontractor', invited_at: '2026-10-01T12:00:00Z', last_seen_at: '2026-10-09T12:00:00Z', revoked_at: null, acknowledgedRevision: null, clear: false, because: '' },
+    { id: 'p-2', company: 'Field Capture', trade: null, contactName: null, email: 'jack@jettx.ai', phone: null, role: 'subcontractor', invited_at: '2026-09-11T12:00:00Z', last_seen_at: null, revoked_at: null, acknowledgedRevision: null, clear: false, because: '' },
+    { id: 'p-3', company: 'Old Crew LLC', trade: null, contactName: null, email: 'old@crew.test', phone: null, role: 'subcontractor', invited_at: '2026-09-01T12:00:00Z', last_seen_at: null, revoked_at: '2026-09-05T12:00:00Z', acknowledgedRevision: null, clear: false, because: '' },
+  ],
   scope: [],
   money: { approved: 0, pending: 0, unpricedApprovals: 0 },
   messages: [],
@@ -243,9 +247,20 @@ await page.goto(
   { waitUntil: 'networkidle' },
 );
 await page.waitForSelector('[data-testid="job-file-section-bar"]', { timeout: 20000 });
-await page.getByRole('button', { name: 'Share with homeowner', exact: true }).click();
+const shareBtn = page.getByRole('button', { name: 'Share', exact: true });
+await (
+  (await shareBtn.count()) ? shareBtn : page.getByRole('button', { name: 'Share with homeowner', exact: true })
+).click();
 await page.getByText('Homeowner email').waitFor();
 await shot('share');
+const crewTab = page.getByRole('tab', { name: 'Subcontractor or crew' });
+if (await crewTab.count()) {
+  await crewTab.click();
+  await page.getByText('Delgado Roofing').waitFor();
+  await shot('share-crew');
+  await page.getByRole('tab', { name: 'Homeowner' }).click();
+  await page.getByText('Homeowner email').waitFor();
+}
 const revoked = page.getByRole('button', { name: /^Revoked \(/ });
 if (await revoked.count()) {
   await revoked.click();
