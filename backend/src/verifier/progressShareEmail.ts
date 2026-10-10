@@ -1,4 +1,5 @@
 import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
+import { viaAtmosphereFromName } from '../lib/mailDeliverability.js';
 
 /**
  * Homeowner (and counsel / bank / adjuster) job-file share email.
@@ -15,11 +16,19 @@ export function progressShareEmail(input: {
   /** The share path, e.g. /progress/<token>. */
   path: string;
   expiresAt?: string | null;
-}): { subject: string; text: string; html: string } {
+}): { subject: string; text: string; html: string; fromName: string } {
   const sharer = input.sharerName?.trim() || null;
+  const job = input.jobTitle?.trim() || null;
   const org = input.orgName.trim() || 'a contractor';
   const from = sharer ? `${sharer} at ${org}` : org;
-  const job = input.jobTitle?.trim() || null;
+  // Who sent it and why, in plain sentences. A two-line body that is mostly
+  // links scores like phishing; a short note that names the sender does not.
+  const intro = job
+    ? `${from} shared the job file for ${job} with you on Atmosphere, so you can follow the work as it happens.`
+    : `${from} shared a job file with you on Atmosphere, so you can follow the work as it happens.`;
+  const why = `You are getting this email because ${org} added ${
+    input.recipientEmail?.trim() || 'you'
+  } to this job. If you were not expecting it, you can ignore it.`;
   const viewLink = absoluteUrl(input.origin, input.path);
   const emailParam = input.recipientEmail
     ? `email=${encodeURIComponent(input.recipientEmail.trim().toLowerCase())}`
@@ -29,16 +38,15 @@ export function progressShareEmail(input: {
     `/signup?intent=homeowner${emailParam ? `&${emailParam}` : ''}&next=${encodeURIComponent(input.path)}`,
   );
 
-  const lines: string[] = ['There is a job file for you on Atmosphere.', '', `From: ${from}`];
-  if (job) lines.push(`Job: ${job}`);
-  lines.push('', 'View progress:', '', `  ${viewLink}`, '');
+  const lines: string[] = ['Hello,', '', intro, '', 'View progress:', '', `  ${viewLink}`, ''];
   lines.push('To save this job for later (email + password):', '', `  ${accountLink}`, '');
 
   if (input.expiresAt) {
-    lines.push(`Link expires ${input.expiresAt.slice(0, 10)}.`);
+    lines.push(`Link expires ${input.expiresAt.slice(0, 10)}.`, '');
   }
 
-  lines.push('', '— Atmosphere');
+  lines.push(`Questions about the work? Contact ${org} directly.`);
+  lines.push('', why, '', 'Atmosphere · atmosphereteam.com');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -50,16 +58,11 @@ export function progressShareEmail(input: {
         <tr><td>
           ${atmosphereWordmarkHtml()}
           <h1 style="margin:16px 0 0;font-size:20px;line-height:1.3;color:#1c1917;">
-            A job file on Atmosphere
+            ${job ? `Job file for ${escapeHtml(job)}` : 'A job file for you'}
           </h1>
           <p style="margin:10px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
-            From ${escapeHtml(from)}
+            ${escapeHtml(intro)}
           </p>
-          ${
-            job
-              ? `<p style="margin:10px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">Job: <strong>${escapeHtml(job)}</strong></p>`
-              : ''
-          }
           <p style="margin:24px 0 0;">
             <a href="${escapeAttr(viewLink)}"
                style="display:inline-block;background:#ea580c;color:#1c1917;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
@@ -77,7 +80,11 @@ export function progressShareEmail(input: {
               ? `<p style="margin:20px 0 0;font-size:12px;line-height:1.4;color:#78716c;">Link expires ${escapeHtml(input.expiresAt.slice(0, 10))}.</p>`
               : ''
           }
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#57534e;">
+            Questions about the work? Contact ${escapeHtml(org)} directly.
+          </p>
           <p style="margin:16px 0 0;font-size:11px;line-height:1.4;color:#78716c;">
+            ${escapeHtml(why)}<br />
             Atmosphere · atmosphereteam.com
           </p>
         </td></tr>
@@ -88,9 +95,10 @@ export function progressShareEmail(input: {
 </html>`;
 
   return {
-    subject: job ? `Job file on Atmosphere · ${job}` : 'A job file on Atmosphere',
+    subject: job ? `${org} shared the job file for ${job}` : `${org} shared a job file with you`,
     text: lines.join('\n'),
     html,
+    fromName: viaAtmosphereFromName(input.orgName),
   };
 }
 

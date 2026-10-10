@@ -1021,6 +1021,7 @@ sharedJobsRouter.post(
           subject: mail.subject,
           text: mail.text,
           html: mail.html,
+          fromName: mail.fromName,
         });
         if (!result.ok) {
           await supabase

@@ -11,6 +11,7 @@ import {
   sameOrganization,
   smtpFromMatchesAccount,
   systemMailTransportOrder,
+  viaAtmosphereFromName,
 } from './mailDeliverability.js';
 
 describe('organizational domain', () => {
@@ -65,6 +66,29 @@ describe('From header / SMTP match', () => {
       formatFromHeader('hello@invites.atmosphereteam.com'),
       'Atmosphere <hello@invites.atmosphereteam.com>',
     );
+  });
+
+  it('quotes display names with specials so From parses as one address', () => {
+    assert.equal(
+      formatFromHeader('hello@invites.atmosphereteam.com', 'Acme, Inc. via Atmosphere'),
+      '"Acme, Inc. via Atmosphere" <hello@invites.atmosphereteam.com>',
+    );
+    assert.equal(
+      formatFromHeader('hello@invites.atmosphereteam.com', 'Ortiz Restoration via Atmosphere'),
+      'Ortiz Restoration via Atmosphere <hello@invites.atmosphereteam.com>',
+    );
+    assert.equal(
+      formatFromHeader('hello@invites.atmosphereteam.com', 'Evil"\r\nBcc: x@y.z'),
+      '"EvilBcc: x@y.z" <hello@invites.atmosphereteam.com>',
+    );
+  });
+
+  it('names the contractor in the From display name', () => {
+    assert.equal(viaAtmosphereFromName('Ortiz Restoration'), 'Ortiz Restoration via Atmosphere');
+    assert.equal(viaAtmosphereFromName('  '), 'Atmosphere');
+    assert.equal(viaAtmosphereFromName(null), 'Atmosphere');
+    assert.equal(viaAtmosphereFromName('Atmosphere'), 'Atmosphere');
+    assert.ok(viaAtmosphereFromName('x'.repeat(200)).length <= 48 + ' via Atmosphere'.length);
   });
 
   it('refuses to claim SMTP can authenticate a foreign From', () => {
