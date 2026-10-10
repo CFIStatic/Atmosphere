@@ -4155,30 +4155,172 @@
     return v === 'fail' ? 2 : v === 'unknown' ? 1 : 0;
   }
 
-  function sortValue(item, key) {
-    if (key === 'preview' || key === 'clip') return Number(item.duration) || 0;
-    if (key === 'job' || key === 'video') {
-      var job = JOBS[item.job] || {};
-      return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
+  /* library-sort:begin
+   * All videos sorting. Pure: only clipInstant / clipStatus /
+   * jobRecordingStatus from the page, so tests can run it on its own.
+   *
+   * Rules (same for the contractor Dashboard and the homeowner portal):
+   * - Date sorts on the real instant: capturedAt, else uploadedAt, else the
+   *   filed workDate read as local noon (day boundaries are local time,
+   *   never UTC). Display strings are never compared.
+   * - A job folder sorts by the clip that leads in the chosen direction:
+   *   its newest clip when descending, its oldest clip when ascending.
+   * - Clips inside an expanded job follow the same key and direction.
+   * - A folder with no clips (Waiting for first clip, date "—") has no
+   *   date, status or uploader and always sits at the bottom, in both
+   *   directions. Job name is the one key where it sorts by its name.
+   * - Ties always break by job / clip name A→Z, then id, whatever the
+   *   direction, so the order never shuffles between renders.
+   */
+  var STATUS_RANK = {
+    'Needs attention': 0, 'Summary unavailable': 0,
+    'Recording': 1, 'Uploading': 2, 'Retrying': 3, 'Transcribing': 3,
+    'Analyzing': 3, 'Summary still processing': 3,
+    'Waiting for AI allowance': 4, 'Waiting to process': 4,
+    'Recorded': 5, 'No speech': 6, 'Analyzed': 6
+  };
+
+  function statusRank(text) {
+    var r = STATUS_RANK[text];
+    return r == null ? 7 : r;
+  }
+
+  function clipSortInstant(e) {
+    var t = clipInstant(e || {}, ['capturedAt', 'uploadedAt', 'workDate']);
+    return t ? t : null;
+  }
+
+  function clipSortValue(e, key) {
+    if (key === 'preview' || key === 'clip') {
+      var d = Number(e.duration);
+      return d > 0 ? d : null;
     }
-    if (key === 'status') return isActiveRecording(item) ? 1 : 0;
-    if (key === 'integrity') return integrityRank(item);
-    if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
-    if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
-    return String(item.uploadedAt || '');
+    if (key === 'recorded') return clipSortInstant(e);
+    if (key === 'status') return statusRank(clipStatus(e).text);
+    if (key === 'uploader') {
+      var who = String(e.person || '').trim();
+      return who ? who + ' ' + String(e.company || '') : null;
+    }
+    // Job name: every clip in a folder shares it, so clips fall back to
+    // their own time (newest first) via the tie-break below.
+    if (key === 'job' || key === 'video') return null;
+    return clipSortInstant(e);
+  }
+
+  function jobSortValue(job, clips, key, dir) {
+    if (key === 'job' || key === 'video') return String((job && job.name) || '').trim() || null;
+    if (!clips.length) return null;
+    if (key === 'recorded') {
+      var best = null;
+      clips.forEach(function (e) {
+        var t = clipSortInstant(e);
+        if (t == null) return;
+        if (best == null || (dir === 'asc' ? t < best : t > best)) best = t;
+      });
+      return best;
+    }
+    if (key === 'status') return statusRank(jobRecordingStatus(clips).text);
+    if (key === 'preview' || key === 'clip') {
+      var total = 0;
+      clips.forEach(function (e) { total += Number(e.duration) || 0; });
+      return total || null;
+    }
+    if (key === 'uploader') {
+      var latest = null;
+      var lt = -Infinity;
+      clips.forEach(function (e) {
+        var t = clipSortInstant(e) || 0;
+        if (t >= lt) { lt = t; latest = e; }
+      });
+      return latest ? clipSortValue(latest, 'uploader') : null;
+    }
+    return null;
+  }
+
+  function compareSortValues(av, bv, dir) {
+    var aNone = av == null || av === '';
+    var bNone = bv == null || bv === '';
+    if (aNone || bNone) return aNone === bNone ? 0 : (aNone ? 1 : -1);
+    var cmp;
+    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+    else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? cmp : -cmp;
+  }
+
+  function nameCompare(a, b) {
+    return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function clipLabelForSort(e) {
+    return e.title || e.name || e.phase || '';
+  }
+
+  /** Clips — inside a folder, or the flat list. */
+  function compareClips(a, b, key, dir) {
+    var cmp = compareSortValues(clipSortValue(a, key), clipSortValue(b, key), dir);
+    if (cmp) return cmp;
+    if (key !== 'recorded') {
+      // Same status / uploader / job: newest first, then oldest-first in asc.
+      cmp = compareSortValues(clipSortInstant(a), clipSortInstant(b), key === 'job' || key === 'video' ? dir : 'desc');
+      if (cmp) return cmp;
+    }
+    cmp = nameCompare(a.jobName, b.jobName) || nameCompare(clipLabelForSort(a), clipLabelForSort(b));
+    if (cmp) return cmp;
+    return nameCompare(a.id, b.id);
+  }
+
+  /**
+   * Folder order. jobs: { key: { name } }, groups: { key: clips[] }.
+   * Returns the keys sorted; does not touch the inputs.
+   */
+  function sortJobKeys(keys, jobs, groups, key, dir) {
+    var rows = keys.map(function (k, i) {
+      var clips = groups[k] || [];
+      var job = jobs[k] || { name: (clips[0] && clips[0].jobName) || '' };
+      return { k: k, i: i, name: job.name || '', empty: !clips.length, v: jobSortValue(job, clips, key, dir) };
+    });
+    rows.sort(function (a, b) {
+      if (key !== 'job' && key !== 'video' && a.empty !== b.empty) return a.empty ? 1 : -1;
+      var cmp = compareSortValues(a.v, b.v, dir);
+      if (cmp) return cmp;
+      cmp = nameCompare(a.name, b.name);
+      if (cmp) return cmp;
+      cmp = nameCompare(a.k, b.k);
+      return cmp || a.i - b.i;
+    });
+    return rows.map(function (r) { return r.k; });
+  }
+
+  function defaultSortDir(key) {
+    return (key === 'job' || key === 'video' || key === 'uploader' || key === 'status') ? 'asc' : 'desc';
+  }
+  /* library-sort:end */
+
+  var SORT_STORE_KEY = 'atm.allVideos.sort';
+  var SORT_KEYS = { preview: 1, job: 1, status: 1, recorded: 1, uploader: 1 };
+
+  function loadSortChoice() {
+    try {
+      var raw = window.sessionStorage && window.sessionStorage.getItem(SORT_STORE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && SORT_KEYS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) {
+        state.sortKey = saved.key;
+        state.sortDir = saved.dir;
+      }
+    } catch (_) { /* private mode / bad JSON: keep the default */ }
+  }
+
+  function saveSortChoice() {
+    try {
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem(SORT_STORE_KEY, JSON.stringify({ key: state.sortKey, dir: state.sortDir }));
+      }
+    } catch (_) { /* ignore */ }
   }
 
   function compareEvidence(a, b) {
-    var key = state.sortKey || 'recorded';
-    var dir = state.sortDir === 'asc' ? 1 : -1;
-    var av = sortValue(a, key);
-    var bv = sortValue(b, key);
-    var cmp = 0;
-    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
-    else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
-    if (cmp) return cmp * dir;
-    // Stable tie-break: newest upload first.
-    return String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || ''));
+    return compareClips(a, b, state.sortKey || 'recorded', state.sortDir === 'asc' ? 'asc' : 'desc');
   }
 
   function syncSortHeaders() {
@@ -4206,9 +4348,10 @@
       state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       state.sortKey = key;
-      // Dates / ranks start newest / highest first; names start A→Z.
-      state.sortDir = (key === 'job' || key === 'uploader') ? 'asc' : 'desc';
+      // Date and length start newest / longest first; names and status A→Z.
+      state.sortDir = defaultSortDir(key);
     }
+    saveSortChoice();
     syncSortHeaders();
     render();
   }
@@ -4458,6 +4601,16 @@
     items.forEach(function (e) {
       var t = clipInstant(e, keys);
       if (t >= bestT) { bestT = t; best = e; }
+    });
+    return best;
+  }
+
+  function earliestClip(items) {
+    var best = null;
+    var bestT = Infinity;
+    items.forEach(function (e) {
+      var t = clipInstant(e, ['capturedAt', 'uploadedAt', 'workDate']);
+      if (t && t < bestT) { bestT = t; best = e; }
     });
     return best;
   }
@@ -4791,7 +4944,11 @@
        the Recorded column still come from the clips the job really has. */
     var jobClips = items.length ? items : EVIDENCE.filter(function (e) { return e.job === key; });
     var status = jobRecordingStatus(jobClips);
-    var latestRecorded = latestClip(jobClips, ['capturedAt', 'workDate', 'uploadedAt']);
+    /* The folder's Date shows the clip it is sorted by: newest normally,
+       oldest while Date is sorted ascending. */
+    var latestRecorded = (state.sortKey === 'recorded' && state.sortDir === 'asc')
+      ? earliestClip(jobClips)
+      : latestClip(jobClips, ['capturedAt', 'workDate', 'uploadedAt']);
     var latestUpload = latestClip(jobClips, ['uploadedAt', 'capturedAt']);
     /* No clip, nothing in the Recorded column — job creation is not a recording. */
     var recordedDay = '—';
@@ -4905,11 +5062,9 @@
           return (groups[k] || []).length > 0 || (q && jobFileMatchesQuery(k, q));
         });
       }
-      if (!jobFileKeys.length) {
-        order.sort(function (ka, kb) {
-          return compareEvidence(groups[ka][0], groups[kb][0]);
-        });
-      }
+      // Folders always follow the column sort — they used to keep the
+      // order jobs were loaded in whenever any job file existed.
+      order = sortJobKeys(order, JOBS, groups, state.sortKey || 'recorded', state.sortDir === 'asc' ? 'asc' : 'desc');
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips · ' +
         order.length + ' job file' + (order.length === 1 ? '' : 's');
       rowsEl.innerHTML = order.map(function (k) {
@@ -9387,6 +9542,7 @@
 
   $('#q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
 
+  loadSortChoice();
   var colheads = document.getElementById('colheads');
   if (colheads) {
     colheads.addEventListener('click', function (ev) {
