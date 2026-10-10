@@ -9,7 +9,6 @@
  *   (or --ids <uuid,uuid>) [--min-seconds 0] [--ttl 21600]
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -27,28 +26,36 @@ const minSeconds = Number(arg('min-seconds', '0'));
 const ids = (arg('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const longest = Number(arg('longest', '5'));
 
-const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-
-let query = db
-  .from('job_proofs')
-  .select('id, org_id, job_id, duration_seconds, byte_size, storage_path, transcript_text, transcript_segments, created_at')
-  .is('deleted_at', null)
-  .not('duration_seconds', 'is', null)
-  .gte('duration_seconds', minSeconds)
-  .order('duration_seconds', { ascending: false })
-  .limit(ids.length ? ids.length : longest);
-if (ids.length) query = query.in('id', ids);
-const { data, error } = await query;
-if (error) throw new Error(error.message);
+// Plain HTTP (no supabase-js): one PostgREST GET and one storage sign POST per
+// clip. Both are reads; nothing here can insert, update, delete or upload.
+const headers = { apikey: key, authorization: `Bearer ${key}` };
+const params = new URLSearchParams({
+  select: 'id,org_id,job_id,duration_seconds,byte_size,storage_path,transcript_text,transcript_segments,created_at',
+  deleted_at: 'is.null',
+  duration_seconds: `gte.${minSeconds}`,
+  order: 'duration_seconds.desc',
+  limit: String(ids.length ? ids.length : longest),
+});
+if (ids.length) params.set('id', `in.(${ids.join(',')})`);
+const res = await fetch(`${url}/rest/v1/job_proofs?${params}`, { headers });
+if (!res.ok) throw new Error(`select failed: ${res.status}`);
+const data = (await res.json()) as Array<Record<string, unknown>>;
 
 const items = [];
-for (const p of data ?? []) {
-  const signed = await db.storage.from('job-proofs').createSignedUrl(p.storage_path as string, ttl);
-  if (signed.error || !signed.data?.signedUrl) {
-    console.warn(`skip ${p.id}: ${signed.error?.message ?? 'no url'}`);
+for (const p of data) {
+  const path = String(p.storage_path).split('/').map(encodeURIComponent).join('/');
+  const signed = await fetch(`${url}/storage/v1/object/sign/job-proofs/${path}`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ expiresIn: ttl }),
+  });
+  const body = (await signed.json().catch(() => ({}))) as { signedURL?: string; signedUrl?: string };
+  const rel = body.signedURL ?? body.signedUrl;
+  if (!signed.ok || !rel) {
+    console.warn(`skip ${String(p.id)}: sign ${signed.status}`);
     continue;
   }
-  items.push({ ...p, signedUrl: signed.data.signedUrl, signedUntil: new Date(Date.now() + ttl * 1000).toISOString() });
+  items.push({ ...p, signedUrl: `${url}/storage/v1${rel.startsWith('/') ? '' : '/'}${rel}`, signedUntil: new Date(Date.now() + ttl * 1000).toISOString() });
 }
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'manifest.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), items }, null, 2));
