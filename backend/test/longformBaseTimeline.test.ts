@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { captionTimes, planSegments } from '../src/longform/segmentPlan.js';
 import { classifyFrameSignal, parseAstatsRms, parseSignalstats } from '../src/longform/deadTime.js';
-import { captionFrames, parseCaptions, type GeminiCall } from '../src/longform/captions.js';
+import { captionFrames, parseCaptions, type CaptionActivity, type GeminiCall } from '../src/longform/captions.js';
+
+type Row = Record<string, unknown>;
 import { buildMinuteTimeline, collapseDeadRanges, timelineCoverage } from '../src/longform/timeline.js';
 import { segmentBackoffMs } from '../src/longform/segmentJobs.js';
 import { runSegmentWorkerOnce, sweepBaseTimeline } from '../src/longform/segmentWorker.js';
@@ -70,7 +72,7 @@ test('every frame gets a row; unsure frames are re-read by the stronger model on
 });
 
 test('timeline: one entry per minute, dead stretches labelled not skipped, speech wins', () => {
-  const cap = (t: number, activity: any, caption: string) => ({ atSeconds: t, caption, activity, room: null, confidence: 0.9, model: 'm', status: 'ok' as const });
+  const cap = (t: number, activity: CaptionActivity, caption: string) => ({ atSeconds: t, caption, activity, room: null, confidence: 0.9, model: 'm', status: 'ok' as const });
   const captions = [
     ...[0, 15, 30, 45].map((t) => cap(t, 'site_work', 'Framing kitchen wall')),
     ...[60, 75, 90, 105, 120, 135, 150, 165].map((t) => cap(t, 'driving', 'Truck dashboard, road ahead')),
@@ -105,7 +107,7 @@ test('worker and sweep do nothing while the switch is off', async () => {
 
 test('worker: claim, caption, complete, assemble timeline (in-memory db)', async () => {
   process.env.VIDEO_BASE_TIMELINE = 'true';
-  const db: Record<string, any[]> = {
+  const db: Record<string, Row[]> = {
     job_proofs: [{ id: 'p1', org_id: 'o1', storage_path: 's/p1.mp4', duration_seconds: 120, transcript_segments: [{ start: 70, end: 75, text: 'Measure twice' }] }],
     video_segment_jobs: [
       { id: 'j1', proof_id: 'p1', org_id: 'o1', seg_index: 0, start_seconds: 0, end_seconds: 120, status: 'queued', attempts: 0, cost_nanos: 0, output: null },
@@ -113,16 +115,16 @@ test('worker: claim, caption, complete, assemble timeline (in-memory db)', async
     video_timelines: [],
   };
   const q = (table: string) => {
-    const filters: Array<(r: any) => boolean> = [];
-    let patch: any = null;
-    const api: any = {
+    const filters: Array<(r: Row) => boolean> = [];
+    let patch: Row | null = null;
+    const api: Record<string, unknown> = {
       select: () => api,
-      eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), api),
+      eq: (k: string, v: unknown) => (filters.push((r: Row) => r[k] === v), api),
       order: () => api,
-      update: (p: any) => ((patch = p), api),
-      upsert: async (row: any) => (db[table]!.push(row), { error: null }),
+      update: (p: Row) => ((patch = p), api),
+      upsert: async (row: Row) => (db[table]!.push(row), { error: null }),
       maybeSingle: async () => ({ data: db[table]!.find((r) => filters.every((f) => f(r))) ?? null, error: null }),
-      then: (res: any) => {
+      then: (res: (v: { data: Row[]; error: null }) => unknown) => {
         const rows = db[table]!.filter((r) => filters.every((f) => f(r)));
         if (patch) rows.forEach((r) => Object.assign(r, patch));
         return Promise.resolve({ data: rows, error: null }).then(res);
@@ -130,12 +132,12 @@ test('worker: claim, caption, complete, assemble timeline (in-memory db)', async
     };
     return api;
   };
-  const admin: any = {
+  const admin = {
     from: q,
     rpc: async () => {
       const row = db.video_segment_jobs!.find((r) => r.status === 'queued');
       if (!row) return { data: null, error: null };
-      Object.assign(row, { status: 'running', lease_owner: 'w', attempts: row.attempts + 1 });
+      Object.assign(row, { status: 'running', lease_owner: 'w', attempts: Number(row.attempts) + 1 });
       return { data: row, error: null };
     },
   };
@@ -148,12 +150,12 @@ test('worker: claim, caption, complete, assemble timeline (in-memory db)', async
     call: (async ({ parts }) => ({
       model: 'gemini-3.5-flash-lite',
       usage: null,
-      text: JSON.stringify({ frames: parts.filter((p: any) => 'inlineData' in p).map((_: unknown, i: number) => ({ frame: i, caption: 'Hanging drywall', activity: 'site_work', confidence: 0.9 })) }),
+      text: JSON.stringify({ frames: parts.filter((p) => 'inlineData' in p).map((_: unknown, i: number) => ({ frame: i, caption: 'Hanging drywall', activity: 'site_work', confidence: 0.9 })) }),
     })) as GeminiCall,
   };
   assert.equal(await runSegmentWorkerOnce(admin, deps, 'w'), true);
-  assert.equal(db.video_segment_jobs![0].status, 'done');
-  const tl = db.video_timelines![0];
+  assert.equal(db.video_segment_jobs![0]!.status, 'done');
+  const tl = db.video_timelines![0] as { minutes: Array<{ speech: string }>; coverage_pct: number };
   assert.equal(tl.minutes.length, 2);
   assert.equal(tl.coverage_pct, 100);
   assert.match(tl.minutes[1].speech, /Measure twice/);

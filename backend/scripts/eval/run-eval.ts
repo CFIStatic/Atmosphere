@@ -20,7 +20,10 @@ import { captionFrames, defaultGeminiCall, type GeminiCall } from '../../src/lon
 import { readSegmentMedia, type SegmentMedia } from '../../src/longform/media.js';
 import { planSegments } from '../../src/longform/segmentPlan.js';
 import { buildMinuteTimeline, collapseDeadRanges, formatClock, type TimedLine } from '../../src/longform/timeline.js';
-import { modelPriceTable, tokenCostUsd } from '../../src/metering/modelPriceTable.js';
+import { modelPriceTable, tokenCostUsd, type TokenCounts } from '../../src/metering/modelPriceTable.js';
+
+type TranscriptRow = { start: number; end?: number | null; text?: string | null; speaker?: string | null };
+type ManifestItem = { id: string; duration_seconds: number | string; signedUrl: string; transcript_segments?: TranscriptRow[] | null };
 import { scoreVariant, PASS_BAR, type MinuteLabel, type VariantScore } from './metrics.js';
 import { SpendGuard } from './spendGuard.js';
 
@@ -45,12 +48,12 @@ const rereadModel = arg('reread', 'gemini-3.8-flash')!;
 const guard = new SpendGuard(Number(arg('budget', process.env.EVAL_BUDGET_USD ?? '150')));
 const maxHours = Number(arg('max-hours', '24'));
 
-const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { items: any[] };
+const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { items: ManifestItem[] };
 const table = modelPriceTable();
 
 /** Worst case for one caption call: ~1.3k tokens per frame in, 120 out per frame, at the model's rates. */
 function worstCaseUsd(model: string, frames: number): number {
-  return (tokenCostUsd(table, { modelId: model, tokens: { inputTokens: frames * 1300 + 1500, outputTokens: frames * 120 + 2000 } as any }) ?? 0.05) * 1.5;
+  return (tokenCostUsd(table, { modelId: model, tokens: { inputTokens: frames * 1300 + 1500, outputTokens: frames * 120 + 2000 } as TokenCounts }) ?? 0.05) * 1.5;
 }
 
 function guardedCall(): GeminiCall {
@@ -58,13 +61,13 @@ function guardedCall(): GeminiCall {
     const frames = input.parts.filter((p) => 'inlineData' in p).length;
     guard.reserve(worstCaseUsd(input.model, frames));
     const res = await defaultGeminiCall(input);
-    guard.record(res.usage ? tokenCostUsd(table, { modelId: res.model, tokens: res.usage as any }) ?? 0 : 0);
+    guard.record(res.usage ? tokenCostUsd(table, { modelId: res.model, tokens: res.usage as unknown as TokenCounts }) ?? 0 : 0);
     return res;
   };
 }
 
 const mediaCache = new Map<string, SegmentMedia>();
-async function media(item: any, interval: number): Promise<SegmentMedia> {
+async function media(item: ManifestItem, interval: number): Promise<SegmentMedia> {
   const k = `${item.id}:${interval}`;
   const hit = mediaCache.get(k);
   if (hit) return hit;
@@ -80,13 +83,13 @@ async function media(item: any, interval: number): Promise<SegmentMedia> {
   return out;
 }
 
-function transcriptOf(item: any): TimedLine[] {
+function transcriptOf(item: ManifestItem): TimedLine[] {
   return Array.isArray(item.transcript_segments)
-    ? item.transcript_segments.map((s: any) => ({ start: Number(s.start), end: Number(s.end ?? s.start), text: String(s.text ?? ''), speaker: s.speaker ?? null }))
+    ? item.transcript_segments.map((s) => ({ start: Number(s.start), end: Number(s.end ?? s.start), text: String(s.text ?? ''), speaker: s.speaker ?? null }))
     : [];
 }
 
-async function runVariant(item: any, model: string, interval: number, reread: boolean) {
+async function runVariant(item: ManifestItem, model: string, interval: number, reread: boolean) {
   const before = guard.spentUsd;
   const m = await media(item, interval);
   const captions = await captionFrames(m.frames, {
@@ -133,7 +136,7 @@ try {
     }
   }
 } catch (err) {
-  if ((err as any)?.spendCap) console.error(String((err as Error).message));
+  if ((err as { spendCap?: boolean })?.spendCap) console.error(String((err as Error).message));
   else throw err;
 }
 
