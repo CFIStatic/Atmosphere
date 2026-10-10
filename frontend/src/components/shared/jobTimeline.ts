@@ -466,6 +466,10 @@ function custodyEvents(source: TimelineSource, out: TimelineEvent[]) {
       else if (action === 'released') line = `${actorName ?? 'Someone'} lifted the hold on ${label}`;
       else if (action === 'restored') line = `${actorName ?? 'Someone'} restored ${label}`;
       else if (action === 'deleted') line = `${actorName ?? 'Someone'} removed ${label} from the library`;
+      else if (action === 'duplicated') {
+        const detail = text(entry.detail);
+        line = `${actorName ?? 'Someone'} copied ${label}${detail ? ` ${detail}` : ''}`;
+      }
       else if (action === 'exported') {
         const detail = text(entry.detail);
         const report = /proof-pack|evidence/i.test(detail);

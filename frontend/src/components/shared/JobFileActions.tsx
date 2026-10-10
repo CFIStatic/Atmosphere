@@ -6,8 +6,9 @@ import { SpinnerIcon } from '../icons';
 /**
  * Rename or duplicate the open job file.
  *
- * A duplicate is a new folder with the same site, brief, and scope. Clips
- * and invites stay on the original — those are the record, not a template.
+ * A duplicate is a full copy of the job file: videos, transcripts, Chat,
+ * files, brief, scope and people. Share links and the custody history stay on
+ * the original.
  * Product UI never deletes job files or evidence.
  */
 
@@ -132,7 +133,7 @@ export function JobFileActions({
             <p className="mt-1 text-sm text-ink-600">
               {mode === 'rename'
                 ? 'The name is what shows on the dashboard and in the library.'
-                : 'Creates a new job file with the same site, brief, and scope. Footage and people stay on the original.'}
+                : 'Creates a full copy: videos, transcripts, Chat, files, brief, scope and people. Share links are not copied, so invite people to the copy again.'}
             </p>
             <label className="mt-4 block text-xs font-medium text-ink-600">
               Name

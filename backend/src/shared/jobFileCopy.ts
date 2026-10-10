@@ -3,9 +3,9 @@ import { titleFromSiteAddress } from '../verifier/intakePropose.js';
 /**
  * Job-file identity: the name the office typed, and a copy of the file.
  *
- * Footage, parties, and holds stay on the original. A duplicate is a new
- * folder with the same site, brief, and scope so a similar job does not
- * start from a blank intake.
+ * A duplicate is a full copy of the job file (see the duplicate route and
+ * duplicate_job_file_contents). Share links, custody history and legal holds
+ * stay on the original.
  */
 
 export const JOB_FILE_TITLE_MIN = 2;
@@ -64,7 +64,7 @@ export function scopeStateForDuplicate(state: string | null | undefined): string
   return 'included';
 }
 
-/** Latest-revision scope, without party ownership — those people are not copied. */
+/** Latest-revision scope lines, as the job file summary counts them. */
 export function scopeLinesForDuplicate(
   items: Array<{
     title?: string | null;

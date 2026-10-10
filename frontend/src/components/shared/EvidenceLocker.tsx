@@ -69,6 +69,7 @@ const ACTION_WORD: Record<string, string> = {
   released: 'Hold lifted',
   shared: 'Link shared',
   deleted: 'Removed from library',
+  duplicated: 'Copied between job files',
 };
 
 const ACTION_DOT: Record<string, string> = {
@@ -82,6 +83,7 @@ const ACTION_DOT: Record<string, string> = {
   released: 'bg-caution-600',
   shared: 'bg-brand-600',
   deleted: 'bg-ink-400',
+  duplicated: 'bg-ink-400',
 };
 
 const when = (iso: string | null) =>
