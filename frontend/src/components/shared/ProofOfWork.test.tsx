@@ -11,6 +11,7 @@ const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
 const jobEpisodes = vi.fn();
 const evidenceLibrary = vi.fn();
+const proofDownloadUrl = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   api: {
@@ -20,6 +21,7 @@ vi.mock('../../lib/api', () => ({
     proofQuestions: (...args: unknown[]) => proofQuestions(...args),
     jobEpisodes: (...args: unknown[]) => jobEpisodes(...args),
     evidenceLibrary: (...args: unknown[]) => evidenceLibrary(...args),
+    proofDownloadUrl: (...args: unknown[]) => proofDownloadUrl(...args),
     episodePhysicalWork: vi.fn(),
     decideProofDay: vi.fn(),
     reanalyseProofDay: vi.fn(),
@@ -94,6 +96,8 @@ describe('ProofOfWork video collection', () => {
     jobEpisodes.mockResolvedValue({ episodes: [] });
     evidenceLibrary.mockReset();
     evidenceLibrary.mockResolvedValue({ items: [] });
+    proofDownloadUrl.mockReset();
+    proofDownloadUrl.mockResolvedValue({ url: 'https://storage.test/clip.mp4?download=' });
   });
 
   it('lists every uploaded video once with duration and status — no separate transcripts section', async () => {
@@ -123,9 +127,8 @@ describe('ProofOfWork video collection', () => {
     expect(screen.queryByTestId('hear-the-mic')).not.toBeInTheDocument();
   });
 
-  it('opens the named clip on a dispute tap and seeks once metadata is ready', async () => {
-    const user = userEvent.setup();
-    const withDispute: ProofResponse = {
+  it('keeps disputes and rooms off the library', () => {
+    const withExtras: ProofResponse = {
       ...catalog,
       disputes: [
         {
@@ -144,28 +147,25 @@ describe('ProofOfWork video collection', () => {
           scopeTitle: null,
         },
       ],
+      rooms: [
+        {
+          roomKey: 'kitchen::',
+          roomName: 'kitchen',
+          firstSeen: '2026-08-20',
+          lastSeen: '2026-08-20',
+          datesWorked: ['2026-08-20'],
+          traits: ['cabinet'],
+          sightings: [],
+        },
+      ],
     };
-    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
-    render(
-      <ProofOfWork
-        jobId="job-1"
-        heading="Videos"
-        initialData={withDispute}
-        videoFetcher={videoFetcher}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /Show me the dispute/i }));
-    await user.click(screen.getByText('Filmed on site'));
-
-    await waitFor(() => expect(videoFetcher).toHaveBeenCalledWith('proof-morning'));
-    const video = (await screen.findByTestId('job-file-player')) as HTMLVideoElement;
-    expect(video.getAttribute('src')).toBe('https://signed.test/morning.mp4');
-    expect(video).toHaveAttribute('data-seek', '41');
-    Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 });
-    video.dispatchEvent(new Event('loadedmetadata'));
-    video.dispatchEvent(new Event('seeked'));
-    expect(video.currentTime).toBe(41);
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={withExtras} />);
+    expect(screen.queryByRole('button', { name: /Show me the dispute/i })).toBeNull();
+    expect(screen.queryByTestId('job-rooms')).toBeNull();
+    expect(screen.queryByText('kitchen')).toBeNull();
+    // Moment chips live inside an opened clip, not on the grid.
+    expect(screen.queryByTestId('job-video-moments')).toBeNull();
+    expect(screen.getAllByTestId('job-video-row')).toHaveLength(2);
   });
 
   it('loads a signed URL when Play is clicked and shows transcript with Copy', async () => {
@@ -180,7 +180,7 @@ describe('ProofOfWork video collection', () => {
       />,
     );
 
-    const playButtons = screen.getAllByRole('button', { name: 'Play' });
+    const playButtons = screen.getAllByRole('button', { name: /^Play / });
     await user.click(playButtons[0]!);
 
     expect(videoFetcher).toHaveBeenCalledWith('proof-morning');
@@ -206,7 +206,7 @@ describe('ProofOfWork video collection', () => {
       />,
     );
 
-    await user.click(screen.getAllByRole('button', { name: 'Play' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /^Play / })[0]!);
     expect(await screen.findByTestId('job-file-mute')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-volume')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-cc')).not.toBeDisabled();
@@ -428,7 +428,7 @@ describe('ProofOfWork video collection', () => {
         showCollectionAsk={false}
       />,
     );
-    await user.click(screen.getAllByRole('button', { name: 'Play' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /^Play / })[0]!);
     await user.click(await screen.findByTestId('copy-transcript'));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(String(writeText.mock.calls[0]![0])).toMatch(/We have not started the subfloor yet/);
@@ -467,77 +467,86 @@ describe('ProofOfWork video collection', () => {
     expect(thumbs[1]).toHaveTextContent('10:00');
   });
 
-  it('jumps to a moment from the row', async () => {
+  it('jumps to a moment inside the opened clip', async () => {
     const user = userEvent.setup();
-    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} />);
-    const moments = screen.getAllByTestId('job-video-moments');
-    expect(moments).toHaveLength(1);
-    const chip = screen.getByRole('button', {
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} videoFetcher={videoFetcher} />,
+    );
+    await user.click(screen.getAllByRole('button', { name: /^Play / })[0]!);
+    const chip = await screen.findByRole('button', {
       name: 'Jump to 0:08: We have not started the subfloor yet.',
     });
+    expect(screen.getByTestId('job-video-expansion')).toContainElement(chip);
     await user.click(chip);
-    expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
+    expect(await screen.findByTestId('job-file-player')).toHaveAttribute('data-seek', '8');
   });
 
-  it('shows room chips and the job rooms list, and a chip seeks into the clip', async () => {
+  it('searches, filters by who filmed, and sorts the library', async () => {
     const user = userEvent.setup();
-    const withRooms: ProofResponse = {
+    const library: ProofResponse = {
       ...catalog,
-      rooms: [
-        {
-          roomKey: 'kitchen::',
-          roomName: 'kitchen',
-          firstSeen: '2026-08-20',
-          lastSeen: '2026-08-20',
-          datesWorked: ['2026-08-20'],
-          traits: ['cabinet'],
-          sightings: [
-            {
-              proofId: 'proof-morning',
-              clipTitle: 'Morning clip',
-              workDate: '2026-08-20',
-              startSeconds: 12,
-              findings: [
-                { kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 },
-              ],
-            },
-          ],
-        },
-      ],
       videos: [
-        {
-          ...catalog.videos![0]!,
-          rooms: [
-            {
-              roomName: 'room unclear',
-              roomKey: 'unclear::',
-              startSeconds: 0,
-              endSeconds: 12,
-              confidence: 0.3,
-              findings: [],
-            },
-            {
-              roomName: 'kitchen',
-              roomKey: 'kitchen::',
-              startSeconds: 12,
-              endSeconds: 40,
-              confidence: 0.8,
-              findings: [
-                { kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 },
-              ],
-            },
-          ],
-        },
-        catalog.videos![1]!,
+        { ...catalog.videos![0]!, id: 'clip-a', workDate: '2026-08-18', person: 'Dana Ruiz', durationSeconds: 30 },
+        { ...catalog.videos![0]!, id: 'clip-b', workDate: '2026-08-22', person: 'Sam Lee', durationSeconds: 300 },
+        { ...catalog.videos![0]!, id: 'clip-c', workDate: '2026-08-20', person: 'Dana Ruiz', durationSeconds: 90 },
       ],
     };
-    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={withRooms} />);
-    expect(screen.getByTestId('job-rooms')).toHaveTextContent('kitchen');
-    expect(screen.getByTestId('job-rooms')).toHaveTextContent('Installs the cabinet boxes along the east wall.');
-    const chip = screen.getByRole('button', { name: 'Jump to kitchen at 0:12' });
-    expect(screen.getByTestId('clip-room-chips')).toContainElement(chip);
-    expect(screen.queryByRole('button', { name: /room unclear/i })).toBeNull();
-    await user.click(chip);
-    expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
+    evidenceLibrary.mockResolvedValue({
+      items: [
+        { id: 'clip-a', jobId: 'job-1', title: 'Kitchen demo' },
+        { id: 'clip-b', jobId: 'job-1', title: 'Drywall walkthrough' },
+        { id: 'clip-c', jobId: 'job-1', title: 'Kitchen cabinets' },
+      ],
+    });
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={library} />);
+    const titles = () => screen.getAllByTestId('job-video-title').map((el) => el.textContent);
+
+    await waitFor(() => expect(titles()).toEqual(['Drywall walkthrough', 'Kitchen cabinets', 'Kitchen demo']));
+
+    await user.selectOptions(screen.getByLabelText('Sort videos'), 'oldest');
+    expect(titles()).toEqual(['Kitchen demo', 'Kitchen cabinets', 'Drywall walkthrough']);
+    await user.selectOptions(screen.getByLabelText('Sort videos'), 'longest');
+    expect(titles()).toEqual(['Drywall walkthrough', 'Kitchen cabinets', 'Kitchen demo']);
+
+    await user.type(screen.getByLabelText('Search videos'), 'kitchen');
+    expect(titles()).toEqual(['Kitchen cabinets', 'Kitchen demo']);
+    await user.clear(screen.getByLabelText('Search videos'));
+    await user.type(screen.getByLabelText('Search videos'), 'sam');
+    expect(titles()).toEqual(['Drywall walkthrough']);
+    await user.clear(screen.getByLabelText('Search videos'));
+
+    await user.selectOptions(screen.getByLabelText('Filmed by'), 'Dana Ruiz');
+    expect(titles()).toEqual(['Kitchen cabinets', 'Kitchen demo']);
+
+    await user.type(screen.getByLabelText('Search videos'), 'drywall');
+    expect(screen.getByTestId('job-video-none')).toHaveTextContent('No videos match.');
+    await user.click(screen.getByRole('button', { name: 'Show all' }));
+    expect(titles()).toHaveLength(3);
+  });
+
+  it('offers Download only where the office may keep a copy', async () => {
+    const user = userEvent.setup();
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    const { unmount } = render(
+      <ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} videoFetcher={videoFetcher} />,
+    );
+    await user.click(screen.getAllByRole('button', { name: /^Play / })[0]!);
+    expect(await screen.findByTestId('job-video-expansion')).toBeInTheDocument();
+    expect(screen.queryByTestId('download-video')).toBeNull();
+    unmount();
+
+    render(
+      <ProofOfWork
+        jobId="job-1"
+        heading="Videos"
+        initialData={catalog}
+        videoFetcher={videoFetcher}
+        allowDownload
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: /^Play / })[0]!);
+    await user.click(await screen.findByTestId('download-video'));
+    await waitFor(() => expect(proofDownloadUrl).toHaveBeenCalledWith('proof-morning'));
   });
 });

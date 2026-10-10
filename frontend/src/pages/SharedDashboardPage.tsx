@@ -528,6 +528,7 @@ function JobFileSections({
             heading="Videos"
             showCollectionAsk={false}
             readOnly={viewerOnly}
+            allowDownload={!grantViewer}
           />
         ) : null}
 

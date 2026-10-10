@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   api,
-  type ProofJobRoom,
   type ProofResponse,
   type ProofQuestion,
   type ProofVideoRecord,
@@ -21,7 +20,6 @@ import { useVideoSeek } from '../../lib/videoSeek';
 import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
-import { ShowDispute } from '../analysis/ShowDispute';
 import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
 import { SpeakerRenameControl, type ClipSpeaker } from '../analysis/SpeakerRenameControl';
 import { expandMentionTokens } from '../../lib/mentions';
@@ -33,9 +31,10 @@ import { loadOrgMentions } from '../mentions/useOrgMentions';
 /**
  * Proof of work — light job-file Videos surface.
  *
- * One clip list: expand/Play shows the player and transcript (Copy) together.
- * Dense punch / playbook / Glance walls stay with the clip player / Ask —
- * not piled onto the job file. Evidence custody goes in the job file report (JobFileReport).
+ * The job's video library: every recorded clip as a searchable, sortable grid.
+ * Opening one shows the player, its moments, transcript (Copy) and Download.
+ * Disputes, rooms and dense analysis stay with Ask and the job file report
+ * (JobFileReport) — not piled onto the library.
  */
 
 function matchSeekVideo(
@@ -64,6 +63,7 @@ export function ProofOfWork({
   initialData,
   videoFetcher,
   showCollectionAsk = true,
+  allowDownload = false,
 }: {
   jobId?: string;
   heading?: string;
@@ -72,6 +72,8 @@ export function ProofOfWork({
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   /** Office job file already pins Ask — hide the second collection form. */
   showCollectionAsk?: boolean;
+  /** Office copy of the original file. Off for homeowners and guests. */
+  allowDownload?: boolean;
 }) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
@@ -170,47 +172,24 @@ export function ProofOfWork({
     }
   }
 
+  const allVideos = data?.videos ?? [];
+  const totalSeconds = allVideos.reduce((sum, video) => sum + (video.durationSeconds ?? 0), 0);
+
   return (
     <section className="rounded-xl glass-card p-5" data-job-section="videos" data-testid="proof-of-work">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-ink-900">{heading}</h2>
-        {data && (
-          <span className="flex flex-wrap gap-3 text-xs">
-            {data.counts.payable > 0 && (
-              <span className="text-success-600">{data.counts.payable} ready to pay</span>
-            )}
-            {data.counts.contradicted > 0 && (
-              <span className="text-danger-600">{data.counts.contradicted} failed a check</span>
-            )}
-            {(data.counts.analysing ?? 0) > 0 && (
-              <span className="text-ink-500">{data.counts.analysing} being read</span>
-            )}
-            {(data.counts.videos ?? data.videos?.length ?? 0) > 0 && (
-              <span className="text-ink-500">
-                {data.counts.videos ?? data.videos?.length} video
-                {(data.counts.videos ?? data.videos?.length) === 1 ? '' : 's'} on file
-              </span>
-            )}
+        {allVideos.length > 0 && (
+          <span className="text-xs text-ink-500" data-testid="job-video-count">
+            {allVideos.length} video{allVideos.length === 1 ? '' : 's'} on file
+            {totalSeconds > 0 ? ` · ${formatClipLength(totalSeconds)} in all` : ''}
           </span>
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        Every uploaded clip is kept. Expand a row to play and read the transcript — dense analysis
-        stays with Ask, not piled onto this file.
+        Every video recorded on this job, kept in one place. Open one to watch it, read the
+        transcript, or download it.
       </p>
-
-      {data && ((data.disputes?.length ?? 0) > 0) && (
-        <div className="mt-3">
-          <ShowDispute
-            disputes={data.disputes ?? []}
-            onSeek={(moment) => {
-              if (moment.proofId) {
-                applyClipSeek(moment.proofId, moment.seekSeconds);
-              }
-            }}
-          />
-        </div>
-      )}
 
       {freshNotice && (
         <p role="status" className="mb-3 mt-3 rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">
@@ -232,13 +211,11 @@ export function ProofOfWork({
         </p>
       ) : (
         <>
-          {data.rooms?.length ? (
-            <JobRooms rooms={data.rooms} onSeek={applyClipSeek} />
-          ) : null}
           <VideoCatalog
             jobId={jobId}
             videos={data.videos ?? []}
             videoFetcher={videoFetcher}
+            allowDownload={allowDownload && !readOnly && Boolean(jobId)}
             seekProofId={seekProofId}
             seekAt={seekAt}
             seekNonce={seekNonce}
@@ -504,60 +481,88 @@ function ClipSpeakerList({ jobId, proofId }: { jobId: string; proofId: string })
   );
 }
 
-/** Leading "room unclear" spans are not chips. Unknown evidence stays off the row. */
-function clipRoomChips(rooms: ProofVideoRecord['rooms']): NonNullable<ProofVideoRecord['rooms']> {
-  return (rooms ?? []).filter((room) => room.roomName !== 'room unclear' && room.roomKey !== 'unclear::');
+type VideoSort = 'newest' | 'oldest' | 'longest' | 'title';
+
+const SORT_LABELS: Record<VideoSort, string> = {
+  newest: 'Newest first',
+  oldest: 'Oldest first',
+  longest: 'Longest first',
+  title: 'Title A–Z',
+};
+
+/** When the clip was filmed: the device clock when we have it, else the work day. */
+function filmedAtMs(video: ProofVideoRecord): number {
+  const captured = video.capturedAt ? Date.parse(video.capturedAt) : NaN;
+  if (Number.isFinite(captured)) return captured;
+  const day = Date.parse(`${video.workDate}T12:00:00Z`);
+  return Number.isFinite(day) ? day : 0;
 }
 
-function roomDay(iso: string | null): string | null {
-  if (!iso) return null;
-  const date = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+function filmedDay(video: ProofVideoRecord): string {
+  const date = new Date(`${video.workDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return video.workDate;
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: date.getUTCFullYear() === new Date().getUTCFullYear() ? undefined : 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
-function JobRooms({
-  rooms,
-  onSeek,
-}: {
-  rooms: ProofJobRoom[];
-  onSeek?: (proofId: string, seconds: number) => void;
-}) {
+function filmedTime(video: ProofVideoRecord): string | null {
+  if (!video.capturedAt) return null;
+  const at = new Date(video.capturedAt);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function filmedBy(video: ProofVideoRecord): string {
+  return String(video.person || video.company || '').trim();
+}
+
+interface LibraryRow {
+  video: ProofVideoRecord;
+  meta: LibraryClipMeta | null;
+  title: string;
+  day: string;
+  time: string | null;
+  by: string;
+  at: number;
+}
+
+function DownloadVideoButton({ proofId }: { proofId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function run() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const { url } = await api.proofDownloadUrl(proofId);
+      // The signed URL is an attachment, so the browser saves it in place.
+      const link = document.createElement('a');
+      link.href = url;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="mt-3 rounded-lg border border-line px-3 py-2.5" data-testid="job-rooms">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Rooms</p>
-      <ul className="mt-2 space-y-2">
-        {rooms.map((room) => {
-          const span = [roomDay(room.firstSeen), roomDay(room.lastSeen)].filter(Boolean);
-          const when = span.length > 1 && span[0] !== span[1] ? `${span[0]} – ${span[1]}` : span[0] ?? null;
-          return (
-            <li key={room.roomKey} data-testid="job-room">
-              <p className="text-sm font-medium text-ink-900">
-                {room.roomName}
-                {when ? <span className="ml-2 text-[11px] font-normal text-ink-500">{when}</span> : null}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {room.sightings.flatMap((sighting) =>
-                  sighting.findings.slice(0, 3).map((finding) => (
-                    <button
-                      key={`${sighting.proofId}-${finding.atSeconds}-${finding.text}`}
-                      type="button"
-                      onClick={() => onSeek?.(sighting.proofId, finding.atSeconds)}
-                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-left text-[11px] text-ink-700 hover:border-brand-300"
-                    >
-                      <span className="font-semibold tabular-nums text-brand-700">
-                        {momentClock(finding.atSeconds)}
-                      </span>
-                      <span className="truncate">{finding.text}</span>
-                    </button>
-                  )),
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <button
+      type="button"
+      onClick={() => void run()}
+      disabled={busy}
+      data-testid="download-video"
+      className="inline-flex items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
+    >
+      {busy && <SpinnerIcon className="animate-spin" width={11} height={11} />}
+      {failed ? 'Could not download — try again' : 'Download'}
+    </button>
   );
 }
 
@@ -565,6 +570,7 @@ function VideoCatalog({
   jobId,
   videos,
   videoFetcher,
+  allowDownload = false,
   seekProofId,
   seekAt,
   seekNonce,
@@ -573,6 +579,7 @@ function VideoCatalog({
   jobId?: string;
   videos: ProofVideoRecord[];
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  allowDownload?: boolean;
   seekProofId?: string | null;
   seekAt?: number | null;
   seekNonce?: number;
@@ -580,228 +587,344 @@ function VideoCatalog({
   onSeek?: (proofId: string, seconds: number) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<VideoSort>('newest');
+  const [who, setWho] = useState('');
+  const viewerRef = useRef<HTMLDivElement | null>(null);
+  const scrollOnOpen = useRef(false);
   const library = useLibraryClipMeta(jobId, videos);
 
   useEffect(() => {
     if (seekProofId) setOpenId(seekProofId);
   }, [seekProofId, seekNonce]);
 
+  useEffect(() => {
+    if (!openId || !scrollOnOpen.current) return;
+    scrollOnOpen.current = false;
+    viewerRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [openId]);
+
   if (!videos.length) return null;
+
+  const rows: LibraryRow[] = videos.map((video) => {
+    const meta = library.get(video.id) ?? null;
+    return {
+      video,
+      meta,
+      title: clipDisplayTitle(video, meta),
+      day: filmedDay(video),
+      time: filmedTime(video),
+      by: filmedBy(video),
+      at: filmedAtMs(video),
+    };
+  });
+  const filmers = Array.from(new Set(rows.map((row) => row.by).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = rows
+    .filter((row) => !who || row.by === who)
+    .filter((row) => {
+      if (!terms.length) return true;
+      const haystack = [row.title, row.by, row.day, row.video.workDate].join(' ').toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    })
+    .sort((a, b) => {
+      if (sort === 'oldest') return a.at - b.at;
+      if (sort === 'longest') return (b.video.durationSeconds ?? 0) - (a.video.durationSeconds ?? 0);
+      if (sort === 'title') return a.title.localeCompare(b.title);
+      return b.at - a.at;
+    });
+  const openRow = rows.find((row) => row.video.id === openId) ?? null;
+  const filtering = Boolean(terms.length || who);
+
+  function openVideo(id: string) {
+    scrollOnOpen.current = true;
+    setOpenId(id);
+  }
+
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-line" data-testid="job-video-list">
-      <ul>
-        {videos.map((video) => {
-          const open = openId === video.id;
-          const captions = captionsForVideo(video);
-          const plain = transcriptPlainText(video);
-          const hasTranscript = Boolean(plain);
-          const meta = library.get(video.id) ?? null;
-          const title = clipDisplayTitle(video, meta);
-          const status = videoRowStatus(video);
-          const moments = clipMoments(video);
-          const roomChips = clipRoomChips(video.rooms);
-          const day = new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            timeZone: 'UTC',
-          });
-          return (
-            <li
-              key={video.id}
-              className="border-b border-line/70 last:border-b-0"
-              data-testid="job-video-row"
-              data-job-clip-date={video.workDate}
-              data-open={open ? '1' : undefined}
+    <div className="mt-3" data-testid="job-video-library">
+      {videos.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="job-video-toolbar">
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by title, date or who filmed"
+            aria-label="Search videos"
+            className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-1.5 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          {filmers.length > 1 ? (
+            <select
+              value={who}
+              onChange={(event) => setWho(event.target.value)}
+              aria-label="Filmed by"
+              className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-none"
             >
-              <div className="flex items-start gap-3 px-3 py-2.5">
+              <option value="">Everyone</option>
+              {filmers.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value as VideoSort)}
+            aria-label="Sort videos"
+            className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-none"
+          >
+            {(Object.keys(SORT_LABELS) as VideoSort[]).map((key) => (
+              <option key={key} value={key}>
+                {SORT_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {openRow ? (
+        <div ref={viewerRef} className="mt-3 scroll-mt-4">
+          <VideoViewer
+            row={openRow}
+            jobId={jobId}
+            videoFetcher={videoFetcher}
+            allowDownload={allowDownload}
+            seekAt={seekProofId === openRow.video.id ? seekAt : null}
+            seekNonce={seekProofId === openRow.video.id ? seekNonce : 0}
+            onSeek={onSeek}
+            onClose={() => setOpenId(null)}
+          />
+        </div>
+      ) : null}
+
+      {shown.length ? (
+        <ul
+          className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          data-testid="job-video-list"
+        >
+          {shown.map((row) => {
+            const { video, meta, title } = row;
+            const status = videoRowStatus(video);
+            const open = openId === video.id;
+            return (
+              <li
+                key={video.id}
+                data-testid="job-video-row"
+                data-job-clip-date={video.workDate}
+                data-open={open ? '1' : undefined}
+              >
                 <button
                   type="button"
-                  onClick={() => setOpenId(open ? null : video.id)}
+                  onClick={() => openVideo(video.id)}
                   aria-label={`Play ${title}`}
-                  className="relative h-[54px] w-24 shrink-0 overflow-hidden rounded-md bg-paper-200"
-                  data-testid="job-video-thumb"
+                  aria-pressed={open}
+                  className={`group block w-full overflow-hidden rounded-lg border text-left transition-colors ${
+                    open ? 'border-brand-400 ring-2 ring-brand-200' : 'border-line hover:border-brand-300'
+                  }`}
                 >
-                  {meta?.posterUrl ? (
-                    <img
-                      src={meta.posterUrl}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="grid h-full w-full place-items-center text-ink-400" aria-hidden>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </span>
-                  )}
-                  <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-medium tabular-nums text-white">
-                    {clipClock(video.durationSeconds)}
-                  </span>
-                </button>
-                <div className="min-w-0 flex-1">
-                  <button
-                    type="button"
-                    className="block w-full text-left"
-                    onClick={() => setOpenId(open ? null : video.id)}
-                    aria-expanded={open}
+                  <span
+                    className="relative block aspect-video w-full overflow-hidden bg-paper-200"
+                    data-testid="job-video-thumb"
                   >
-                    <p className="truncate text-sm font-medium text-ink-900" data-testid="job-video-title">
+                    {meta?.posterUrl ? (
+                      <img
+                        src={meta.posterUrl}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="grid h-full w-full place-items-center text-ink-400" aria-hidden>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </span>
+                    )}
+                    <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+                      {clipClock(video.durationSeconds)}
+                    </span>
+                  </span>
+                  <span className="block px-3 py-2.5">
+                    <span
+                      className="block truncate text-sm font-medium text-ink-900"
+                      data-testid="job-video-title"
+                    >
                       {title}
-                    </p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-500">
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-ink-500">
+                      {row.day}
+                      {row.time ? ` · ${row.time}` : ''}
+                      {row.by ? ` · ${row.by}` : ''}
+                    </span>
+                    <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ink-500">
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ROW_TONE[status.tone]}`}
                         data-testid="job-video-status"
                       >
                         {status.label}
                       </span>
-                      <span>{day}</span>
-                      <span aria-hidden>·</span>
                       <span>{formatClipLength(video.durationSeconds)}</span>
-                      {video.person || video.company ? (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span className="truncate">{video.person || video.company}</span>
-                        </>
-                      ) : null}
-                    </p>
-                  </button>
-                  {roomChips.length ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1" data-testid="clip-room-chips">
-                      {roomChips.map((room) => (
-                        <button
-                          key={`${room.roomKey}-${room.startSeconds}`}
-                          type="button"
-                          title={`${room.roomName} · ${momentClock(room.startSeconds)}`}
-                          aria-label={`Jump to ${room.roomName} at ${momentClock(room.startSeconds)}`}
-                          onClick={() => {
-                            setOpenId(video.id);
-                            onSeek?.(video.id, room.startSeconds);
-                          }}
-                          className="inline-flex max-w-[14rem] items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-[11px] text-ink-700 hover:border-brand-300"
-                        >
-                          <span className="font-semibold tabular-nums text-brand-700">
-                            {momentClock(room.startSeconds)}
-                          </span>
-                          <span className="truncate">{room.roomName}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {moments.length > 0 ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1" data-testid="job-video-moments">
-                      {moments.map((moment) => (
-                        <button
-                          key={moment.atSeconds}
-                          type="button"
-                          title={moment.text}
-                          aria-label={`Jump to ${momentClock(moment.atSeconds)}: ${moment.text}`}
-                          onClick={() => {
-                            setOpenId(video.id);
-                            onSeek?.(video.id, moment.atSeconds);
-                          }}
-                          className="inline-flex max-w-[14rem] items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-[11px] text-ink-700 hover:border-brand-300"
-                        >
-                          <span className="font-semibold tabular-nums text-brand-700">
-                            {momentClock(moment.atSeconds)}
-                          </span>
-                          <span className="truncate">{moment.text}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {!open ? (
-                    <button
-                      type="button"
-                      onClick={() => setOpenId(video.id)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
-                    >
-                      Play
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setOpenId(null)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
-                    >
-                      Close
-                    </button>
-                  )}
-                </div>
-              </div>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600" data-testid="job-video-none">
+          No videos match.{' '}
+          {filtering ? (
+            <button
+              type="button"
+              className="font-medium text-brand-700 underline-offset-2 hover:underline"
+              onClick={() => {
+                setQuery('');
+                setWho('');
+              }}
+            >
+              Show all
+            </button>
+          ) : null}
+        </p>
+      )}
+    </div>
+  );
+}
 
-              {open ? (
-                <div className="space-y-3 border-t border-line/70 bg-paper-50/40 px-3 py-3" data-testid="job-video-expansion">
-                  <ClipPlayer
-                    proofId={video.id}
-                    videoFetcher={videoFetcher}
-                    seekAt={seekProofId === video.id ? seekAt : null}
-                    seekNonce={seekProofId === video.id ? seekNonce : 0}
-                    autoOpen
-                    captions={captions}
-                    privacyRedactions={video.privacyRedactions?.ranges ?? null}
-                    childPrivacyRedactions={video.childPrivacyRedactions?.ranges ?? null}
-                  />
-                  {video.privacyRedactions?.ranges?.length || video.childPrivacyRedactions?.ranges?.length ? (
-                    <p
-                      className="text-[10px] text-ink-400"
-                      data-testid="privacy-redaction-review"
-                      title={[
-                        ...(video.privacyRedactions?.ranges ?? []).map(
-                          (r) =>
-                            `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
-                        ),
-                        ...(video.childPrivacyRedactions?.ranges ?? []).map(
-                          (r) =>
-                            `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · child · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
-                        ),
-                      ].join('\n')}
-                    >
-                      Privacy-protected ·{' '}
-                      {(video.privacyRedactions?.ranges?.length ?? 0) +
-                        (video.childPrivacyRedactions?.ranges?.length ?? 0)}{' '}
-                      segment
-                      {(video.privacyRedactions?.ranges?.length ?? 0) +
-                        (video.childPrivacyRedactions?.ranges?.length ?? 0) ===
-                      1
-                        ? ''
-                        : 's'}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    {hasTranscript ? <CopyTranscriptButton text={plain} /> : null}
-                    {jobId && video.transcriptStatus !== 'done' ? (
-                      <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
-                    ) : null}
-                  </div>
-                  {jobId ? <ClipSpeakerList jobId={jobId} proofId={video.id} /> : null}
-                  {hasTranscript ? (
-                    <div className="-mt-1">
-                      <VerbatimTranscript
-                        segments={captions?.segments}
-                        transcriptText={captions?.transcriptText ?? video.heardOnMic}
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-[12px] text-ink-500" data-testid="transcript-empty">
-                      {video.transcriptStatus === 'queued' || video.transcriptStatus === 'running'
-                        ? 'Hearing the mic…'
-                        : video.transcriptStatus === 'skipped' || video.transcriptStatus === 'failed'
-                          ? video.transcriptError || 'No transcript on this clip yet.'
-                          : 'No transcript on this clip yet.'}
-                    </p>
-                  )}
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+function VideoViewer({
+  row,
+  jobId,
+  videoFetcher,
+  allowDownload,
+  seekAt,
+  seekNonce,
+  onSeek,
+  onClose,
+}: {
+  row: LibraryRow;
+  jobId?: string;
+  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  allowDownload: boolean;
+  seekAt?: number | null;
+  seekNonce?: number;
+  onSeek?: (proofId: string, seconds: number) => void;
+  onClose: () => void;
+}) {
+  const { video, title } = row;
+  const captions = captionsForVideo(video);
+  const plain = transcriptPlainText(video);
+  const hasTranscript = Boolean(plain);
+  const moments = clipMoments(video, 12);
+  const status = videoRowStatus(video);
+  const redactions =
+    (video.privacyRedactions?.ranges?.length ?? 0) + (video.childPrivacyRedactions?.ranges?.length ?? 0);
+  return (
+    <div
+      className="space-y-3 rounded-lg border border-line bg-paper-50/40 p-3"
+      data-testid="job-video-expansion"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-500">
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ROW_TONE[status.tone]}`}>
+              {status.label}
+            </span>
+            <span>
+              {row.day}
+              {row.time ? ` · ${row.time}` : ''}
+            </span>
+            <span aria-hidden>·</span>
+            <span>{formatClipLength(video.durationSeconds)}</span>
+            {row.by ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate">{row.by}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {allowDownload ? <DownloadVideoButton proofId={video.id} /> : null}
+          {hasTranscript ? <CopyTranscriptButton text={plain} /> : null}
+          {jobId && video.transcriptStatus !== 'done' ? (
+            <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <ClipPlayer
+        key={video.id}
+        proofId={video.id}
+        videoFetcher={videoFetcher}
+        seekAt={seekAt}
+        seekNonce={seekNonce}
+        autoOpen
+        captions={captions}
+        privacyRedactions={video.privacyRedactions?.ranges ?? null}
+        childPrivacyRedactions={video.childPrivacyRedactions?.ranges ?? null}
+      />
+      {redactions ? (
+        <p
+          className="text-[10px] text-ink-400"
+          data-testid="privacy-redaction-review"
+          title={[
+            ...(video.privacyRedactions?.ranges ?? []).map(
+              (r) =>
+                `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+            ),
+            ...(video.childPrivacyRedactions?.ranges ?? []).map(
+              (r) =>
+                `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · child · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+            ),
+          ].join('\n')}
+        >
+          Privacy-protected · {redactions} segment{redactions === 1 ? '' : 's'}
+        </p>
+      ) : null}
+      {moments.length > 0 ? (
+        <div className="flex flex-wrap gap-1" data-testid="job-video-moments">
+          {moments.map((moment) => (
+            <button
+              key={moment.atSeconds}
+              type="button"
+              title={moment.text}
+              aria-label={`Jump to ${momentClock(moment.atSeconds)}: ${moment.text}`}
+              onClick={() => onSeek?.(video.id, moment.atSeconds)}
+              className="inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-[11px] text-ink-700 hover:border-brand-300"
+            >
+              <span className="font-semibold tabular-nums text-brand-700">{momentClock(moment.atSeconds)}</span>
+              <span className="truncate">{moment.text}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {jobId ? <ClipSpeakerList jobId={jobId} proofId={video.id} /> : null}
+      {hasTranscript ? (
+        <VerbatimTranscript
+          segments={captions?.segments}
+          transcriptText={captions?.transcriptText ?? video.heardOnMic}
+        />
+      ) : (
+        <p className="text-[12px] text-ink-500" data-testid="transcript-empty">
+          {video.transcriptStatus === 'queued' || video.transcriptStatus === 'running'
+            ? 'Hearing the mic…'
+            : video.transcriptStatus === 'skipped' || video.transcriptStatus === 'failed'
+              ? video.transcriptError || 'No transcript on this clip yet.'
+              : 'No transcript on this clip yet.'}
+        </p>
+      )}
     </div>
   );
 }
@@ -917,7 +1040,7 @@ function ClipPlayer({
           setResumePlaying(info.wasPlaying);
           void open();
         }}
-        className="block max-h-56 w-full rounded-lg bg-black"
+        className="block aspect-video max-h-[60vh] w-full rounded-lg bg-black object-contain"
       />
     );
   }
@@ -927,7 +1050,7 @@ function ClipPlayer({
       type="button"
       onClick={() => void open()}
       disabled={loading || failed}
-      className="flex h-40 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 disabled:opacity-50"
+      className="flex aspect-video max-h-[60vh] w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 disabled:opacity-50"
     >
       {loading && <SpinnerIcon className="animate-spin" width={14} height={14} />}
       {failed ? 'Could not load' : loading ? 'Loading…' : 'Play'}
