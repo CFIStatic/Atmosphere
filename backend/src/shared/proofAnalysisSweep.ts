@@ -15,6 +15,7 @@ import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
 import { claimNextProofWork, type ProofWorkKind } from './outboxClaim.js';
 import { sweepStaleSummaries } from '../audio/summaryQueue.js';
+import { sweepBaseTimeline } from '../longform/segmentWorker.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -258,6 +259,13 @@ async function tick(): Promise<void> {
     if (summaries) console.log(`[proof-analysis] re-queued ${summaries} stale AI summaries`);
   } catch (err) {
     console.warn('[proof-analysis] summary sweep failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    // Full-coverage base timeline (VIDEO_BASE_TIMELINE, off by default).
+    const base = await sweepBaseTimeline(admin);
+    if (base.enqueued || base.ran) console.log(`[proof-analysis] base timeline: ${base.enqueued} segments queued, ${base.ran} run`);
+  } catch (err) {
+    console.warn('[proof-analysis] base timeline sweep failed:', err instanceof Error ? err.message : err);
   } finally {
     running = false;
   }
