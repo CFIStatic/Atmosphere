@@ -13,9 +13,10 @@ const REASONS: Array<{ id: AskFeedbackReason; label: string }> = [
 const CHIP =
   'inline-flex items-center gap-1 rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900 disabled:opacity-35';
 
-/** Icon-only, matching Copy and Regenerate in the answer row. */
+/** Icon-only, matching Copy and Regenerate in the answer row. Relative so the
+ * screen-reader label stays inside the button instead of stretching the page. */
 const ICON =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
+  'relative inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
 
 /**
  * Rate, pin and share one stored answer. Office members only (the panel hides

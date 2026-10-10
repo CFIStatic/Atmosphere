@@ -73,7 +73,7 @@ export function OperationsShell() {
             isJobFile
               ? phone
                 ? 'flex h-full flex-col overflow-hidden'
-                : 'operations-main flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
+                : 'operations-main flex h-screen flex-col overflow-hidden'
               : phone
                 ? 'flex h-full flex-col overflow-hidden'
                 : 'operations-main min-h-screen'
@@ -110,7 +110,7 @@ export function OperationsShell() {
               isJobFile
                 ? phone
                   ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                  : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
+                  : 'flex min-h-0 flex-1 flex-col overflow-hidden'
                 : phone
                   ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-3 py-3'
                   : 'px-4 py-6 sm:px-6'
