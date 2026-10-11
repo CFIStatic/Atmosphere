@@ -17,10 +17,11 @@ describe('Invited homeowner chrome', () => {
 });
 
 describe('Sub whose own workspace never finished checkout', () => {
-  it('gets a Start your plan rail item that opens plan and card, hidden by default', () => {
+  it('gets a Start your plan rail item that opens the corporate pricing page, hidden by default', () => {
     expect(verifierHtml).toContain('id="nav-start-plan" hidden');
     expect(verifierHtml).toContain('#nav-start-plan[hidden] { display: none !important; }');
-    expect(verifierHtml).toContain("goShell('/signup?step=2&next=' + encodeURIComponent('/verifier-library'))");
+    expect(verifierHtml).toContain("var PRICING_URL = 'https://atmosphereteam.com/pricing';");
+    expect(verifierHtml).toContain("window.open(PRICING_URL, '_blank', 'noopener');");
     expect(verifierHtml).toContain('setUpgrade(d.upgrade);');
   });
 });

@@ -4727,6 +4727,8 @@
     return key;
   }
 
+  var PRICING_URL = 'https://atmosphereteam.com/pricing';
+
   /** Unpaid workspace of its own: show the way to pay. */
   function setUpgrade(on) {
     var btn = document.getElementById('nav-start-plan');
@@ -9552,8 +9554,10 @@
     }
     var navStartPlan = document.getElementById('nav-start-plan');
     if (navStartPlan) {
+      // Plans live on the corporate site's pricing page (a new tab; the
+      // phone app hands it to the browser).
       navStartPlan.addEventListener('click', function () {
-        goShell('/signup?step=2&next=' + encodeURIComponent('/verifier-library'));
+        window.open(PRICING_URL, '_blank', 'noopener');
       });
     }
     var navSettings = document.getElementById('nav-settings');
