@@ -101,6 +101,12 @@ export function LoginPage() {
     return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
   }
 
+  // /login?homeowner=1 opens the same email-link step as the sign-up page.
+  if (searchParams.get('homeowner') === '1' && !user) {
+    const email = searchParams.get('email');
+    return <Navigate to={`/signup?homeowner=1${email ? `&email=${encodeURIComponent(email)}` : ''}`} replace />;
+  }
+
   if (loading || (user && membershipLoading && !switchAccount)) {
     return (
       <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
@@ -325,6 +331,16 @@ export function LoginPage() {
                     {submitting ? 'Signing in…' : 'Sign in'}
                   </button>
                 </form>
+
+                <p className="mt-4 text-center text-sm">
+                  <Link
+                    to="/signup?homeowner=1"
+                    data-testid="homeowner-email-option"
+                    className="font-medium text-brand-600 transition hover:text-brand-700"
+                  >
+                    Homeowner? Sign in with your email
+                  </Link>
+                </p>
 
                 <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
                   Don&apos;t have an account?{' '}
