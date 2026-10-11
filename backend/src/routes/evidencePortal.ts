@@ -60,6 +60,7 @@ import {
   assertViewerMayOpenProof,
   listJobPartyViews,
   listJobProgressGrants,
+  resolveOrgOrViewerAccess,
   resolveProofAccess,
 } from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
@@ -803,6 +804,24 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: z.string().uuid().optional(),
       })
       .parse(req.query);
+    if (jobId) {
+      // A job shared with someone who also has a workspace of their own: the
+      // clips (and their AI names) come from the job's org, exactly as the
+      // homeowner and contractor see them, not from the viewer's workspace.
+      const access = await resolveOrgOrViewerAccess(req, jobId).catch(() => null);
+      const admin = access?.access === 'viewer' ? unscopedAdminOrNull() : null;
+      if (admin) {
+        const payload = await viewerLibraryPayload(admin, req.user!.id, req.user!.email);
+        if (payload) {
+          res.json({
+            ...payload,
+            items: ((payload.items ?? []) as any[]).filter((item) => item?.jobId === jobId),
+            jobs: ((payload.jobs ?? []) as any[]).filter((job) => job?.jobId === jobId),
+          });
+          return;
+        }
+      }
+    }
     let orgCtx: Awaited<ReturnType<typeof requireOrgContext>>;
     try {
       orgCtx = await requireOrgContext(req);

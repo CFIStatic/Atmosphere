@@ -45,3 +45,13 @@ test('library — accounts without an org fall back to the invited-jobs dashboar
   assert.match(fn, /\.is\('deleted_at', null\)/);
   assert.match(fn, /proofFindingsHavePrivacyRedactions/);
 });
+
+test('library — a job viewer with a workspace of their own gets the job’s clip names from the job’s org', () => {
+  const src = readFileSync(new URL('../src/routes/evidencePortal.ts', import.meta.url), 'utf8');
+  const route = src.slice(src.indexOf("evidencePortalRouter.get('/library'"));
+  const head = route.slice(0, route.indexOf('requireOrgContext(req)'));
+  assert.match(head, /resolveOrgOrViewerAccess\(req, jobId\)/);
+  assert.match(head, /access === 'viewer'/);
+  assert.match(head, /viewerLibraryPayload\(admin, req\.user!\.id, req\.user!\.email\)/);
+  assert.match(head, /item\?\.jobId === jobId/);
+});

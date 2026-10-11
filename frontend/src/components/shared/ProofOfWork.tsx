@@ -403,8 +403,8 @@ function libraryClipMetaKey(videos: ProofVideoRecord[]): string {
 
 /**
  * Titles and poster stills from the Dashboard's library rows, so the Videos
- * tab names a clip exactly as the Dashboard does. Office only — the library
- * is an org endpoint; a homeowner's read-only file keeps the fallback name.
+ * tab names a clip exactly as the Dashboard does, for the contractor and for
+ * anyone the job is shared with (the library answers job viewers too).
  */
 function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[]) {
   const [meta, setMeta] = useState<Map<string, LibraryClipMeta>>(() => new Map());
