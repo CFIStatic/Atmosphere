@@ -43,6 +43,8 @@ test('library — accounts without an org fall back to the invited-jobs dashboar
   assert.match(fn, /\.in\('job_id', jobIds\)/);
   assert.match(fn, /\.in\('id', jobIds\)/);
   assert.match(fn, /\.is\('deleted_at', null\)/);
+  // Only a sub's clips lose their poster; the homeowner gets every clip like the contractor.
+  assert.match(fn, /partyByJob\.has\(p\.job_id as string\) && proofFindingsHavePrivacyRedactions/);
 });
 
 test('library — a job viewer with a workspace of their own gets the job’s clip names from the job’s org', () => {
