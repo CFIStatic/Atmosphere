@@ -93,6 +93,11 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /Switch to (light|dark) mode/ })).toBeInTheDocument();
   });
 
+  it('offers homeowners the email-link sign-in', () => {
+    renderLogin();
+    expect(screen.getByTestId('homeowner-email-option')).toHaveAttribute('href', '/signup?homeowner=1');
+  });
+
   it('offers a single create-account link instead of org vs office cards', () => {
     renderLogin();
 
