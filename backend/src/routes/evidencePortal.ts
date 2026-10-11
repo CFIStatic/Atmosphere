@@ -1073,7 +1073,11 @@ evidencePortalRouter.get(
   '/evidence/:proofId',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId } = await requireOrgContext(req);
+      // The office, or someone the job was shared with (homeowner, invited
+      // sub): the same clip panel on their Dashboard as the contractor's.
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId } = resolved;
+      const viewer = resolved.access === 'viewer';
       const { data: proof, error } = await supabase
         .from('job_proofs')
         .select(PORTAL_PROOF_SELECT)
@@ -1081,7 +1085,9 @@ evidencePortalRouter.get(
         .eq('id', req.params.proofId)
         .maybeSingle();
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      // An invited subcontractor opens only what they recorded.
+      assertViewerMayOpenProof(resolved, proof as any);
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const admin = writerForJob(
@@ -1089,10 +1095,13 @@ evidencePortalRouter.get(
         supabase,
       ).raw;
       const item = await readClipForOpen(admin, orgId, items[0]);
+      // No raw stills of a clip with privacy redactions for a guest.
+      const guestRedacted = viewer && proofFindingsHavePrivacyRedactions((proof as any).ai_findings);
+      if (guestRedacted && item) item.posterUrl = null;
 
       const [custody, frames] = await Promise.all([
         custodyFor(supabase, req.params.proofId),
-        frameUrls(req.params.proofId),
+        guestRedacted ? Promise.resolve([]) : frameUrls(req.params.proofId),
       ]);
 
       res.json({ item, custody, frames });
@@ -1221,7 +1230,9 @@ evidencePortalRouter.post(
   askLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId, userId } = await requireOrgContext(req);
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId, userId } = resolved;
+      const viewer = resolved.access === 'viewer';
       const input = askBody.parse(req.body ?? {});
       const { data: proof, error } = await supabase
         .from('job_proofs')
@@ -1230,7 +1241,8 @@ evidencePortalRouter.post(
         .eq('id', req.params.proofId)
         .maybeSingle();
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      assertViewerMayOpenProof(resolved, proof as any);
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = items[0];
@@ -1249,11 +1261,12 @@ evidencePortalRouter.post(
         item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
-        documentIds: input.documentIds,
+        // The office's uploaded documents and @teammates stay with the office.
+        documentIds: viewer ? undefined : input.documentIds,
         askedBy: userId,
-        orgMentions: true,
+        orgMentions: !viewer,
         actorLabel: await actorLabelFor(supabase, userId),
-        actorRole: 'general_contractor',
+        actorRole: viewer ? (resolved.access === 'viewer' && resolved.partyId ? 'subcontractor' : 'homeowner') : 'general_contractor',
       });
 
       res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });
