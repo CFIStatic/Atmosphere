@@ -190,6 +190,13 @@ export function ProofOfWork({
         Every video recorded on this job, kept in one place. Open one to watch it, read the
         transcript, or download it.
       </p>
+      {data?.viewerScope?.role === 'subcontractor' && (
+        <p className="mt-2 rounded-lg border border-line px-3 py-2 text-xs text-ink-600" data-testid="sub-video-scope">
+          You're on this job as {data.viewerScope.company ? `${data.viewerScope.company}, a subcontractor` : 'a subcontractor'}, so
+          you see only the videos you recorded. To see every video, ask the contractor to add you under Share
+          &gt; Homeowner.
+        </p>
+      )}
 
       {freshNotice && (
         <p role="status" className="mb-3 mt-3 rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">

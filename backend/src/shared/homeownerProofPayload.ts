@@ -122,8 +122,12 @@ export function partyProofPayload<T extends Record<string, any>>(payload: T, par
   const safe: any = homeownerProofPayload(payload);
   const videos = ((safe.videos ?? []) as any[]).filter((video) => video.partyId === partyId);
   const days = ((safe.days ?? []) as any[]).filter((day) => day.partyId === partyId);
+  const company =
+    [...videos, ...days].map((row: any) => row.company).find((c: unknown) => typeof c === 'string' && c.trim()) ?? null;
   return {
     ...safe,
+    // Tells the page why the list is short: this account is on the job as a sub.
+    viewerScope: { role: 'subcontractor', company },
     videos,
     days,
     rooms: [],

@@ -66,6 +66,11 @@ test('an invited sub gets only the videos and days they recorded', () => {
   assert.equal('contentHash' in out.videos[0]!, false);
 });
 
+test('the sub view says it is the sub view, so a short list is explained', () => {
+  const out = partyProofPayload(officePayload, 'party-sub') as unknown as { viewerScope: { role: string } };
+  assert.equal(out.viewerScope.role, 'subcontractor');
+});
+
 test("a sub cannot open another trade's or the office's clip; a homeowner can", () => {
   assert.equal(viewerPartyId(viewer('party-sub')), 'party-sub');
   assert.equal(viewerPartyId(viewer(null)), null);
