@@ -294,7 +294,7 @@ describe('LoginsPage', () => {
     expect(computerStartSignIn).toHaveBeenCalledWith({
       url: CATALOG.sites[2]!.signInUrl,
       label: 'Google Calendar',
-      credential: { username: 'office@example.test', password: PASSWORD, loginUrl: CATALOG.sites[2]!.signInUrl },
+      credential: { username: 'office@example.test', password: PASSWORD, companyId: null, loginUrl: CATALOG.sites[2]!.signInUrl },
     });
     expect(await screen.findByTestId('logins-signing-in')).toBeInTheDocument();
     expect(where()).toBe('/logins');
@@ -310,6 +310,20 @@ describe('LoginsPage', () => {
     expect(screen.getByLabelText('Sign-in page')).toHaveAttribute('placeholder', 'https://mail.google.com/');
     await user.click(screen.getByRole('button', { name: 'Sign in myself without saving a password' }));
     expect(computerStartSignIn).toHaveBeenCalledWith({ url: 'https://mail.google.com/', label: 'Gmail (Google)' });
+  });
+
+  it('add form: an optional Company ID is sent with the login', async () => {
+    computerLogins.mockResolvedValue(state({ passwords: ADMIN }));
+    computerStartSignIn.mockResolvedValue({ signIn });
+    const user = renderPage();
+    await user.click(await screen.findByTestId('logins-catalog-gmail'));
+    await user.type(screen.getByLabelText('Email or username'), 'office@example.test');
+    await user.type(screen.getByLabelText('Password'), PASSWORD);
+    await user.type(screen.getByLabelText('Company ID (optional)'), ' ACME-77 ');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(computerStartSignIn).toHaveBeenCalledWith(
+      expect.objectContaining({ credential: expect.objectContaining({ companyId: 'ACME-77' }) }),
+    );
   });
 
   it('add form asks for both fields before saving', async () => {
@@ -394,7 +408,7 @@ describe('LoginsPage', () => {
     expect(computerStartSignIn).toHaveBeenCalledWith({
       url: 'portal.acme-ins.example',
       label: 'Acme Insurance',
-      credential: { username: 'estimates@example.test', password: PASSWORD, loginUrl: null },
+      credential: { username: 'estimates@example.test', password: PASSWORD, companyId: null, loginUrl: null },
     });
     expect(await screen.findByTestId('logins-auto-sign-in')).toHaveTextContent('asking for a verification code');
     expect(document.body.innerHTML).not.toContain(PASSWORD);
@@ -419,7 +433,7 @@ describe('LoginsPage', () => {
     expect(computerStartSignIn).toHaveBeenCalledWith({
       url: 'https://mail.google.com/',
       label: 'Gmail (Google)',
-      credential: { username: 'office@example.test', password: PASSWORD, loginUrl: 'https://mail.google.com/' },
+      credential: { username: 'office@example.test', password: PASSWORD, companyId: null, loginUrl: 'https://mail.google.com/' },
     });
   });
 
@@ -438,7 +452,7 @@ describe('LoginsPage', () => {
     expect(computerStartSignIn).toHaveBeenCalledWith({
       url: 'https://claims.acme.example/login',
       label: undefined,
-      credential: { username: 'a@example.test', password: PASSWORD, loginUrl: null },
+      credential: { username: 'a@example.test', password: PASSWORD, companyId: null, loginUrl: null },
     });
   });
 
@@ -551,7 +565,7 @@ describe('LoginsPage', () => {
     await user.type(email, 'new@example.test');
     await user.type(within(panel).getByLabelText('Password'), PASSWORD);
     await user.click(within(panel).getByRole('button', { name: 'Save' }));
-    expect(computerSaveCredential).toHaveBeenCalledWith('l2', { username: 'new@example.test', password: PASSWORD, loginUrl: null });
+    expect(computerSaveCredential).toHaveBeenCalledWith('l2', { username: 'new@example.test', password: PASSWORD, companyId: null, loginUrl: null });
     expect(await screen.findByText('Password saved for Xactimate. Computer will sign in on its own.')).toBeInTheDocument();
     expect(document.body.innerHTML).not.toContain(PASSWORD);
 

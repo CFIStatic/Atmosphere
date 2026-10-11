@@ -32,7 +32,7 @@ const MIN_KEY_CHARS = 32;
 export const CREDENTIALS_OFF_MESSAGE =
   "Saving passwords isn't turned on for your account yet. You can still sign in yourself in the browser.";
 
-export type CredentialField = 'username' | 'password';
+export type CredentialField = 'username' | 'password' | 'company_id';
 
 type KeyState = { key: Buffer; fingerprint: string };
 
@@ -158,14 +158,25 @@ export function resealCredential(row: {
   login_id: string;
   username_sealed: string;
   password_sealed: string;
+  company_id_sealed?: string | null;
   key_fingerprint: string;
-}): { username_sealed: string; password_sealed: string; key_fingerprint: string } | null {
+}): { username_sealed: string; password_sealed: string; company_id_sealed?: string | null; key_fingerprint: string } | null {
   if (row.key_fingerprint === credentialKeyFingerprint()) return null;
   const username = openCredential(row.username_sealed, row.org_id, row.login_id, 'username', row.key_fingerprint);
   const password = openCredential(row.password_sealed, row.org_id, row.login_id, 'password', row.key_fingerprint);
   return {
     username_sealed: sealCredential(username, row.org_id, row.login_id, 'username'),
     password_sealed: sealCredential(password, row.org_id, row.login_id, 'password'),
+    ...(row.company_id_sealed
+      ? {
+          company_id_sealed: sealCredential(
+            openCredential(row.company_id_sealed, row.org_id, row.login_id, 'company_id', row.key_fingerprint),
+            row.org_id,
+            row.login_id,
+            'company_id',
+          ),
+        }
+      : {}),
     key_fingerprint: credentialKeyFingerprint(),
   };
 }

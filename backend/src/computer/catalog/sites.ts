@@ -137,6 +137,8 @@ export interface SignInRecipe {
   identityHosts?: string[];
   /** live_page: seen on the live page. blocked_probe: the page blocks automated browsers; steps follow the site's help pages. */
   checked: 'live_page' | 'blocked_probe';
+  /** CSS selectors for a company / tenant ID box on the sign-in form (filled from the saved Company ID). */
+  companyIdSelectors?: string[];
   /** One plain sentence for the person or the model (codes, extra fields). */
   note?: string;
 }
@@ -437,7 +439,7 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     terms: t('no_ban_found', 'Xcelerate’s terms and conditions have no automation clause.', 'https://www.xlrestorationsoftware.com/terms-and-conditions'),
     practice: ['restoration_jobs'],
   },
-  { id: 'nextgear', name: 'DASH by Next Gear Solutions', category: 'restoration', signInUrl: 'https://dash-ngs.net/NextGear/Enterprise/Module/User/Login.aspx', hosts: ['dash-ngs.net', 'www.dash-ngs.net'], aliases: ['dash', 'next gear', 'nextgear', 'next gear solutions', 'nextgen'], twoStep: 'sometimes', sso: false, logo: { text: 'NG', color: '#1D4F91' },
+  { id: 'nextgear', name: 'DASH by Next Gear Solutions', category: 'restoration', signInUrl: 'https://dash-ngs.net/NextGear/Enterprise/Module/User/Login.aspx', hosts: ['dash-ngs.net', 'www.dash-ngs.net'], aliases: ['dash', 'next gear', 'nextgear', 'next gear solutions', 'nextgen', 'restore 365', 'restore365', 'dash restore 365'], twoStep: 'sometimes', sso: false, logo: { text: 'NG', color: '#1D4F91' },
     terms: t('flagged', 'Next Gear (Cotality) bans robots, crawlers, data mining and systematic retrieval from DASH without written permission.', 'https://www.nextgearsolutions.com/legal/'), practice: ['restoration_jobs'] },
   { id: 'matterport', name: 'Matterport', category: 'restoration', signInUrl: 'https://my.matterport.com/', hosts: ['my.matterport.com', 'authn.matterport.com'], aliases: ['matterport'], twoStep: 'sometimes', sso: false, logo: { text: 'M', color: '#1C1C1C' },
     terms: t('flagged', 'Matterport bans AI agents, robots, scrapers and any other automated means to access its website or service.', 'https://matterport.com/terms-of-use'), practice: ['sign_in_check'] },
@@ -626,7 +628,10 @@ export const SIGN_IN_RECIPES: Record<string, SignInRecipe> = {
   accuserve: live('username_first'),
   contractorconnection: { flow: 'one_page', checked: 'blocked_probe', note: 'Contractor Connection blocks automated browsers at times; if it does, Computer hands the sign-in to the person.' },
   symbility: live('one_page'),
-  nextgear: live('one_page'),
+  nextgear: live('one_page', {
+    companyIdSelectors: ['input[id*="CompanyID" i]', 'input[name*="CompanyID" i]', 'input[id*="Company" i]', 'input[name*="Company" i]'],
+    note: 'DASH asks for a company ID along with the username and password; save it as the Company ID.',
+  }),
   matterport: live('one_page', { identityHosts: ['authn.matterport.com'] }),
   greensky: live('one_page', { identityHosts: ['auth.prod.greensky.com'] }),
   hearth: live('one_page'),

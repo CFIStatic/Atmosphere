@@ -7,7 +7,7 @@
 import { canOpenFingerprint, credentialKeyFingerprint, resealCredential } from './credentialCrypto.js';
 import type { ComputerCredentialRow, CredentialPatch } from './store.js';
 
-export type RotationRow = Pick<ComputerCredentialRow, 'org_id' | 'login_id' | 'username_sealed' | 'password_sealed' | 'key_fingerprint'>;
+export type RotationRow = Pick<ComputerCredentialRow, 'org_id' | 'login_id' | 'username_sealed' | 'password_sealed' | 'company_id_sealed' | 'key_fingerprint'>;
 
 export interface RotationResult {
   scanned: number;
