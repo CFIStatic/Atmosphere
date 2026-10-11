@@ -48,7 +48,6 @@ import {
   listJobPartyViews,
   touchJobProgressGrantAccess,
   resolveOrgOrViewerAccess,
-  viewerPartyId,
 } from '../shared/jobProgressGrants.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
@@ -347,7 +346,6 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     const resolved = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const { orgId, access } = resolved;
     const supabase = resolved.supabase as Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
-    const partyId = viewerPartyId(resolved);
 
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
@@ -369,10 +367,10 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     }
 
     // Viewers see the job file without contractor money / private thread chatter.
-    // A subcontractor sees their own lines and the shared ones, like their
-    // invite link always showed.
+    // Homeowners and subcontractors see the same scope as the contractor,
+    // without the money. (A sub's only difference is the videos.)
     const scope = access === 'viewer'
-      ? (partyId ? scopeForParty(record.scope, partyId) : record.scope).map((item: any) => ({ ...item, amount: null }))
+      ? record.scope.map((item: any) => ({ ...item, amount: null }))
       : record.scope;
     const messages = access === 'viewer' ? [] : record.messages;
 
