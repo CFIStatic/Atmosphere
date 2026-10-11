@@ -626,7 +626,8 @@ test('share-link clip Ask does not resolve org mentions', () => {
   assert.doesNotMatch(share, /orgMentions:\s*true/);
   const orgAt = portal.indexOf("evidencePortalRouter.post(\n  '/evidence/:proofId/ask'");
   assert.ok(orgAt > 0 && orgAt < shareAt);
-  assert.match(portal.slice(orgAt, shareAt), /orgMentions:\s*true/);
+  // Office members resolve @handles; a homeowner or sub on the same route does not.
+  assert.match(portal.slice(orgAt, shareAt), /orgMentions:\s*!viewer/);
 
   const verifier = readFileSync(join(here, '../../verifier/index.html'), 'utf8');
   assert.match(verifier, /if \(rosterLoaded \|\| !ORG_MODE\) return/);

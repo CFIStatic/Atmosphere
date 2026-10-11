@@ -17,11 +17,17 @@ describe('Invited homeowner chrome', () => {
 });
 
 describe('Jobs shared with someone who has a workspace', () => {
-  it('list read-only on the Dashboard and open the job page', () => {
+  it('list on the Dashboard and play in the same clip player as the contractor', () => {
     expect(verifierHtml).toContain('sharedWithMe: Boolean(raw.sharedWithMe)');
     expect(verifierHtml).toContain('sharedWithMe: Boolean(j.sharedWithMe)');
-    expect(verifierHtml).toContain('if (VIEWER || item.sharedWithMe) { openJobRecord(item.job); return; }');
+    expect(verifierHtml).not.toContain('openJobRecord(item.job); return; }');
     expect(verifierHtml).toContain('tr.is-shared .job-acts');
-    expect(verifierHtml).toContain('tr.is-shared .kebab');
+    expect(verifierHtml).not.toContain('tr.is-shared .kebab');
+    expect(verifierHtml).not.toContain('body[data-atm-viewer] tr.cliprow .kebab');
+  });
+
+  it('keeps Rename and Share on a shared clip with the contractor', () => {
+    expect(verifierHtml).toContain('var guestClip = VIEWER || !!(clip && clip.sharedWithMe);');
+    expect(verifierHtml).toContain('[data-act="rename"], [data-act="share"]');
   });
 });

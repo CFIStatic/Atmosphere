@@ -2236,10 +2236,8 @@
   body[data-atm-viewer] #menu-settings,
   body[data-atm-viewer] .job-acts,
   body[data-atm-viewer] .clip-rename,
-  body[data-atm-viewer] tr.cliprow .kebab,
   tr.is-shared .job-acts,
-  tr.is-shared .clip-rename,
-  tr.is-shared .kebab { display: none !important; }
+  tr.is-shared .clip-rename { display: none !important; }
   .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
@@ -5176,6 +5174,10 @@
     var pending = !!(clip && clip.pendingDeletion);
     var restoreBtn = document.getElementById('rowmenu-restore');
     if (restoreBtn) restoreBtn.hidden = !(ORG_MODE && isSessionGlobalAdmin() && pending);
+    // A shared clip is the contractor's record: watch, Save and Export like
+    // they do; renaming it or issuing shares stays with the contractor.
+    var guestClip = VIEWER || !!(clip && clip.sharedWithMe);
+    menuEl.querySelectorAll('[data-act="rename"], [data-act="share"]').forEach(function (b) { b.hidden = guestClip; });
     menuEl.hidden = false;
     var r = btn.getBoundingClientRect();
     var mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
@@ -6479,8 +6481,7 @@
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
-    // Homeowners watch clips on the job page (guest media rules apply there).
-    if (VIEWER || item.sharedWithMe) { openJobRecord(item.job); return; }
+    // Shared clips open in the same player and panel as the contractor's.
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);

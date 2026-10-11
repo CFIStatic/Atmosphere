@@ -66,3 +66,17 @@ test('library — the Dashboard of someone with a workspace also lists jobs shar
   assert.match(route, /viewerLibraryPayload\(viewerAdmin, req\.user!\.id, req\.user!\.email, orgId\)/);
   assert.match(route, /kickUnreadLibraryReads\(admin, orgId, items\.filter\(\(item: any\) => !item\.sharedWithMe\)\)/);
 });
+
+test('clip panel — a job viewer opens the clip detail and Ask like the contractor (sub: own clips only)', () => {
+  const src = readFileSync(new URL('../src/routes/evidencePortal.ts', import.meta.url), 'utf8');
+  const detail = src.slice(src.indexOf("'/evidence/:proofId',\n  async"), src.indexOf("'/evidence/:proofId/retry-read'"));
+  assert.match(detail, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(detail, /assertViewerMayOpenProof\(resolved, proof as any\)/);
+  assert.match(detail, /viewer && \(proof as any\)\.deleted_at/);
+  assert.match(detail, /guestRedacted \? Promise\.resolve\(\[\]\) : frameUrls/);
+  const ask = src.slice(src.indexOf("'/evidence/:proofId/ask'"), src.indexOf("'/evidence/:proofId/download'"));
+  assert.match(ask, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(ask, /assertViewerMayOpenProof\(resolved, proof as any\)/);
+  assert.match(ask, /documentIds: viewer \? undefined : input\.documentIds/);
+  assert.match(ask, /orgMentions: !viewer/);
+});
