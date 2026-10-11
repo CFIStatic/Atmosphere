@@ -600,6 +600,7 @@ describe('SharedDashboardPage job file identity', () => {
 
   it('lets an unpaid office preview the job file, invite panel, and homeowner share', async () => {
     getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    sharedJob.mockResolvedValue({ ...record, access: 'org' });
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
@@ -623,5 +624,20 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByPlaceholderText('their@email.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
-});
 
+  it('shows a job shared with you exactly like the contractor sees it, even if your own workspace is unpaid', async () => {
+    getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    await waitFor(() => expect(getBillingOnboarding).toHaveBeenCalled());
+    expect(screen.queryByTestId('unpaid-job-evaluation')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('upgrade-prompt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kitchen leak walkthrough')).not.toBeInTheDocument();
+  });
+});

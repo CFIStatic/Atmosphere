@@ -13,3 +13,20 @@ export function isUnpaidEvaluationLocation(pathname: string, search = ''): boole
   }
   return false;
 }
+
+/**
+ * An unpaid workspace whose person holds a live job share opens that job
+ * instead of first-run setup or plans. Null when there is none (or the lookup
+ * failed), so a real unpaid office still goes to setup.
+ */
+export async function sharedJobInsteadOfSetup(
+  lookup: () => Promise<{ grants: Array<{ path?: string | null }> }>,
+): Promise<string | null> {
+  try {
+    const { grants } = await lookup();
+    const path = grants.find((g) => typeof g.path === 'string' && g.path.startsWith('/'))?.path;
+    return path ?? null;
+  } catch {
+    return null;
+  }
+}

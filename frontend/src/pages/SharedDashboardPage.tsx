@@ -135,6 +135,9 @@ export function SharedDashboardPage() {
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
   const grantViewer = viewerOnly || (!membership && Boolean(requestedJob));
+  /** Known to be this workspace's job (the server says so, or we just made it). */
+  const ownJob =
+    !grantViewer && (record?.access === 'org' || (!record?.access && Boolean(freshRecord || freshFromNav)));
 
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
@@ -356,7 +359,9 @@ export function SharedDashboardPage() {
         </header>
       ) : null}
 
-      {actionsLocked && record ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
+      {/* Plan prompts are about the signed-in person's own workspace. A job
+          shared with them looks exactly like it does to the contractor. */}
+      {actionsLocked && record && ownJob ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
 
       {record && <JobFileTodayStrip jobId={record.job.id} record={record} />}
 
