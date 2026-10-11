@@ -16,6 +16,8 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'verifying'>('idle');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // A link that is gone can't be retried here; everything else can.
+  const [dead, setDead] = useState(false);
 
   async function send() {
     setState('sending');
@@ -25,7 +27,15 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
       setState('sent');
     } catch (err) {
       setState('idle');
-      setError(err instanceof ApiError ? err.message : 'Could not send the sign-in email.');
+      const code = err instanceof ApiError ? err.code : '';
+      if (['not_found', 'revoked', 'expired', 'no_recipient', 'job_deleted'].includes(code)) {
+        setDead(true);
+        setError(`${(err as Error).message} Ask your contractor to share the job again.`);
+      } else if (code === 'rate_limited') {
+        setError('Too many emails in a row. Wait a few minutes, then tap Email me a link again.');
+      } else {
+        setError(err instanceof ApiError ? `${err.message} Tap Email me a link to try again.` : 'Could not send the sign-in email. Tap Email me a link to try again.');
+      }
     }
   }
 
@@ -76,7 +86,7 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
           </button>
         </form>
       ) : (
-        <>
+        dead ? null : <>
           {email && (
             <div>
               <label htmlFor="homeowner-email" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -104,9 +114,14 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
         </>
       )}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-danger-700">
-          {error}
-        </p>
+        <div role="alert" className="mt-3 text-sm text-danger-700">
+          <p>{error}</p>
+          {dead && (
+            <a href="/login" className="mt-2 inline-block font-semibold text-brand-600" data-testid="email-link-dead-action">
+              Go to sign in
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

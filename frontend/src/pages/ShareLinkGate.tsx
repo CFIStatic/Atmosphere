@@ -57,7 +57,17 @@ export function ShareLinkGate() {
     api
       .progressShareInvite(token)
       .then((data) => !cancelled && setInvite(data))
-      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : 'This link is not valid.'));
+      .catch((err) => {
+        if (cancelled) return;
+        const gone = err instanceof ApiError && ['revoked', 'expired', 'job_deleted'].includes(err.code);
+        setError(
+          err instanceof ApiError
+            ? gone
+              ? `${err.message} Ask your contractor to share the job again.`
+              : err.message
+            : 'This link is not valid.',
+        );
+      });
     return () => {
       cancelled = true;
     };

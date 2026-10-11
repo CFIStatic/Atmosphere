@@ -261,8 +261,15 @@ export async function claimProgressShareForUser(input: {
     }
   }
 
-  // Progress-share claim always labels the person as Homeowner for Analysis.
-  await admin.from('profiles').upsert(
+  // Progress-share claim labels the person as Homeowner for Analysis, unless
+  // they have a work account: a contractor opening a shared job keeps their role.
+  const { data: memberships, error: memberError } = await admin
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', input.userId)
+    .limit(1);
+  const hasWorkAccount = Boolean(memberError) || (memberships ?? []).length > 0;
+  if (!hasWorkAccount) await admin.from('profiles').upsert(
     {
       id: input.userId,
       email: email,
@@ -309,6 +316,36 @@ export async function touchJobProgressGrantAccess(
   await admin.from('verifier_shares').update({ last_opened_at: now }).eq('id', shareId);
 }
 
+/**
+ * A job that belongs to a different org than the caller's, which the caller
+ * was invited to by a claimed progress share (email must still match). Null
+ * for the caller's own jobs, unknown jobs, or no grant.
+ */
+export async function viewerGrantForForeignJob(
+  req: Request,
+  callerOrgId: string,
+  jobId: string,
+): Promise<JobProgressGrant | null> {
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  const { data: job } = await admin.from('crm_jobs').select('org_id').eq('id', jobId).maybeSingle();
+  const jobOrg = (job as { org_id?: string } | null)?.org_id;
+  if (!jobOrg || jobOrg === callerOrgId) return null;
+  return findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
+}
+
+function viewerAccess(req: Request, orgId: string): SharedJobAccess {
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  return {
+    access: 'viewer',
+    orgId,
+    userId: req.user!.id,
+    role: 'viewer',
+    productRole: 'employee',
+    supabase: admin,
+    readOnly: true,
+  } as SharedJobAccess;
+}
+
 /** Org member, or a homeowner who claimed a progress share for this job. */
 export async function resolveOrgOrViewerAccess(
   req: Request,
@@ -316,6 +353,11 @@ export async function resolveOrgOrViewerAccess(
 ): Promise<SharedJobAccess> {
   try {
     const ctx = await requireOrgContext(req);
+    if (jobId) {
+      // A contractor invited to another company's job opens it as a viewer.
+      const grant = await viewerGrantForForeignJob(req, ctx.orgId, jobId);
+      if (grant) return viewerAccess(req, grant.orgId);
+    }
     return { ...ctx, access: 'org' };
   } catch (err) {
     if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;

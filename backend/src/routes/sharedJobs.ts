@@ -45,6 +45,7 @@ import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import {
   findJobProgressGrant,
+  viewerGrantForForeignJob,
   listJobProgressGrants,
   touchJobProgressGrantAccess,
 } from '../shared/jobProgressGrants.js';
@@ -342,6 +343,13 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
       const ctx = await requireOrgContext(req);
       orgId = ctx.orgId;
       supabase = ctx.supabase;
+      // Invited to another company's job: read it as a viewer, not as this org.
+      const foreign = await viewerGrantForForeignJob(req, ctx.orgId, req.params.jobId);
+      if (foreign) {
+        orgId = foreign.orgId;
+        supabase = (unscopedAdminOrNull() ?? requireAdmin()) as typeof supabase;
+        access = 'viewer';
+      }
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
       const admin = unscopedAdminOrNull() ?? requireAdmin();
