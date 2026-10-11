@@ -29,7 +29,7 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { DocumentTitle } from './components/DocumentTitle';
 import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
-import { PLATFORM_HOME } from './lib/platforms';
+import { DASHBOARD_HOME, PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { OperationsShell } from './layouts/OperationsShell';
 import { getPlatform } from './lib/usePlatform';
@@ -244,7 +244,10 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
   if (gate === 'blocked' && sharedJobPath) {
-    return <Navigate to={sharedJobPath} replace />;
+    // Someone jobs were shared with (no finished contractor account) gets the
+    // same Dashboard as the contractor, listing every job shared with them.
+    if (location.pathname === DASHBOARD_HOME) return <>{children}</>;
+    return <Navigate to={DASHBOARD_HOME} replace />;
   }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
