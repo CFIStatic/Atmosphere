@@ -102,7 +102,8 @@ export function SettingsPage() {
     },
   ];
   const SECTIONS = ALL_SECTIONS.filter((section) => {
-    if (homeowner) return section.id === 'profile';
+    // No company: the company-only sections (organization, billing, connect) have nothing to show.
+    if (homeowner) return section.id === 'profile' || section.id === 'support';
     if (section.id === 'billing' && !showBilling) return false;
     if (section.id === 'connect' && !SHOW_SETTINGS_CONNECT) return false;
     return true;
@@ -423,11 +424,7 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
     <>
       <Card
         title={t('settings.profile.title')}
-        description={
-          homeowner
-            ? 'Your contractors see this name on the jobs they share with you.'
-            : t('settings.profile.description')
-        }
+        description={t('settings.profile.description')}
       >
         <div className="flex items-center gap-4">
           <label className="relative shrink-0 cursor-pointer">
@@ -563,7 +560,6 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
           </div>
         </div>
       </Card>
-      {homeowner ? <SignOutCard /> : null}
     </>
   );
 }

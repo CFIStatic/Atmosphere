@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { homeownerProofPayload } from '../src/shared/homeownerProofPayload.js';
 import { composeHomeownerLiveStory } from '../src/shared/homeownerLiveStory.js';
-import { homeownerSafeText, NEUTRAL_CLIP_LINE } from '../src/shared/homeownerSafeSummary.js';
+import { homeownerSafeText } from '../src/shared/homeownerSafeSummary.js';
 
 const JUNK =
   'This clip contains no job-site conversation whatsoever. Every word of audio comes from a YouTube video playing on the Dell monitor. The Diary Of A CEO episode titled "How to win" is audible.';
@@ -27,8 +27,10 @@ test('viewer payload never carries raw analysis; junk clips get a neutral line',
   const out: any = homeownerProofPayload(office as any);
   const text = JSON.stringify(out);
   assert.doesNotMatch(text, BANNED);
-  assert.equal(out.videos[0].homeownerSummary, NEUTRAL_CLIP_LINE);
-  assert.equal(out.days[0].summary, NEUTRAL_CLIP_LINE);
+  // Non-job clip: same card, analyst text absent, no stand-in wording.
+  assert.equal(out.videos[0].aiSummary, null);
+  assert.equal(out.days[0].summary, '');
+  assert.doesNotMatch(JSON.stringify(out), /Site video recorded|homeownerSummary/);
   assert.equal(out.days[1].summary, 'Crew removed wet drywall in the kitchen.');
   assert.deepEqual(out.videos[1].conversation.keyMoments, [{ text: 'Drywall cut out to 2 ft' }]);
   assert.doesNotMatch(JSON.stringify(composeHomeownerLiveStory(out.videos)), BANNED);

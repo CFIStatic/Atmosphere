@@ -418,6 +418,9 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
+    // Same tabs as the contractor, minus Access (it lists everyone's email).
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
+    expect(tabs).toEqual(['Chat', 'Timeline', 'Videos', 'Evidence report']);
   });
 
   it('shows Who-has-access for office org members without Similar jobs', async () => {

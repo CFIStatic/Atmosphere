@@ -9,7 +9,6 @@
  * analysis says it isn't job-site footage gets a neutral line instead.
  */
 
-export const NEUTRAL_CLIP_LINE = 'Site video recorded';
 
 /** Phrases that mark a sentence as internal analyst language. */
 const ANALYST_SENTENCE = new RegExp(
@@ -172,8 +171,8 @@ export function isNonJobClip(video: any): boolean {
 export function homeownerSafeVideo<V extends Record<string, any>>(video: V): V {
   const next: any = { ...video };
   if (isNonJobClip(video)) {
-    next.aiSummary = NEUTRAL_CLIP_LINE;
-    next.homeownerSummary = NEUTRAL_CLIP_LINE;
+    // Same card as the contractor's, with the analyst's text simply absent.
+    next.aiSummary = null;
     next.conversation = null;
     next.dictationEntries = [];
     next.events = [];
@@ -188,7 +187,6 @@ export function homeownerSafeVideo<V extends Record<string, any>>(video: V): V {
   }
   const summary = homeownerSafeText(video.aiSummary);
   next.aiSummary = summary;
-  next.homeownerSummary = summary ?? NEUTRAL_CLIP_LINE;
   if (video.conversation && typeof video.conversation === 'object') {
     // Allowlist: only cleaned summaries and short fact lists. Details,
     // unresolved questions, speaker notes and raw segments stay with the office.
