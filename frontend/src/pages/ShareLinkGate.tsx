@@ -15,7 +15,7 @@ import { SpinnerIcon } from '../components/icons';
  * - signed in as the invited email → claim the share, open the job in the portal
  * - emailed sign-in link → verify, claim, open the job in the portal
  * - signed out → the same sign-in page contractors use, email prefilled,
- *   "Email me a link" offered
+ *   "Email me a code" offered
  * - signed in as someone else → say so, offer to switch accounts
  *
  * The server checks the email against the invite on every claim.
