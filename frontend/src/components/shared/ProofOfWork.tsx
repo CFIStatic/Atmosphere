@@ -56,6 +56,20 @@ function matchSeekVideo(
   return videos[0];
 }
 
+/** jobProofs with two quick retries for a transient gateway error. */
+async function jobProofsWithRetry(jobId: string, delaysMs: number[] = [800, 2000]) {
+  let last: unknown;
+  for (let i = 0; i <= delaysMs.length; i += 1) {
+    try {
+      return await api.jobProofs(jobId);
+    } catch (err) {
+      last = err;
+      if (i < delaysMs.length) await new Promise((r) => setTimeout(r, delaysMs[i]));
+    }
+  }
+  throw last;
+}
+
 export function ProofOfWork({
   jobId,
   heading = 'Videos',
@@ -101,7 +115,9 @@ export function ProofOfWork({
     if (!jobId) return;
     try {
       const [proofs, qs] = await Promise.all([
-        api.jobProofs(jobId),
+        // A momentary 502/503 on first open used to paint "Nothing filed yet"
+        // over a job full of clips. Retry briefly before giving up.
+        opts?.silent ? api.jobProofs(jobId) : jobProofsWithRetry(jobId),
         readOnly
           ? Promise.resolve({ questions: [] as ProofQuestion[] })
           : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
@@ -120,14 +136,14 @@ export function ProofOfWork({
       setQuestions(qs.questions);
       setError(null);
     } catch (err) {
+      // Never show an empty list because a request failed: keep what is on
+      // screen (or Loading…) and let the 12-second refresh fill it in.
       if (!opts?.silent) {
-        setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-        setData({
-          days: [],
-          videos: [],
-          counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
-          siteKnown: false,
-        });
+        setError(
+          err instanceof Error && !/not reachable|API_UPSTREAM/i.test(err.message)
+            ? err.message
+            : 'Could not load the videos just now. Retrying…',
+        );
       }
     }
   }
