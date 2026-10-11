@@ -757,7 +757,6 @@ export async function viewerLibraryPayload(
   const partyViews = (await listJobPartyViews(admin, userEmail)).filter(
     (v) => !granted.has(v.jobId) && v.orgId !== excludeOrgId,
   );
-  const partyByJob = new Map(partyViews.map((v) => [v.jobId, v.partyId]));
   const grants: Array<{ orgId: string; jobId: string }> = [...homeownerGrants, ...partyViews];
   if (!grants.length) return null;
   const jobIdsByOrg = new Map<string, string[]>();
@@ -793,20 +792,10 @@ export async function viewerLibraryPayload(
     ]);
     if (proofsError) throw new HttpError(500, proofsError.message, 'library_failed');
     if (jobsError) throw new HttpError(500, jobsError.message, 'library_failed');
-    const proofRows = ((proofs ?? []) as any[]).filter((p) => {
-      const partyId = partyByJob.get(p.job_id as string);
-      return !partyId || p.party_id === partyId;
-    });
-    // The homeowner gets every clip like the contractor; a sub's clips keep
-    // the guest rule (no raw stills of a clip with privacy redactions).
-    const redacted = new Set(
-      proofRows
-        .filter((p) => partyByJob.has(p.job_id as string) && proofFindingsHavePrivacyRedactions(p.ai_findings))
-        .map((p) => p.id as string),
-    );
+    // Every invitee (homeowner or sub) lists every live clip on the job.
+    const proofRows = (proofs ?? []) as any[];
     const orgItems = await assembleLibrary(admin, orgId, proofRows);
     for (const item of orgItems as any[]) {
-      if (redacted.has(item.id)) item.posterUrl = null;
       item.sharedWithMe = true;
       items.push(item);
     }

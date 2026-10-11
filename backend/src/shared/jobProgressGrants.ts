@@ -436,8 +436,12 @@ function viewerAccess(req: Request, orgId: string, partyId: string | null = null
 }
 
 /** The sub's party id when this access is an invited subcontractor, else null. */
-export function viewerPartyId(access: SharedJobAccess): string | null {
-  return access.access === 'viewer' ? access.partyId ?? null : null;
+export function viewerPartyId(_access: SharedJobAccess): string | null {
+  // Anyone the contractor invites to a job (homeowner or subcontractor) sees
+  // the whole job file: every clip from every crew, sub and office upload.
+  // The party id stays on the access (it labels the person a subcontractor)
+  // but no longer narrows what they see.
+  return null;
 }
 
 /** An invited subcontractor opens only clips they recorded (404 otherwise). */
