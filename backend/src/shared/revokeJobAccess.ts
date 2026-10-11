@@ -58,6 +58,30 @@ async function revokeProgressShare(
   return { recipientEmail: ((share as any).recipient_email as string | null) ?? null };
 }
 
+/**
+ * Homeowner invites are matched to the account by email, so removing a
+ * person removes every live invite on this job addressed to that email —
+ * otherwise a resent invite would quietly link them back.
+ */
+async function revokeProgressSharesForEmail(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string,
+  email: string | null | undefined,
+): Promise<void> {
+  const recipient = email?.trim().toLowerCase();
+  if (!recipient) return;
+  const { error } = await supabase
+    .from('verifier_shares')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .eq('share_kind', 'progress')
+    .is('revoked_at', null)
+    .ilike('recipient_email', recipient.replace(/[\\%_]/g, (c) => `\\${c}`));
+  if (error) throw new HttpError(400, error.message, 'revoke_failed');
+}
+
 async function deleteProgressGrants(input: {
   admin: SupabaseClient;
   orgId: string;
@@ -135,6 +159,7 @@ export async function revokeJobAccessPerson(input: {
       jobId: input.jobId,
       shareId: ref.id,
     });
+    await revokeProgressSharesForEmail(input.supabase, input.orgId, input.jobId, recipientEmail);
     // Grants whose share_id was cleared still count — drop by email on this job.
     if (recipientEmail) {
       await deleteProgressGrants({
@@ -178,6 +203,12 @@ export async function revokeJobAccessPerson(input: {
   if (shareId) {
     await revokeProgressShare(input.supabase, input.orgId, input.jobId, shareId);
   }
+  await revokeProgressSharesForEmail(
+    input.supabase,
+    input.orgId,
+    input.jobId,
+    (grant as { recipient_email?: string | null }).recipient_email ?? null,
+  );
 
   return { ok: true, kind: 'grant' };
 }

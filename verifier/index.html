@@ -2232,9 +2232,14 @@
      only ever returns jobs shared with them; this just hides what they cannot use. */
   body[data-atm-viewer] #nav-start-job,
   body[data-atm-viewer] #nav-logins,
+  body[data-atm-viewer] #nav-settings,
+  body[data-atm-viewer] #menu-settings,
   body[data-atm-viewer] .job-acts,
   body[data-atm-viewer] .clip-rename,
-  body[data-atm-viewer] tr.cliprow .kebab { display: none !important; }
+  body[data-atm-viewer] tr.cliprow .kebab,
+  tr.is-shared .job-acts,
+  tr.is-shared .clip-rename,
+  tr.is-shared .kebab { display: none !important; }
   .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
@@ -4560,7 +4565,7 @@
     var clipDay = dayLabel(e.capturedAt || e.uploadedAt || e.workDate);
     var sub = storedTitleSubtitle(e, phase, underJob);
     return '' +
-      '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
+      '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + (e.sharedWithMe ? ' is-shared' : '') + '" tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="clip-title-row">' +
@@ -4964,7 +4969,7 @@
       : '—';
     var nameInner = esc(job.name);
     // Homeowners see who shared the job with them.
-    if (VIEWER && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
+    if ((VIEWER || job.sharedWithMe) && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
@@ -4989,7 +4994,7 @@
         metaBits.join('') +
       '</div>';
     return '' +
-      '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
+      '<tr class="jobrow' + (job.sharedWithMe ? ' is-shared' : '') + '" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
         '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
@@ -6475,7 +6480,7 @@
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
     // Homeowners watch clips on the job page (guest media rules apply there).
-    if (VIEWER) { openJobRecord(item.job); return; }
+    if (VIEWER || item.sharedWithMe) { openJobRecord(item.job); return; }
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
@@ -9718,6 +9723,8 @@
     return {
       _remote: true,
       id: raw.id,
+      // A job another company shared with you (homeowner or sub invite).
+      sharedWithMe: Boolean(raw.sharedWithMe),
       job: jobKey || 'shared',
       jobId: raw.jobId || (jobKey && jobKey !== 'shared' ? jobKey : null),
       jobName: raw.jobName,
@@ -10123,7 +10130,8 @@
         company: j.company || '',
         person: j.person || '',
         createdAt: j.createdAt || '',
-        captureStatus: j.captureStatus || ''
+        captureStatus: j.captureStatus || '',
+        sharedWithMe: Boolean(j.sharedWithMe)
       };
     });
     (payload.items || []).forEach(function (raw) {

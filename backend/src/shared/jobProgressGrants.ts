@@ -174,11 +174,91 @@ async function liveGrants(
 }
 
 /** Every live job this person was invited to, across contractor orgs, newest first. */
+/**
+ * Every live homeowner invite (Share > Homeowner) addressed to this email,
+ * not yet claimed by this account. Pure so it can be tested without a DB.
+ */
+export function unclaimedSharesForEmail<
+  S extends { id: string; job_id: string; recipient_email: string | null; revoked_at: string | null; expires_at?: string | null },
+>(shares: S[], live: Array<{ job_id: string; share_id: string | null; revoked_at?: string | null }>, email: string, now = Date.now()): S[] {
+  const want = email.trim().toLowerCase();
+  if (!want) return [];
+  const claimed = new Set(live.filter((g) => !g.revoked_at && g.share_id).map((g) => `${g.job_id}:${g.share_id}`));
+  const seenJobs = new Set<string>();
+  return shares.filter((s) => {
+    if (s.revoked_at) return false;
+    if (s.expires_at && new Date(s.expires_at).getTime() < now) return false;
+    if ((s.recipient_email ?? '').trim().toLowerCase() !== want) return false;
+    if (claimed.has(`${s.job_id}:${s.id}`) || seenJobs.has(s.job_id)) return false;
+    seenJobs.add(s.job_id);
+    return true;
+  });
+}
+
+/**
+ * The homeowner account is the email. Any job a contractor shares with that
+ * email (now or years later) joins the account without clicking each invite
+ * link: live invites to the signed-in email become grants, the same row the
+ * link claim writes. Best-effort; the per-link claim still works.
+ */
+async function adoptSharesForEmail(
+  admin: SupabaseClient,
+  userId: string,
+  userEmail: string | null | undefined,
+  jobId?: string,
+): Promise<void> {
+  const email = userEmail?.trim().toLowerCase() || '';
+  if (!email) return;
+  try {
+    let q = admin
+      .from('verifier_shares')
+      .select('id, org_id, job_id, recipient_email, revoked_at, expires_at')
+      .eq('share_kind', 'progress')
+      .is('revoked_at', null)
+      .ilike('recipient_email', escapeLike(email))
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (jobId) q = q.eq('job_id', jobId);
+    const { data: shares, error } = await q;
+    if (error || !shares?.length) return;
+    let gq = admin.from('job_progress_grants').select('job_id, share_id, revoked_at').eq('user_id', userId);
+    if (jobId) gq = gq.eq('job_id', jobId);
+    const { data: grants, error: grantsError } = await gq;
+    if (grantsError) return;
+    type ShareRow = {
+      id: string;
+      org_id: string;
+      job_id: string;
+      recipient_email: string | null;
+      revoked_at: string | null;
+      expires_at: string | null;
+    };
+    type GrantPeek = { job_id: string; share_id: string | null; revoked_at: string | null };
+    const todo = unclaimedSharesForEmail(shares as ShareRow[], (grants ?? []) as GrantPeek[], email);
+    if (!todo.length) return;
+    const homeowner = normalizeServiceRoleInput({ forceHomeowner: true });
+    const rows = todo.map((s) => ({
+      org_id: s.org_id,
+      job_id: s.job_id,
+      user_id: userId,
+      share_id: s.id,
+      recipient_email: email,
+      service_role: homeowner.service_role,
+      revoked_at: null,
+    }));
+    const { error: upsertError } = await admin.from('job_progress_grants').upsert(rows, { onConflict: 'job_id,user_id' });
+    if (upsertError) console.warn('[grants] adopt by email failed:', upsertError.message);
+  } catch (err) {
+    console.warn('[grants] adopt by email failed:', err instanceof Error ? err.message : err);
+  }
+}
+
 export async function listJobProgressGrants(
   admin: SupabaseClient,
   userId: string,
   userEmail?: string | null,
 ): Promise<JobProgressGrant[]> {
+  await adoptSharesForEmail(admin, userId, userEmail);
   const rows = await selectGrantRows(admin, userId);
   if (!rows) return [];
   return liveGrants(admin, rows, userEmail);
@@ -190,6 +270,7 @@ export async function findJobProgressGrant(
   jobId: string,
   userEmail?: string | null,
 ): Promise<JobProgressGrant | null> {
+  await adoptSharesForEmail(admin, userId, userEmail, jobId);
   const rows = await selectGrantRows(admin, userId, jobId);
   if (!rows) return null;
   const [grant] = await liveGrants(admin, rows, userEmail);
