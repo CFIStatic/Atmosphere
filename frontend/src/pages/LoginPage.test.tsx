@@ -269,7 +269,9 @@ describe('LoginPage in the iPhone/Android app shell', () => {
 });
 
 describe('LoginPage from a homeowner share link', () => {
-  it('prefills the invited email and offers Email me a link, sent to the share (not the typed address)', async () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('prefills the invited email and offers Email me a code, sent to the share (not the typed address)', async () => {
     authState.user = null;
     renderLogin('/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com');
     expect(screen.getByLabelText('Email')).toHaveValue('home@owner.com');
@@ -280,8 +282,8 @@ describe('LoginPage from a homeowner share link', () => {
     expect(screen.queryByRole('button', { name: /^Sign in$/ })).toBeNull();
     expect(screen.queryByText(/Create an account/)).toBeNull();
     expect(screen.queryByText(/use a password|forgot password/i)).toBeNull();
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toContain('Email me a link');
-    await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toContain('Email me a code');
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
     expect(progressShareEmailSignIn).toHaveBeenCalledWith('tok_0123456789abcdef0123');
     expect(await screen.findByRole('status')).toHaveTextContent('home@owner.com');
   });
@@ -289,13 +291,14 @@ describe('LoginPage from a homeowner share link', () => {
   it('plain /login has no homeowner link option', () => {
     authState.user = null;
     renderLogin('/login');
-    expect(screen.queryByRole('button', { name: 'Email me a link' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Email me a code' })).toBeNull();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByText(/Create an account/)).toBeInTheDocument();
   });
 });
 
 describe('homeowner email-link errors always leave a next step', () => {
+  beforeEach(() => sessionStorage.clear());
   const url = '/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com';
   async function failWith(code: string, message: string) {
     const { ApiError } = await import('../lib/api');
@@ -308,16 +311,16 @@ describe('homeowner email-link errors always leave a next step', () => {
     authState.user = null;
     await failWith('rate_limited', 'Too many sign-in emails.');
     renderLogin(url);
-    await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Wait a few minutes/);
-    expect(screen.getByRole('button', { name: 'Email me a link' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Email me a code' })).toBeEnabled();
   });
 
   it('revoked link: explains and links to sign in', async () => {
     authState.user = null;
     await failWith('revoked', 'This link was revoked.');
     renderLogin(url);
-    await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/share the job again/);
     expect(screen.getByTestId('email-link-dead-action')).toHaveAttribute('href', '/login');
   });
@@ -326,8 +329,8 @@ describe('homeowner email-link errors always leave a next step', () => {
     authState.user = null;
     await failWith('signin_send_failed', 'Could not send the sign-in email.');
     renderLogin(url);
-    await userEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/try again/);
-    expect(screen.getByRole('button', { name: 'Email me a link' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Email me a code' })).toBeEnabled();
   });
 });
