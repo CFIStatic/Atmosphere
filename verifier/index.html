@@ -648,6 +648,11 @@
     background: var(--stage);
     overflow: hidden;
   }
+  /* A child or a private moment on screen, and the file is not the blurred
+     copy yet: blur the whole frame here. */
+  .preview-stage.is-private video {
+    filter: blur(48px) saturate(0.6);
+  }
   .preview-stage video,
   .preview-stage img,
   .screen-preview .player .frame video,
@@ -3815,9 +3820,39 @@
     return currentPlayhead();
   }
 
+  /** Blur (and mute) the player through a child / private-moment window. */
+  function syncPrivacyBlur(item, vid) {
+    if (!vid || !item) return;
+    var windows = item._privacyWindows || [];
+    var stage = vid.closest ? vid.closest('.preview-stage') : null;
+    var t = Number(vid.currentTime) || 0;
+    var hit = null;
+    for (var i = 0; i < windows.length; i += 1) {
+      // A quarter second early: timeupdate only fires a few times a second.
+      if (t >= Number(windows[i].startSec) - 0.25 && t <= Number(windows[i].endSec)) { hit = windows[i]; break; }
+    }
+    if (stage) stage.classList.toggle('is-private', Boolean(hit));
+    var wantMute = Boolean(hit && hit.mute);
+    // atmHoldMutePref: this mute is not the viewer's choice; do not save it.
+    if (wantMute && !vid.dataset.privacyMuted) {
+      vid.dataset.privacyMuted = vid.muted ? 'was' : '1';
+      if (!vid.muted) {
+        vid.dataset.atmHoldMutePref = '1';
+        vid.muted = true;
+      }
+    } else if (!wantMute && vid.dataset.privacyMuted) {
+      if (vid.dataset.privacyMuted === '1') {
+        vid.dataset.atmHoldMutePref = '1';
+        vid.muted = false;
+      }
+      delete vid.dataset.privacyMuted;
+    }
+  }
+
   function paintLiveProgress() {
     var item = state.open;
     var vid = previewVideo();
+    syncPrivacyBlur(item, vid);
     var duration = clipLength(item, vid);
     var at = playbackSeconds(item, vid);
     if (duration > 0 && at > duration) at = duration;
@@ -6208,6 +6243,12 @@
     vid.controls = false;
     vid.disablePictureInPicture = true;
     applyVolumePrefs(vid);
+    syncPrivacyBlur(item, vid);
+    ['loadeddata', 'seeking', 'seeked', 'timeupdate', 'play'].forEach(function (ev) {
+      vid.addEventListener(ev, function () {
+        if (vid.isConnected) syncPrivacyBlur(item, vid);
+      });
+    });
     syncClipCaptions(item);
     if (vid.dataset) vid.dataset.playingSoon = hold ? '' : '1';
     if (hold && vid.dataset) delete vid.dataset.playingSoon;
@@ -6555,7 +6596,9 @@
     // Skip when the preview element is already fetching this URL — a second
     // <video> downloads the file twice and stalls the first Play.
     if (item._videoUrl && (!item.poster || String(item.poster).indexOf('data:') === 0)) {
-      if (!previewVideo()) {
+      // Never grab a still from the original of a clip with a child or a
+      // private moment in it.
+      if (!previewVideo() && !(item._privacyWindows && item._privacyWindows.length)) {
         captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
           if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
         });
@@ -9658,6 +9701,8 @@
   var muteBtn = document.getElementById('d-mute');
   if (muteBtn) muteBtn.addEventListener('click', function () {
     var vid = previewVideo();
+    // Sound stays off through a private window; it comes back after it.
+    if (vid && vid.dataset.privacyMuted) return;
     var prefs = readVideoPrefs();
     var nextMuted = !(vid ? vid.muted : prefs.muted);
     if (vid) {
@@ -9676,6 +9721,10 @@
   if (volumeSlider) volumeSlider.addEventListener('input', function () {
     var next = Math.max(0, Math.min(1, Number(volumeSlider.value) || 0));
     var vid = previewVideo();
+    if (vid && vid.dataset.privacyMuted) {
+      vid.volume = next;
+      return;
+    }
     if (vid) {
       vid.volume = next;
       vid.muted = next === 0;
@@ -10027,6 +10076,10 @@
           return { at: f.atSeconds, src: f.url };
         });
         item._videoUrl = video && video.url ? video.url : null;
+        // Windows to blur on this side when the file is not the blurred copy.
+        item._privacyWindows = video && !video.privacySafe && Array.isArray(video.privacyWindows)
+          ? video.privacyWindows
+          : [];
         if (video && video.url) {
           var videoTtl = Number(video.expiresInSeconds);
           if (!isFinite(videoTtl) || videoTtl <= 0) videoTtl = 3600;

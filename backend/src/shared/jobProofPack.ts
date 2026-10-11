@@ -15,6 +15,7 @@ import {
   secondsInPrivacyRange,
   type PrivacyRedactionRange,
 } from '../audio/privacyRedactions.js';
+import { childPrivacyRedactionsFromStored } from '../audio/childPrivacyRedactions.js';
 
 export const JOB_PROOF_PACK_SCHEMA = 'atmosphere.job_proof_pack.v1' as const;
 
@@ -543,6 +544,7 @@ export type ProofPackVideoInput = {
   evidenceLog?: Array<Record<string, unknown>> | null;
   people?: unknown;
   privacyRedactions?: unknown;
+  childPrivacyRedactions?: unknown;
 };
 
 export type ProofPackDayInput = {
@@ -695,7 +697,12 @@ export function buildJobProofPack(input: {
   );
 
   const clips: ProofPackClip[] = videos.map((video) => {
-    const ranges = privacyRedactionsFromStored(video.privacyRedactions);
+    // Child ranges keep their stills and quotes out of the pack exactly like
+    // private moments do.
+    const ranges: PrivacyRedactionRange[] = [
+      ...privacyRedactionsFromStored(video.privacyRedactions),
+      ...childPrivacyRedactionsFromStored(video.childPrivacyRedactions),
+    ].sort((a, b) => a.startSec - b.startSec);
     const collected = collectQuotes(
       video.conversation ?? null,
       (video.evidenceLog as Array<Record<string, unknown>> | null) ?? null,

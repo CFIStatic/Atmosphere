@@ -1251,6 +1251,8 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   job?: { id: string; number: number | null; name: string | null };
+  /** Set when this account is on the job as an invited subcontractor (own videos only). */
+  viewerScope?: { role: 'subcontractor'; company: string | null };
   days: ProofDay[];
   videos?: ProofVideoRecord[];
   /** Job-level rooms. The same physical room filmed on different days is one row. */
