@@ -25,6 +25,7 @@ import {
   postSignOutToFieldCapture,
 } from '../lib/fieldEmbed';
 import { preferFresherProfile } from '../lib/preferFresherProfile';
+import { announceAccountChange, watchAccountSwitch } from '../lib/accountSwitch';
 import {
   clearSessionTermsAccepted,
   markSessionTermsAccepted,
@@ -79,6 +80,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // True once an explicit login/signup/logout has run. The mount-time restore
   // below must never overwrite the result of an explicit action that races it.
   const explicitAuthRef = useRef(false);
+
+  // Another tab signing in as someone else swaps the shared cookie under this
+  // tab: its header would keep the old name while every request acts as the
+  // new account. Reload so the page matches who is actually signed in.
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user]);
+  useEffect(() => {
+    if (loading) return;
+    return watchAccountSwitch({
+      currentUserId: () => userIdRef.current,
+      fetchUserId: async () => {
+        try {
+          const { user: current } = await api.me();
+          return current?.id ?? null;
+        } catch (err) {
+          return err instanceof ApiError && err.status === 401 ? null : undefined;
+        }
+      },
+      onSwitch: () => window.location.reload(),
+    });
+  }, [loading]);
 
   const loadMembership = useCallback(async (): Promise<Membership | null> => {
     setMembershipLoading(true);
@@ -185,7 +209,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user, session, terms: nextTerms } = await api.login(email, password);
       rememberSession(session);
       explicitAuthRef.current = true;
+      userIdRef.current = user?.id ?? null;
       setUser(user);
+      announceAccountChange();
       setTerms(nextTerms ?? publicTermsStatus());
       return loadMembership();
     },
@@ -206,7 +232,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.needsEmailConfirmation && res.user) {
         rememberSession(res.session);
         explicitAuthRef.current = true;
+        userIdRef.current = res.user.id;
         setUser(res.user);
+        announceAccountChange();
         membership = await loadMembership();
       }
       return {
@@ -237,7 +265,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const adoptUser = useCallback(
     async (nextUser: AuthUser) => {
       explicitAuthRef.current = true;
+      userIdRef.current = nextUser.id;
       setUser(nextUser);
+      announceAccountChange();
       try {
         const { terms: nextTerms } = await api.me();
         setTerms(nextTerms ?? publicTermsStatus());
@@ -257,7 +287,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearFieldEmbedSession();
       clearSessionTermsAccepted();
       postSignOutToFieldCapture();
+      userIdRef.current = null;
       setUser(null);
+      announceAccountChange();
       setMembership(null);
       setProfile(null);
       setTerms(null);
