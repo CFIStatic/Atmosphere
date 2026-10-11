@@ -17,7 +17,8 @@ import { progressSignInEmail } from './progressSignInEmail.js';
  * succeeds when the resulting Auth user's email is that same recipient. The
  * claim afterwards still goes through claimProgressShareForUser, unchanged.
  *
- * Office / org login is untouched; it keeps email + password.
+ * Work accounts may use it too: the link goes only to the invited inbox (the
+ * same proof as a password reset) and signs them into their own account.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -116,16 +117,9 @@ export async function sendProgressSignInLink(shareToken: string): Promise<{ sent
       options: { redirectTo },
     });
   }
-  // Email-only sign-in is for homeowners. Anyone who already belongs to an
-  // org (contractors, subs) keeps their real password account.
-  const existingUserId = kind === 'magiclink' ? generated.data?.user?.id : null;
-  if (existingUserId && (await isOrgMember(admin, existingUserId))) {
-    throw new HttpError(
-      409,
-      'This email has an Atmosphere work account. Sign in with your password to open this job.',
-      'password_required',
-    );
-  }
+  // Work accounts (contractors, subs) get the same link. It proves the same
+  // thing a password reset does: control of the invited inbox. The session is
+  // their existing account; the claim only adds this one job.
   const props = generated.data?.properties;
   if (generated.error || !props?.hashed_token) {
     console.warn('[progress-signin] generateLink:', generated.error?.message);
@@ -145,11 +139,6 @@ export async function sendProgressSignInLink(shareToken: string): Promise<{ sent
   return { sentTo: recipient };
 }
 
-async function isOrgMember(admin: NonNullable<ReturnType<typeof unscopedAdminOrNull>>, userId: string): Promise<boolean> {
-  const { data, error } = await admin.from('org_members').select('org_id').eq('user_id', userId).limit(1);
-  if (error) return true; // fail closed: never mint a passwordless link we cannot vet
-  return (data ?? []).length > 0;
-}
 
 /** Turn the email link (token hash) or the 6-digit code into a session for the invitee. */
 export async function verifyProgressSignIn(input: {
@@ -182,13 +171,5 @@ export async function verifyProgressSignIn(input: {
   }
   if (!session || !user) throw invalid();
   assertInvitedUser(user, recipient);
-  const admin = unscopedAdminOrNull();
-  if (admin && (await isOrgMember(admin, user.id))) {
-    throw new HttpError(
-      409,
-      'This email has an Atmosphere work account. Sign in with your password to open this job.',
-      'password_required',
-    );
-  }
   return { session, user };
 }
