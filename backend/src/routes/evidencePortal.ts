@@ -56,7 +56,7 @@ import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
-import { listJobProgressGrants } from '../shared/jobProgressGrants.js';
+import { listJobProgressGrants, resolveProofAccess } from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
@@ -1210,14 +1210,18 @@ evidencePortalRouter.get(
   '/evidence/:proofId/download',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId, userId } = await requireOrgContext(req);
+      // The office, or a homeowner the job was shared with: same Download
+      // button, same guest media rules as playback for the homeowner.
+      const { supabase, orgId, userId, access } = await resolveProofAccess(req, req.params.proofId);
+      const viewer = access === 'viewer';
       const { data: proof } = await supabase
         .from('job_proofs')
-        .select('id, job_id, storage_path, phase, work_date')
+        .select('id, job_id, storage_path, phase, work_date, deleted_at, ai_findings')
         .eq('org_id', orgId)
         .eq('id', req.params.proofId)
         .maybeSingle();
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (viewer) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const admin = unscopedAdminOrNull();
       if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
@@ -1234,7 +1238,7 @@ evidencePortalRouter.get(
         requester_email: req.user?.email ?? '',
         fee_cents: 0,
         status: 'waived',
-        paid_via: 'org_member',
+        paid_via: viewer ? 'job_share' : 'org_member',
         paid_at: new Date().toISOString(),
       });
 
@@ -1250,7 +1254,7 @@ evidencePortalRouter.get(
         action: 'downloaded',
         actorId: userId,
         actorLabel: await actorLabelFor(supabase, userId),
-        actorRole: 'general_contractor',
+        actorRole: viewer ? 'homeowner' : 'general_contractor',
         detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 

@@ -388,3 +388,17 @@ export async function resolveOrgOrViewerAccess(
     };
   }
 }
+
+/**
+ * Who may open one clip: the clip's own org, or someone the clip's job was
+ * shared with (viewer). Peeks the job with admin, then the normal job check.
+ */
+export async function resolveProofAccess(req: Request, proofId: string) {
+  const admin = unscopedAdminOrNull();
+  if (admin) {
+    const { data: peek } = await admin.from('job_proofs').select('job_id').eq('id', proofId).maybeSingle();
+    const jobId = (peek as { job_id?: string } | null)?.job_id;
+    if (jobId) return resolveOrgOrViewerAccess(req, jobId);
+  }
+  return resolveOrgOrViewerAccess(req);
+}

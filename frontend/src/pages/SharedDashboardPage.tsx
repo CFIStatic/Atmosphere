@@ -481,18 +481,17 @@ function JobFileSections({
   onOpenHref?: (href: string) => void;
 }) {
   const tabs = useMemo(() => {
+    // Exactly the contractor's tabs for everyone. The server strips
+    // office-only data from the videos and the evidence report for viewers (#710).
     const next: JobFileSectionTab[] = [
       { id: 'chat', label: 'Chat' },
       { id: 'timeline', label: 'Timeline' },
+      { id: 'access', label: 'Access' },
+      { id: 'videos', label: 'Videos' },
+      { id: 'evidence', label: 'Evidence report' },
     ];
-    // Access lists everyone's email on the job: contractor only.
-    if (!grantViewer) next.push({ id: 'access', label: 'Access' });
-    // Same tabs as the contractor. The server strips office-only data from
-    // the videos and the evidence report for viewers (#710).
-    next.push({ id: 'videos', label: 'Videos' });
-    next.push({ id: 'evidence', label: 'Evidence report' });
     return next;
-  }, [grantViewer]);
+  }, []);
 
   const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
@@ -526,7 +525,7 @@ function JobFileSections({
           <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
         ) : null}
 
-        {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
+        {active === 'access' ? <JobAccessRoster jobId={record.job.id} readOnly={grantViewer} /> : null}
 
         {active === 'videos' ? (
           <ProofOfWork
@@ -534,7 +533,7 @@ function JobFileSections({
             heading="Videos"
             showCollectionAsk={false}
             readOnly={viewerOnly}
-            allowDownload={!grantViewer}
+            allowDownload
           />
         ) : null}
 

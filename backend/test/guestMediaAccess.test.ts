@@ -135,8 +135,19 @@ test('shared proof video applies the guest rules to progress-grant viewers', () 
   const start = proofOfWork.indexOf('export async function proofVideoUrl');
   assert.ok(start > 0);
   const body = proofOfWork.slice(start, start + 2600);
-  assert.match(body, /guest = ctx\.access === 'viewer'/);
+  assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(body, /guest = access === 'viewer'/);
   assert.match(body, /guest && \(proof as any\)\.deleted_at/);
   assert.match(body, /if \(guest\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
   assert.match(body, /select\('[^']*ai_findings[^']*'\)/);
+});
+
+test('homeowner Download of a shared clip applies the same guest rules', () => {
+  const portal = readFileSync(join(here, '../src/routes/evidencePortal.ts'), 'utf8');
+  const start = portal.indexOf("'/evidence/:proofId/download'");
+  assert.ok(start > 0);
+  const body = portal.slice(start, start + 2000);
+  assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(body, /viewer && \(proof as any\)\.deleted_at/);
+  assert.match(body, /if \(viewer\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
 });

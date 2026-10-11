@@ -48,6 +48,7 @@ import {
   viewerGrantForForeignJob,
   listJobProgressGrants,
   touchJobProgressGrantAccess,
+  resolveOrgOrViewerAccess,
 } from '../shared/jobProgressGrants.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
@@ -437,15 +438,16 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
 
 /**
  * GET /api/operations/shared/:jobId/access-roster
- * Office view: everyone with job-progress / Field Capture access, last open, grantor.
- * Org members only — homeowners (viewer grants) do not see the full roster.
+ * Everyone with job-progress / Field Capture access, last open, grantor.
+ * The office and the homeowner see the same list (read-only for the
+ * homeowner: revoking stays org-only).
  */
 sharedJobsRouter.get(
   '/shared/:jobId/access-roster',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const jobId = z.string().uuid().parse(req.params.jobId);
-      const { orgId, supabase } = await requireOrgContext(req);
+      const { orgId, supabase } = await resolveOrgOrViewerAccess(req, jobId);
 
       const { data: job, error: jobError } = await supabase
         .from('crm_jobs')

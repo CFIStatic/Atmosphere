@@ -24,7 +24,7 @@ import { VIDEO_ANALYSIS_FEATURE, withVideoUsageScope } from '../metering/backgro
 import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../metering/aiBudgetService.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
-import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
+import { resolveOrgOrViewerAccess, resolveProofAccess } from '../shared/jobProgressGrants.js';
 import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
@@ -4305,34 +4305,12 @@ export async function getJobLiveSession(req: Request, res: Response, next: NextF
 
 export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
   try {
-    // Resolve after we know the job — proof rows carry job_id.
-    let orgId: string;
-    let userId: string;
-    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    // Resolve after we know the job — proof rows carry job_id. Own org, or a
+    // job shared with this person (they may also have a workspace of their own).
+    const { orgId, userId, supabase, access } = await resolveProofAccess(req, req.params.proofId);
     // Progress-grant viewers (homeowners, guests) get the guest media rules:
     // never a removed clip, never a raw original that has privacy redactions.
-    let guest = false;
-    try {
-      const ctx = await requireOrgContext(req);
-      orgId = ctx.orgId;
-      userId = ctx.userId;
-      supabase = ctx.supabase;
-    } catch (err) {
-      // Peek job_id with admin, then verify grant.
-      const adminPeek = unscopedAdminOrNull();
-      if (!adminPeek) throw err;
-      const { data: peek } = await adminPeek
-        .from('job_proofs')
-        .select('job_id, org_id')
-        .eq('id', req.params.proofId)
-        .maybeSingle();
-      if (!peek) throw err;
-      const ctx = await resolveOrgOrViewerAccess(req, (peek as any).job_id);
-      orgId = ctx.orgId;
-      userId = ctx.userId;
-      supabase = ctx.supabase;
-      guest = ctx.access === 'viewer';
-    }
+    const guest = access === 'viewer';
     const { data: proof } = await supabase
       .from('job_proofs')
       .select('storage_path, job_id, work_date, phase, deleted_at, ai_findings')

@@ -401,11 +401,11 @@ describe('SharedDashboardPage job file identity', () => {
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('your-job-files')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Access' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
-  it('hides Who-has-access for grant / homeowner viewers', async () => {
+  it('gives grant / homeowner viewers the same tabs, with Who-has-access read-only', async () => {
+    const user = userEvent.setup();
     authMembership.current = null;
     sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
 
@@ -416,11 +416,13 @@ describe('SharedDashboardPage job file identity', () => {
     );
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
-    expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
-    // Same tabs as the contractor, minus Access (it lists everyone's email).
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
-    expect(tabs).toEqual(['Chat', 'Timeline', 'Videos', 'Evidence report']);
+    expect(tabs).toEqual(['Chat', 'Timeline', 'Access', 'Videos', 'Evidence report']);
+
+    await user.click(screen.getByRole('tab', { name: 'Access' }));
+    expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /revoke access/i })).not.toBeInTheDocument();
   });
 
   it('shows Who-has-access for office org members without Similar jobs', async () => {
