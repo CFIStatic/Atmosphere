@@ -1118,6 +1118,31 @@
     return Array.isArray(jobs) && jobs.length > 1;
   }
 
+  /** The invite token inside a Today row's job-file link (/shared/<token>?email=…). */
+  function shareTokenFromPath(path) {
+    var m = /\/shared\/([^/?#]+)/.exec(String(path || ''));
+    if (!m) return '';
+    try {
+      return decodeURIComponent(m[1]);
+    } catch (e) {
+      return m[1];
+    }
+  }
+
+  /**
+   * After invite sign-in: the Today row for the job this invite opened, so a
+   * sub lands on the normal job list with that job already picked.
+   */
+  function inviteJobIdInToday(jobs, token) {
+    var want = String(token || '').trim();
+    if (!want || !Array.isArray(jobs)) return '';
+    for (var i = 0; i < jobs.length; i += 1) {
+      var j = jobs[i];
+      if (j && j.id && shareTokenFromPath(j.sharePath) === want) return j.id;
+    }
+    return '';
+  }
+
   function loadTodayJobs(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/field-app/today', { accessToken: accessToken }).then(
       function (body) {
@@ -3814,6 +3839,8 @@
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
     preferTodayAfterInviteSignIn: preferTodayAfterInviteSignIn,
+    shareTokenFromPath: shareTokenFromPath,
+    inviteJobIdInToday: inviteJobIdInToday,
     createTodayJob: createTodayJob,
     placesStatus: placesStatus,
     placesAutocomplete: placesAutocomplete,
