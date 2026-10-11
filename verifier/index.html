@@ -2243,6 +2243,7 @@
   body[data-atm-viewer] .clip-rename,
   tr.is-shared .job-acts,
   tr.is-shared .clip-rename { display: none !important; }
+  #nav-start-plan[hidden] { display: none !important; }
   .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
@@ -2277,6 +2278,12 @@
       <button type="button" class="navitem nav-icon" id="nav-logins">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M16 7l3 3M18 5l2 2"/></svg>
         <span class="label" data-i18n-chrome="logins">Logins</span>
+      </button>
+      <!-- A sub whose own workspace never finished checkout: the way to pay,
+           which turns Start a job, Logins and Settings on. -->
+      <button type="button" class="navitem nav-icon" id="nav-start-plan" hidden>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        <span class="label">Start your plan</span>
       </button>
     </div>
 
@@ -4753,6 +4760,14 @@
     if (key === 'meridian') return 'job-1041';
     if (key === 'camden') return 'job-1044';
     return key;
+  }
+
+  var PRICING_URL = 'https://atmosphereteam.com/pricing';
+
+  /** Unpaid workspace of its own: show the way to pay. */
+  function setUpgrade(on) {
+    var btn = document.getElementById('nav-start-plan');
+    if (btn) btn.hidden = !on;
   }
 
   var VIEWER = false;
@@ -9490,7 +9505,10 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
-    if (d && d.atmosphere === 'viewer') setViewer(d.on);
+    if (d && d.atmosphere === 'viewer') {
+      setViewer(d.on);
+      setUpgrade(d.upgrade);
+    }
     if (d && d.atmosphere === 'layout') {
       setRailOnly(!!d.railOnly);
       setPhoneDrawer(!!d.phoneDrawer);
@@ -9576,6 +9594,14 @@
     var navLogins = document.getElementById('nav-logins');
     if (navLogins) {
       navLogins.addEventListener('click', function () { goShell('/logins'); });
+    }
+    var navStartPlan = document.getElementById('nav-start-plan');
+    if (navStartPlan) {
+      // Plans live on the corporate site's pricing page (a new tab; the
+      // phone app hands it to the browser).
+      navStartPlan.addEventListener('click', function () {
+        window.open(PRICING_URL, '_blank', 'noopener');
+      });
     }
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {

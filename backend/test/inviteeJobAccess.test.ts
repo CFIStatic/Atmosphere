@@ -7,6 +7,8 @@ import {
   assertInviteeMayRecord,
   inviteeCanOpenJob,
   inviteeEmailsMatch,
+  invitedPartyForJob,
+  mergeSharedTodayJobs,
   normalizeInviteEmail,
   partiesInvitedToEmail,
 } from '../src/shared/inviteeJobAccess.js';
@@ -81,4 +83,40 @@ test('field-app Today does not list org jobs for capture invitees', () => {
   assert.match(src, /listInviteeToday/);
   assert.match(src, /access: 'invitee'/);
   assert.match(src, /claimInvitedPartiesForUser/);
+});
+
+test('a signed-in sub files on the job under their own invite', () => {
+  const older = { ...jobA, id: 'party-a-old', created_at: '2026-10-01T00:00:00Z' };
+  const newer = { ...jobA, id: 'party-a-new', created_at: '2026-10-05T00:00:00Z' };
+  const parties = [newer, jobB, older, { ...jobA, id: 'gone', revoked_at: '2026-10-02T00:00:00Z' }];
+  assert.equal(invitedPartyForJob(parties, 'job-a', ALICE)?.id, 'party-a-old');
+  assert.equal(invitedPartyForJob(parties, 'job-a', BOB), null, 'never another recipient');
+  assert.equal(invitedPartyForJob(parties, 'job-b', ALICE), null, 'never a job not shared with them');
+  assert.equal(invitedPartyForJob(parties, null, ALICE), null);
+});
+
+test('Today lists jobs shared with a sub after their own jobs, once each', () => {
+  const merged = mergeSharedTodayJobs(
+    [{ id: 'own-1' }, { id: 'both' }],
+    [
+      { id: 'both', shared: true },
+      { id: 'shared-1', shared: true },
+      { id: 'shared-1', shared: true },
+    ],
+  );
+  assert.deepEqual(
+    merged.map((job) => job.id),
+    ['own-1', 'both', 'shared-1'],
+  );
+});
+
+test('field-app filing falls back to the invite for shared jobs', () => {
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../src/routes/fieldApp.ts'),
+    'utf8',
+  );
+  assert.match(src, /err\.code === 'job_not_found'\) return inviteeProofParty\(req\)/);
+  assert.match(src, /err\.code === 'no_organization'\) return inviteeProofParty\(req\)/);
+  assert.match(src, /assertInviteeAccount\(req, party\)/);
+  assert.match(src, /mergeSharedTodayJobs\(out, shared\)/);
 });

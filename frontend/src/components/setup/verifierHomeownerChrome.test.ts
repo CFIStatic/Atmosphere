@@ -16,6 +16,16 @@ describe('Invited homeowner chrome', () => {
   });
 });
 
+describe('Sub whose own workspace never finished checkout', () => {
+  it('gets a Start your plan rail item that opens the corporate pricing page, hidden by default', () => {
+    expect(verifierHtml).toContain('id="nav-start-plan" hidden');
+    expect(verifierHtml).toContain('#nav-start-plan[hidden] { display: none !important; }');
+    expect(verifierHtml).toContain("var PRICING_URL = 'https://atmosphereteam.com/pricing';");
+    expect(verifierHtml).toContain("window.open(PRICING_URL, '_blank', 'noopener');");
+    expect(verifierHtml).toContain('setUpgrade(d.upgrade);');
+  });
+});
+
 describe('Jobs shared with someone who has a workspace', () => {
   it('list on the Dashboard and play in the same clip player as the contractor', () => {
     expect(verifierHtml).toContain('sharedWithMe: Boolean(raw.sharedWithMe)');
