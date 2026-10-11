@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * A homeowner on a shared job sees every live clip on it: the company's
  * crews, a subcontractor from another company filming by invite, and office
