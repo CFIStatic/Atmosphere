@@ -62,6 +62,7 @@ import {
   listJobProgressGrants,
   resolveOrgOrViewerAccess,
   resolveProofAccess,
+  viewerPartyId,
 } from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
 
@@ -770,8 +771,12 @@ export async function viewerLibraryPayload(
       const partyId = partyByJob.get(p.job_id as string);
       return !partyId || p.party_id === partyId;
     });
+    // The homeowner gets every clip like the contractor; a sub's clips keep
+    // the guest rule (no raw stills of a clip with privacy redactions).
     const redacted = new Set(
-      proofRows.filter((p) => proofFindingsHavePrivacyRedactions(p.ai_findings)).map((p) => p.id as string),
+      proofRows
+        .filter((p) => partyByJob.has(p.job_id as string) && proofFindingsHavePrivacyRedactions(p.ai_findings))
+        .map((p) => p.id as string),
     );
     const orgItems = await assembleLibrary(admin, orgId, proofRows);
     for (const item of orgItems as any[]) {
@@ -1095,8 +1100,9 @@ evidencePortalRouter.get(
         supabase,
       ).raw;
       const item = await readClipForOpen(admin, orgId, items[0]);
-      // No raw stills of a clip with privacy redactions for a guest.
-      const guestRedacted = viewer && proofFindingsHavePrivacyRedactions((proof as any).ai_findings);
+      // The homeowner sees every clip like the contractor; a sub gets no raw
+      // stills of a clip with privacy redactions.
+      const guestRedacted = Boolean(viewerPartyId(resolved)) && proofFindingsHavePrivacyRedactions((proof as any).ai_findings);
       if (guestRedacted && item) item.posterUrl = null;
 
       const [custody, frames] = await Promise.all([
@@ -1288,8 +1294,9 @@ evidencePortalRouter.get(
   '/evidence/:proofId/download',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // The office, or a homeowner the job was shared with: same Download
-      // button, same guest media rules as playback for the homeowner.
+      // The office, or someone the job was shared with: same Download button.
+      // The homeowner downloads every clip like the contractor; a sub keeps
+      // the guest media rules.
       const resolved = await resolveProofAccess(req, req.params.proofId);
       const { supabase, orgId, userId, access } = resolved;
       const viewer = access === 'viewer';
@@ -1302,7 +1309,7 @@ evidencePortalRouter.get(
       if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
       // An invited subcontractor downloads only what they recorded.
       assertViewerMayOpenProof(resolved, proof as any);
-      if (viewer) assertGuestMayMintRawMedia((proof as any).ai_findings);
+      if (viewerPartyId(resolved)) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const admin = unscopedAdminOrNull();
       if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');

@@ -130,7 +130,7 @@ test('verifier-share clip detail and Ask exclude deleted proofs', () => {
   assert.match(ask, /\.is\('deleted_at',\s*null\)/);
 });
 
-test('shared proof video applies the guest rules to progress-grant viewers', () => {
+test('shared proof video: no removed clips for viewers; raw-media rule only for subs', () => {
   const proofOfWork = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
   const start = proofOfWork.indexOf('export async function proofVideoUrl');
   assert.ok(start > 0);
@@ -138,18 +138,21 @@ test('shared proof video applies the guest rules to progress-grant viewers', () 
   assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
   assert.match(body, /guest = access === 'viewer'/);
   assert.match(body, /guest && \(proof as any\)\.deleted_at/);
-  assert.match(body, /if \(guest\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  // The homeowner plays every clip like the contractor; a sub keeps the guest rule.
+  assert.match(body, /if \(viewerPartyId\(viewer\)\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  assert.doesNotMatch(body, /if \(guest\) assertGuestMayMintRawMedia/);
   assert.match(body, /select\('[^']*ai_findings[^']*'\)/);
 });
 
-test('homeowner Download of a shared clip applies the same guest rules', () => {
+test('homeowner downloads every clip of a shared job; a sub keeps the guest rules', () => {
   const portal = readFileSync(join(here, '../src/routes/evidencePortal.ts'), 'utf8');
   const start = portal.indexOf("'/evidence/:proofId/download'");
   assert.ok(start > 0);
   const body = portal.slice(start, start + 2000);
   assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
   assert.match(body, /viewer && \(proof as any\)\.deleted_at/);
-  assert.match(body, /if \(viewer\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  assert.match(body, /if \(viewerPartyId\(resolved\)\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  assert.doesNotMatch(body, /if \(viewer\) assertGuestMayMintRawMedia/);
 });
 
 test('an invited subcontractor only ever gets the videos they recorded', () => {

@@ -4362,8 +4362,8 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     // job shared with this person (they may also have a workspace of their own).
     const viewer = await resolveProofAccess(req, req.params.proofId);
     const { orgId, userId, supabase, access } = viewer;
-    // Progress-grant viewers (homeowners, guests) get the guest media rules:
-    // never a removed clip, never a raw original that has privacy redactions.
+    // Job viewers never get a removed clip. The homeowner plays every clip like
+    // the contractor; a sub never gets a raw original with privacy redactions.
     const guest = access === 'viewer';
     const { data: proof } = await supabase
       .from('job_proofs')
@@ -4374,7 +4374,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     if (!proof || (guest && (proof as any).deleted_at)) throw new HttpError(404, 'No such video.', 'not_found');
     // An invited subcontractor plays only what they recorded.
     assertViewerMayOpenProof(viewer, proof as any);
-    if (guest) assertGuestMayMintRawMedia((proof as any).ai_findings);
+    if (viewerPartyId(viewer)) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
