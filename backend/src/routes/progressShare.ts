@@ -16,6 +16,7 @@ import {
   claimProgressShareForUser,
   enrichJobProgressGrants,
   listJobProgressGrants,
+  listJobPartyViews,
 } from '../shared/jobProgressGrants.js';
 import { sendProgressSignInLink, verifyProgressSignIn } from '../auth/progressEmailSignIn.js';
 import { setSessionCookies } from '../lib/session.js';
@@ -190,10 +191,14 @@ progressShareRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grants = await enrichJobProgressGrants(
-        admin,
-        await listJobProgressGrants(admin, req.user!.id, req.user!.email),
-      );
+      const homeowner = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
+      // Jobs they were invited to as a subcontractor open the same job file
+      // (their own videos only), so they count here too.
+      const granted = new Set(homeowner.map((g) => g.jobId));
+      const parties = (await listJobPartyViews(admin, req.user!.email))
+        .filter((v) => !granted.has(v.jobId))
+        .map((v) => ({ orgId: v.orgId, jobId: v.jobId, shareId: null, recipientEmail: req.user!.email ?? '' }));
+      const grants = await enrichJobProgressGrants(admin, [...homeowner, ...parties]);
       res.json({
         grants: grants.map((g) => ({
           orgId: g.orgId,

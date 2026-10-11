@@ -215,7 +215,7 @@ export function ProofOfWork({
             jobId={jobId}
             videos={data.videos ?? []}
             videoFetcher={videoFetcher}
-            allowDownload={allowDownload && !readOnly && Boolean(jobId)}
+            allowDownload={allowDownload && Boolean(jobId)}
             seekProofId={seekProofId}
             seekAt={seekAt}
             seekNonce={seekNonce}

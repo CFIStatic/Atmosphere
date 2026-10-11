@@ -22,7 +22,7 @@ import { LoginPage } from './pages/LoginPage';
 import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
 import { isInAppShell } from './lib/appShell';
 import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
-import { isUnpaidEvaluationLocation } from './lib/unpaidEvaluation';
+import { isUnpaidEvaluationLocation, sharedJobInsteadOfSetup } from './lib/unpaidEvaluation';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -177,6 +177,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { membership } = useAuth();
   const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
+  const [sharedJobPath, setSharedJobPath] = useState<string | null>(null);
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
   // Only skip when there is no org membership on a grant-only surface. Org
@@ -198,7 +199,17 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
         }
         const status = await getBillingOnboardingShared(api.getBillingOnboarding);
         if (cancelled) return;
-        setGate(status.required && !status.complete ? 'blocked' : 'ready');
+        if (!status.required || status.complete) {
+          setGate('ready');
+          return;
+        }
+        // Someone a job was shared with (a homeowner who once made an empty
+        // workspace, or an invited contractor) opens that job, not first-run
+        // setup or plans for their own workspace.
+        const shared = await sharedJobInsteadOfSetup(() => api.progressShareGrants());
+        if (cancelled) return;
+        setSharedJobPath(shared);
+        setGate('blocked');
       } catch {
         if (!cancelled) setGate(fieldEmbed || jobProgressViewer ? 'ready' : 'error');
       }
@@ -231,6 +242,9 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   }
   if (gate === 'blocked' && isUnpaidEvaluationLocation(location.pathname, location.search)) {
     return <>{children}</>;
+  }
+  if (gate === 'blocked' && sharedJobPath) {
+    return <Navigate to={sharedJobPath} replace />;
   }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;

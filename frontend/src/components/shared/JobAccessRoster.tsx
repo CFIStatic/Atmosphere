@@ -4,8 +4,8 @@ import { TrashIcon } from '../icons';
 
 /**
  * Everyone with a path into this job file — homeowners (progress shares) and
- * Field Capture crew. Last open + who granted, for the office on /job-progress.
- * Org members only (parent hides this for homeowner viewers). Trash revokes.
+ * Field Capture crew. Last open + who granted. The homeowner sees the same
+ * list read-only; only the office gets the trash (revoke).
  */
 
 function when(iso: string | null): string {
@@ -59,7 +59,13 @@ function statusBadgeLabel(person: JobAccessPerson): string {
   return 'Field Capture';
 }
 
-export function JobAccessRoster({ jobId }: { jobId: string }) {
+export function JobAccessRoster({
+  jobId,
+  readOnly = false,
+}: {
+  jobId: string;
+  readOnly?: boolean;
+}) {
   const [people, setPeople] = useState<JobAccessPerson[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -104,7 +110,11 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
   }
 
   return (
-    <section className="rounded-xl glass-card p-5" data-testid="job-access-roster" data-job-section="access">
+    <section
+      className="rounded-xl glass-card p-5"
+      data-testid="job-access-roster"
+      data-job-section="access"
+    >
       <div>
         <h2 className="text-base font-semibold text-ink-900">Who has access</h2>
         <p className="mt-0.5 text-xs text-ink-500">
@@ -155,15 +165,17 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
                       {statusBadgeLabel(person)}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void revoke(person)}
-                    disabled={revokingId === person.id}
-                    aria-label={`Revoke access for ${title}`}
-                    className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
-                  >
-                    <TrashIcon width={14} height={14} />
-                  </button>
+                  {readOnly ? null : (
+                    <button
+                      type="button"
+                      onClick={() => void revoke(person)}
+                      disabled={revokingId === person.id}
+                      aria-label={`Revoke access for ${title}`}
+                      className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+                    >
+                      <TrashIcon width={14} height={14} />
+                    </button>
+                  )}
                 </div>
               </li>
             );

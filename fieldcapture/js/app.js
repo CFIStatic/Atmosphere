@@ -1158,8 +1158,11 @@
       },
     ]);
     showJobAdd(false);
-    paintJobFileLink(sharePath);
-    setStatus('Ready — film here, or open the job file for scope and recordings.');
+    // The job file is the same Platform page the contractor uses; for an
+    // invited sub it shows only the videos they recorded.
+    var jobId = payload.job && payload.job.id;
+    paintJobFileLink(jobId ? '/job-progress?job=' + encodeURIComponent(jobId) : sharePath);
+    setStatus('Ready — film here, or open the job file for scope and your videos.');
     when('#daybtn', function (btn) { btn.disabled = false; });
     state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
     if (filmQueue) filmQueue.kick('session');
