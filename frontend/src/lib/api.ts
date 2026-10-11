@@ -4705,6 +4705,19 @@ export const api = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
+  /** "Homeowner? Sign in with your email": always { ok: true }, never says whether the email is known. */
+  homeownerEmailSignIn: (email: string) =>
+    request<{ ok: boolean }>('/api/progress-share/email-sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  homeownerVerifyEmailSignIn: (email: string, code: string) =>
+    request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
+      '/api/progress-share/email-sign-in/verify',
+      { method: 'POST', body: JSON.stringify({ email, code }) },
+    ),
+
   progressShareGrants: () =>
     request<{
       grants: Array<{

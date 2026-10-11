@@ -138,6 +138,83 @@ const signInVerifyLimiter = rateLimit({
   message: { error: 'Too many sign-in attempts. Wait a few minutes and try again.', code: 'rate_limited' },
 });
 
+/** Newest live, unexpired homeowner invite addressed to this email, or null. */
+export async function liveProgressShareTokenForEmail(admin: any, email: string): Promise<string | null> {
+  const want = email.trim().toLowerCase();
+  if (!want) return null;
+  const { data, error } = await admin
+    .from('verifier_shares')
+    .select('access_token, recipient_email, expires_at, revoked_at')
+    .eq('share_kind', 'progress')
+    .is('revoked_at', null)
+    .ilike('recipient_email', want.replace(/[\\%_]/g, (c: string) => `\\${c}`))
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return null;
+  const now = Date.now();
+  const row = ((data ?? []) as any[]).find(
+    (s) =>
+      String(s.recipient_email ?? '').trim().toLowerCase() === want &&
+      (!s.expires_at || new Date(s.expires_at).getTime() >= now) &&
+      s.access_token,
+  );
+  return row ? String(row.access_token) : null;
+}
+
+const emailBody = z.object({ email: z.string().trim().email().max(320) });
+
+/**
+ * POST /api/progress-share/email-sign-in  { email }
+ * "Homeowner? Sign in with your email" on the sign-up page. Sends the same
+ * one-tap link + code as a share link, only when a contractor shared a job
+ * with this email. Always answers the same way, so it never reveals whether
+ * an email has an account or an invite. Creates no workspace and no plan.
+ */
+progressShareRouter.post(
+  '/email-sign-in',
+  signInSendLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email } = emailBody.parse(req.body ?? {});
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const token = await liveProgressShareTokenForEmail(admin, email);
+      if (token) {
+        await sendProgressSignInLink(token).catch((err) => {
+          console.warn('[progress-signin] by email:', err instanceof Error ? err.message : err);
+        });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /api/progress-share/email-sign-in/verify  { email, code } */
+progressShareRouter.post(
+  '/email-sign-in/verify',
+  signInVerifyLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, code } = emailBody
+        .extend({ code: z.string().trim().regex(/^\d{6,10}$/) })
+        .parse(req.body ?? {});
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const token = await liveProgressShareTokenForEmail(admin, email);
+      if (!token) {
+        throw new HttpError(401, 'That sign-in link or code is invalid or has expired. Send a new one.', 'invalid_signin');
+      }
+      const { session, user } = await verifyProgressSignIn({ shareToken: token, code });
+      setSessionCookies(res, session, req.hostname);
+      const claimed = await claimProgressShareForUser({ token, userId: user.id, userEmail: user.email });
+      res.json({ ok: true, user: publicUser(user), ...claimed });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /**
  * POST /api/progress-share/:token/email-sign-in
  * Emails the share's own recipient a one-time sign-in link + code. No password.
