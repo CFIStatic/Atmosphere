@@ -1,3 +1,6 @@
+import { Logo } from '../components/Logo';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { HomeownerEmailSignIn } from '../components/HomeownerEmailSignIn';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -82,6 +85,7 @@ export function SignupPage() {
   const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
   const [serviceRoleCustom, setServiceRoleCustom] = useState('');
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
+  const [homeownerEmail, setHomeownerEmail] = useState(() => searchParams.get('homeowner') === '1');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -342,6 +346,29 @@ export function SignupPage() {
     }
   }
 
+  // "Homeowner? Sign in with your email": the email-link step on its own, with
+  // no company setup, plan or billing around it.
+  if (homeownerEmail && !user) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper-100">
+        <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
+          <Logo size="lg" />
+          <ThemeToggle />
+        </header>
+        <main className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-md animate-fade-in-up">
+            <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10" data-testid="homeowner-signup">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Homeowner</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Sign in with your email</h1>
+              <p className="mt-1.5 text-sm text-ink-600">See the job your contractor shared with you.</p>
+              <HomeownerEmailSignIn initialEmail={email} onBack={() => setHomeownerEmail(false)} />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <SetupWizardShell
       step={step}
@@ -529,6 +556,18 @@ export function SignupPage() {
               {submitting ? 'Saving…' : isCapture ? 'Create account' : isHomeowner ? 'Save this job' : 'Continue'}
             </PrimaryButton>
           </form>
+          {!user && !isCapture && (
+            <p className="mt-4 text-center text-sm text-ink-600">
+              <button
+                type="button"
+                onClick={() => setHomeownerEmail(true)}
+                className="font-medium text-brand-600 hover:text-brand-700"
+                data-testid="homeowner-email-option"
+              >
+                Homeowner? Sign in with your email
+              </button>
+            </p>
+          )}
         </SetupStepCard>
       )}
 
