@@ -12,7 +12,7 @@ import {
 } from '../src/shared/jobProgressGrants.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = (file: string) => readFileSync(join(here, '..', file), 'utf8');
+const _src = (file: string) => readFileSync(join(here, '..', file), 'utf8');
 
 function viewer(partyId: string | null): SharedJobAccess {
   return {
