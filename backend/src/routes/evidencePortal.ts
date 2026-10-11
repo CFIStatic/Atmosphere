@@ -718,12 +718,18 @@ export async function viewerLibraryPayload(
   admin: any,
   userId: string,
   userEmail: string | null | undefined,
+  /** Leave out jobs from this org (the caller's own workspace lists those). */
+  excludeOrgId?: string,
 ): Promise<Record<string, unknown> | null> {
-  const homeownerGrants = await listJobProgressGrants(admin, userId, userEmail);
+  const homeownerGrants = (await listJobProgressGrants(admin, userId, userEmail)).filter(
+    (g) => g.orgId !== excludeOrgId,
+  );
   // Invited subcontractors list their jobs too, but each job carries only
   // the clips that sub recorded.
   const granted = new Set(homeownerGrants.map((g) => g.jobId));
-  const partyViews = (await listJobPartyViews(admin, userEmail)).filter((v) => !granted.has(v.jobId));
+  const partyViews = (await listJobPartyViews(admin, userEmail)).filter(
+    (v) => !granted.has(v.jobId) && v.orgId !== excludeOrgId,
+  );
   const partyByJob = new Map(partyViews.map((v) => [v.jobId, v.partyId]));
   const grants: Array<{ orgId: string; jobId: string }> = [...homeownerGrants, ...partyViews];
   if (!grants.length) return null;
@@ -770,6 +776,7 @@ export async function viewerLibraryPayload(
     const orgItems = await assembleLibrary(admin, orgId, proofRows);
     for (const item of orgItems as any[]) {
       if (redacted.has(item.id)) item.posterUrl = null;
+      item.sharedWithMe = true;
       items.push(item);
     }
     const addr = await propertyAddresses(admin, ((jobRows ?? []) as any[]).map((j) => j.property_id));
@@ -784,6 +791,7 @@ export async function viewerLibraryPayload(
         company: orgName.get(orgId) ?? 'Contractor',
         person: null,
         createdAt: j.created_at ?? null,
+        sharedWithMe: true,
       });
     }
   }
@@ -882,6 +890,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       company: string | null;
       person: string | null;
       createdAt?: string | null;
+      sharedWithMe?: boolean;
     };
     let jobs: LibraryJob[] = [];
     const { data: jobRows, error: jobsError } = await supabase
@@ -954,6 +963,28 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       });
     }
 
+    if (!jobId) {
+      // Jobs other companies shared with this person (as homeowner or
+      // invited sub) sit on the same Dashboard, read-only, with only the
+      // clips they may see.
+      const viewerAdmin = unscopedAdminOrNull();
+      const shared = viewerAdmin
+        ? await viewerLibraryPayload(viewerAdmin, req.user!.id, req.user!.email, orgId).catch((err) => {
+            console.warn('[library] shared jobs unavailable:', err instanceof Error ? err.message : err);
+            return null;
+          })
+        : null;
+      if (shared) {
+        const known = new Set(jobs.map((j) => j.jobId));
+        items = [...items, ...((shared.items ?? []) as any[])];
+        for (const job of (shared.jobs ?? []) as LibraryJob[]) {
+          if (known.has(job.jobId)) continue;
+          known.add(job.jobId);
+          jobs.push(job);
+        }
+      }
+    }
+
     if (q?.trim()) {
       // Names, addresses, dates, companies, hashes — whatever a person types
       // to find a video. Substring, case-blind, in memory: 500 rows is small.
@@ -1009,11 +1040,11 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     jobs = sortJobsForOpen(jobs, lastWorkDateByJob, todayKey());
 
     const admin = unscopedAdminOrNull();
-    if (admin) kickUnreadLibraryReads(admin, orgId, items);
+    if (admin) kickUnreadLibraryReads(admin, orgId, items.filter((item: any) => !item.sharedWithMe));
 
     res.json({
       items,
-      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person, createdAt }) => ({
+      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person, createdAt, sharedWithMe }) => ({
         jobId,
         jobName,
         jobNumber,
@@ -1023,6 +1054,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         person,
         createdAt: createdAt ?? null,
         captureStatus: libraryJobCaptureStatus(lastWorkDateByJob.has(jobId)),
+        ...(sharedWithMe ? { sharedWithMe: true } : {}),
       })),
       counts: {
         total: items.length,

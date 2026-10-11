@@ -15,3 +15,13 @@ describe('Invited homeowner chrome', () => {
     }
   });
 });
+
+describe('Jobs shared with someone who has a workspace', () => {
+  it('list read-only on the Dashboard and open the job page', () => {
+    expect(verifierHtml).toContain('sharedWithMe: Boolean(raw.sharedWithMe)');
+    expect(verifierHtml).toContain('sharedWithMe: Boolean(j.sharedWithMe)');
+    expect(verifierHtml).toContain('if (VIEWER || item.sharedWithMe) { openJobRecord(item.job); return; }');
+    expect(verifierHtml).toContain('tr.is-shared .job-acts');
+    expect(verifierHtml).toContain('tr.is-shared .kebab');
+  });
+});
