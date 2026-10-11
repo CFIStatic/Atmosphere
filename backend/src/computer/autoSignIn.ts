@@ -31,6 +31,7 @@ export function signInHintsFor(saved: SavedSignIn): SignInHints {
   const site = catalogSiteForHost(saved.login.host) ?? catalogSiteForHost(loginUrlHost);
   const extra = new Set([...signInHostsFor(saved.login.host), ...signInHostsFor(loginUrlHost)].map((h) => h.toLowerCase()));
   return {
+    ...(site?.signIn?.companyIdSelectors?.length ? { companyIdSelectors: site.signIn.companyIdSelectors } : {}),
     openWith: site?.signIn?.flow === 'open_first' && site.signIn.openWith?.length ? site.signIn.openWith : GENERIC_OPEN_WITH,
     allowHost: (host) => {
       const h = host.toLowerCase();
@@ -142,10 +143,14 @@ export async function autoSignIn(input: {
   // Plaintext lives only in these locals, for this one call.
   let username: string;
   let password: string;
+  let companyId: string | null = null;
   try {
     if (!canOpenFingerprint(credential.key_fingerprint)) throw new Error('key changed');
     username = openCredential(credential.username_sealed, login.org_id, login.id, 'username', credential.key_fingerprint);
     password = openCredential(credential.password_sealed, login.org_id, login.id, 'password', credential.key_fingerprint);
+    if (credential.company_id_sealed) {
+      companyId = openCredential(credential.company_id_sealed, login.org_id, login.id, 'company_id', credential.key_fingerprint);
+    }
   } catch {
     await needsAttention('This password was saved with a different encryption key. An admin needs to save it again.');
     await record('failed');
@@ -160,6 +165,7 @@ export async function autoSignIn(input: {
       login_id: login.id,
       username_sealed: credential.username_sealed,
       password_sealed: credential.password_sealed,
+      company_id_sealed: credential.company_id_sealed ?? null,
       key_fingerprint: credential.key_fingerprint,
     });
     if (resealed) await store.updateCredential(login.org_id, login.id, resealed);
@@ -178,11 +184,11 @@ export async function autoSignIn(input: {
       navigated = true;
     }
     const hints = signInHintsFor(saved);
-    filled = await driver.fillSignIn({ username, password }, hints);
+    filled = await driver.fillSignIn({ username, password, companyId }, hints);
     if (filled === 'no_form' && !navigated) {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
-      filled = await driver.fillSignIn({ username, password }, hints);
+      filled = await driver.fillSignIn({ username, password, companyId }, hints);
     }
   } catch {
     await record('incomplete');

@@ -399,6 +399,8 @@ export interface ComputerSavedCredential {
   saved: true;
   /** Only sent to admins. */
   username: string | null;
+  /** Only sent to admins; null when none is saved. */
+  companyId?: string | null;
   loginUrl: string | null;
   status: 'ok' | 'needs_attention';
   attentionReason: string | null;
@@ -410,6 +412,8 @@ export interface ComputerSavedCredential {
 export interface ComputerCredentialInput {
   username: string;
   password: string;
+  /** Optional company / tenant ID (DASH and similar). */
+  companyId?: string | null;
   loginUrl?: string | null;
 }
 

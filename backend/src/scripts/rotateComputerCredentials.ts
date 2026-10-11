@@ -31,7 +31,7 @@ async function main() {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await admin
       .from('computer_login_credentials')
-      .select('org_id, login_id, username_sealed, password_sealed, key_fingerprint')
+      .select('org_id, login_id, username_sealed, password_sealed, company_id_sealed, key_fingerprint')
       .order('login_id')
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`Could not read saved logins: ${error.message}`);
