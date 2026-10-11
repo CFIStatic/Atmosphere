@@ -43,7 +43,8 @@ test('library — accounts without an org fall back to the invited-jobs dashboar
   assert.match(fn, /\.in\('job_id', jobIds\)/);
   assert.match(fn, /\.in\('id', jobIds\)/);
   assert.match(fn, /\.is\('deleted_at', null\)/);
-  assert.match(fn, /proofFindingsHavePrivacyRedactions/);
+  // Only a sub's clips lose their poster; the homeowner gets every clip like the contractor.
+  assert.match(fn, /partyByJob\.has\(p\.job_id as string\) && proofFindingsHavePrivacyRedactions/);
 });
 
 test('library — a job viewer with a workspace of their own gets the job’s clip names from the job’s org', () => {
@@ -74,6 +75,7 @@ test('clip panel — a job viewer opens the clip detail and Ask like the contrac
   assert.match(detail, /assertViewerMayOpenProof\(resolved, proof as any\)/);
   assert.match(detail, /viewer && \(proof as any\)\.deleted_at/);
   assert.match(detail, /guestRedacted \? Promise\.resolve\(\[\]\) : frameUrls/);
+  assert.match(detail, /guestRedacted = Boolean\(viewerPartyId\(resolved\)\)/);
   const ask = src.slice(src.indexOf("'/evidence/:proofId/ask'"), src.indexOf("'/evidence/:proofId/download'"));
   assert.match(ask, /resolveProofAccess\(req, req\.params\.proofId\)/);
   assert.match(ask, /assertViewerMayOpenProof\(resolved, proof as any\)/);
