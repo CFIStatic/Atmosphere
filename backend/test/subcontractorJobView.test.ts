@@ -21,7 +21,7 @@ function viewer(partyId: string | null): SharedJobAccess {
     userId: 'user-sub',
     role: 'viewer',
     productRole: 'employee',
-    supabase: {} as any,
+    supabase: {} as SharedJobAccess['supabase'],
     readOnly: true,
     partyId,
   };
@@ -45,9 +45,17 @@ const officePayload = {
 };
 
 test('an invited sub gets only the videos and days they recorded', () => {
-  const out: any = partyProofPayload(officePayload, 'party-sub');
-  assert.deepEqual(out.videos.map((v: any) => v.id), ['v1']);
-  assert.deepEqual(out.days.map((d: any) => d.workDate + d.partyId), ['2026-10-10party-sub']);
+  type Row = Record<string, unknown>;
+  const out = partyProofPayload(officePayload, 'party-sub') as unknown as {
+    videos: Row[];
+    days: Row[];
+    rooms: Row[];
+    disputes: Row[];
+    punchList: Row[];
+    counts: Record<string, number>;
+  };
+  assert.deepEqual(out.videos.map((v) => v.id), ['v1']);
+  assert.deepEqual(out.days.map((d) => `${d.workDate}${d.partyId}`), ['2026-10-10party-sub']);
   assert.deepEqual(out.rooms, []);
   assert.deepEqual(out.disputes, []);
   assert.deepEqual(out.punchList, []);
@@ -55,7 +63,7 @@ test('an invited sub gets only the videos and days they recorded', () => {
   assert.equal(out.counts.days, 1);
   assert.equal(out.counts.awaitingAfter, 0);
   // Homeowner-level redaction still applies.
-  assert.equal('contentHash' in out.videos[0], false);
+  assert.equal('contentHash' in out.videos[0]!, false);
 });
 
 test("a sub cannot open another trade's or the office's clip; a homeowner can", () => {
@@ -74,14 +82,15 @@ test('sub invites resolve by signed-in email, live rows only, one per job', asyn
     { id: 'pc', org_id: 'org-gc', job_id: 'job-1', email: 'sub@trade.com', revoked_at: null },
     { id: 'pd', org_id: 'org-gc', job_id: 'job-3', email: 'other@trade.com', revoked_at: null },
   ];
-  const query: any = {
+  type Query = Record<string, (...args: unknown[]) => unknown>;
+  const query: Query = {
     select: () => query,
     ilike: () => query,
     is: () => query,
     eq: () => query,
     order: async () => ({ data: rows, error: null }),
   };
-  const admin: any = { from: () => query };
+  const admin = { from: () => query } as unknown as Parameters<typeof listJobPartyViews>[0];
   const views = await listJobPartyViews(admin, ' SUB@trade.com ');
   assert.deepEqual(views, [{ orgId: 'org-gc', jobId: 'job-1', partyId: 'pa' }]);
   assert.deepEqual(await listJobPartyViews(admin, ''), []);
