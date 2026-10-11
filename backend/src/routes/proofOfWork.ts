@@ -30,6 +30,7 @@ import {
   resolveProofAccess,
   viewerPartyId,
 } from '../shared/jobProgressGrants.js';
+import { existingPrivacySafeCopy, privacyBlurWindows } from '../lib/proofPrivacySafe.js';
 import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload, partyProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
@@ -4379,15 +4380,29 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
+    // A clip with a child or a private moment on file plays from its blurred
+    // copy once that exists, so no player can show the original pixels. Until
+    // then the original plays and the player blurs the windows it is sent.
+    const privacyWindows = privacyBlurWindows((proof as any).ai_findings);
+    const safePath = privacyWindows.length
+      ? await existingPrivacySafeCopy({
+          admin,
+          storagePath: (proof as any).storage_path,
+          aiFindings: (proof as any).ai_findings,
+          bucket: PROOF_BUCKET,
+        })
+      : null;
     // WebM from Chrome Field Capture is not playable in Safari. Mint a URL to
     // an H.264 derivative when needed so Platform playback works everywhere.
-    const playable = await createSignedPlayableProofUrl({
-      admin,
-      storagePath: (proof as any).storage_path,
-      expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
-      bucket: PROOF_BUCKET,
-      scheduleBuild: true,
-    });
+    const playable = safePath
+      ? await signedPrivacySafeUrl(admin, safePath)
+      : await createSignedPlayableProofUrl({
+          admin,
+          storagePath: (proof as any).storage_path,
+          expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
+          bucket: PROOF_BUCKET,
+          scheduleBuild: true,
+        });
 
     // Logged here rather than on playback: this is the moment the file becomes
     // watchable, and it is the only moment the server reliably hears about.
@@ -4406,10 +4421,24 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       url: playable.url,
       expiresInSeconds: playable.expiresInSeconds,
       contentType: playable.contentType,
+      // privacySafe: the file itself is blurred. Otherwise a player that does
+      // not read the clip's ranges blurs these windows itself.
+      privacySafe: Boolean(safePath),
+      privacyWindows: safePath ? [] : privacyWindows,
     });
   } catch (err) {
     next(err);
   }
+}
+
+async function signedPrivacySafeUrl(admin: any, safePath: string) {
+  const { data, error } = await admin.storage
+    .from(PROOF_BUCKET)
+    .createSignedUrl(safePath, PROOF_PLAYBACK_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    throw new HttpError(500, error?.message ?? 'Could not mint a signed URL for playback.', 'signed_url_failed');
+  }
+  return { url: data.signedUrl as string, expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS, contentType: 'video/mp4' };
 }
 
 

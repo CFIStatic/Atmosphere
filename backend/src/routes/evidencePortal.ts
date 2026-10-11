@@ -56,6 +56,7 @@ import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
+import { ensurePrivacySafeCopy, hasPrivacyBlur, privacyBlurWindows, schedulePrivacySafeCopy, secondsInBlurWindow } from '../lib/proofPrivacySafe.js';
 import {
   assertViewerMayOpenProof,
   listJobPartyViews,
@@ -423,7 +424,7 @@ async function backfillStills(proofIds: string[]): Promise<void> {
  * routes that hand over frames, the analysis, or the file itself.
  */
 async function posterUrls(
-  proofs: Array<{ id: string; duration_seconds?: number | null }>,
+  proofs: Array<{ id: string; duration_seconds?: number | null; ai_findings?: unknown; storage_path?: string | null }>,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const proofIds = proofs.map((proof) => proof.id);
@@ -448,8 +449,15 @@ async function posterUrls(
     const durationByProof = new Map(
       proofs.map((proof) => [proof.id, proof.duration_seconds ?? null]),
     );
+    // Never a poster from a stretch with a child or a private moment in it.
+    // When every still falls in one, the clip has no poster.
+    const windowsByProof = new Map(proofs.map((proof) => [proof.id, privacyBlurWindows(proof.ai_findings)]));
     const pathByProof = new Map<string, string>();
-    for (const [proofId, list] of framesByProof) {
+    for (const [proofId, all] of framesByProof) {
+      const windows = windowsByProof.get(proofId) ?? [];
+      const list = windows.length
+        ? all.filter((frame) => !secondsInBlurWindow(Number(frame.at_seconds), windows))
+        : all;
       const picked = pickPosterFrame(list, durationByProof.get(proofId));
       if (picked?.storage_path) pathByProof.set(proofId, picked.storage_path);
     }
@@ -458,8 +466,20 @@ async function posterUrls(
     // no frame to sign. Backfilling them here is what makes an old row heal
     // itself the next time somebody opens the library, rather than waiting for
     // a re-upload. Off the response: the list must not wait on FFmpeg.
-    const missing = proofIds.filter((id) => !pathByProof.has(id));
+    const missing = proofIds.filter(
+      (id) => !pathByProof.has(id) && !framesByProof.has(id),
+    );
     if (missing.length) void backfillStills(missing);
+
+    // Have the blurred copy ready before anyone presses Play or Download.
+    // A few per list; each build is shared and skipped once the copy exists.
+    let kicked = 0;
+    for (const proof of proofs) {
+      if (kicked >= 4) break;
+      if (!proof.storage_path || !(windowsByProof.get(proof.id) ?? []).length) continue;
+      kicked += 1;
+      schedulePrivacySafeCopy({ admin, storagePath: proof.storage_path, aiFindings: proof.ai_findings, bucket: PROOF_BUCKET });
+    }
 
     if (!pathByProof.size) return out;
 
@@ -489,13 +509,19 @@ async function posterUrls(
 async function frameUrls(proofId: string) {
   const admin = unscopedAdminOrNull();
   if (!admin) return [];
-  const { data: frames } = await admin
-    .from('job_proof_frames')
-    .select('at_seconds, storage_path')
-    .eq('proof_id', proofId)
-    .order('at_seconds');
+  const [{ data: frames }, { data: proofRow }] = await Promise.all([
+    admin
+      .from('job_proof_frames')
+      .select('at_seconds, storage_path')
+      .eq('proof_id', proofId)
+      .order('at_seconds'),
+    admin.from('job_proofs').select('ai_findings').eq('id', proofId).maybeSingle(),
+  ]);
+  // No still from a stretch with a child or a private moment in it.
+  const windows = privacyBlurWindows((proofRow as any)?.ai_findings);
   const out: Array<{ atSeconds: number; url: string }> = [];
   for (const frame of (frames ?? []) as any[]) {
+    if (windows.length && secondsInBlurWindow(Number(frame.at_seconds), windows)) continue;
     const { data } = await admin.storage
       .from(PROOF_BUCKET)
       .createSignedUrl(frame.storage_path, 600);
@@ -1330,9 +1356,37 @@ evidencePortalRouter.get(
         paid_at: new Date().toISOString(),
       });
 
+      // A child or a private moment on file: the download is the blurred
+      // copy, for everyone. Never the original as a fallback.
+      let downloadPath = (proof as any).storage_path as string;
+      let blurred = false;
+      if (hasPrivacyBlur((proof as any).ai_findings)) {
+        try {
+          const safePath = await ensurePrivacySafeCopy({
+            admin,
+            storagePath: downloadPath,
+            aiFindings: (proof as any).ai_findings,
+            bucket: PROOF_BUCKET,
+          });
+          if (safePath) {
+            downloadPath = safePath;
+            blurred = true;
+          }
+        } catch (err) {
+          console.warn('[download] blurred copy failed:', err instanceof Error ? err.message : err);
+        }
+        if (!blurred) {
+          throw new HttpError(
+            503,
+            'This clip has a child or a private moment in it. Its blurred copy is not ready yet; try again in a minute.',
+            'privacy_safe_pending',
+          );
+        }
+      }
+
       const { data, error } = await admin.storage
         .from(PROOF_BUCKET)
-        .createSignedUrl((proof as any).storage_path, 600, { download: true });
+        .createSignedUrl(downloadPath, 600, { download: true });
       if (error) throw new HttpError(500, error.message, 'signed_url_failed');
 
       await recordAccess(supabase, {
@@ -1343,7 +1397,7 @@ evidencePortalRouter.get(
         actorId: userId,
         actorLabel: await actorLabelFor(supabase, userId),
         actorRole: viewer ? (resolved.access === 'viewer' && resolved.partyId ? 'subcontractor' : 'homeowner') : 'general_contractor',
-        detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date}`,
+        detail: `${blurred ? 'blurred copy (child / private moment)' : 'original file'} · ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
       res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
