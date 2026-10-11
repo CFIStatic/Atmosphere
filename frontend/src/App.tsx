@@ -58,6 +58,9 @@ const LoginsPage = lazy(() => import('./pages/LoginsPage').then((m) => ({ defaul
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
+const CrewInviteGate = lazy(() =>
+  import('./pages/CrewInviteGate').then((m) => ({ default: m.CrewInviteGate })),
+);
 const ShareLinkGate = lazy(() =>
   import('./pages/ShareLinkGate').then((m) => ({ default: m.ShareLinkGate })),
 );
@@ -69,6 +72,7 @@ const TERMS_EXEMPT_PREFIXES = [
   '/reset-password',
   '/guest',
   '/shared/',
+  '/invite/',
   '/progress',
 ];
 
@@ -444,6 +448,9 @@ export default function App() {
           <Route path="/progress-view" element={<LegacyProgressRedirect />} />
           <Route path="/progress" element={<LegacyProgressRedirect />} />
           <Route path="/progress/:token" element={<ShareLinkGate />} />
+          {/* Subcontractor invite links (Share > Subcontractor or crew): the
+              same sign-in as contractors, a real account, then the job. */}
+          <Route path="/invite/:token/*" element={<CrewInviteGate />} />
 
           <Route
             path="/onboarding"

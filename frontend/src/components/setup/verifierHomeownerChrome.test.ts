@@ -24,4 +24,8 @@ describe('Jobs shared with someone who has a workspace', () => {
     expect(verifierHtml).toContain('tr.is-shared .job-acts');
     expect(verifierHtml).toContain('tr.is-shared .kebab');
   });
+
+  it('mark another company\'s job "Shared by <company>"', () => {
+    expect(verifierHtml).toContain("(job.sharedWithMe ? 'Shared by ' : '') + esc(job.company)");
+  });
 });

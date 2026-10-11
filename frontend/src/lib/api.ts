@@ -4664,6 +4664,18 @@ export const api = {
     );
   },
 
+  crewInviteInfo: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>('/api/crew-invite/info', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  claimCrewInvite: (token: string) =>
+    request<{ ok: boolean; orgId: string; jobId: string; path: string }>('/api/crew-invite/claim', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
   progressShareInvite: (token: string) =>
     request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>(
       progressShareApiPath(token, '/invite'),
