@@ -235,8 +235,10 @@ describe('LoginsPage', () => {
     const x = within(yours).getByTestId('logins-saved-l2');
     expect(x).toHaveTextContent('Xactimate');
     expect(within(x).getByRole('img', { name: 'Saved' })).toBeInTheDocument();
-    // …with its own logo (favicon, or a monogram if that fails), like the catalog tiles.
-    expect(within(x).getByTestId('site-logo').querySelector('img')?.getAttribute('src')).toContain('identity.xactware.com');
+    // …with a monogram: no image is loaded from another website.
+    expect(within(x).getByTestId('site-logo-monogram')).toHaveTextContent('X');
+    // Catalog tiles use the locally hosted official icon.
+    expect(within(o).getByTestId('site-logo').querySelector('img')?.getAttribute('src')).toBe('/logos/outlook.png');
     expect(screen.getAllByTestId('logins-catalog-outlook')).toHaveLength(1);
     expect(screen.getAllByTestId('logins-saved-check')).toHaveLength(2);
     expect(within(picker).queryByText('Password saved')).toBeNull();
@@ -398,7 +400,7 @@ describe('LoginsPage', () => {
     await user.type(screen.getByLabelText('Website address'), 'portal.acme-ins.example');
     const header = await screen.findByTestId('logins-add-site');
     await waitFor(() => expect(header).toHaveTextContent('Acme Insurance'), { timeout: 2000 });
-    expect(within(header).getByTestId('site-logo').querySelector('img')?.getAttribute('src')).toContain('portal.acme-ins.example');
+    expect(within(header).getByTestId('site-logo-monogram')).toBeInTheDocument();
     // Looked up once the typing stopped, not on every key.
     expect(computerIdentifySite).toHaveBeenCalledTimes(1);
     expect(computerIdentifySite).toHaveBeenCalledWith('portal.acme-ins.example');
