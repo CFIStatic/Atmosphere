@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { redactProofDeviceIdentity } from './deviceIdentity.js';
-import { homeownerSafeText, homeownerSafeVideo, NEUTRAL_CLIP_LINE } from './homeownerSafeSummary.js';
+import { homeownerSafeText, homeownerSafeVideo } from './homeownerSafeSummary.js';
 
 /**
  * What an invited homeowner may see of a job's videos. The office payload
@@ -45,9 +45,9 @@ export function homeownerProofPayload<T extends Record<string, any>>(payload: T)
     // summaries, else its own cleaned text, else a neutral line.
     const fromClips = ((day.proofIds ?? []) as string[])
       .map((id) => videoById.get(id)?.aiSummary)
-      .find((t: unknown) => typeof t === 'string' && t && t !== NEUTRAL_CLIP_LINE);
-    const clean = fromClips ?? homeownerSafeText(day.aiSummary) ?? (day.aiSummary ? NEUTRAL_CLIP_LINE : null);
-    const next: any = { ...day, aiSummary: clean, summary: clean ?? '', homeownerSummary: clean ?? '' };
+      .find((t: unknown) => typeof t === 'string' && t);
+    const clean = fromClips ?? homeownerSafeText(day.aiSummary) ?? null;
+    const next: any = { ...day, aiSummary: clean, summary: clean ?? '' };
     for (const key of DAY_DROP) delete next[key];
     return next;
   });

@@ -480,13 +480,14 @@ function JobFileSections({
       { id: 'chat', label: 'Chat' },
       { id: 'timeline', label: 'Timeline' },
     ];
+    // Access lists everyone's email on the job: contractor only.
     if (!grantViewer) next.push({ id: 'access', label: 'Access' });
-    // Invited homeowners watch the videos too (read-only, guest media rules
-    // on the server); the evidence report stays with the contractor.
+    // Same tabs as the contractor. The server strips office-only data from
+    // the videos and the evidence report for viewers (#710).
     next.push({ id: 'videos', label: 'Videos' });
-    if (!viewerOnly) next.push({ id: 'evidence', label: 'Evidence report' });
+    next.push({ id: 'evidence', label: 'Evidence report' });
     return next;
-  }, [grantViewer, viewerOnly]);
+  }, [grantViewer]);
 
   const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
@@ -532,7 +533,7 @@ function JobFileSections({
           />
         ) : null}
 
-        {active === 'evidence' && !viewerOnly ? <JobFileReport jobId={record.job.id} /> : null}
+        {active === 'evidence' ? <JobFileReport jobId={record.job.id} /> : null}
       </div>
     </div>
   );
