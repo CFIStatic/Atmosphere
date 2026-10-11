@@ -12,7 +12,7 @@ import {
 } from '../src/shared/jobProgressGrants.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const _src = (file: string) => readFileSync(join(here, '..', file), 'utf8');
+const src = (file: string) => readFileSync(join(here, '..', file), 'utf8');
 
 function viewer(partyId: string | null): SharedJobAccess {
   return {
@@ -71,6 +71,15 @@ test('the sub view says it is the sub view, so a short list is explained', () =>
   assert.equal(out.viewerScope.role, 'subcontractor');
 });
 
+test("a sub cannot open another trade's or the office's clip; a homeowner can", () => {
+  assert.equal(viewerPartyId(viewer('party-sub')), 'party-sub');
+  assert.equal(viewerPartyId(viewer(null)), null);
+  assert.doesNotThrow(() => assertViewerMayOpenProof(viewer('party-sub'), { party_id: 'party-sub' }));
+  assert.throws(() => assertViewerMayOpenProof(viewer('party-sub'), { party_id: 'party-other' }), /No such video/);
+  assert.throws(() => assertViewerMayOpenProof(viewer('party-sub'), { party_id: null }), /No such video/);
+  assert.doesNotThrow(() => assertViewerMayOpenProof(viewer(null), { party_id: 'party-other' }));
+});
+
 test('sub invites resolve by signed-in email, live rows only, one per job', async () => {
   const rows = [
     { id: 'pa', org_id: 'org-gc', job_id: 'job-1', email: 'Sub@Trade.com', revoked_at: null },
@@ -92,9 +101,21 @@ test('sub invites resolve by signed-in email, live rows only, one per job', asyn
   assert.deepEqual(await listJobPartyViews(admin, ''), []);
 });
 
-
-test('an invited sub, like a homeowner, opens every clip on the job (full mirror)', () => {
-  assert.equal(viewerPartyId(viewer('party-sub')), null);
-  assert.doesNotThrow(() => assertViewerMayOpenProof(viewer('party-sub'), { party_id: 'party-other' }));
-  assert.doesNotThrow(() => assertViewerMayOpenProof(viewer('party-sub'), { party_id: null }));
+test('every job-page read scopes a sub to their own videos', () => {
+  const proof = src('src/routes/proofOfWork.ts');
+  // Videos tab, Timeline and Today strip.
+  assert.match(proof, /partyId\s*\?\s*partyProofPayload\(payload, partyId\)/);
+  // Evidence report PDF.
+  assert.match(proof, /partyId\s*\?\s*partyProofPayload\(officePayload, partyId\)/);
+  // Playback.
+  assert.match(proof, /assertViewerMayOpenProof\(viewer, proof as any\)/);
+  // Chat: other clips are dropped before the answer is built, memory notes too.
+  assert.match(proof, /loadedProofs\.filter\(\(row\) => row\.party_id === input\.partyId\)/);
+  assert.match(proof, /history: input\.partyId \? \[\] :/);
+  // Chat history: only their own threads.
+  assert.match(proof, /An invited subcontractor reads only their own chats/);
+  // Download.
+  assert.match(src('src/routes/evidencePortal.ts'), /assertViewerMayOpenProof\(resolved, proof as any\)/);
+  // Dashboard library: only their clips on a sub-only job.
+  assert.match(src('src/routes/evidencePortal.ts'), /!partyId \|\| p\.party_id === partyId/);
 });

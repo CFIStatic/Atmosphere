@@ -127,3 +127,8 @@ test('Only an invited sub is narrowed to their own clips', async () => {
   const sub = partyProofPayload(contractor, 'party-sub') as any;
   assert.deepEqual(sub.videos.map((v: Row) => v.id), ['sub-1']);
 });
+
+test('Dashboard: an invited sub with its own workspace lists only the clips it recorded', async () => {
+  const out = (await viewerLibraryPayload(db(), 'user-sub', 'boss@subco.com', SUB_ORG)) as any;
+  assert.deepEqual(out.items.map((i: Row) => i.id), ['sub-1']);
+});
