@@ -5,9 +5,13 @@ import { z } from 'zod';
 import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
+import { adminForPartyToken, unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
+import { ackDisplayName, acknowledgeShareRevision } from '../shared/acknowledgeShareRevision.js';
 import {
+  assertInviteeAccount,
   claimInvitedPartiesForUser,
+  invitedPartyForJob,
+  mergeSharedTodayJobs,
   normalizeInviteEmail,
   partiesInvitedToEmail,
 } from '../shared/inviteeJobAccess.js';
@@ -273,9 +277,22 @@ async function listInviteeToday(req: Request) {
 
   const { data: jobs } = await admin
     .from('crm_jobs')
-    .select('id, job_number, title, status, scheduled_start, property_id')
+    .select('id, org_id, job_number, title, status, scheduled_start, property_id')
     .in('id', jobIds)
     .is('deleted_at', null);
+
+  // "Shared by <company>" on the row, so a sub with their own jobs can tell
+  // whose job they are filming on.
+  const jobOrgs = (jobs ?? []) as Array<{ id: string; org_id: string }>;
+  const orgIds = [...new Set(jobOrgs.map((j) => j.org_id).filter(Boolean))];
+  const orgNameById = new Map<string, string>();
+  if (orgIds.length) {
+    const { data: orgs } = await admin.from('orgs').select('id, name').in('id', orgIds);
+    for (const o of (orgs ?? []) as Array<{ id: string; name?: string | null }>) {
+      if (o.name) orgNameById.set(o.id, o.name);
+    }
+  }
+  const orgByJob = new Map<string, string>(jobOrgs.map((j) => [j.id, j.org_id]));
 
   const tokenByJob = new Map<string, string>();
   for (const party of mine) {
@@ -306,6 +323,8 @@ async function listInviteeToday(req: Request) {
       filmed: false,
       reason: j.reason,
       sharePath: token ? jobSharePagePath(token, email) : null,
+      shared: true,
+      sharedBy: orgNameById.get(orgByJob.get(j.id) ?? '') ?? null,
     };
   });
   return { jobs: out, today: day, access: 'invitee' as const };
@@ -473,7 +492,17 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       };
     });
 
-    res.json({ jobs: out, today: day });
+    // A subcontractor with their own workspace is still invited onto other
+    // contractors' jobs. Those jobs go on the same list, so they pick one and
+    // film exactly like their own.
+    let shared: Awaited<ReturnType<typeof listInviteeToday>>['jobs'] = [];
+    try {
+      shared = (await listInviteeToday(req)).jobs;
+    } catch (err) {
+      console.warn('[field-app] could not list shared jobs:', (err as Error).message);
+    }
+
+    res.json({ jobs: mergeSharedTodayJobs(out, shared), today: day });
   } catch (err) {
     next(err);
   }
@@ -726,21 +755,40 @@ type ProofPartyRow = {
  * `partyForToken` returns for job-share tokens), for the signed-in crew
  * member filing on one of the office's jobs.
  */
-async function fieldProofParty(req: Request) {
-  const { orgId, userId, supabase } = await requireOrgContext(req);
+async function fieldProofParty(req: Request): Promise<{
+  admin: Awaited<ReturnType<typeof adminOrThrow>>;
+  partyRow: ProofPartyRow;
+  invitee: (ProofPartyRow & { contact_name?: string | null }) | null;
+}> {
+  let ctx: Awaited<ReturnType<typeof requireOrgContext>>;
+  try {
+    ctx = await requireOrgContext(req);
+  } catch (err) {
+    if (err instanceof HttpError && err.code === 'no_organization') return inviteeProofParty(req);
+    throw err;
+  }
+  const { orgId, userId, supabase } = ctx;
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name')
     .eq('id', userId)
     .maybeSingle();
-  const party = await ensureFieldParty(
-    supabase,
-    orgId,
-    req.params.jobId,
-    userId,
-    req.user?.email,
-    (profile as { full_name?: string } | null)?.full_name,
-  );
+  let party: { id: string; access_token: string; company: string };
+  try {
+    party = await ensureFieldParty(
+      supabase,
+      orgId,
+      req.params.jobId,
+      userId,
+      req.user?.email,
+      (profile as { full_name?: string } | null)?.full_name,
+    );
+  } catch (err) {
+    // Not one of their workspace's jobs: a job another contractor shared
+    // with them, filed exactly as the invite link would.
+    if (err instanceof HttpError && err.code === 'job_not_found') return inviteeProofParty(req);
+    throw err;
+  }
   const admin = await adminOrThrow();
   const partyRow: ProofPartyRow = {
     id: party.id,
@@ -749,7 +797,42 @@ async function fieldProofParty(req: Request) {
     company: party.company,
     access_token: party.access_token,
   };
-  return { admin, partyRow };
+  return { admin, partyRow, invitee: null };
+}
+
+/**
+ * A signed-in subcontractor filing on a job they were invited to: the same
+ * party (and so the same "only your videos" view) as their invite link.
+ */
+async function inviteeProofParty(req: Request) {
+  const jobId = z.string().uuid().parse(req.params.jobId);
+  const email = normalizeInviteEmail(req.user?.email);
+  if (!req.user || !email) {
+    throw new HttpError(401, 'Sign in or create an account to record.', 'account_required');
+  }
+  const raw = await adminOrThrow();
+  const { data: parties } = await raw
+    .from('job_parties')
+    .select('job_id, email, access_token, revoked_at, created_at')
+    .eq('job_id', jobId)
+    .eq('email', email)
+    .is('revoked_at', null);
+  const invite = invitedPartyForJob(
+    (parties ?? []) as Array<{
+      job_id: string;
+      email?: string | null;
+      access_token: string;
+      revoked_at?: string | null;
+      created_at?: string | null;
+    }>,
+    jobId,
+    email,
+  );
+  if (!invite) throw new HttpError(404, 'This job was not shared with you.', 'job_not_found');
+  const { party, admin } = await adminForPartyToken(invite.access_token);
+  assertInviteeAccount(req, party);
+  const partyRow = party as unknown as ProofPartyRow & { contact_name?: string | null };
+  return { admin: admin.raw, partyRow, invitee: partyRow };
 }
 
 function proofRoute(
@@ -759,11 +842,31 @@ function proofRoute(
     body: unknown,
   ) => Promise<unknown>,
   status: 200 | 201 = 200,
+  opts: { ackShareRevision?: boolean } = {},
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { partyRow, admin } = await fieldProofParty(req);
-      res.status(status).json(await handler(partyRow, admin, req.body));
+      const { partyRow, admin, invitee } = await fieldProofParty(req);
+      const result = await handler(partyRow, admin, req.body);
+      if (invitee && opts.ackShareRevision) {
+        // Filing is the invitee's acceptance of the current brief, as on the link.
+        const { data: brief } = await admin
+          .from('job_briefs')
+          .select('revision')
+          .eq('job_id', invitee.job_id)
+          .order('revision', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        await acknowledgeShareRevision({
+          admin,
+          orgId: invitee.org_id,
+          jobId: invitee.job_id,
+          partyId: invitee.id,
+          revision: (brief as { revision?: number } | null)?.revision ?? null,
+          acknowledgedName: ackDisplayName(invitee),
+        });
+      }
+      res.status(status).json(result);
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);
@@ -891,4 +994,4 @@ fieldAppRouter.post('/jobs/:jobId/proof/upload-part-url', proofRoute(createPartU
 fieldAppRouter.post('/jobs/:jobId/proof/upload-complete', proofRoute(completeChunkedProofUpload));
 
 /** POST /api/field-app/jobs/:jobId/proof — file the uploaded day film into the org record. */
-fieldAppRouter.post('/jobs/:jobId/proof', proofRoute(recordProof, 201));
+fieldAppRouter.post('/jobs/:jobId/proof', proofRoute(recordProof, 201, { ackShareRevision: true }));

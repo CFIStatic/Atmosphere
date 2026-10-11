@@ -1759,6 +1759,31 @@ assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }, { id: 'b' }]), true
 assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }]), false);
 assert.match(appSrc, /openInviteAfterAccountSignIn/, 'account=1 sign-in can prefer Today');
 
+// Invited subcontractor: the shared job sits on the normal Today list,
+// selectable, and the invite opens with that job already picked.
+assert.equal(Core.shareTokenFromPath('/shared/abc%2Bdef?email=a%40b.co'), 'abc+def');
+assert.equal(Core.shareTokenFromPath('/job-progress?job=1'), '');
+assert.equal(Core.shareTokenFromPath(null), '');
+assert.equal(
+  Core.inviteJobIdInToday(
+    [
+      { id: 'own', sharePath: '/shared/zzz' },
+      { id: 'sub-job', sharePath: '/shared/tok123?email=sub%40alpha.co', shared: true },
+    ],
+    'tok123',
+  ),
+  'sub-job',
+);
+assert.equal(Core.inviteJobIdInToday([{ id: 'own', sharePath: '/shared/zzz' }], 'tok123'), '');
+assert.equal(Core.inviteJobIdInToday([{ id: 'x', sharePath: '/shared/tok123' }], ''), '');
+assert.match(appSrc, /function preferAccountToday/, 'a signed-in invite prefers the job list');
+assert.match(
+  appSrc,
+  /function enterAccountHome\(me, jobs\) \{[\s\S]{0,200}LIVE = false;/,
+  'the job list files against the picked job, not the invite link',
+);
+assert.match(appSrc, /Shared by /, 'shared jobs say whose job they are');
+
 
 assert.match(appSrc, /Recording disclosure gate removed/, 'web FC no longer gates startLiveDay on disclosure');
 assert.doesNotMatch(appSrc, /bindRecordingConsent\(\);/, 'disclosure removal must not leave a crashing bindRecordingConsent() call');

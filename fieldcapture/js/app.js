@@ -499,6 +499,7 @@
   function jobMetaLine(j) {
     var bits = [];
     if (j.addr) bits.push(escapeHtml(j.addr));
+    if (j.shared) bits.push(escapeHtml(j.sharedBy ? 'Shared by ' + j.sharedBy : 'Shared job'));
     if (j.pending || (Core.isLocalJobId && Core.isLocalJobId(j.id))) {
       bits.push('<span class="pendingpin">On this phone</span>');
     } else if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
@@ -519,6 +520,8 @@
       situation: j.situation || '',
       createdAt: j.createdAt || '',
       sharePath: j.sharePath || '',
+      shared: Boolean(j.shared),
+      sharedBy: j.sharedBy || '',
     };
   }
 
@@ -533,11 +536,11 @@
    * is the job file (scope, brief, recordings). Signed-in office jobs already
    * open Platform — hide this row there.
    */
-  function paintJobFileLink(sharePath) {
+  function paintJobFileLink(sharePath, onAccountList) {
     var row = $('#job-file-link');
     var href = $('#job-file-href');
     if (!row || !href) return;
-    if (!LIVE || !sharePath || sharePath === '/guest') {
+    if ((!LIVE && !onAccountList) || !sharePath || sharePath === '/guest') {
       row.hidden = true;
       href.removeAttribute('href');
       return;
@@ -549,6 +552,19 @@
     href.target = '_blank';
     href.rel = 'noopener noreferrer';
     row.hidden = false;
+  }
+
+  /**
+   * Signed-in list: a job another contractor shared has no Dashboard of this
+   * workspace behind it, so keep the same job-file link the invite showed.
+   */
+  function paintSelectedJobFileLink() {
+    if (LIVE) return;
+    var job = jobById(state.activeJobId);
+    paintJobFileLink(
+      job && job.shared && !job.pending ? '/job-progress?job=' + encodeURIComponent(job.id) : '',
+      true,
+    );
   }
 
   function bindJobSearch() {
@@ -1113,6 +1129,7 @@
         );
       })
       .join('');
+    paintSelectedJobFileLink();
     root.querySelectorAll('[data-job-id]').forEach(function (row) {
       row.addEventListener('click', function () {
         state.activeJobId = row.getAttribute('data-job-id');
@@ -1191,20 +1208,48 @@
     bootLive(preloaded);
   }
 
-  function openInviteAfterAccountSignIn() {
-    if (!TOKEN) return finishAccountConnect();
-    if (!Core.loadTodayJobs) return enterLiveMode();
+  /**
+   * Signed in with an invite open (link token or the share cookie): when the
+   * invited job is on their Today list, they get the normal job list and
+   * record button like any Field Capture user, with that job already picked.
+   * The single-job invite screen is only the fallback. Resolves true when
+   * Today took over.
+   */
+  function preferAccountToday(preloaded) {
+    if (!Core.loadTodayJobs || !state.accessToken) return Promise.resolve(false);
+    var inviteJobId = (preloaded && preloaded.job && preloaded.job.id) || '';
     return Core.loadTodayJobs(API_BASE, state.accessToken).then(
       function (jobs) {
-        if (Core.preferTodayAfterInviteSignIn && Core.preferTodayAfterInviteSignIn(jobs)) {
-          return finishAccountConnect();
+        var invited = Core.inviteJobIdInToday ? Core.inviteJobIdInToday(jobs, TOKEN) : '';
+        if (!invited && inviteJobId && jobs.some(function (j) { return j && j.id === inviteJobId; })) {
+          invited = inviteJobId;
         }
-        return enterLiveMode();
+        if (!invited && !(Core.preferTodayAfterInviteSignIn && Core.preferTodayAfterInviteSignIn(jobs))) {
+          return false;
+        }
+        if (invited) state.activeJobId = invited;
+        return true;
       },
       function () {
-        return enterLiveMode();
+        return false;
       },
     );
+  }
+
+  /** App opened on an invite while already signed in. */
+  function openInviteSignedIn(preloaded) {
+    return preferAccountToday(preloaded).then(function (today) {
+      if (today) return bootAccount();
+      return enterLiveMode(preloaded);
+    });
+  }
+
+  function openInviteAfterAccountSignIn() {
+    if (!TOKEN) return finishAccountConnect();
+    return preferAccountToday(null).then(function (today) {
+      if (today) return finishAccountConnect();
+      return enterLiveMode();
+    });
   }
 
   function showBlockedMsg(message) {
@@ -1324,6 +1369,10 @@
   }
 
   function enterAccountHome(me, jobs) {
+    /* The job list is up: films file against the picked job, never the
+       invite link this tab may have opened on. */
+    LIVE = false;
+    document.body.setAttribute('data-mode', 'account');
     state.account = true;
     var pending = Core.readPendingJobs ? Core.readPendingJobs() : [];
     var merged = Core.mergeTodayJobs ? Core.mergeTodayJobs(jobs || [], pending) : (jobs || []);
@@ -1879,6 +1928,13 @@
     if (!jobId || (Core.isLocalJobId && Core.isLocalJobId(jobId))) return;
     if (!LIVE && !(state.account && state.accessToken)) return;
     if (LIVE && !TOKEN && !state.shareToken) return;
+    /* A job shared by another contractor publishes through its invite, the
+       same as the link would; the office watching is theirs, not ours. */
+    var sharedJob = !LIVE ? jobById(jobId) : null;
+    var sharedToken =
+      sharedJob && sharedJob.shared && Core.shareTokenFromPath
+        ? Core.shareTokenFromPath(sharedJob.sharePath)
+        : '';
     try {
       if (rec.livePublisher && rec.livePublisher.stop) rec.livePublisher.stop();
       rec.livePublisher = Core.createLiveRtcPublisher({
@@ -1889,7 +1945,7 @@
         accessToken: function () {
           return state.accessToken;
         },
-        shareToken: LIVE ? TOKEN || state.shareToken || null : null,
+        shareToken: LIVE ? TOKEN || state.shareToken || null : sharedToken || null,
       });
     } catch (e) {
       /* never block capture */
@@ -3094,7 +3150,7 @@
   if (LIVE) {
     readStoredSession();
     if (state.accessToken) {
-      enterLiveMode();
+      openInviteSignedIn();
     } else {
       bootAccount();
       showLoginError('');
@@ -3114,6 +3170,8 @@
     /* Token already left the URL after /exchange. A refresh still has the cookie. */
     Core.loadShareJob('', API_BASE)
       .then(function (payload) {
+        readStoredSession();
+        if (state.accessToken) return openInviteSignedIn(payload);
         enterLiveMode(payload);
       })
       .catch(function () {
