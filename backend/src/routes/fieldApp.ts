@@ -283,19 +283,16 @@ async function listInviteeToday(req: Request) {
 
   // "Shared by <company>" on the row, so a sub with their own jobs can tell
   // whose job they are filming on.
-  const orgIds = [
-    ...new Set(((jobs ?? []) as any[]).map((j) => j.org_id as string).filter(Boolean)),
-  ];
+  const jobOrgs = (jobs ?? []) as Array<{ id: string; org_id: string }>;
+  const orgIds = [...new Set(jobOrgs.map((j) => j.org_id).filter(Boolean))];
   const orgNameById = new Map<string, string>();
   if (orgIds.length) {
     const { data: orgs } = await admin.from('orgs').select('id, name').in('id', orgIds);
-    for (const o of (orgs ?? []) as any[]) {
-      if (o.name) orgNameById.set(o.id as string, o.name as string);
+    for (const o of (orgs ?? []) as Array<{ id: string; name?: string | null }>) {
+      if (o.name) orgNameById.set(o.id, o.name);
     }
   }
-  const orgByJob = new Map<string, string>(
-    ((jobs ?? []) as any[]).map((j) => [j.id as string, j.org_id as string]),
-  );
+  const orgByJob = new Map<string, string>(jobOrgs.map((j) => [j.id, j.org_id]));
 
   const tokenByJob = new Map<string, string>();
   for (const party of mine) {
