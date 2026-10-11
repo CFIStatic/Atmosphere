@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
-import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { partyInviteEmail } from './partyInviteEmail.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
@@ -36,6 +35,17 @@ export function fieldCaptureInviteUrl(
   // Account gate: sign-in / create-account before the shared job opens.
   params.set('account', '1');
   return `${origin}/?${params.toString()}`;
+}
+
+/**
+ * The sub's invite link on the office host: the same app and sign-in as the
+ * contractor (a real account), then the job opens. Same shape as the
+ * homeowner's /progress/<token>.
+ */
+export function crewInvitePagePath(token: string, email?: string | null): string {
+  const base = `/invite/${encodeURIComponent(token)}`;
+  const address = email?.trim().toLowerCase();
+  return address ? `${base}?email=${encodeURIComponent(address)}` : base;
 }
 
 export async function deliverPartyInvite(input: {
@@ -96,7 +106,7 @@ export async function deliverPartyInvite(input: {
       actorLabelFor(input.supabase, input.userId),
     ]);
     const emailParam = encodeURIComponent(email);
-    const sharePath = jobSharePagePath(input.token, email);
+    const sharePath = crewInvitePagePath(input.token, email);
     const origin = publicAppOrigin();
     const mail = partyInviteEmail({
       orgName: (org as any)?.name ?? 'a contractor',
@@ -108,7 +118,7 @@ export async function deliverPartyInvite(input: {
       recipientHasAccount,
       origin,
       path: sharePath,
-      signupPath: `/signup?email=${emailParam}`,
+      signupPath: `/signup?email=${emailParam}&next=${encodeURIComponent(crewInvitePagePath(input.token))}`,
       fieldCaptureUrl: fieldCaptureInviteUrl(input.token, { email }),
     });
     const result = await sendSystemMail({
@@ -116,6 +126,7 @@ export async function deliverPartyInvite(input: {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      fromName: mail.fromName,
     });
     if (!result.ok) {
       console.warn(`[invite] email to ${email} failed: ${result.why}`);

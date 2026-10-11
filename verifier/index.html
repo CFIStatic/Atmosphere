@@ -4969,7 +4969,10 @@
       : '—';
     var nameInner = esc(job.name);
     // Homeowners see who shared the job with them.
-    if ((VIEWER || job.sharedWithMe) && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
+    // On a contractor's own Dashboard, another company's job is marked as shared.
+    if ((VIEWER || job.sharedWithMe) && job.company) {
+      nameInner += '<span class="job-from">' + (job.sharedWithMe ? 'Shared by ' : '') + esc(job.company) + '</span>';
+    }
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
