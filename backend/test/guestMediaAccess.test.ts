@@ -151,3 +151,16 @@ test('homeowner Download of a shared clip applies the same guest rules', () => {
   assert.match(body, /viewer && \(proof as any\)\.deleted_at/);
   assert.match(body, /if \(viewer\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
 });
+
+test('an invited subcontractor only ever gets the videos they recorded', () => {
+  const proofOfWork = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
+  const start = proofOfWork.indexOf('export async function listPartyProofs');
+  assert.ok(start > 0);
+  const body = proofOfWork.slice(start, start + 400);
+  assert.match(body, /listAllVisibleProofs\(admin, \{ partyId: party\.id \}\)/);
+
+  // The sub's job view carries no other videos at all.
+  const shared = readFileSync(join(here, '../src/routes/sharedJobs.ts'), 'utf8');
+  const view = shared.slice(shared.indexOf("the sub's view of the job"), shared.indexOf("the sub's view of the job") + 3500);
+  assert.doesNotMatch(view, /job_proofs|videos|listAllVisibleProofs/);
+});
