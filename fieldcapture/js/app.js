@@ -1158,11 +1158,78 @@
       },
     ]);
     showJobAdd(false);
-    paintJobFileLink(sharePath);
-    setStatus('Ready — film here, or open the job file for scope and recordings.');
+    // /shared/<token> only bounces back here, so the sub's job file is the
+    // list of their own videos below rather than a link.
+    paintJobFileLink('');
+    setStatus('Ready — film here. Your videos on this job are below.');
+    paintMyVideos();
     when('#daybtn', function (btn) { btn.disabled = false; });
     state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
     if (filmQueue) filmQueue.kick('session');
+  }
+
+  /**
+   * An invited sub sees the videos they recorded on this job, and only those
+   * (the server filters by their invite). Tap one to watch it here.
+   */
+  function paintMyVideos() {
+    var box = $('#my-videos');
+    var list = $('#my-videos-list');
+    var msg = $('#my-videos-msg');
+    var player = $('#my-videos-player');
+    if (!box || !list || !Core.loadShareVideos || !LIVE) return;
+    var token = TOKEN || state.shareToken || '';
+    box.hidden = false;
+    function say(text) {
+      if (!msg) return;
+      msg.textContent = text || '';
+      msg.hidden = !text;
+    }
+    say('Loading your videos…');
+    Core.loadShareVideos(token, API_BASE).then(
+      function (videos) {
+        list.innerHTML = '';
+        if (!videos.length) {
+          say('Nothing yet. Videos you film on this job show up here.');
+          return;
+        }
+        say('');
+        videos.forEach(function (video) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          var mins = video.durationSeconds ? Math.max(1, Math.round(video.durationSeconds / 60)) + ' min' : '';
+          btn.innerHTML =
+            '<span class="sum">' + escapeHtml(video.summary || 'Video') + '</span>' +
+            '<span class="meta">' + escapeHtml([video.workDate, mins].filter(Boolean).join(' · ')) + '</span>';
+          btn.addEventListener('click', function () {
+            Array.prototype.forEach.call(list.querySelectorAll('button'), function (b) {
+              b.removeAttribute('aria-current');
+            });
+            btn.setAttribute('aria-current', 'true');
+            say('Opening video…');
+            Core.shareVideoPlayUrl(token, API_BASE, video.id).then(
+              function (url) {
+                say('');
+                if (!player) return;
+                player.src = url;
+                player.hidden = false;
+                var played = player.play && player.play();
+                if (played && played.catch) played.catch(function () {});
+              },
+              function (err) {
+                say(err.message || 'Could not open this video.');
+              },
+            );
+          });
+          li.appendChild(btn);
+          list.appendChild(li);
+        });
+      },
+      function (err) {
+        say(err.message || 'Could not load your videos.');
+      },
+    );
   }
 
   function bootLive(preloaded) {
@@ -3058,6 +3125,7 @@
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');
     if (filmQueue) paintFiling(filmQueue.films(), 'home');
+    if (LIVE) paintMyVideos();
   });
 
   bindJobSearch();

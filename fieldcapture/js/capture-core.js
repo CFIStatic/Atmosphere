@@ -1817,6 +1817,34 @@
       });
   }
 
+  /** An invited sub's own videos on this job (never anyone else's). */
+  function loadShareVideos(token, apiBase) {
+    apiBase = (apiBase || '').replace(/\/$/, '');
+    return fetch(jobShareUrl(apiBase, token, '/videos'), {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error((body && body.error) || 'Could not load your videos.');
+        return (body && body.videos) || [];
+      });
+    });
+  }
+
+  /** Signed playback link for one of the sub's own videos. */
+  function shareVideoPlayUrl(token, apiBase, proofId) {
+    apiBase = (apiBase || '').replace(/\/$/, '');
+    return fetch(jobShareUrl(apiBase, token, '/videos/' + encodeURIComponent(proofId) + '/url'), {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok || !body || !body.url) throw new Error((body && body.error) || 'Could not open this video.');
+        return body.url;
+      });
+    });
+  }
+
   function loadShareJob(token, apiBase) {
     apiBase = (apiBase || '').replace(/\/$/, '');
     return fetch(jobShareUrl(apiBase, token), {
@@ -3820,6 +3848,8 @@
     placesDetails: placesDetails,
     placesResolve: placesResolve,
     loadShareJob: loadShareJob,
+    loadShareVideos: loadShareVideos,
+    shareVideoPlayUrl: shareVideoPlayUrl,
     loadShareProofs: loadShareProofs,
     jobShareUrl: jobShareUrl,
     exchangeShareToken: exchangeShareToken,

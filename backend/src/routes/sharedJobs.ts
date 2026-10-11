@@ -90,7 +90,11 @@ import {
   deleteEvidence,
   restoreEvidence,
   recordAccess,
+  listAllVisibleProofs,
 } from './proofOfWork.js';
+import { assertPartyOwnsVideo, partyVideoList } from '../shared/partyVideos.js';
+import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
+import { createSignedPlayableProofUrl, PROOF_PLAYBACK_URL_TTL_SECONDS } from '../lib/proofPlayableUrl.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
 import {
   JOB_FILE_TITLE_MAX,
@@ -1877,6 +1881,64 @@ jobShareRouter.get(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       res.json(await listPartyProofs(party, admin));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/job-share/:token/videos
+ * The sub's own videos on this job. Another trade's (or the office's) never
+ * appear: an invited subcontractor only sees what they recorded.
+ */
+jobShareRouter.get(
+  jobShareActionPattern('/videos'),
+  shareLimiter,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      const rows = await listAllVisibleProofs(admin, { partyId: party.id });
+      res.json({ videos: partyVideoList(rows, party.id) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/job-share/:token/videos/:proofId/url
+ * Signed playback link for one of the sub's own videos. Same guest media
+ * rules as the homeowner: never a removed clip or a redacted raw original.
+ */
+jobShareRouter.get(
+  /^\/(.+)\/videos\/([0-9a-fA-F-]{36})\/url$/,
+  shareLimiter,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const proofId = z.string().uuid().parse((req.params as Record<string, string>)['1']);
+      const { party, admin } = await partyForToken(req.params.token);
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select('id, job_id, party_id, storage_path, deleted_at, ai_findings')
+        .eq('org_id', party.org_id)
+        .eq('id', proofId)
+        .maybeSingle();
+      assertPartyOwnsVideo(proof, party);
+      assertGuestMayMintRawMedia((proof as any).ai_findings);
+      const playable = await createSignedPlayableProofUrl({
+        admin,
+        storagePath: (proof as any).storage_path,
+        expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
+        scheduleBuild: true,
+      });
+      res.json({
+        url: playable.url,
+        expiresInSeconds: playable.expiresInSeconds,
+        contentType: playable.contentType,
+      });
     } catch (err) {
       next(err);
     }
