@@ -56,7 +56,12 @@ import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
-import { listJobProgressGrants, resolveProofAccess } from '../shared/jobProgressGrants.js';
+import {
+  assertViewerMayOpenProof,
+  listJobPartyViews,
+  listJobProgressGrants,
+  resolveProofAccess,
+} from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
@@ -713,7 +718,13 @@ export async function viewerLibraryPayload(
   userId: string,
   userEmail: string | null | undefined,
 ): Promise<Record<string, unknown> | null> {
-  const grants = await listJobProgressGrants(admin, userId, userEmail);
+  const homeownerGrants = await listJobProgressGrants(admin, userId, userEmail);
+  // Invited subcontractors list their jobs too, but each job carries only
+  // the clips that sub recorded.
+  const granted = new Set(homeownerGrants.map((g) => g.jobId));
+  const partyViews = (await listJobPartyViews(admin, userEmail)).filter((v) => !granted.has(v.jobId));
+  const partyByJob = new Map(partyViews.map((v) => [v.jobId, v.partyId]));
+  const grants: Array<{ orgId: string; jobId: string }> = [...homeownerGrants, ...partyViews];
   if (!grants.length) return null;
   const jobIdsByOrg = new Map<string, string[]>();
   for (const g of grants) {
@@ -748,7 +759,10 @@ export async function viewerLibraryPayload(
     ]);
     if (proofsError) throw new HttpError(500, proofsError.message, 'library_failed');
     if (jobsError) throw new HttpError(500, jobsError.message, 'library_failed');
-    const proofRows = (proofs ?? []) as any[];
+    const proofRows = ((proofs ?? []) as any[]).filter((p) => {
+      const partyId = partyByJob.get(p.job_id as string);
+      return !partyId || p.party_id === partyId;
+    });
     const redacted = new Set(
       proofRows.filter((p) => proofFindingsHavePrivacyRedactions(p.ai_findings)).map((p) => p.id as string),
     );
@@ -1212,15 +1226,18 @@ evidencePortalRouter.get(
     try {
       // The office, or a homeowner the job was shared with: same Download
       // button, same guest media rules as playback for the homeowner.
-      const { supabase, orgId, userId, access } = await resolveProofAccess(req, req.params.proofId);
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId, userId, access } = resolved;
       const viewer = access === 'viewer';
       const { data: proof } = await supabase
         .from('job_proofs')
-        .select('id, job_id, storage_path, phase, work_date, deleted_at, ai_findings')
+        .select('id, job_id, party_id, storage_path, phase, work_date, deleted_at, ai_findings')
         .eq('org_id', orgId)
         .eq('id', req.params.proofId)
         .maybeSingle();
       if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      // An invited subcontractor downloads only what they recorded.
+      assertViewerMayOpenProof(resolved, proof as any);
       if (viewer) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const admin = unscopedAdminOrNull();
@@ -1254,7 +1271,7 @@ evidencePortalRouter.get(
         action: 'downloaded',
         actorId: userId,
         actorLabel: await actorLabelFor(supabase, userId),
-        actorRole: viewer ? 'homeowner' : 'general_contractor',
+        actorRole: viewer ? (resolved.access === 'viewer' && resolved.partyId ? 'subcontractor' : 'homeowner') : 'general_contractor',
         detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 

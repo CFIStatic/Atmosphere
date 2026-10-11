@@ -35,7 +35,10 @@ test('homeownerProofPayload drops pay, verdicts, disputes, punch list, checks an
 
 test('evidence PDF strips the payload for viewers', () => {
   const fn = between(src('../src/routes/proofOfWork.ts'), 'export async function jobProofPackPdf', '\n}\n');
-  assert.match(fn, /access === 'viewer' \? homeownerProofPayload\(officePayload\) : officePayload/);
+  assert.match(
+    fn,
+    /access === 'viewer'\s*\?\s*partyId\s*\?\s*partyProofPayload\(officePayload, partyId\)\s*:\s*homeownerProofPayload\(officePayload\)\s*:\s*officePayload/,
+  );
 });
 
 test('viewer Ask: job file keeps the job, drops office notes, tasks, logs, documents and concerns', () => {

@@ -44,11 +44,11 @@ import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import {
-  findJobProgressGrant,
-  viewerGrantForForeignJob,
   listJobProgressGrants,
+  listJobPartyViews,
   touchJobProgressGrantAccess,
   resolveOrgOrViewerAccess,
+  viewerPartyId,
 } from '../shared/jobProgressGrants.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
@@ -90,11 +90,7 @@ import {
   deleteEvidence,
   restoreEvidence,
   recordAccess,
-  listAllVisibleProofs,
 } from './proofOfWork.js';
-import { assertPartyOwnsVideo, partyVideoList } from '../shared/partyVideos.js';
-import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
-import { createSignedPlayableProofUrl, PROOF_PLAYBACK_URL_TTL_SECONDS } from '../lib/proofPlayableUrl.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
 import {
   JOB_FILE_TITLE_MAX,
@@ -219,7 +215,12 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grants = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
+      const homeowner = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
+      const granted = new Set(homeowner.map((g) => g.jobId));
+      const grants = [
+        ...homeowner,
+        ...(await listJobPartyViews(admin, req.user!.email)).filter((v) => !granted.has(v.jobId)),
+      ];
       if (!grants.length) throw err;
       const jobIds = grants.map((g) => g.jobId);
       const { data: jobs } = await admin
@@ -341,29 +342,12 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
 /** GET /api/operations/shared/:jobId — the record itself. */
 sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let orgId: string;
-    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
-    let access: 'org' | 'viewer' = 'org';
-    try {
-      const ctx = await requireOrgContext(req);
-      orgId = ctx.orgId;
-      supabase = ctx.supabase;
-      // Invited to another company's job: read it as a viewer, not as this org.
-      const foreign = await viewerGrantForForeignJob(req, ctx.orgId, req.params.jobId);
-      if (foreign) {
-        orgId = foreign.orgId;
-        supabase = (unscopedAdminOrNull() ?? requireAdmin()) as typeof supabase;
-        access = 'viewer';
-      }
-    } catch (err) {
-      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
-      const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grant = await findJobProgressGrant(admin, req.user!.id, req.params.jobId, req.user!.email);
-      if (!grant) throw err;
-      orgId = grant.orgId;
-      supabase = admin as typeof supabase;
-      access = 'viewer';
-    }
+    // Org member; or, read-only, a homeowner who claimed a share or a
+    // subcontractor invited to this job (own org or none).
+    const resolved = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, access } = resolved;
+    const supabase = resolved.supabase as Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    const partyId = viewerPartyId(resolved);
 
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
@@ -385,8 +369,10 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     }
 
     // Viewers see the job file without contractor money / private thread chatter.
+    // A subcontractor sees their own lines and the shared ones, like their
+    // invite link always showed.
     const scope = access === 'viewer'
-      ? record.scope.map((item: any) => ({ ...item, amount: null }))
+      ? (partyId ? scopeForParty(record.scope, partyId) : record.scope).map((item: any) => ({ ...item, amount: null }))
       : record.scope;
     const messages = access === 'viewer' ? [] : record.messages;
 
@@ -1888,64 +1874,6 @@ jobShareRouter.get(
 );
 
 /**
- * GET /api/job-share/:token/videos
- * The sub's own videos on this job. Another trade's (or the office's) never
- * appear: an invited subcontractor only sees what they recorded.
- */
-jobShareRouter.get(
-  jobShareActionPattern('/videos'),
-  shareLimiter,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { party, admin } = await partyForToken(req.params.token);
-      const rows = await listAllVisibleProofs(admin, { partyId: party.id });
-      res.json({ videos: partyVideoList(rows, party.id) });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/**
- * GET /api/job-share/:token/videos/:proofId/url
- * Signed playback link for one of the sub's own videos. Same guest media
- * rules as the homeowner: never a removed clip or a redacted raw original.
- */
-jobShareRouter.get(
-  /^\/(.+)\/videos\/([0-9a-fA-F-]{36})\/url$/,
-  shareLimiter,
-  attachShareToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const proofId = z.string().uuid().parse((req.params as Record<string, string>)['1']);
-      const { party, admin } = await partyForToken(req.params.token);
-      const { data: proof } = await admin
-        .from('job_proofs')
-        .select('id, job_id, party_id, storage_path, deleted_at, ai_findings')
-        .eq('org_id', party.org_id)
-        .eq('id', proofId)
-        .maybeSingle();
-      assertPartyOwnsVideo(proof, party);
-      assertGuestMayMintRawMedia((proof as any).ai_findings);
-      const playable = await createSignedPlayableProofUrl({
-        admin,
-        storagePath: (proof as any).storage_path,
-        expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
-        scheduleBuild: true,
-      });
-      res.json({
-        url: playable.url,
-        expiresInSeconds: playable.expiresInSeconds,
-        contentType: playable.contentType,
-      });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/**
  * GET /api/job-share/:token — the sub's view of the job.
  *
  * Registered last among GETs: the pattern is a greedy capture and would
@@ -1988,6 +1916,8 @@ jobShareRouter.get(
       res.json({
         you: { company: party.company, trade: party.trade, role: party.role },
         job: {
+          // Opens the job file on Platform after sign-in (their own videos only).
+          id: record.job.id,
           jobNumber: record.job.job_number,
           title: record.job.title,
           claimNumber: record.job.claim_number,

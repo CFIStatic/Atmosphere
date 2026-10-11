@@ -162,5 +162,5 @@ test('an invited subcontractor only ever gets the videos they recorded', () => {
   // The sub's job view carries no other videos at all.
   const shared = readFileSync(join(here, '../src/routes/sharedJobs.ts'), 'utf8');
   const view = shared.slice(shared.indexOf("the sub's view of the job"), shared.indexOf("the sub's view of the job") + 3500);
-  assert.doesNotMatch(view, /job_proofs|videos|listAllVisibleProofs/);
+  assert.doesNotMatch(view, /job_proofs|videos:|listAllVisibleProofs/);
 });

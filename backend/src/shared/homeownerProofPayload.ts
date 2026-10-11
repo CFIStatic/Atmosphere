@@ -112,3 +112,27 @@ export function homeownerFindings(findings: unknown): unknown {
 export function homeownerAskClips<C extends { findings?: unknown }>(clips: C[]): C[] {
   return clips.map((clip) => ({ ...clip, findings: homeownerFindings(clip.findings) }));
 }
+
+/**
+ * What an invited subcontractor sees of the videos: the homeowner view of the
+ * job, cut down to the videos this party recorded. Rooms are matched across
+ * everyone's clips, so they are left out rather than leak another trade's.
+ */
+export function partyProofPayload<T extends Record<string, any>>(payload: T, partyId: string): T {
+  const safe: any = homeownerProofPayload(payload);
+  const videos = ((safe.videos ?? []) as any[]).filter((video) => video.partyId === partyId);
+  const days = ((safe.days ?? []) as any[]).filter((day) => day.partyId === partyId);
+  return {
+    ...safe,
+    videos,
+    days,
+    rooms: [],
+    counts: {
+      ...(safe.counts ?? {}),
+      days: days.length,
+      videos: videos.length,
+      analysing: days.filter((d: any) => d.analysisStatus === 'queued' || d.analysisStatus === 'running').length,
+      awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
+    },
+  };
+}

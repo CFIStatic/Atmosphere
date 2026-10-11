@@ -25,7 +25,10 @@ test('a contractor invited to another company’s job opens it as a viewer, not 
   assert.match(fn, /jobOrg === callerOrgId\) return null/);
   assert.match(fn, /findJobProgressGrant\(admin, req\.user!\.id, jobId, req\.user!\.email\)/);
   const resolve = grants.slice(grants.indexOf('export async function resolveOrgOrViewerAccess'));
-  assert.match(resolve, /viewerGrantForForeignJob\(req, ctx\.orgId, jobId\)/);
+  // Another org's job: the homeowner grant first, then a subcontractor invite.
+  assert.match(resolve, /jobOrg && jobOrg !== ctx\.orgId/);
+  assert.match(resolve, /findJobProgressGrant\(admin, req\.user!\.id, jobId, req\.user!\.email\)/);
+  assert.match(resolve, /findJobPartyView\(admin, req\.user!\.email, jobId\)/);
   const shared = readFileSync(new URL('../src/routes/sharedJobs.ts', import.meta.url), 'utf8');
-  assert.match(shared, /viewerGrantForForeignJob\(req, ctx\.orgId, req\.params\.jobId\)/);
+  assert.match(shared, /resolveOrgOrViewerAccess\(req, req\.params\.jobId\)/);
 });

@@ -677,19 +677,6 @@
     text-underline-offset: 2px;
   }
   .erow .pendingpin { font-size: 11px; color: var(--muted); }
-  .my-videos { margin: 18px 0 0; }
-  .my-videos h2 { margin: 0; font-size: 15px; font-weight: 650; }
-  .my-videos-note { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--muted, #78716c); }
-  .my-videos-player { display: block; width: 100%; max-height: 50vh; margin: 10px 0 0; border-radius: 12px; background: #000; }
-  .my-videos-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
-  .my-videos-list button {
-    display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 10px;
-    padding: 10px 12px; border: 1px solid var(--line, rgba(120, 113, 108, 0.25)); border-radius: 10px;
-    background: transparent; color: inherit; font: inherit; font-size: 13.5px; text-align: start; cursor: pointer;
-  }
-  .my-videos-list button[aria-current="true"] { border-color: var(--brand, #ea580c); }
-  .my-videos-list .meta { flex-shrink: 0; font-size: 12px; color: var(--muted, #78716c); }
-  .my-videos-list .sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ---------- days saved on this phone, filing in the background ----------
      Offline-first: films are safe on device until filed. Finishing a day
@@ -1175,18 +1162,9 @@
       <!-- Invite token path: film here AND open the job file (scope / brief / recordings). -->
       <p class="job-file-link" id="job-file-link" hidden>
         <a id="job-file-href" href="#">Open job file</a>
-        <span> — scope, do-nots, brief, and recordings for this job.</span>
+        <span> — scope, do-nots, brief, and the videos you recorded on this job.</span>
       </p>
       <p class="lede" id="live-status" hidden></p>
-
-      <!-- Invite token path: the sub's own videos on this job, and only theirs. -->
-      <section class="my-videos" id="my-videos" hidden aria-labelledby="my-videos-title">
-        <h2 id="my-videos-title">Your videos</h2>
-        <p class="my-videos-note">Only the videos you recorded on this job.</p>
-        <video class="my-videos-player" id="my-videos-player" controls playsinline preload="metadata" hidden></video>
-        <p class="my-videos-note" id="my-videos-msg" role="status" hidden></p>
-        <ul class="my-videos-list" id="my-videos-list"></ul>
-      </section>
     </div>
     </div>
 
