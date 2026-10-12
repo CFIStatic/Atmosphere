@@ -2,13 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from './errors.js';
 import {
   DEMO_WINDOW_DAYS,
-  buildDemoIcs,
   demoSlotStarts,
   isBookableSlot,
   type DemoBookingInput,
 } from './demoBooking.js';
 import { demoGuestEmail, demoHostEmail } from './demoBookingEmail.js';
-import type { MailAttachment } from './systemMail.js';
 
 export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
 export const DEMO_ORGANIZER_NAME = (process.env.DEMO_BOOKING_HOST_NAME || 'Jack Cyganiak').trim();
@@ -28,7 +26,6 @@ export type DemoMailer = (input: {
   html?: string | null;
   replyTo?: string | null;
   keepReplyTo?: boolean;
-  attachments?: MailAttachment[];
 }) => Promise<{ ok: true } | { ok: false; why: string }>;
 
 export function supabaseDemoStore(client: SupabaseClient): DemoBookingStore {
@@ -65,7 +62,7 @@ export async function openDemoSlots(store: DemoBookingStore, now: Date = new Dat
 }
 
 /**
- * Book a slot, then email the host and the guest an invite. The row is the
+ * Book a slot, then email the host and the guest a confirmation (the Google Calendar invite is sent separately). The row is the
  * source of truth: once it is in, the slot is held even if mail fails.
  */
 export async function bookDemo(
@@ -93,28 +90,11 @@ export async function bookDemo(
     throw new HttpError(409, 'Someone just booked that time. Pick another.', 'slot_taken');
   }
 
-  const ics = buildDemoIcs({
-    uid: inserted.id,
-    start,
-    organizerEmail: DEMO_ORGANIZER_EMAIL,
-    organizerName: DEMO_ORGANIZER_NAME,
-    attendeeEmail: input.email,
-    attendeeName: input.name,
-    company: input.company,
-    phone: input.phone,
-    notes: input.notes,
-    now,
-  });
-  const attachments: MailAttachment[] = [
-    { filename: 'atmosphere-demo.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=REQUEST' },
-  ];
-
   const host = await deps.send({
     to: DEMO_ORGANIZER_EMAIL,
     ...demoHostEmail(input, start),
     replyTo: `"${input.name.replaceAll('"', "'")}" <${input.email}>`,
     keepReplyTo: true,
-    attachments,
   });
   if (host.ok) await deps.store.markEmailed(inserted.id, 'host_emailed_at').catch(() => undefined);
   else console.error('[demo] host email failed:', host.why);
@@ -124,7 +104,6 @@ export async function bookDemo(
     ...demoGuestEmail(input, start, DEMO_ORGANIZER_NAME),
     replyTo: DEMO_ORGANIZER_EMAIL,
     keepReplyTo: true,
-    attachments,
   });
   if (guest.ok) await deps.store.markEmailed(inserted.id, 'guest_emailed_at').catch(() => undefined);
   else console.error('[demo] guest email failed:', guest.why);

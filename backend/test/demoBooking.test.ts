@@ -122,7 +122,7 @@ function memStore(): DemoBookingStore & { rows: Record<string, unknown>[] } {
   };
 }
 
-test('booking: stores, emails host and guest with .ics (stubbed), blocks double booking', async () => {
+test('booking: stores, emails host and guest (stubbed, no .ics), blocks double booking', async () => {
   const store = memStore();
   const sent: Array<{ to: string; subject: string; attachments?: MailAttachment[] }> = [];
   const send: DemoMailer = async (m) => {
@@ -147,10 +147,7 @@ test('booking: stores, emails host and guest with .ics (stubbed), blocks double 
     sent.map((m) => m.to),
     ['jack@jettx.ai', 'dana@example.com'],
   );
-  for (const m of sent) {
-    assert.equal(m.attachments?.[0]?.filename, 'atmosphere-demo.ics');
-    assert.match(m.attachments?.[0]?.content ?? '', /DTSTART:20261013T150000Z/);
-  }
+  for (const m of sent) assert.equal(m.attachments, undefined, 'no .ics attachment');
 
   const open = await openDemoSlots(store, NOW);
   assert.ok(!open.includes(slot), 'booked slot is hidden');
