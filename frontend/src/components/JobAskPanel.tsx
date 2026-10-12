@@ -1736,7 +1736,7 @@ export function JobAskPanel({
                           </Link>
                         </>
                       ) : (
-                        <p className="text-[11px] text-ink-500">An owner can upgrade the plan or buy credits.</p>
+                        <p className="text-[11px] text-ink-500">The account owner can upgrade the plan or buy credits.</p>
                       )}
                     </div>
                   ) : (

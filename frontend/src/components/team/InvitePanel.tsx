@@ -61,7 +61,9 @@ export function InvitePanel() {
       setInvites((prev) => prev ?? []);
     }
     try {
-      const workspace = await api.getBillingWorkspace();
+      // Seat counts come with the onboarding status every member can read;
+      // the full billing workspace is the account owner's alone.
+      const workspace = await api.getBillingOnboarding();
       if (workspace.fieldCaptureSeats) {
         setSeats({
           used: workspace.fieldCaptureSeats.used,

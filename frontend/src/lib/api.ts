@@ -6533,7 +6533,8 @@ export interface BillingOnboardingStatus {
   plans?: AtmosphereSelfServePlan[];
   /** Customer usage rates from the billing constants. */
   usageRateLabel?: string;
-  plan: {
+  /** Owner only. Other members get the gate fields and seat counts, nothing priced. */
+  plan?: {
     code?: string;
     name: string;
     baseMonthlyFeeCents: number;
@@ -6542,12 +6543,13 @@ export interface BillingOnboardingStatus {
     includedFcSeats?: number;
   };
   fieldCaptureSeats?: {
-    included: number;
-    extra: number;
     allowed: number;
     used: number;
     remaining: number;
-    extraSeatPriceCents: number;
+    /** Owner only. */
+    included?: number;
+    extra?: number;
+    extraSeatPriceCents?: number;
   };
 }
 
