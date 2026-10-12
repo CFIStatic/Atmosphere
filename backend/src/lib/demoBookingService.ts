@@ -6,7 +6,7 @@ import {
   isBookableSlot,
   type DemoBookingInput,
 } from './demoBooking.js';
-import { demoGuestEmail, demoHostEmail } from './demoBookingEmail.js';
+import { demoHostEmail } from './demoBookingEmail.js';
 
 export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
 export const DEMO_ORGANIZER_NAME = (process.env.DEMO_BOOKING_HOST_NAME || 'Jack Cyganiak').trim();
@@ -62,13 +62,13 @@ export async function openDemoSlots(store: DemoBookingStore, now: Date = new Dat
 }
 
 /**
- * Book a slot, then email the host and the guest a confirmation (the Google Calendar invite is sent separately). The row is the
+ * Book a slot, then send the host a short branded notice. The guest gets Google's Calendar invite (sent separately). The row is the
  * source of truth: once it is in, the slot is held even if mail fails.
  */
 export async function bookDemo(
   input: DemoBookingInput,
   deps: { store: DemoBookingStore; send: DemoMailer; ip: string | null; now?: Date },
-): Promise<{ id: string; slotStart: string; hostEmailed: boolean; guestEmailed: boolean }> {
+): Promise<{ id: string; slotStart: string; hostEmailed: boolean }> {
   const now = deps.now ?? new Date();
   if (!isBookableSlot(input.slotStart, now)) {
     throw new HttpError(409, 'That time is no longer available. Pick another.', 'slot_unavailable');
@@ -99,16 +99,9 @@ export async function bookDemo(
   if (host.ok) await deps.store.markEmailed(inserted.id, 'host_emailed_at').catch(() => undefined);
   else console.error('[demo] host email failed:', host.why);
 
-  const guest = await deps.send({
-    to: input.email,
-    ...demoGuestEmail(input, start, DEMO_ORGANIZER_NAME),
-    replyTo: DEMO_ORGANIZER_EMAIL,
-    keepReplyTo: true,
-  });
-  if (guest.ok) await deps.store.markEmailed(inserted.id, 'guest_emailed_at').catch(() => undefined);
-  else console.error('[demo] guest email failed:', guest.why);
-
-  return { id: inserted.id, slotStart, hostEmailed: host.ok, guestEmailed: guest.ok };
+  // No branded guest email: the guest's email is Google's own Calendar invite
+  // (with its Join button), sent from the host's calendar for this booking.
+  return { id: inserted.id, slotStart, hostEmailed: host.ok };
 }
 
 export { DEMO_WINDOW_DAYS };
