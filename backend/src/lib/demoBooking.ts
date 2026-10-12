@@ -199,37 +199,3 @@ export function formatSlot(start: Date, timeZone: string = DEMO_TIME_ZONE): stri
     timeZoneName: 'short',
   }).format(start);
 }
-
-export function renderOrganizerEmail(b: DemoBookingInput, start: Date): string {
-  return [
-    `New demo booked: ${formatSlot(start)} (30 min)`,
-    '',
-    `Name:     ${b.name}`,
-    `Email:    ${b.email}`,
-    `Company:  ${b.company}`,
-    b.phone ? `Phone:    ${b.phone}` : null,
-    b.timeZone ? `Their zone: ${b.timeZone} (${formatSlot(start, b.timeZone)})` : null,
-    b.notes ? '' : null,
-    b.notes ? b.notes : null,
-    '',
-    'The calendar invite is attached. Reply to this email to reach them.',
-  ]
-    .filter((line): line is string => line !== null)
-    .join('\n');
-}
-
-export function renderGuestEmail(b: DemoBookingInput, start: Date, organizerName: string): string {
-  const firstName = b.name.split(/\s+/)[0] || b.name;
-  return [
-    `Hi ${firstName},`,
-    '',
-    `You're booked for an Atmosphere demo with ${organizerName}:`,
-    '',
-    `  ${formatSlot(start, b.timeZone || DEMO_TIME_ZONE)} · 30 minutes`,
-    '',
-    'The calendar invite is attached. Add it to your calendar, and we will send the call link before we start.',
-    'Need a different time? Just reply to this email.',
-    '',
-    '— Atmosphere',
-  ].join('\n');
-}

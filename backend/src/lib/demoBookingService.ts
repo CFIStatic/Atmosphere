@@ -5,10 +5,9 @@ import {
   buildDemoIcs,
   demoSlotStarts,
   isBookableSlot,
-  renderGuestEmail,
-  renderOrganizerEmail,
   type DemoBookingInput,
 } from './demoBooking.js';
+import { demoGuestEmail, demoHostEmail } from './demoBookingEmail.js';
 import type { MailAttachment } from './systemMail.js';
 
 export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
@@ -26,6 +25,7 @@ export type DemoMailer = (input: {
   to: string;
   subject: string;
   text: string;
+  html?: string | null;
   replyTo?: string | null;
   keepReplyTo?: boolean;
   attachments?: MailAttachment[];
@@ -111,8 +111,7 @@ export async function bookDemo(
 
   const host = await deps.send({
     to: DEMO_ORGANIZER_EMAIL,
-    subject: `Demo booked — ${input.company} (${input.name})`,
-    text: renderOrganizerEmail(input, start),
+    ...demoHostEmail(input, start),
     replyTo: `"${input.name.replaceAll('"', "'")}" <${input.email}>`,
     keepReplyTo: true,
     attachments,
@@ -122,8 +121,7 @@ export async function bookDemo(
 
   const guest = await deps.send({
     to: input.email,
-    subject: 'Your Atmosphere demo is booked',
-    text: renderGuestEmail(input, start, DEMO_ORGANIZER_NAME),
+    ...demoGuestEmail(input, start, DEMO_ORGANIZER_NAME),
     replyTo: DEMO_ORGANIZER_EMAIL,
     keepReplyTo: true,
     attachments,
