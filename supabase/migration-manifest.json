@@ -227,7 +227,8 @@
     "20261010200000_job_evidence_duplicated.sql",
     "20261010200100_duplicate_job_file_contents.sql",
     "20261010210000_homeowner_portal_grants.sql",
-    "20261011230000_computer_login_company_id.sql"
+    "20261011230000_computer_login_company_id.sql",
+    "20261012190000_demo_bookings.sql"
   ],
   "migrations": [
     {
@@ -6893,6 +6894,34 @@
       "indistinguishableReason": null,
       "expect": [
         "column|public.computer_login_credentials.company_id_sealed"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261012190000_demo_bookings",
+      "file": "20261012190000_demo_bookings.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.demo_bookings.client_ip",
+        "column|public.demo_bookings.company",
+        "column|public.demo_bookings.created_at",
+        "column|public.demo_bookings.email",
+        "column|public.demo_bookings.guest_emailed_at",
+        "column|public.demo_bookings.guest_time_zone",
+        "column|public.demo_bookings.host_emailed_at",
+        "column|public.demo_bookings.id",
+        "column|public.demo_bookings.name",
+        "column|public.demo_bookings.notes",
+        "column|public.demo_bookings.phone",
+        "column|public.demo_bookings.slot_start",
+        "column|public.demo_bookings.status",
+        "index|public.demo_bookings.demo_bookings_pkey",
+        "index|public.demo_bookings.demo_bookings_slot_booked_uniq",
+        "rls|public.demo_bookings",
+        "table|public.demo_bookings"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

@@ -26,6 +26,7 @@ import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
+import { demoRouter } from './routes/demo.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { chatDocumentsRouter } from './routes/chatDocuments.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
@@ -248,6 +249,7 @@ export function createApp(): Express {
   app.use('/api/unsubscribe', unsubscribeRouter);
   app.use('/api/careers', careersRouter);
   app.use('/api/contact', contactRouter);
+  app.use('/api/demo', demoRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
