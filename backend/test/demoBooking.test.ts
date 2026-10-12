@@ -15,6 +15,9 @@ import {
   type DemoMailer,
 } from '../src/lib/demoBookingService.js';
 import type { MailAttachment } from '../src/lib/systemMail.js';
+import { resetDemoBusyCacheForTests } from '../src/lib/demoBookingService.js';
+import { calendarCreds, createGoogleCalendarClient, type GoogleCalendarClient } from '../src/lib/googleCalendar.js';
+import { generateKeyPairSync } from 'node:crypto';
 
 // Monday Oct 12 2026, 8:00 AM CDT.
 const NOW = new Date('2026-10-12T13:00:00Z');
@@ -181,4 +184,186 @@ test('booking: slot is held even when mail fails', async () => {
   const r = await bookDemo(input, { store, send, ip: null, now: NOW });
   assert.equal(r.guestEmailed, false);
   assert.equal(store.rows.length, 1);
+});
+
+const GC_INPUT = {
+  slotStart: '2026-10-15T15:00:00.000Z',
+  name: 'Dana Ortiz',
+  email: 'dana@example.com',
+  company: 'Ortiz Roofing',
+  timeZone: 'America/New_York',
+};
+
+test('gcal: off unless credentials exist; oauth beats service account', () => {
+  assert.equal(calendarCreds({}, 'jack@jettx.ai'), null);
+  assert.equal(createGoogleCalendarClient({ env: {}, hostEmail: 'jack@jettx.ai' }), null);
+  assert.equal(calendarCreds({ GOOGLE_CALENDAR_CLIENT_ID: 'a', GOOGLE_CALENDAR_CLIENT_SECRET: 'b' }), null);
+  assert.equal(
+    calendarCreds({ GOOGLE_CALENDAR_CLIENT_ID: 'a', GOOGLE_CALENDAR_CLIENT_SECRET: 'b', GOOGLE_CALENDAR_REFRESH_TOKEN: 'c' })?.kind,
+    'oauth',
+  );
+  const sa = calendarCreds(
+    { GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON: JSON.stringify({ client_email: 's@x.iam', private_key: 'k' }) },
+    'jack@jettx.ai',
+  );
+  assert.equal(sa?.kind === 'service_account' && sa.subject, 'jack@jettx.ai');
+});
+
+test('gcal: creates a Meet event with sendUpdates=all, parses link and dial-in', async () => {
+  const calls: Array<{ url: string; body: string }> = [];
+  const fetchStub = async (url: string, init?: RequestInit) => {
+    calls.push({ url, body: String(init?.body ?? '') });
+    if (url.includes('oauth2')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }));
+    return new Response(
+      JSON.stringify({
+        id: 'evt1',
+        htmlLink: 'https://calendar.google.com/x',
+        hangoutLink: 'https://meet.google.com/abc-defg-hij',
+        conferenceData: {
+          entryPoints: [
+            { entryPointType: 'video', uri: 'https://meet.google.com/abc-defg-hij' },
+            { entryPointType: 'phone', uri: 'tel:+1-555-010-9999', label: '+1 555-010-9999', pin: '123456789' },
+          ],
+        },
+      }),
+    );
+  };
+  const c = createGoogleCalendarClient({
+    env: { GOOGLE_CALENDAR_CLIENT_ID: 'a', GOOGLE_CALENDAR_CLIENT_SECRET: 'b', GOOGLE_CALENDAR_REFRESH_TOKEN: 'c' },
+    hostEmail: 'jack@jettx.ai',
+    fetch: fetchStub,
+  })!;
+  const ev = await c.createDemoEvent({
+    requestId: 'id-1',
+    start: new Date('2026-10-15T15:00:00Z'),
+    end: new Date('2026-10-15T15:30:00Z'),
+    summary: 'Atmosphere product demo: Ortiz Roofing',
+    description: 'd',
+    attendee: { email: 'dana@example.com', name: 'Dana' },
+  });
+  assert.deepEqual(ev, {
+    eventId: 'evt1',
+    meetUrl: 'https://meet.google.com/abc-defg-hij',
+    htmlLink: 'https://calendar.google.com/x',
+    dialIn: '+1 555-010-9999',
+    pin: '123 456 789#',
+  });
+  assert.match(calls[0]!.body, /grant_type=refresh_token/);
+  assert.match(calls[1]!.url, /calendars\/primary\/events\?conferenceDataVersion=1&sendUpdates=all$/);
+  const body = JSON.parse(calls[1]!.body);
+  assert.equal(body.conferenceData.createRequest.requestId, 'id-1');
+  assert.equal(body.conferenceData.createRequest.conferenceSolutionKey.type, 'hangoutsMeet');
+  assert.equal(body.attendees[0].email, 'dana@example.com');
+  assert.equal(body.start.dateTime, '2026-10-15T15:00:00.000Z');
+});
+
+test('gcal: service account signs a delegated JWT', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  let assertion = '';
+  const c = createGoogleCalendarClient({
+    env: {
+      GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        client_email: 'svc@p.iam.gserviceaccount.com',
+        private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      }),
+    },
+    hostEmail: 'jack@jettx.ai',
+    fetch: async (url, init) => {
+      if (url.includes('oauth2')) {
+        assertion = new URLSearchParams(String(init?.body)).get('assertion') ?? '';
+        return new Response(JSON.stringify({ access_token: 't' }));
+      }
+      return new Response(JSON.stringify({ calendars: { primary: { busy: [] } } }));
+    },
+  })!;
+  await c.busy(new Date(), new Date(Date.now() + 1000));
+  const claims = JSON.parse(Buffer.from(assertion.split('.')[1]!, 'base64url').toString());
+  assert.equal(claims.sub, 'jack@jettx.ai');
+  assert.match(claims.scope, /calendar\.events/);
+});
+
+function fakeCalendar(over: Partial<GoogleCalendarClient> = {}): GoogleCalendarClient {
+  return {
+    async createDemoEvent() {
+      return { eventId: 'evt1', meetUrl: 'https://meet.google.com/per-book-ing', htmlLink: null, dialIn: null, pin: null };
+    },
+    async busy() {
+      return [];
+    },
+    ...over,
+  };
+}
+
+test('booking with calendar: per-booking Meet link, event stored, no .ics', async () => {
+  const store = memStore();
+  const stored: string[] = [];
+  store.markCalendarEvent = async (id, ev, url) => void stored.push(`${id}|${ev}|${url}`);
+  const sent: Array<{ text: string; html?: string | null; attachments?: MailAttachment[] }> = [];
+  let summary = '';
+  const r = await bookDemo(demoBookingSchema.parse(GC_INPUT), {
+    store,
+    send: async (m) => (sent.push(m), { ok: true }),
+    ip: null,
+    now: NOW,
+    calendar: fakeCalendar({
+      async createDemoEvent(i) {
+        summary = i.summary;
+        return { eventId: 'evt1', meetUrl: 'https://meet.google.com/per-book-ing', htmlLink: null, dialIn: null, pin: null };
+      },
+    }),
+  });
+  assert.equal(r.calendarEvent, true);
+  assert.equal(summary, 'Atmosphere product demo: Ortiz Roofing');
+  assert.deepEqual(stored, ['id-1|evt1|https://meet.google.com/per-book-ing']);
+  assert.equal(sent.length, 2);
+  for (const m of sent) {
+    assert.equal(m.attachments, undefined);
+    assert.match(m.text, /meet\.google\.com\/per-book-ing/);
+    assert.match(m.html ?? '', /meet\.google\.com\/per-book-ing/);
+    assert.doesNotMatch(m.text, /wcd-dsir-qyg|\.ics/);
+  }
+});
+
+test('booking with calendar failure: falls back to shared link and .ics', async () => {
+  const store = memStore();
+  const sent: Array<{ text: string; attachments?: MailAttachment[] }> = [];
+  const r = await bookDemo(demoBookingSchema.parse(GC_INPUT), {
+    store,
+    send: async (m) => (sent.push(m), { ok: true }),
+    ip: null,
+    now: NOW,
+    calendar: fakeCalendar({
+      async createDemoEvent() {
+        throw new Error('403');
+      },
+    }),
+  });
+  assert.equal(r.calendarEvent, false);
+  for (const m of sent) {
+    assert.equal(m.attachments?.[0]?.filename, 'atmosphere-demo.ics');
+    assert.match(m.text, /wcd-dsir-qyg/);
+  }
+});
+
+test('slots: freebusy hides busy hours and fails open', async () => {
+  resetDemoBusyCacheForTests();
+  const store = memStore();
+  const all = await openDemoSlots(store, NOW, null);
+  const busy = await openDemoSlots(
+    store,
+    NOW,
+    fakeCalendar({
+      async busy() {
+        return [{ start: Date.parse('2026-10-15T15:10:00Z'), end: Date.parse('2026-10-15T16:00:00Z') }];
+      },
+    }),
+  );
+  assert.ok(all.includes('2026-10-15T15:00:00.000Z'));
+  assert.ok(!busy.includes('2026-10-15T15:00:00.000Z'));
+  assert.ok(!busy.includes('2026-10-15T15:30:00.000Z'));
+  assert.ok(busy.includes('2026-10-15T16:00:00.000Z'));
+  assert.equal(busy.length, all.length - 2);
+  resetDemoBusyCacheForTests();
+  const failed = await openDemoSlots(store, NOW, fakeCalendar({ async busy() { throw new Error('x'); } }));
+  assert.deepEqual(failed, all);
 });

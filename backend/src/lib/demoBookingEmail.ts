@@ -19,6 +19,21 @@ export const DEMO_EMAIL_LOGO_URL =
   'https://atmosphereteam.com/assets/email/atmosphere-lockup-dark.png';
 const SITE_URL = 'https://atmosphereteam.com';
 
+/**
+ * The call for this booking. A per-booking Google Calendar event brings its
+ * own Meet link (and Google's dial-in); otherwise the host's reusable room.
+ * `calendarInvite` says how the invite reaches people: Google's own invite
+ * ('google') or the attached .ics ('ics').
+ */
+export type DemoMeet = { url: string; dialIn?: string | null; pin?: string | null; calendarInvite: 'google' | 'ics' };
+
+export const DEFAULT_DEMO_MEET: DemoMeet = {
+  url: DEMO_MEET_URL,
+  dialIn: DEMO_MEET_DIAL_IN || null,
+  pin: DEMO_MEET_DIAL_IN ? meetPinLabel() : null,
+  calendarInvite: 'ics',
+};
+
 const INK = '#1C1917';
 const INK_SOFT = '#57534E';
 const INK_FAINT = '#78716C';
@@ -121,6 +136,7 @@ function rowsHtml(rows: Row[]): string {
 }
 
 function layout(input: {
+  meet: DemoMeet;
   title: string;
   preheader: string;
   eyebrow: string;
@@ -186,14 +202,14 @@ function layout(input: {
         <tr><td class="em-pad" style="padding:18px 32px 0;">
           <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
             <td bgcolor="${ACCENT}" style="background:${ACCENT};border-radius:10px;">
-              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${esc(DEMO_MEET_URL)}" style="height:46px;v-text-anchor:middle;width:240px;" arcsize="20%" stroke="f" fillcolor="${ACCENT}"><center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Join with Google Meet</center></v:roundrect><![endif]-->
-              <!--[if !mso]><!--><a href="${esc(DEMO_MEET_URL)}" style="display:inline-block;padding:13px 24px;font-family:${FONT};font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:10px;background:${ACCENT};">Join with Google Meet</a><!--<![endif]-->
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${esc(input.meet.url)}" style="height:46px;v-text-anchor:middle;width:240px;" arcsize="20%" stroke="f" fillcolor="${ACCENT}"><center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Join with Google Meet</center></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="${esc(input.meet.url)}" style="display:inline-block;padding:13px 24px;font-family:${FONT};font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:10px;background:${ACCENT};">Join with Google Meet</a><!--<![endif]-->
             </td>
           </tr></table>
           <p class="em-soft" style="margin:12px 0 0;font-size:13.5px;line-height:1.6;color:${INK_SOFT};">
-            <a href="${esc(DEMO_MEET_URL)}" class="em-link" style="color:${ACCENT};text-decoration:none;">${esc(DEMO_MEET_URL.replace(/^https?:\/\//, ''))}</a>${
-              DEMO_MEET_DIAL_IN
-                ? `<br />Or dial <a href="tel:${esc(DEMO_MEET_DIAL_IN.replace(/[^0-9+]/g, ''))}" class="em-link" style="color:${INK_SOFT};text-decoration:none;">${esc(DEMO_MEET_DIAL_IN)}</a> &middot; PIN ${esc(meetPinLabel())}`
+            <a href="${esc(input.meet.url)}" class="em-link" style="color:${ACCENT};text-decoration:none;">${esc(input.meet.url.replace(/^https?:\/\//, ''))}</a>${
+              input.meet.dialIn
+                ? `<br />Or dial <a href="tel:${esc(input.meet.dialIn.replace(/[^0-9+]/g, ''))}" class="em-link" style="color:${INK_SOFT};text-decoration:none;">${esc(input.meet.dialIn)}</a>${input.meet.pin ? ` &middot; PIN ${esc(input.meet.pin)}` : ''}`
                 : ''
             }
           </p>
@@ -221,10 +237,12 @@ function layout(input: {
 </html>`;
 }
 
-const TEXT_MEET = [
-  `Join with Google Meet: ${DEMO_MEET_URL}`,
-  ...(DEMO_MEET_DIAL_IN ? [`Join by phone: ${DEMO_MEET_DIAL_IN}, PIN: ${meetPinLabel()}`] : []),
-];
+function textMeet(meet: DemoMeet): string[] {
+  return [
+    `Join with Google Meet: ${meet.url}`,
+    ...(meet.dialIn ? [`Join by phone: ${meet.dialIn}${meet.pin ? `, PIN: ${meet.pin}` : ''}`] : []),
+  ];
+}
 
 const TEXT_FOOTER = [
   '—',
@@ -236,6 +254,7 @@ const TEXT_FOOTER = [
 export function demoHostEmail(
   b: DemoBookingInput,
   start: Date,
+  meet: DemoMeet = DEFAULT_DEMO_MEET,
 ): { subject: string; text: string; html: string } {
   const ct = slotParts(start, DEMO_TIME_ZONE);
   const guestZone = b.timeZone ? validZone(b.timeZone) : null;
@@ -252,6 +271,7 @@ export function demoHostEmail(
     ...(b.notes ? [{ label: 'Notes', value: b.notes }] : []),
   ];
   const html = layout({
+    meet,
     title: subject,
     preheader: `${b.name} from ${b.company} booked ${slotSubjectLabel(start)}.`,
     eyebrow: 'New demo booked',
@@ -259,7 +279,7 @@ export function demoHostEmail(
     intro: `${esc(b.company)} picked a time on atmosphereteam.com/demo.`,
     when: ct,
     rows,
-    after: `The calendar invite is attached. Reply to this email to reach ${esc(b.name.split(/\s+/)[0] || b.name)} directly.`,
+    after: `${meet.calendarInvite === 'google' ? 'The event is on your Google Calendar with its own Meet link, and Google sent the invite.' : 'The calendar invite is attached.'} Reply to this email to reach ${esc(b.name.split(/\s+/)[0] || b.name)} directly.`,
   });
   const text = [
     `New demo booked: ${b.name} (${b.company})`,
@@ -272,9 +292,11 @@ export function demoHostEmail(
     theirs ? `Their time: ${theirs.time} (${guestZone})` : null,
     b.notes ? `Notes:    ${b.notes}` : null,
     '',
-    ...TEXT_MEET,
+    ...textMeet(meet),
     '',
-    'The calendar invite is attached. Reply to this email to reach them.',
+    meet.calendarInvite === 'google'
+      ? 'The event is on your Google Calendar with its own Meet link, and Google sent the invite. Reply to this email to reach them.'
+      : 'The calendar invite is attached. Reply to this email to reach them.',
     '',
     ...TEXT_FOOTER,
   ]
@@ -287,6 +309,7 @@ export function demoGuestEmail(
   b: DemoBookingInput,
   start: Date,
   hostName: string,
+  meet: DemoMeet = DEFAULT_DEMO_MEET,
 ): { subject: string; text: string; html: string } {
   const zone = validZone(b.timeZone || DEMO_TIME_ZONE);
   const when = slotParts(start, zone);
@@ -299,14 +322,19 @@ export function demoGuestEmail(
     { label: 'Email', value: b.email },
   ];
   const html = layout({
+    meet,
     title: subject,
-    preheader: `You're booked for ${slotSubjectLabel(start, zone)}. The calendar invite is attached.`,
+    preheader: `You're booked for ${slotSubjectLabel(start, zone)}. ${meet.calendarInvite === 'google' ? 'Your Google Calendar invite is on its way.' : 'The calendar invite is attached.'}`,
     eyebrow: 'Demo confirmed',
     heading: `You're booked, ${first}`,
     intro: `Thanks for booking time with Atmosphere. ${esc(hostName)} will walk you through what Atmosphere would do on the jobs you run.`,
     when,
     rows,
-    after: `<strong class="em-ink" style="color:${INK};">Add it to your calendar:</strong> open the attached <span style="font-family:${MONO};font-size:13px;">atmosphere-demo.ics</span> invite. The Google Meet link above is included in it.<br /><br /><strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
+    after: `<strong class="em-ink" style="color:${INK};">Add it to your calendar:</strong> ${
+      meet.calendarInvite === 'google'
+        ? 'a Google Calendar invite is on its way from ' + esc(hostName) + '. Accept it to add the demo, with this Meet link, to your calendar.'
+        : `open the attached <span style="font-family:${MONO};font-size:13px;">atmosphere-demo.ics</span> invite. The Google Meet link above is included in it.`
+    }<br /><br /><strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
   });
   const text = [
     `Hi ${first},`,
@@ -316,9 +344,11 @@ export function demoGuestEmail(
     `When:   ${when.date}, ${when.time} (${DEMO_SLOT_MINUTES} min)`,
     `With:   ${hostName}, Founder`,
     '',
-    ...TEXT_MEET,
+    ...textMeet(meet),
     '',
-    'Add it to your calendar: open the attached atmosphere-demo.ics invite. The Google Meet link is included in it.',
+    meet.calendarInvite === 'google'
+      ? `Add it to your calendar: a Google Calendar invite is on its way from ${hostName}. Accept it to add the demo to your calendar.`
+      : 'Add it to your calendar: open the attached atmosphere-demo.ics invite. The Google Meet link is included in it.',
     'Need to reschedule or have a question? Just reply to this email.',
     '',
     ...TEXT_FOOTER,
