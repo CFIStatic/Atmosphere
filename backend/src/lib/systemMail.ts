@@ -22,6 +22,9 @@ import {
   resendFromCandidates,
 } from './resendFrom.js';
 
+/** A file on the message, e.g. a calendar invite (.ics). */
+export type MailAttachment = { filename: string; content: string; contentType: string };
+
 /**
  * Platform mail — Atmosphere sends it (invites, OTPs, resets, contact/careers).
  *
@@ -110,6 +113,7 @@ async function sendViaLog(input: {
   html?: string | null;
   replyTo?: string | null;
   from: string;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   try {
     const dir = path.resolve(process.cwd(), '.mail');
@@ -132,6 +136,10 @@ async function sendViaLog(input: {
     if (input.html) {
       await writeFile(`${base}.html`, input.html, 'utf8');
     }
+    for (const [i, a] of (input.attachments ?? []).entries()) {
+      const safeName = a.filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+      await writeFile(`${base}.${i}.${safeName}`, a.content, 'utf8');
+    }
     console.info(`[system-mail] logged invite for ${input.to} → ${base}.txt`);
     return { ok: true };
   } catch (err) {
@@ -151,6 +159,7 @@ async function postResend(input: {
   headers?: Record<string, string>;
   kind?: MailKind;
   fromName?: string | null;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: true } | { ok: false; why: string; status?: number; body?: string }> {
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -168,6 +177,15 @@ async function postResend(input: {
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         ...(input.headers ? { headers: input.headers } : {}),
         tags: resendTags(input.kind ?? 'transactional'),
+        ...(input.attachments?.length
+          ? {
+              attachments: input.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.content, 'utf8').toString('base64'),
+                content_type: a.contentType,
+              })),
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(20_000),
     });
@@ -199,6 +217,7 @@ async function sendViaResend(input: {
   keepReplyTo?: boolean;
   kind?: MailKind;
   fromName?: string | null;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -264,6 +283,7 @@ export async function sendSystemMail(input: {
   unsubscribeUrl?: string | null;
   /** Display name on From, e.g. "Acme Restoration via Atmosphere". */
   fromName?: string | null;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();
   const driver = driverOverride();
@@ -314,6 +334,15 @@ export async function sendSystemMail(input: {
           ...(input.html ? { html: input.html } : {}),
           ...(replyTo ? { replyTo } : {}),
           headers,
+          ...(input.attachments?.length
+            ? {
+                attachments: input.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: a.content,
+                  contentType: a.contentType,
+                })),
+              }
+            : {}),
         });
         return { ok: true };
       } catch (err) {
