@@ -61,3 +61,17 @@ test('guest email: their zone, calendar + reply lines, no host-only notes', () =
   assert.match(m.text, /atmosphere-demo\.ics/);
   assert.match(m.text, /reply to this email/i);
 });
+
+test('both emails carry the Google Meet button, link and dial-in', () => {
+  for (const m of [demoHostEmail(b, start), demoGuestEmail(b, start, 'Jack')]) {
+    assert.match(m.html, /Join with Google Meet/);
+    assert.match(m.html, /href="https:\/\/meet\.google\.com\/wcd-dsir-qyg"/);
+    assert.match(m.html, /\+1 502-947-4063/);
+    assert.match(m.html, /PIN 126 500 844#/);
+    assert.match(m.text, /Join with Google Meet: https:\/\/meet\.google\.com\/wcd-dsir-qyg/);
+    assert.match(m.text, /Join by phone: \+1 502-947-4063, PIN: 126 500 844#/);
+  }
+  const g = demoGuestEmail(b, start, 'Jack');
+  assert.ok(!/send the call link/i.test(g.html + g.text));
+  assert.match(g.text, /Google Meet link is included/);
+});
