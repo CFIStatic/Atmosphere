@@ -1,4 +1,11 @@
-import { DEMO_SLOT_MINUTES, DEMO_TIME_ZONE, type DemoBookingInput } from './demoBooking.js';
+import {
+  DEMO_MEET_DIAL_IN,
+  DEMO_MEET_URL,
+  DEMO_SLOT_MINUTES,
+  DEMO_TIME_ZONE,
+  meetPinLabel,
+  type DemoBookingInput,
+} from './demoBooking.js';
 
 /**
  * Branded demo-booking mail: the host notification and the visitor
@@ -124,7 +131,7 @@ function layout(input: {
   after: string;
 }): string {
   return `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -176,6 +183,21 @@ function layout(input: {
             </td></tr>
           </table>
         </td></tr>
+        <tr><td class="em-pad" style="padding:18px 32px 0;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td bgcolor="${ACCENT}" style="background:${ACCENT};border-radius:10px;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${esc(DEMO_MEET_URL)}" style="height:46px;v-text-anchor:middle;width:240px;" arcsize="20%" stroke="f" fillcolor="${ACCENT}"><center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Join with Google Meet</center></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="${esc(DEMO_MEET_URL)}" style="display:inline-block;padding:13px 24px;font-family:${FONT};font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:10px;background:${ACCENT};">Join with Google Meet</a><!--<![endif]-->
+            </td>
+          </tr></table>
+          <p class="em-soft" style="margin:12px 0 0;font-size:13.5px;line-height:1.6;color:${INK_SOFT};">
+            <a href="${esc(DEMO_MEET_URL)}" class="em-link" style="color:${ACCENT};text-decoration:none;">${esc(DEMO_MEET_URL.replace(/^https?:\/\//, ''))}</a>${
+              DEMO_MEET_DIAL_IN
+                ? `<br />Or dial <a href="tel:${esc(DEMO_MEET_DIAL_IN.replace(/[^0-9+]/g, ''))}" class="em-link" style="color:${INK_SOFT};text-decoration:none;">${esc(DEMO_MEET_DIAL_IN)}</a> &middot; PIN ${esc(meetPinLabel())}`
+                : ''
+            }
+          </p>
+        </td></tr>
         <tr><td class="em-pad" style="padding:22px 32px 4px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${rowsHtml(input.rows)}
           </table>
@@ -198,6 +220,11 @@ function layout(input: {
 </body>
 </html>`;
 }
+
+const TEXT_MEET = [
+  `Join with Google Meet: ${DEMO_MEET_URL}`,
+  ...(DEMO_MEET_DIAL_IN ? [`Join by phone: ${DEMO_MEET_DIAL_IN}, PIN: ${meetPinLabel()}`] : []),
+];
 
 const TEXT_FOOTER = [
   '—',
@@ -245,6 +272,8 @@ export function demoHostEmail(
     theirs ? `Their time: ${theirs.time} (${guestZone})` : null,
     b.notes ? `Notes:    ${b.notes}` : null,
     '',
+    ...TEXT_MEET,
+    '',
     'The calendar invite is attached. Reply to this email to reach them.',
     '',
     ...TEXT_FOOTER,
@@ -277,7 +306,7 @@ export function demoGuestEmail(
     intro: `Thanks for booking time with Atmosphere. ${esc(hostName)} will walk you through what Atmosphere would do on the jobs you run.`,
     when,
     rows,
-    after: `<strong class="em-ink" style="color:${INK};">Add it to your calendar:</strong> open the attached <span style="font-family:${MONO};font-size:13px;">atmosphere-demo.ics</span> invite. We'll send the call link before we start.<br /><br /><strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
+    after: `<strong class="em-ink" style="color:${INK};">Add it to your calendar:</strong> open the attached <span style="font-family:${MONO};font-size:13px;">atmosphere-demo.ics</span> invite. The Google Meet link above is included in it.<br /><br /><strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
   });
   const text = [
     `Hi ${first},`,
@@ -287,7 +316,9 @@ export function demoGuestEmail(
     `When:   ${when.date}, ${when.time} (${DEMO_SLOT_MINUTES} min)`,
     `With:   ${hostName}, Founder`,
     '',
-    'Add it to your calendar: open the attached atmosphere-demo.ics invite. We will send the call link before we start.',
+    ...TEXT_MEET,
+    '',
+    'Add it to your calendar: open the attached atmosphere-demo.ics invite. The Google Meet link is included in it.',
     'Need to reschedule or have a question? Just reply to this email.',
     '',
     ...TEXT_FOOTER,
