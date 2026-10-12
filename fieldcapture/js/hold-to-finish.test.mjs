@@ -265,8 +265,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
-assert.match(html, /js\/app\.js\?v=app-shell-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-session-1/);
+assert.match(html, /js\/app\.js\?v=app-session-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -1879,8 +1879,8 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 }
 
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
-assert.match(html, /js\/app\.js\?v=app-shell-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-session-1/);
+assert.match(html, /js\/app\.js\?v=app-session-1/);
 
 const DENIED_GUM =
   'The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.';
@@ -2097,3 +2097,6 @@ console.log('keyboard chrome: ok');
   assert.doesNotMatch(coreSrc, /\/proof\/(?:safety-live|safety-sample|wellness-heartbeat)/);
   console.log('no live safety stream: ok');
 }
+
+// Stay signed in until force close (runs in the same CI step).
+await import('./app-session.test.mjs');
