@@ -155,6 +155,24 @@ export function invitedPartyForJob<
 }
 
 /**
+ * Jobs that really were shared with this person by another company.
+ *
+ * A job in an org the person belongs to is their own job, never "shared",
+ * even when a job_parties row carries their email (Field Capture adds a
+ * general_contractor row for the filming GC, and a GC can invite their own
+ * email as a sub). A job deleted from its org's library (tombstoned) is
+ * gone for everyone, so it is never listed.
+ */
+export function sharedJobsOnly<J extends { id: string; org_id: string }>(
+  jobs: J[],
+  memberOrgIds: Iterable<string>,
+  tombstonedByOrg: Map<string, Set<string>>,
+): J[] {
+  const mine = new Set(memberOrgIds);
+  return jobs.filter((j) => !mine.has(j.org_id) && !tombstonedByOrg.get(j.org_id)?.has(j.id));
+}
+
+/**
  * Field Capture Today for someone with their own workspace: their jobs first,
  * then jobs other contractors shared with them. A job already on their own
  * list is never repeated.

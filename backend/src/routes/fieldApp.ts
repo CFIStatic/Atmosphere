@@ -12,6 +12,7 @@ import {
   claimInvitedPartiesForUser,
   invitedPartyForJob,
   mergeSharedTodayJobs,
+  sharedJobsOnly,
   normalizeInviteEmail,
   partiesInvitedToEmail,
 } from '../shared/inviteeJobAccess.js';
@@ -275,11 +276,23 @@ async function listInviteeToday(req: Request) {
   const jobIds = [...new Set(mine.map((p) => p.job_id))];
   if (!jobIds.length) return { jobs: [], today: day, access: 'invitee' as const };
 
-  const { data: jobs } = await admin
+  const { data: jobRows } = await admin
     .from('crm_jobs')
     .select('id, org_id, job_number, title, status, scheduled_start, property_id')
     .in('id', jobIds)
     .is('deleted_at', null);
+  // Never the person's own company's jobs, and never a job deleted from its library.
+  const { data: memberships } = await admin.from('org_members').select('org_id').eq('user_id', req.user.id);
+  const candidateRows = (jobRows ?? []) as Array<{ id: string; org_id: string }>;
+  const tombstonedByOrg = new Map<string, Set<string>>();
+  for (const orgId of [...new Set(candidateRows.map((j) => j.org_id).filter(Boolean))]) {
+    tombstonedByOrg.set(orgId, await listTombstonedJobIds(admin, orgId));
+  }
+  const jobs = sharedJobsOnly(
+    candidateRows,
+    ((memberships ?? []) as Array<{ org_id: string }>).map((m) => m.org_id),
+    tombstonedByOrg,
+  );
 
   // "Shared by <company>" on the row, so a sub with their own jobs can tell
   // whose job they are filming on.
