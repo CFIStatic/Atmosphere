@@ -66,30 +66,26 @@
   }
   var REFRESH_KEY = 'atm.field.refreshToken';
 
-  /* iPhone / Android app only (Capacitor shell, apps/mobile): a force-quit
-     ends the sign-in. sessionStorage lives as long as the app's web view, so
-     it survives backgrounding, locking the phone and reloads, and is empty
-     again on a cold launch. On a cold launch nothing signs back in on its own:
-     the office cookie is not adopted (and is logged out below), so the crew
-     signs in again. Day films waiting in IndexedDB and job drafts are kept;
-     they file once the same person signs back in. Browsers never run this. */
-  var APP_LAUNCHED_KEY = 'atm.app.launched';
+  /* iPhone / Android app and the home-screen web app (Core.isAppLaunchContext):
+     stay signed in while backgrounded, locked, switched away or reloaded;
+     a force close ends the sign-in. sessionStorage lives as long as the
+     app's web view and is empty again on a cold launch. On a cold launch
+     nothing signs back in on its own: the office cookie is not adopted (and
+     is logged out below), so the crew signs in again. Day films waiting in
+     IndexedDB and job drafts are kept; they file once the same person signs
+     back in. Browser tabs never run this. */
   var COLD_APP_START = (function () {
-    var cap = window.Capacitor;
-    var native =
-      /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
-      Boolean(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-    if (!native) return false;
+    if (!Core || !Core.isAppLaunchContext || !Core.isAppLaunchContext(window)) return false;
+    var store = null;
     try {
-      if (sessionStorage.getItem(APP_LAUNCHED_KEY) === '1') return false;
-      sessionStorage.setItem(APP_LAUNCHED_KEY, '1');
-      sessionStorage.removeItem(ACCESS_KEY);
-      sessionStorage.removeItem(REFRESH_KEY);
-      sessionStorage.setItem('atm.field.noPlatformAdopt', '1');
+      store = window.sessionStorage;
     } catch (e) {
       return false;
     }
-    return true;
+    return Core.claimColdAppLaunch(store, {
+      tokens: [ACCESS_KEY, REFRESH_KEY],
+      noAdopt: 'atm.field.noPlatformAdopt',
+    });
   })();
 
   function $(sel) {
@@ -703,6 +699,17 @@
           return run(fresh);
         });
       });
+  }
+
+  /**
+   * Back from the background (hours later, the 1-hour access token has
+   * lapsed): renew before anything calls the office, so the crew stays
+   * signed in instead of hitting a 401. Single-flight via refreshAccess.
+   */
+  function renewIfStale() {
+    if (!state.accessToken || !Core.accessTokenNeedsRefresh) return;
+    if (!Core.accessTokenNeedsRefresh(state.accessToken, Date.now())) return;
+    refreshAccess(captureSession());
   }
 
   function refreshAccess(bound) {
@@ -3135,13 +3142,16 @@
     });
     /* Field Capture back in front (home-screen app resumed, tab refocused). */
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') flushFieldWork('visible');
+      if (document.visibilityState !== 'visible') return;
+      renewIfStale();
+      flushFieldWork('visible');
     });
     window.addEventListener('pageshow', function () {
       flushFieldWork('visible');
     });
     /* Safety tick: a missed event must never leave a day on this phone. */
     window.setInterval(function () {
+      renewIfStale();
       flushFieldWork('tick');
     }, 15000);
   })();
