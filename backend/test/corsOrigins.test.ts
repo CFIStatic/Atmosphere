@@ -111,3 +111,49 @@ test('CORS denial is 403, not Internal server error', async () => {
     await close();
   }
 });
+
+test('corporate site origin may call the public form endpoints only, without credentials', async () => {
+  const { url, close } = await listen();
+  try {
+    for (const origin of ['https://atmosphereteam.com', 'https://www.atmosphereteam.com']) {
+      // Missing name: passes the origin check, fails validation — never books.
+      const book = await fetch(`${url}/api/demo/book`, {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotStart: '2026-10-13T14:00:00.000Z', email: 'a@example.com', company: 'C' }),
+      });
+      const body = (await book.json()) as { code?: string };
+      assert.notEqual(body.code, 'cors_origin_denied');
+      assert.equal(book.status, 400);
+      assert.equal(book.headers.get('access-control-allow-origin'), origin);
+      assert.equal(book.headers.get('access-control-allow-credentials'), null);
+
+      const pre = await fetch(`${url}/api/demo/book`, {
+        method: 'OPTIONS',
+        headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+      });
+      assert.ok(pre.status === 204 || pre.status === 200);
+      assert.equal(pre.headers.get('access-control-allow-origin'), origin);
+
+      const contact = await fetch(`${url}/api/contact/send`, {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      assert.notEqual(((await contact.json()) as { code?: string }).code, 'cors_origin_denied');
+    }
+    // Anywhere else, the corporate site origin is still refused.
+    const other = await fetch(`${url}/api/auth/me`, { headers: { Origin: 'https://atmosphereteam.com' } });
+    assert.equal(other.status, 403);
+    assert.equal(((await other.json()) as { code?: string }).code, 'cors_origin_denied');
+    // Lookalikes are not the corporate site.
+    const fake = await fetch(`${url}/api/demo/book`, {
+      method: 'POST',
+      headers: { Origin: 'https://atmosphereteam.com.evil.example', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(fake.status, 403);
+  } finally {
+    await close();
+  }
+});
