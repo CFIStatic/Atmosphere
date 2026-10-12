@@ -3,6 +3,7 @@ import { rejectPurchasesInAppShell } from '../lib/appShell.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { BILLING_OPEN_TO_MEMBERS, requireOrgOwnerExcept } from '../middleware/requireOrgOwner.js';
 import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
@@ -93,6 +94,9 @@ billingRouter.get('/catalog', async (_req: Request, res: Response, next: NextFun
 
 // Everything past this point acts on the caller's own organization.
 billingRouter.use(requireAuth, requireOrg);
+// Billing and Usage are the owner's alone. Every member's app still reads the
+// onboarding status (paywall gate); it gets no prices or plan details.
+billingRouter.use(requireOrgOwnerExcept(BILLING_OPEN_TO_MEMBERS));
 
 /**
  * GET /api/billing/overview
@@ -509,6 +513,24 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
   try {
     const supabase = createUserClient(req.accessToken!);
     const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
+    if (!workspace.isCreator) {
+      // Not the owner: only what the app needs to gate (no prices, plans or Stripe data).
+      res.json({
+        paymentProvider: workspace.paymentProvider,
+        required: workspace.required,
+        complete: workspace.complete,
+        isCreator: false,
+        hasSubscription: workspace.subscription.hasStripeSubscription,
+        fieldCaptureSeats: workspace.fieldCaptureSeats
+          ? {
+              used: workspace.fieldCaptureSeats.used,
+              allowed: workspace.fieldCaptureSeats.allowed,
+              remaining: workspace.fieldCaptureSeats.remaining,
+            }
+          : undefined,
+      });
+      return;
+    }
     res.json({
       paymentProvider: workspace.paymentProvider,
       required: workspace.required,

@@ -9,6 +9,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { isOrgOwnerRow, loadOrgOwnerId, requireOrgOwner } from '../middleware/requireOrgOwner.js';
 import { config } from '../config.js';
 import { badRequest, forbidden } from '../lib/errors.js';
 import { createUserClient } from '../lib/supabase.js';
@@ -26,7 +27,7 @@ import {
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { aiBudgetConfig, creditPackByCode, creditPackPriceId } from '../metering/aiBudgetConfig.js';
-import { canPurchaseAiCredits, creditNanosForPaymentCents } from '../metering/aiBudget.js';
+import { creditNanosForPaymentCents } from '../metering/aiBudget.js';
 import { loadAiAllowance, publicAllowance } from '../metering/aiBudgetService.js';
 import {
   readAutoRecharge,
@@ -36,7 +37,7 @@ import {
 } from '../metering/autoRecharge.js';
 
 export const aiAllowanceRouter = Router();
-aiAllowanceRouter.use(requireAuth, requireOrg);
+aiAllowanceRouter.use(requireAuth, requireOrg, requireOrgOwner);
 
 const packSchema = z.object({
   packCode: z.string().min(1).max(32),
@@ -54,15 +55,9 @@ const planSchema = z.object({
   billingInterval: z.string().optional(),
 });
 
+/** Billing and Usage are the owner's alone (orgs.created_by). */
 async function callerCanManage(req: Request): Promise<boolean> {
-  const supabase = createUserClient(req.accessToken!);
-  const { data } = await supabase
-    .from('org_members')
-    .select('role')
-    .eq('org_id', req.orgId!)
-    .eq('user_id', req.user!.id)
-    .maybeSingle();
-  return canPurchaseAiCredits((data as { role?: string } | null)?.role);
+  return isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, req.orgId!) }, req.user!.id);
 }
 
 aiAllowanceRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {

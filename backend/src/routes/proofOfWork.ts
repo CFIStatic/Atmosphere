@@ -18,7 +18,7 @@ import {
   PROOF_PLAYBACK_URL_TTL_SECONDS,
 } from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
-import { canPurchaseAiCredits } from '../metering/aiBudget.js';
+import { isOrgOwnerRow } from '../middleware/requireOrgOwner.js';
 import { enterAiUsageScope, runWithAiUsageScope } from '../metering/aiUsageContext.js';
 import { VIDEO_ANALYSIS_FEATURE, withVideoUsageScope } from '../metering/backgroundUsage.js';
 import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../metering/aiBudgetService.js';
@@ -2969,6 +2969,7 @@ async function loadChatSessionDocuments(
   return viewsFromChatRows(chatSessionRows(data, jobId));
 }
 
+/** Only the organization's owner (orgs.created_by) may buy AI credits. */
 async function memberCanPurchaseAi(
   supabase: any,
   orgId: string,
@@ -2976,13 +2977,8 @@ async function memberCanPurchaseAi(
 ): Promise<boolean> {
   if (!userId) return false;
   try {
-    const { data } = await supabase
-      .from('org_members')
-      .select('role')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    return canPurchaseAiCredits((data as { role?: string } | null)?.role);
+    const { data } = await supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle();
+    return isOrgOwnerRow(data as { created_by?: string | null } | null, userId);
   } catch {
     return false;
   }
