@@ -66,3 +66,20 @@ export function isAtmosphereCustomAppOrigin(origin: string): boolean {
 export function isAtmosphereCustomFieldCaptureOrigin(origin: string): boolean {
   return ATMOSPHERE_CUSTOM_FIELD_CAPTURE.test(origin);
 }
+
+/**
+ * The corporate site (atmosphereteam.com, www.) only calls its public forms:
+ * demo booking, contact and careers. Those origins are allowed there and
+ * nowhere else, so a marketing page can never make a credentialed call to
+ * the office API.
+ */
+const MARKETING_SITE_ORIGINS = new Set(['https://atmosphereteam.com', 'https://www.atmosphereteam.com']);
+const MARKETING_FORM_PATH = /^\/api\/(?:demo|contact|careers)(?:\/|$)/;
+
+export function isMarketingSiteOrigin(origin: string): boolean {
+  return MARKETING_SITE_ORIGINS.has(origin);
+}
+
+export function isMarketingFormPath(path: string): boolean {
+  return MARKETING_FORM_PATH.test(path);
+}

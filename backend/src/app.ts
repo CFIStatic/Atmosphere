@@ -54,6 +54,8 @@ import {
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
+  isMarketingFormPath,
+  isMarketingSiteOrigin,
 } from './lib/previewOrigins.js';
 
 /**
@@ -106,26 +108,35 @@ export function createApp(): Express {
   // CORS — allow the configured frontend origins with credentials (cookies).
   // In development, also accept Cloudflare quick-tunnel hosts so cloud-agent /
   // shareable preview URLs can sign in without editing FRONTEND_ORIGIN each time.
-  app.use(
-    cors({
-      origin(origin, callback) {
-        // Allow same-origin / server-to-server / curl (no Origin header).
-        if (!origin || isAllowedFrontendOrigin(origin)) {
-          callback(null, true);
-          return;
-        }
-        if (!config.isProduction && isCloudflareQuickTunnelOrigin(origin)) {
-          callback(null, true);
-          return;
-        }
-        // Reject the request (do not callback(null, false) — cors would still
-        // run the handler). Use HttpError so this is a 403, not a 500.
-        callback(forbidden('Origin not allowed', 'cors_origin_denied'));
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    }),
-  );
+  const officeCors = cors({
+    origin(origin, callback) {
+      // Allow same-origin / server-to-server / curl (no Origin header).
+      if (!origin || isAllowedFrontendOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (!config.isProduction && isCloudflareQuickTunnelOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      // Reject the request (do not callback(null, false) — cors would still
+      // run the handler). Use HttpError so this is a 403, not a 500.
+      callback(forbidden('Origin not allowed', 'cors_origin_denied'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+  // The corporate site's public forms (demo booking, contact, careers): its
+  // origin is allowed on those paths only, without credentials.
+  const marketingFormCors = cors({ origin: true, credentials: false, methods: ['GET', 'POST', 'OPTIONS'] });
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && isMarketingSiteOrigin(origin) && isMarketingFormPath(req.path)) {
+      marketingFormCors(req, res, next);
+      return;
+    }
+    officeCors(req, res, next);
+  });
 
   // Stripe signs the exact bytes it sent, so this route must see the raw body.
   // Mounted before any JSON parser — once a parser has consumed the stream the
