@@ -55,23 +55,19 @@ test('host email: branded HTML with every detail, escaped, plus text', () => {
 test('guest email: their zone, calendar + reply lines, no host-only notes', () => {
   const m = demoGuestEmail(b, start, 'Jack Cyganiak');
   assert.match(m.html, /10:00 – 10:30 AM EDT/);
-  assert.match(m.html, /Add it to your calendar/);
   assert.match(m.html, /reschedule or have a question/);
   assert.ok(!m.html.includes('Three crews'));
-  assert.match(m.text, /atmosphere-demo\.ics/);
   assert.match(m.text, /reply to this email/i);
 });
 
-test('both emails carry the Google Meet button, link and dial-in', () => {
-  for (const m of [demoHostEmail(b, start), demoGuestEmail(b, start, 'Jack')]) {
-    assert.match(m.html, /Join with Google Meet/);
-    assert.match(m.html, /href="https:\/\/meet\.google\.com\/wcd-dsir-qyg"/);
-    assert.match(m.html, /\+1 502-947-4063/);
-    assert.match(m.html, /PIN 126 500 844#/);
-    assert.match(m.text, /Join with Google Meet: https:\/\/meet\.google\.com\/wcd-dsir-qyg/);
-    assert.match(m.text, /Join by phone: \+1 502-947-4063, PIN: 126 500 844#/);
+test('no shared Meet link, dial-in or .ics: Google invite line with CT time instead', () => {
+  const g = demoGuestEmail(b, start, 'Jack Cyganiak');
+  const h = demoHostEmail(b, start);
+  const line =
+    'Your Google Calendar invite with the video link for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is on its way from Jack Cyganiak.';
+  assert.ok(g.html.includes(line) && g.text.includes(line));
+  assert.match(h.text, /A Google Calendar invite with the video link for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is going out to/);
+  for (const m of [g, h]) {
+    assert.ok(!/meet\.google\.com|Join with Google Meet|502-947-4063|PIN|\.ics|attached/i.test(m.html + m.text));
   }
-  const g = demoGuestEmail(b, start, 'Jack');
-  assert.ok(!/send the call link/i.test(g.html + g.text));
-  assert.match(g.text, /Google Meet link is included/);
 });
