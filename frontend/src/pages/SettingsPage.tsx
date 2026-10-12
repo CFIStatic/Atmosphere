@@ -1,3 +1,4 @@
+import { accountContact, formatPhone } from '../lib/phone';
 import {
   useEffect,
   useState,
@@ -456,9 +457,9 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
           </label>
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-ink-900">
-              {displayName(name || profile?.fullName, user?.email)}
+              {displayName(name || profile?.fullName, user?.email || accountContact(user))}
             </p>
-            <p className="truncate text-sm text-ink-500">{user?.email}</p>
+            <p className="truncate text-sm text-ink-500">{accountContact(user)}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="cursor-pointer text-sm font-medium text-brand-700 transition hover:text-brand-800">
                 {profile?.avatarUrl || previewUrl
@@ -531,15 +532,20 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
       {homeowner ? null : <VoiceEnrollmentCard />}
 
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
-        <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
-        <ReadOnlyRow
-          label={t('settings.account.emailConfirmed')}
-          value={
-            user?.emailConfirmed
-              ? t('settings.account.emailConfirmedYes')
-              : t('settings.account.emailConfirmedNo')
-          }
-        />
+        {(user?.email || !user?.phone) && (
+          <>
+            <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
+            <ReadOnlyRow
+              label={t('settings.account.emailConfirmed')}
+              value={
+                user?.emailConfirmed
+                  ? t('settings.account.emailConfirmedYes')
+                  : t('settings.account.emailConfirmedNo')
+              }
+            />
+          </>
+        )}
+        {user?.phone && <ReadOnlyRow label={t('settings.account.phone')} value={formatPhone(user.phone)} />}
         <ReadOnlyRow label={t('settings.account.memberSince')} value={formatDate(user?.createdAt, locale)} />
         <ReadOnlyRow label={t('settings.account.lastSignIn')} value={formatDate(user?.lastSignInAt, locale)} />
         <p className="mt-4 text-xs text-ink-500">{t('settings.account.emailLocked')}</p>

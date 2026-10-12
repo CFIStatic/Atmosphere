@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { accountContact, formatPhone, normalizePhoneE164 } from '../lib/phone';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { forgetHomeownerCache } from '../lib/homeownerPortal';
 import { HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
 import { jobShareTokenFromRoute } from '../lib/jobSharePath';
-import { crewInviteLoginHref } from '../lib/crewInvite';
+import { crewInviteLoginHref, crewInvitePhoneLoginHref } from '../lib/crewInvite';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
@@ -24,7 +25,7 @@ export function CrewInviteGate() {
   const token = jobShareTokenFromRoute(params);
   const navigate = useNavigate();
   const { user, loading: authLoading, logout } = useAuth();
-  const [invite, setInvite] = useState<{ recipientEmail: string | null; orgName: string; jobTitle: string | null } | null>(null);
+  const [invite, setInvite] = useState<{ recipientEmail: string | null; recipientPhone?: string | null; orgName: string; jobTitle: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
 
@@ -55,7 +56,11 @@ export function CrewInviteGate() {
 
   const invited = invite?.recipientEmail?.trim().toLowerCase() || null;
   const sessionEmail = user?.email?.trim().toLowerCase() || null;
-  const matches = Boolean(user && invited && sessionEmail === invited);
+  const invitedPhone = invited ? null : invite?.recipientPhone || null;
+  const sessionPhone = normalizePhoneE164(user?.phone ?? null);
+  const matches = Boolean(
+    user && ((invited && sessionEmail === invited) || (invitedPhone && sessionPhone === invitedPhone)),
+  );
 
   useEffect(() => {
     if (authLoading || !matches || started.current) return;
@@ -89,6 +94,32 @@ export function CrewInviteGate() {
     );
   }
 
+  if (invitedPhone) {
+    if (!user) return <Navigate to={crewInvitePhoneLoginHref(token, invitedPhone)} replace />;
+    return (
+      <Shell>
+        <h1 className="text-2xl font-semibold text-ink-900">This job was shared with another number</h1>
+        <p className="mt-3 text-ink-600" data-testid="crew-invite-mismatch">
+          {invite.orgName} shared this job with{' '}
+          <span className="font-medium text-ink-900">{formatPhone(invitedPhone)}</span>. You&apos;re signed in as{' '}
+          <span className="font-medium text-ink-900">{accountContact(user)}</span>.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate(crewInvitePhoneLoginHref(token, invitedPhone), { replace: true });
+            }}
+            className="rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900"
+          >
+            Sign in with that number
+          </button>
+        </div>
+      </Shell>
+    );
+  }
+
   if (!invited) {
     return (
       <Shell>
@@ -107,7 +138,7 @@ export function CrewInviteGate() {
       <h1 className="text-2xl font-semibold text-ink-900">This job was shared with another email</h1>
       <p className="mt-3 text-ink-600" data-testid="crew-invite-mismatch">
         {invite.orgName} shared this job with <span className="font-medium text-ink-900">{invited}</span>.
-        You&apos;re signed in as <span className="font-medium text-ink-900">{user.email}</span>.
+        You&apos;re signed in as <span className="font-medium text-ink-900">{accountContact(user)}</span>.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <button

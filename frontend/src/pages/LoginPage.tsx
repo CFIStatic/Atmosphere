@@ -7,6 +7,9 @@ import { isInAppShell, WEBSITE_SIGNUP_URL } from '../lib/appShell';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
 import { shareTokenFromLogin } from '../lib/homeownerLogin';
 import { HomeownerEmailLink } from '../components/HomeownerEmailLink';
+import { PhoneSignIn } from '../components/PhoneSignIn';
+import { usePhoneAuthEnabled } from '../hooks/usePhoneAuthEnabled';
+import { accountContact } from '../lib/phone';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
@@ -78,6 +81,8 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [usePhone, setUsePhone] = useState(() => Boolean(searchParams.get('phone')));
 
   useEffect(() => {
     if (!fieldEmbed || user || switchAccount) return;
@@ -216,7 +221,7 @@ export function LoginPage() {
                   <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
                     <p>
                       You&apos;re signed in as{' '}
-                      <span className="font-medium text-ink-900">{user.email}</span>
+                      <span className="font-medium text-ink-900">{accountContact(user)}</span>
                       {membership?.org?.name ? (
                         <>
                           {' '}
@@ -246,6 +251,20 @@ export function LoginPage() {
                 )}
 
 
+                {phoneEnabled && usePhone ? (
+                  <div className="mt-6">
+                    <PhoneSignIn
+                      intent={searchParams.get('invited') === '1' ? 'signup' : 'signin'}
+                      initialPhone={searchParams.get('phone')}
+                      onSignedIn={async (nextMembership) => {
+                        queueRedirect(
+                          await destinationAfterLogin(nextMembership, redirectTo, searchParams.get('intent')),
+                        );
+                      }}
+                    />
+                  </div>
+                ) : (
+                <>
                 {error && (
                   <div
                     role="alert"
@@ -332,6 +351,25 @@ export function LoginPage() {
                   </button>
                 </form>
 
+                </>
+                )}
+
+                {phoneEnabled && (
+                  <p className="mt-4 text-center text-sm">
+                    <button
+                      type="button"
+                      data-testid="toggle-phone-signin"
+                      onClick={() => {
+                        setError(null);
+                        setUsePhone((v) => !v);
+                      }}
+                      className="font-medium text-brand-600 transition hover:text-brand-700"
+                    >
+                      {usePhone ? 'Use email instead' : 'Use phone number instead'}
+                    </button>
+                  </p>
+                )}
+
                 <p className="mt-4 text-center text-sm">
                   <Link
                     to="/signup?homeowner=1"
@@ -366,9 +404,11 @@ export function LoginPage() {
                 </div>
           </div>
 
-          <p className="mt-6 text-center text-xs text-ink-400">
-            Passwords are encrypted, never stored in plain text, and never seen by this page.
-          </p>
+          {!(phoneEnabled && usePhone) && (
+            <p className="mt-6 text-center text-xs text-ink-400">
+              Passwords are encrypted, never stored in plain text, and never seen by this page.
+            </p>
+          )}
         </div>
       </main>
     </div>

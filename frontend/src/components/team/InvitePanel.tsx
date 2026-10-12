@@ -7,6 +7,8 @@ import { SpinnerIcon } from '../icons';
 import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
 import type { ServiceRoleSlug } from '../../lib/serviceRole';
 import { APP_SHELL_SEATS_NOTE, isInAppShell } from '../../lib/appShell';
+import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
+import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 
 /**
  * Adding somebody to the team.
@@ -39,6 +41,11 @@ export function InvitePanel() {
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [byPhone, setByPhone] = useState(false);
+  const [phone, setPhone] = useState('');
+  const phoneE164 = normalizePhoneE164(phone);
+  const usingPhone = phoneEnabled && byPhone;
   const [role, setRole] = useState<MemberRole>('employee');
   const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
   const [serviceRoleCustom, setServiceRoleCustom] = useState('');
@@ -103,17 +110,22 @@ export function InvitePanel() {
     setOutcome(null);
     try {
       const res = await api.createOrgInvite({
-        email,
+        ...(usingPhone ? { phone: phoneE164 ?? phone } : { email }),
         role,
         serviceRole: serviceRole || undefined,
         serviceRoleCustom: serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
       });
       setOutcome(
-        res.emailed
-          ? `Invited — Atmosphere emailed ${email}.`
-          : `Invited. Atmosphere could not email them, so let them know to check with you.`,
+        usingPhone
+          ? res.texted
+            ? `Invited. Atmosphere texted ${formatPhone(phoneE164)} a sign-in link.`
+            : 'Invited. The text did not go through, so let them know to sign in with this number.'
+          : res.emailed
+            ? `Invited — Atmosphere emailed ${email}.`
+            : `Invited. Atmosphere could not email them, so let them know to check with you.`,
       );
       setEmail('');
+      setPhone('');
       setServiceRole('');
       setServiceRoleCustom('');
       await load();
@@ -150,14 +162,28 @@ export function InvitePanel() {
       ) : null}
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="their@email.com"
-          className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
-        />
+        {usingPhone ? (
+          <input
+            type="tel"
+            inputMode="tel"
+            required
+            aria-label="Mobile number"
+            data-testid="invite-phone"
+            value={phone}
+            onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+            placeholder="(555) 123-4567"
+            className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+          />
+        ) : (
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="their@email.com"
+            className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+          />
+        )}
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as MemberRole)}
@@ -200,13 +226,26 @@ export function InvitePanel() {
         ) : null}
         <button
           type="submit"
-          disabled={busy || !email.trim()}
+          disabled={busy || (usingPhone ? !phoneE164 : !email.trim())}
           className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
         >
           {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
           {t('settings.invites.button')}
         </button>
       </form>
+      {phoneEnabled && (
+        <button
+          type="button"
+          data-testid="invite-toggle-phone"
+          onClick={() => {
+            setByPhone((v) => !v);
+            setError(null);
+          }}
+          className="mt-2 text-xs font-medium text-brand-600 transition hover:text-brand-700"
+        >
+          {byPhone ? 'Invite by email instead' : 'No email? Invite by phone number'}
+        </button>
+      )}
       <p className="mt-1.5 text-[11px] text-ink-400">
         {t('settings.invites.rolesHint')}
         {seats
@@ -229,7 +268,7 @@ export function InvitePanel() {
           {invites.slice(0, 12).map((inv) => (
             <li key={inv.id} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0">
-                <span className="block truncate text-xs font-medium text-ink-800">{inv.email}</span>
+                <span className="block truncate text-xs font-medium text-ink-800">{inv.email || formatPhone(inv.phone)}</span>
                 <span className="block text-[11px] text-ink-500">
                   {ROLE_LABELS[inv.role as MemberRole] ?? inv.role}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
                 </span>

@@ -7,6 +7,8 @@ import {
   useProductActionsLocked,
 } from '../billing/ProductActionLock';
 import { InviteList } from './InviteList';
+import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
+import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 
 /**
  * Invite a trade or crew to film the job. A name and an email; Atmosphere
@@ -18,13 +20,14 @@ import { InviteList } from './InviteList';
 export const CREW_INVITE_INTRO = 'Email a Field Capture link so a trade or crew can film this job.';
 
 type Made =
-  { emailed: true; email: string } | { emailed: false; email: string; link: string | null };
+  | { emailed: true; email: string; via: 'email' | 'text' }
+  | { emailed: false; email: string; via: 'email' | 'text'; link: string | null };
 
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
 
 function partyMeta(party: JobParty): string {
-  const parts = [party.email];
+  const parts = [party.email || formatPhone(party.phone)];
   if (party.last_seen_at) parts.push(`Opened ${when(party.last_seen_at)}`);
   else parts.push('Not opened yet');
   return parts.filter(Boolean).join(' · ');
@@ -40,6 +43,11 @@ export function InviteCrewPanel({ jobId }: { jobId: string }) {
   const [parties, setParties] = useState<JobParty[] | null>(null);
   const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [byPhone, setByPhone] = useState(false);
+  const [phone, setPhone] = useState('');
+  const usingPhone = phoneEnabled && byPhone;
+  const phoneE164 = normalizePhoneE164(phone);
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<Made | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +78,9 @@ export function InviteCrewPanel({ jobId }: { jobId: string }) {
       return;
     }
     const name = company.trim();
-    const to = email.trim().toLowerCase();
+    const to = usingPhone ? phoneE164 : email.trim().toLowerCase();
     if (!name || !to) {
-      setError('Enter a name and an email to send the invite.');
+      setError(usingPhone ? 'Enter a name and a mobile number.' : 'Enter a name and an email to send the invite.');
       return;
     }
     setBusy(true);
@@ -80,16 +88,20 @@ export function InviteCrewPanel({ jobId }: { jobId: string }) {
     try {
       const res = await api.addJobParty(jobId, {
         company: name,
-        email: to,
+        ...(usingPhone ? { phone: to } : { email: to }),
         role: 'subcontractor',
       });
+      const via = usingPhone ? 'text' : 'email';
+      const shown = usingPhone ? formatPhone(to) : to;
+      const sent = usingPhone ? Boolean(res.texted) : Boolean(res.emailed);
       setMade(
-        res.emailed
-          ? { emailed: true, email: to }
-          : { emailed: false, email: to, link: absolute(res.fieldCapturePath ?? res.sharePath) },
+        sent
+          ? { emailed: true, email: shown, via }
+          : { emailed: false, email: shown, via, link: absolute(res.fieldCapturePath ?? res.sharePath) },
       );
       setCompany('');
       setEmail('');
+      setPhone('');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the invite.');
@@ -133,21 +145,46 @@ export function InviteCrewPanel({ jobId }: { jobId: string }) {
             className={field}
           />
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-ink-700">Crew email</span>
-          <input
-            required
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="crew@example.com"
-            className={field}
-          />
-        </label>
+        {usingPhone ? (
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Crew mobile number</span>
+            <input
+              required
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+              placeholder="(555) 123-4567"
+              className={field}
+            />
+          </label>
+        ) : (
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Crew email</span>
+            <input
+              required
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="crew@example.com"
+              className={field}
+            />
+          </label>
+        )}
+        {phoneEnabled && (
+          <button
+            type="button"
+            onClick={() => setByPhone((v) => !v)}
+            className="text-xs font-medium text-brand-600 transition hover:text-brand-700"
+          >
+            {byPhone ? 'Use email instead' : 'Use phone number instead'}
+          </button>
+        )}
         <button
           type="submit"
-          disabled={busy || !company.trim() || !email.trim()}
+          disabled={busy || !company.trim() || (usingPhone ? !phoneE164 : !email.trim())}
           className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
@@ -162,11 +199,13 @@ export function InviteCrewPanel({ jobId }: { jobId: string }) {
           }`}
         >
           {made.emailed ? (
-            `Invite sent to ${made.email}. The link opens on the web and in Field Capture.`
+            made.via === 'text'
+              ? `Invite texted to ${made.email}. They sign in with that number.`
+              : `Invite sent to ${made.email}. The link opens on the web and in Field Capture.`
           ) : (
             <>
               <p>
-                Added to the job, but the email to {made.email} did not send. Copy the link to send
+                Added to the job, but the {made.via === 'text' ? 'text' : 'email'} to {made.email} did not send. Copy the link to send
                 it yourself.
               </p>
               {made.link ? (

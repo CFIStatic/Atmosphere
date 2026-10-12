@@ -1,6 +1,9 @@
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { HomeownerEmailSignIn } from '../components/HomeownerEmailSignIn';
+import { PhoneSignIn } from '../components/PhoneSignIn';
+import { usePhoneAuthEnabled } from '../hooks/usePhoneAuthEnabled';
+import type { Membership } from '../lib/api';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -103,6 +106,8 @@ export function SignupPage() {
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [termsAcknowledged, setTermsAcknowledged] = useState(false);
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [usePhoneChoice, setUsePhone] = useState(() => Boolean(searchParams.get('phone')));
 
   const existingSession = Boolean(user) && !membership;
   const creatingNewAccount = !existingSession;
@@ -213,6 +218,10 @@ export function SignupPage() {
     ? (isInviteeAccount ? emailValid && passwordValid : nameValid && emailValid && passwordValid)
     : true;
   const termsValid = creatingNewAccount ? termsAcknowledged : true;
+  const usePhone = phoneEnabled && usePhoneChoice && creatingNewAccount;
+  // Phone sign-up: everything but the credentials must be filled before a code is sent.
+  const phoneDetailsValid =
+    (isInviteeAccount ? true : nameValid) && workspaceValid && termsValid;
   const formValid = accountValid && workspaceValid && termsValid;
 
   function enterApp() {
@@ -272,6 +281,52 @@ export function SignupPage() {
     await continueAfterWorkspace();
   }
 
+  /** Shared by email and phone sign-up. True when it already navigated. */
+  async function afterAccountCreated(nextMembership: Membership | null): Promise<boolean> {
+    if (fullName.trim() || (serviceRole && !isHomeowner)) {
+      await api.updateProfile(
+        fullName.trim() || null,
+        isHomeowner ? 'homeowner' : serviceRole || null,
+        !isHomeowner && serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
+      );
+      await refreshMembership();
+    } else if (isHomeowner) {
+      try {
+        await api.updateProfile(null, 'homeowner', null);
+      } catch {
+        /* claim path also forces Homeowner */
+      }
+    }
+    // Homeowner / capture invitees never create an org or enter billing —
+    // even if signup somehow returned a membership.
+    if (orgIntent === 'homeowner') {
+      queueRedirect(homeownerAfterSignup(redirectTo));
+      return true;
+    }
+    if (orgIntent === 'capture') {
+      window.location.assign(
+        captureAfterSignup(searchParams.get('token'), email.trim() || searchParams.get('email')),
+      );
+      return true;
+    }
+    if (nextMembership?.org) {
+      await continueAfterWorkspace();
+      return true;
+    }
+          return false;
+  }
+
+  /** Phone sign-up: the code was verified and the session is set. */
+  async function afterPhoneAccount(nextMembership: Membership | null) {
+    setError(null);
+    try {
+      if (await afterAccountCreated(nextMembership)) return;
+      await completeWorkspace();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    }
+  }
+
   async function handleSetupSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -296,36 +351,7 @@ export function SignupPage() {
           setPassword('');
           return;
         }
-        if (fullName.trim() || (serviceRole && !isHomeowner)) {
-          await api.updateProfile(
-            fullName.trim() || null,
-            isHomeowner ? 'homeowner' : serviceRole || null,
-            !isHomeowner && serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
-          );
-          await refreshMembership();
-        } else if (isHomeowner) {
-          try {
-            await api.updateProfile(null, 'homeowner', null);
-          } catch {
-            /* claim path also forces Homeowner */
-          }
-        }
-        // Homeowner / capture invitees never create an org or enter billing —
-        // even if signup somehow returned a membership.
-        if (orgIntent === 'homeowner') {
-          queueRedirect(homeownerAfterSignup(redirectTo));
-          return;
-        }
-        if (orgIntent === 'capture') {
-          window.location.assign(
-            captureAfterSignup(searchParams.get('token'), email.trim() || searchParams.get('email')),
-          );
-          return;
-        }
-        if (res.membership?.org) {
-          await continueAfterWorkspace();
-          return;
-        }
+        if (await afterAccountCreated(res.membership)) return;
       }
       if (orgIntent === 'homeowner') {
         queueRedirect(homeownerAfterSignup(redirectTo));
@@ -405,7 +431,9 @@ export function SignupPage() {
               : isHomeowner
                 ? 'Invited email + password. Free — no plan or payment.'
                 : mode === 'join'
-                  ? 'Use the invite from your Global Admin — create the account with the invited email.'
+                  ? usePhone
+                    ? 'Use the invite from your Global Admin. Sign up with the invited mobile number.'
+                    : 'Use the invite from your Global Admin — create the account with the invited email.'
                   : 'You are creating this company as Global Admin. Next you name your first job and see your first evidence. Plan and card come after that.'
           }
         >
@@ -436,7 +464,11 @@ export function SignupPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSetupSubmit} noValidate className="mt-6 space-y-4">
+          <form
+            onSubmit={usePhone ? (e) => e.preventDefault() : handleSetupSubmit}
+            noValidate
+            className="mt-6 space-y-4"
+          >
             {creatingNewAccount && (
               <>
                 {!isInviteeAccount && (
@@ -475,6 +507,8 @@ export function SignupPage() {
                   </p>
                 )}
 
+                {!usePhone && (
+                <>
                 <Field label={isInviteeAccount ? 'Email' : 'Work email'} htmlFor="signup-email">
                   <input
                     id="signup-email"
@@ -511,6 +545,8 @@ export function SignupPage() {
                     </button>
                   </div>
                 </Field>
+                </>
+                )}
               </>
             )}
 
@@ -533,7 +569,9 @@ export function SignupPage() {
               </Field>
             ) : (
               <p className="text-sm text-ink-600">
-                Use the invited email. Your Global Admin already sent the invite.{' '}
+                {usePhone
+                  ? 'Use the number your Global Admin invited.'
+                  : 'Use the invited email. Your Global Admin already sent the invite.'}{' '}
                 <button
                   type="button"
                   onClick={() => setMode('create')}
@@ -552,10 +590,38 @@ export function SignupPage() {
               />
             )}
 
-            <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
-              {submitting ? 'Saving…' : isCapture ? 'Create account' : isHomeowner ? 'Save this job' : 'Continue'}
-            </PrimaryButton>
+            {!usePhone && (
+              <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
+                {submitting ? 'Saving…' : isCapture ? 'Create account' : isHomeowner ? 'Save this job' : 'Continue'}
+              </PrimaryButton>
+            )}
           </form>
+          {usePhone && (
+            <div className="mt-4">
+              <PhoneSignIn
+                intent="signup"
+                initialPhone={searchParams.get('phone')}
+                acceptedTermsVersion={CURRENT_TERMS_VERSION}
+                termsReady={phoneDetailsValid}
+                onSignedIn={afterPhoneAccount}
+              />
+            </div>
+          )}
+          {phoneEnabled && creatingNewAccount && (
+            <p className="mt-4 text-center text-sm">
+              <button
+                type="button"
+                data-testid="toggle-phone-signup"
+                onClick={() => {
+                  setError(null);
+                  setUsePhone((v) => !v);
+                }}
+                className="font-medium text-brand-600 transition hover:text-brand-700"
+              >
+                {usePhone ? 'Use email instead' : 'Use phone number instead'}
+              </button>
+            </p>
+          )}
           {!user && !isCapture && (
             <p className="mt-4 text-center text-sm text-ink-600">
               <button
@@ -639,7 +705,7 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {!isInviteeAccount && (
+      {!isInviteeAccount && !usePhone && (
         <p className="mt-6 text-center text-xs text-ink-400">
           Passwords are encrypted, never stored in plain text, and never seen by this page.
         </p>

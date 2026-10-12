@@ -109,6 +109,8 @@ import {
   writeJobFileDeleteTombstone,
 } from '../lib/jobFileDelete.js';
 import { renameCrmJobTitle } from '../lib/jobFileRename.js';
+import { jobInviteSms, normalizePhoneE164, phoneAuthEnabled } from '../auth/phoneAuth.js';
+import { sendSms } from '../shared/smsProvider.js';
 
 /**
  * The shared job record.
@@ -913,6 +915,8 @@ sharedJobsRouter.post(
       const { orgId, userId, supabase } = await requireOrgContext(req);
       await assertOrgProductActionsAllowed(supabase, orgId);
       const input = partySchema.parse(req.body ?? {});
+      // Store phones in E.164 so a phone-only invitee can claim by number later.
+      const partyPhone = input.phone ? normalizePhoneE164(input.phone) ?? input.phone : null;
 
       const partyRole = input.role ?? 'subcontractor';
       // Homeowner/owner/adjuster parties force matching service titles.
@@ -945,7 +949,7 @@ sharedJobsRouter.post(
           trade: input.trade ?? null,
           contact_name: input.contactName ?? null,
           email: input.email ?? null,
-          phone: input.phone ?? null,
+          phone: partyPhone,
           role: partyRole,
           service_role: serviceNorm.service_role,
           service_role_custom: serviceNorm.service_role_custom,
@@ -1022,6 +1026,62 @@ sharedJobsRouter.post(
           sharePath,
           fieldCapturePath: null,
           progressShare: true,
+        });
+        return;
+      }
+
+      // No email: text the invite instead. Homeowners/adjusters get the
+      // read-only progress link (the token is the credential); subs get the
+      // job invite page and sign in with this number.
+      const smsTo = !email ? normalizePhoneE164(partyPhone) : null;
+      if (smsTo && phoneAuthEnabled()) {
+        const [{ data: job }, { data: org }] = await Promise.all([
+          supabase.from('crm_jobs').select('title').eq('org_id', orgId).eq('id', req.params.jobId).maybeSingle(),
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+        ]);
+        const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
+        let path: string | null = null;
+        let progressShare = false;
+        if (role === 'owner' || role === 'adjuster') {
+          const { data: share, error: shareError } = await supabase
+            .from('verifier_shares')
+            .insert({
+              org_id: orgId,
+              job_id: req.params.jobId,
+              created_by: userId,
+              label: smsTo,
+              share_kind: 'progress',
+            })
+            .select('id, access_token')
+            .single();
+          if (shareError) throw new HttpError(400, shareError.message, 'share_failed');
+          path = `/progress/${(share as any).access_token}`;
+          progressShare = true;
+        } else if (token) {
+          path = jobSharePagePath(token, null);
+        }
+        let texted = false;
+        if (path) {
+          const sms = await sendSms({
+            to: smsTo,
+            orgId,
+            jobId: req.params.jobId,
+            body: jobInviteSms({
+              orgName: (org as any)?.name ?? 'Your contractor',
+              jobTitle: (job as any)?.title ?? null,
+              link: `${origin}${path}`,
+            }),
+          });
+          if (!sms.ok) console.warn(`[party-invite] text to ${smsTo} failed: ${sms.reason}`);
+          texted = sms.ok;
+        }
+        res.status(201).json({
+          party,
+          emailed: false,
+          texted,
+          sharePath: path,
+          fieldCapturePath: !progressShare && token ? fieldCaptureInvitePath(token) : null,
+          progressShare,
         });
         return;
       }

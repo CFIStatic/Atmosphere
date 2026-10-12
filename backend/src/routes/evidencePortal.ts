@@ -66,6 +66,8 @@ import {
   viewerPartyId,
 } from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
+import { formatPhoneForDisplay, jobInviteSms, normalizePhoneE164, phoneAuthEnabled } from '../auth/phoneAuth.js';
+import { sendSms } from '../shared/smsProvider.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -1417,9 +1419,12 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         jobId: z.string().uuid(),
         label: z.string().trim().min(2).max(200).optional(),
         kind: z.enum(['evidence', 'progress']).default('evidence'),
-        recipientEmail: z.string().email(),
+        recipientEmail: z.string().email().optional(),
+        /** Homeowner without email: text the progress link instead. */
+        recipientPhone: z.string().trim().max(40).optional(),
         expiresInDays: z.number().int().min(0).max(365).default(0),
       })
+      .refine((b) => b.recipientEmail || b.recipientPhone, { message: 'Enter an email or a mobile number.' })
       .parse(req.body);
     const { supabase, orgId, userId } = await requireOrgContext(req);
     await assertOrgProductActionsAllowed(supabase, orgId);
@@ -1437,7 +1442,73 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         ? null
         : new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
 
-    const recipientEmail = body.recipientEmail.toLowerCase();
+    if (!body.recipientEmail && body.recipientPhone) {
+      const phone = normalizePhoneE164(body.recipientPhone);
+      if (!phone) throw new HttpError(400, 'Enter a valid mobile number.', 'invalid_phone');
+      if (body.kind !== 'progress' || !phoneAuthEnabled()) {
+        throw new HttpError(409, 'Text invites are not turned on yet.', 'phone_auth_disabled');
+      }
+      const { data: share, error } = await supabase
+        .from('verifier_shares')
+        .insert({
+          org_id: orgId,
+          job_id: body.jobId,
+          label: body.label?.trim() || formatPhoneForDisplay(phone),
+          share_kind: 'progress',
+          created_by: userId,
+          expires_at: expiresAt,
+        })
+        .select('id, access_token, label, expires_at, created_at')
+        .single();
+      if (error) throw new HttpError(400, error.message, 'share_failed');
+      const sharePath = `/progress/${(share as any).access_token}`;
+      const { data: org } = await supabase.from('orgs').select('name').eq('id', orgId).maybeSingle();
+      const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
+      const sms = await sendSms({
+        to: phone,
+        orgId,
+        jobId: body.jobId,
+        body: jobInviteSms({
+          orgName: (org as any)?.name ?? 'Your contractor',
+          jobTitle: (job as any)?.title ?? null,
+          link: `${origin}${sharePath}`,
+        }),
+      });
+      if (!sms.ok) {
+        await supabase
+          .from('verifier_shares')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('id', (share as any).id);
+        throw new HttpError(502, sms.message || 'The invite text could not be sent. Try again.', 'sms_not_sent');
+      }
+      await recordAccess(supabase, {
+        orgId,
+        jobId: body.jobId,
+        action: 'shared',
+        actorId: userId,
+        actorLabel: await actorLabelFor(supabase, userId),
+        actorRole: 'general_contractor',
+        detail: `Progress link texted to ${formatPhoneForDisplay(phone)}${
+          expiresAt ? `, expires ${expiresAt.slice(0, 10)}` : ', no expiry'
+        }`,
+      });
+      res.status(201).json({
+        share: {
+          id: (share as any).id,
+          label: (share as any).label,
+          kind: body.kind,
+          expiresAt: (share as any).expires_at,
+          createdAt: (share as any).created_at,
+          path: sharePath,
+        },
+        emailed: false,
+        texted: true,
+        recipientHasAccount: false,
+      });
+      return;
+    }
+
+    const recipientEmail = (body.recipientEmail ?? '').toLowerCase();
     const label = body.label?.trim() || recipientEmail;
 
     const { data: share, error } = await supabase

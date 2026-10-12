@@ -1616,6 +1616,99 @@
           });
       });
     }
+    // Phone sign-in for crew without email: number → 6-digit text code.
+    var phoneForm = $('#phone-form');
+    if (phoneForm && form) {
+      var phoneSentTo = null;
+      var showPhone = function (on) {
+        form.hidden = on;
+        phoneForm.hidden = !on;
+        if (on && $('#phone-number')) $('#phone-number').focus();
+      };
+      var phoneError = function (msg) {
+        var el = $('#phone-err');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.hidden = !msg;
+      };
+      var toE164 = function (raw) {
+        var t = String(raw || '').trim();
+        var d = t.replace(/\D/g, '');
+        if (t.charAt(0) === '+') return d.length >= 8 && d.length <= 15 ? '+' + d : null;
+        if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+        return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+1' + d : null;
+      };
+      var setPhoneStep = function (sent) {
+        $('#phone-number-wrap').hidden = Boolean(sent);
+        $('#phone-code-wrap').hidden = !sent;
+        $('#phone-resend').hidden = !sent;
+        $('#phone-btn-lbl').textContent = sent ? 'Sign in' : 'Text me a code';
+        if (sent) $('#phone-code').focus();
+      };
+      var sendPhoneCode = function () {
+        var phone = phoneSentTo || toE164($('#phone-number').value);
+        if (!phone) {
+          phoneError('Enter a valid mobile number.');
+          return Promise.resolve();
+        }
+        phoneError('');
+        // Crew invited by phone may not have an account yet; the code creates it.
+        return Core.startPhoneSignIn(phone, API_BASE, 'signup').then(function () {
+          phoneSentTo = phone;
+          setPhoneStep(true);
+        }, function (err) {
+          phoneError(err.message || 'Could not text a code. Try again.');
+        });
+      };
+      Core.phoneAuthConfig(API_BASE).then(function (res) {
+        if (res && res.enabled && $('#phone-toggle-wrap')) $('#phone-toggle-wrap').hidden = false;
+      }, function () {});
+      when('#phone-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showPhone(true); });
+      });
+      when('#email-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showPhone(false); });
+      });
+      when('#phone-resend', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); void sendPhoneCode(); });
+      });
+      phoneForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = $('#phone-btn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var done = function () { btn.disabled = false; };
+        if (!phoneSentTo) {
+          sendPhoneCode().then(done, done);
+          return;
+        }
+        var code = String($('#phone-code').value || '').replace(/\D/g, '');
+        if (code.length !== 6) {
+          phoneError('Enter the 6-digit code.');
+          done();
+          return;
+        }
+        phoneError('');
+        Core.verifyPhoneSignIn(phoneSentTo, code, API_BASE)
+          .then(function (res) {
+            var session = (res && res.session) || {};
+            if (!session.accessToken) throw new Error('Signed in, but no session came back. Try again.');
+            allowPlatformAdoption();
+            writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) return openInviteAfterAccountSignIn();
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            if (isTermsRequired(err)) { showTermsGate(); return; }
+            if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
+              return joinOfficeByInvite().catch(failJoinOffice);
+            }
+            phoneError(err.message || 'That code did not work. Try again.');
+          })
+          .then(done, done);
+      });
+    }
     var signupForm = $('#signup-form');
     if (signupForm) {
       signupForm.addEventListener('submit', function (event) {

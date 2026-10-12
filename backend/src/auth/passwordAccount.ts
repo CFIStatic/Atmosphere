@@ -1,3 +1,4 @@
+import { authPhoneToE164 } from './phoneAuth.js';
 import type { Session, User } from '@supabase/supabase-js';
 import { createAnonClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
@@ -31,7 +32,8 @@ export function sessionTokens(session: Session) {
 export function publicUser(user: User) {
   return {
     id: user.id,
-    email: user.email,
+    email: user.email || null,
+    phone: authPhoneToE164(user.phone),
     createdAt: user.created_at,
     lastSignInAt: user.last_sign_in_at ?? null,
     emailConfirmed: Boolean(user.email_confirmed_at ?? user.confirmed_at),

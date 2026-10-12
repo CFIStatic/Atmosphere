@@ -1227,8 +1227,30 @@
           Don&apos;t have an account?
           <a id="signup-link" href="#create-account">Create an account</a>
         </p>
+        <p class="auth-foot" id="phone-toggle-wrap" hidden>
+          <a id="phone-toggle" href="#phone">Use phone number instead</a>
+        </p>
         <p class="auth-foot">
           <a id="homeowner-link" href="https://platform.atmosphereteam.com/signup?homeowner=1">Homeowner? Sign in with your email</a>
+        </p>
+      </form>
+      <form class="auth-form" id="phone-form" hidden novalidate>
+        <label for="phone-number" id="phone-number-wrap">Mobile number
+          <input id="phone-number" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567" />
+        </label>
+        <label for="phone-code" id="phone-code-wrap" hidden>
+          <span id="phone-code-label">Enter the 6-digit code we texted you</span>
+          <input id="phone-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="123456" />
+        </label>
+        <p class="auth-err" id="phone-err" hidden></p>
+        <button class="daybtn" type="submit" id="phone-btn">
+          <span class="lbl" id="phone-btn-lbl">Text me a code</span>
+        </button>
+        <p class="auth-foot">
+          <a id="phone-resend" href="#resend" hidden>Resend code</a>
+        </p>
+        <p class="auth-foot">
+          <a id="email-toggle" href="#signin">Use email instead</a>
         </p>
       </form>
       <form class="auth-form" id="signup-form" hidden novalidate>

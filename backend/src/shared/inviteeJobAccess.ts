@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
 import type { PartyRow } from '../lib/scopedAdmin.js';
+import { authPhoneToE164, normalizePhoneE164 } from '../auth/phoneAuth.js';
 
 export function normalizeInviteEmail(email: string | null | undefined): string {
   return (email ?? '').trim().toLowerCase();
@@ -70,20 +71,24 @@ export function assertInviteeAccount(req: Request, party: Pick<PartyRow, 'email'
  */
 export async function claimInvitedPartiesForUser(
   db: SupabaseClient,
-  user: Pick<User, 'id' | 'email'>,
+  user: Pick<User, 'id' | 'email'> & { phone?: string | null },
 ): Promise<{ identityId: string; partyIds: string[] }> {
   const email = normalizeInviteEmail(user.email);
-  if (!email) {
-    throw new HttpError(400, 'Your account needs an email address to claim invites.', 'email_required');
+  const phone = authPhoneToE164(user.phone);
+  if (!email && !phone) {
+    throw new HttpError(400, 'Your account needs an email or phone number to claim invites.', 'contact_required');
   }
 
+  // Email stays the primary identity when present; phone-only accounts use sms.
+  const channel = email ? 'email' : 'sms';
+  const address = email || (phone as string);
   const { data: identity, error: identityError } = await db
     .from('field_identities')
     .upsert(
       {
-        channel: 'email',
-        address: email,
-        display_name: email,
+        channel,
+        address,
+        display_name: address,
         last_seen_at: new Date().toISOString(),
       },
       { onConflict: 'channel,address' },
@@ -94,21 +99,32 @@ export async function claimInvitedPartiesForUser(
     throw new HttpError(500, 'Could not attach this invite to your account.', 'identity_failed');
   }
 
-  const { data: parties, error: partyError } = await db
-    .from('job_parties')
-    .select('id, org_id, email, revoked_at')
-    .eq('email', email)
-    .is('revoked_at', null);
-  if (partyError) {
-    throw new HttpError(500, 'Could not load invites for this email.', 'invite_lookup_failed');
+  type Party = { id: string; org_id: string; email?: string | null; phone?: string | null; revoked_at?: string | null };
+  const mine: Party[] = [];
+  if (email) {
+    const { data: parties, error: partyError } = await db
+      .from('job_parties')
+      .select('id, org_id, email, revoked_at')
+      .eq('email', email)
+      .is('revoked_at', null);
+    if (partyError) {
+      throw new HttpError(500, 'Could not load invites for this email.', 'invite_lookup_failed');
+    }
+    mine.push(...partiesInvitedToEmail((parties ?? []) as Party[], email));
   }
-
-  const mine = partiesInvitedToEmail((parties ?? []) as Array<{
-    id: string;
-    org_id: string;
-    email?: string | null;
-    revoked_at?: string | null;
-  }>, email);
+  if (phone) {
+    const { data: parties, error: partyError } = await db
+      .from('job_parties')
+      .select('id, org_id, email, phone, revoked_at')
+      .eq('phone', phone)
+      .is('revoked_at', null);
+    if (partyError) {
+      throw new HttpError(500, 'Could not load invites for this number.', 'invite_lookup_failed');
+    }
+    for (const party of partiesInvitedToPhone((parties ?? []) as Party[], phone)) {
+      if (!mine.some((m) => m.id === party.id)) mine.push(party);
+    }
+  }
 
   for (const party of mine) {
     const { error } = await db.from('job_party_claims').upsert(
@@ -128,6 +144,17 @@ export async function claimInvitedPartiesForUser(
     identityId: (identity as { id: string }).id,
     partyIds: mine.map((party) => party.id),
   };
+}
+
+/** Live party rows texted to this number (E.164). Phone-only parties only. */
+export function partiesInvitedToPhone<
+  T extends { email?: string | null; phone?: string | null; revoked_at?: string | null },
+>(parties: T[], phone: string | null | undefined): T[] {
+  const want = normalizePhoneE164(phone);
+  if (!want) return [];
+  return parties.filter(
+    (party) => !party.revoked_at && !normalizeInviteEmail(party.email) && normalizePhoneE164(party.phone) === want,
+  );
 }
 
 /**
