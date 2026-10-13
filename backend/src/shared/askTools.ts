@@ -15,6 +15,7 @@ import {
   planSupplyOrderComputerTask,
 } from './askComputerCommand.js';
 import { looksLikeSupplyOrderAsk, type SupplyCart } from '../computer/supplyOrder.js';
+import { addLoginLead, addLoginPath, outsideSiteTarget, siteFromWebHits } from './askComputerCommand.js';
 
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
@@ -61,6 +62,10 @@ export type AskToolContext = {
   address?: string | null;
   /** Per-turn memoized web search (one search per query per turn). */
   webSearch?: AskWebSearchFn;
+  /** Saved Logins (label + host only). Loaded per turn when absent. */
+  savedLogins?: Array<{ label: string; host: string }>;
+  /** Computer tasks already run from this job. Loaded per turn when absent. */
+  computerResults?: Array<{ id: string; instructions: string; status: string; result: string | null; error: string | null; at: string | null }>;
 };
 
 export type AskToolResult = {
@@ -1147,6 +1152,37 @@ export async function executeAskTool(
               }
             })(),
           ]);
+          // Any website: use the saved Login, else find the site and ask for the login in-thread.
+          const target = outsideSiteTarget(instructions, logins);
+          if (target && target.kind !== 'saved') {
+            let found: { name: string; url: string; host: string } | null = target.kind === 'known' ? target : null;
+            let viaWeb = false;
+            if (target.kind === 'named') {
+              const outcome = await (ctx.webSearch ?? searchAskWebDetailed)(`${target.name} login`, {
+                fetchFn: ctx.fetchFn,
+                limit: 5,
+              }).catch(() => ({ hits: [], answer: '' }));
+              found = siteFromWebHits(target.name, outcome.hits ?? []);
+              viaWeb = Boolean(found);
+            }
+            if (!found) {
+              const name = target.kind === 'named' ? target.name : 'that site';
+              return {
+                ok: false,
+                tool: 'start_computer_task',
+                summary: `I couldn't find the website for ${name}. Send me its web address and I'll take it from there.`,
+                ui: { section: 'computer', path: 'computer-task:need-detail' },
+              };
+            }
+            const prompt = { n: found.name, u: found.url, h: found.host, q: instructions, ...(viaWeb ? { w: 1 as const } : {}) };
+            return {
+              ok: false,
+              tool: name,
+              summary: addLoginLead(prompt),
+              data: { channel: 'add_login', site: found.name, host: found.host, url: found.url, foundWithWebSearch: viaWeb },
+              ui: { section: 'computer', path: addLoginPath(prompt) },
+            };
+          }
           const plan = looksLikeSupplyOrderAsk(instructions)
             ? await planSupplyOrderComputerTask({
                 question: instructions,

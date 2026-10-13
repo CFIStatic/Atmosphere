@@ -113,6 +113,8 @@ import {
   scrubStoredAskText,
 } from '../shared/askLookup.js';
 import { answerHasJobCitation, applyHonestNotFound } from '../shared/askNotFound.js';
+import { looksLikeComputerTask } from '../shared/askComputerCommand.js';
+import { looksLikeComputerCapabilityAsk } from '../shared/askComputerCapability.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -3829,6 +3831,12 @@ async function runProofAskTurn(input: {
     // Deterministic Not found. lead-in at the HTTP boundary (covers all Ask paths).
     storedAnswer = applyHonestNotFound(storedAnswer, lookup, input.question, {
       noGroundedClaim: !answerHasJobCitation(storedAnswer),
+      // A Computer command or a question about Chat itself is never an evidence miss.
+      nonEvidence:
+        (Array.isArray(result.toolResults) &&
+          (result.toolResults as Array<{ tool?: string }>).some((r) => r?.tool === 'start_computer_task')) ||
+        looksLikeComputerTask(input.question) ||
+        looksLikeComputerCapabilityAsk(input.question),
     });
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;

@@ -29,6 +29,7 @@ import {
   type SupplyVendor,
 } from '../computer/supplyOrder.js';
 import { homeDepotOrderStepsForInstructions } from '../computer/homeDepotPlaybook.js';
+import { SITE_CATALOG, EXCLUDED_SITES } from '../computer/catalog/sites.js';
 
 /** Well-known sites people name in Chat; matched to Logins by host or label. */
 export const KNOWN_COMPUTER_SITES: ReadonlyArray<{
@@ -132,10 +133,122 @@ const ESTIMATE =
 const ADJUSTER_STATUS =
   /\b(adjusters?|xactanalysis|xact\s*analysis)\b[\s\S]{0,60}\b(status|update|follow\s*-?up|check\s+in|message|email|text|sms|ask|ping|contact)\b|\b(status|update|follow\s*-?up|check\s+in|message|email|text|sms|ask|ping|contact)\b[\s\S]{0,60}\b(adjusters?|xactanalysis)\b|\b(email|text|message|sms|ask|contact)\s+(?:the\s+)?adjusters?\b|\b(update|status)\s+(?:from|with|via)\s+(?:the\s+)?(?:adjusters?|xactanalysis)\b/i;
 
+/** Words that only mean "act on an outside site" when a site is named. */
+const OUTSIDE_ACTION =
+  /\b(?:log\s*-?\s*(?:in|on)(?:\s*to|\s+into)?|login(?:\s+to|\s+into)?|sign\s*-?\s*(?:in|on)(?:\s*to|\s+into)?|signin|go\s+(?:in)?to|go\s+into|get\s+into|hop\s+(?:on|into)|jump\s+(?:on|into)|pull\s+up|open|check|look\s+(?:at|in|up)|access|visit|navigate\s+to|head\s+to|see\s+what'?s|tell\s+me\s+what)/i;
+/** Asking to sign in to / act on a site, in so many words. */
+const LOGIN_REQUEST = /\b(?:log\s*-?\s*(?:in|on)|login|sign\s*-?\s*(?:in|on)|signin)\s*(?:to|into|on)?\s+(?:my\s+|our\s+|the\s+)?[a-z0-9]/i;
+
+/** The request opens with the sign-in ask ("log in to…", "can you sign in to…", "please login…"). */
+const LOGIN_COMMAND =
+  /^(?:(?:hey|ok|okay|yo)[,!]?\s+)?(?:(?:can|could|would|will)\s+(?:you|u|ya)\s+(?:please\s+)?|please\s+|pls\s+|i\s+(?:need|want)\s+(?:you\s+)?to\s+|go\s+(?:ahead\s+(?:and\s+)?|and\s+)?)?(?:log\s*-?\s*(?:in|on)|login|sign\s*-?\s*(?:in|on)|signin)\b/i;
+
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Word-boundary alias test; tolerant of "restore 365" vs "restore365". */
+function aliasIn(text: string, alias: string): boolean {
+  const a = alias.toLowerCase().trim();
+  if (a.length < 3) return false;
+  const pattern = escapeRe(a).replace(/\\?\s+/g, '\\s*');
+  return new RegExp(`(?:^|[^a-z0-9])${pattern}(?:$|[^a-z0-9])`, 'i').test(text);
+}
+
+/** Generic words that are also catalog aliases; never treat these alone as a site name. */
+const GENERIC_ALIASES = new Set(['dash', 'mail', 'email', 'calendar', 'drive', 'teams', 'box', 'chat', 'meet', 'office', 'sheets', 'docs', 'jobs', 'portal', 'hover', 'live', 'assess', 'permits', 'meld', 'square', 'hearth', 'indeed', 'beacon', 'mobile claims', 'code blue', 'pro+', 'word online', 'excel online']);
+
+type KnownSite = (typeof KNOWN_COMPUTER_SITES)[number];
+
+/** Catalog sites (Logins picker) as Chat-recognisable sites. */
+const CATALOG_KNOWN: ReadonlyArray<KnownSite> = [
+  ...SITE_CATALOG.filter((s) => !s.publicTestSite && s.hosts.length).map((s) => ({
+    aliases: [...new Set([s.name.toLowerCase(), ...s.aliases.map((a) => a.toLowerCase())])].filter(
+      (a) => a.length >= 4 && !GENERIC_ALIASES.has(a),
+    ),
+    host: s.hosts[0]!,
+    url: s.signInUrl,
+    kind: (s.category === 'crm' ? 'crm' : s.category === 'email_calendar' ? 'email' : 'portal') as KnownSite['kind'],
+  })),
+  ...EXCLUDED_SITES.map((s) => ({
+    aliases: [s.name.toLowerCase()],
+    host: s.hosts[0]!,
+    url: `https://${s.hosts[0]}`,
+    kind: 'portal' as const,
+  })),
+];
+
+/** A catalog site named in the question (word-boundary match), longest alias wins. */
+export function catalogSiteInQuestion(question: string): KnownSite | null {
+  const q = String(question ?? '').toLowerCase();
+  let best: KnownSite | null = null;
+  let bestLen = 0;
+  for (const site of CATALOG_KNOWN) {
+    for (const a of site.aliases) {
+      if (a.length > bestLen && aliasIn(q, a)) {
+        best = site;
+        bestLen = a.length;
+      }
+    }
+    for (const host of [site.host]) {
+      const bare = host.replace(/^www\./, '');
+      if (bare.length > bestLen && q.includes(bare)) {
+        best = site;
+        bestLen = bare.length;
+      }
+    }
+  }
+  return best;
+}
+
+/** A saved Login named in the question, by label, host, or the catalog site behind its host. */
+export function savedLoginInQuestion(
+  question: string,
+  logins: ReadonlyArray<Pick<ComputerLoginRow, 'label' | 'host'>>,
+): Pick<ComputerLoginRow, 'label' | 'host'> | null {
+  const q = String(question ?? '').toLowerCase();
+  if (!q.trim() || !logins.length) return null;
+  const catalog = catalogSiteInQuestion(q);
+  for (const login of logins) {
+    const label = String(login.label ?? '').toLowerCase().trim();
+    const host = String(login.host ?? '').toLowerCase().replace(/^www\./, '');
+    if (label && label.length >= 3 && !GENERIC_ALIASES.has(label) && aliasIn(q, label)) return login;
+    if (host && q.includes(host)) return login;
+    const root = host.split('.').slice(-2, -1)[0] ?? '';
+    if (root.length >= 4 && !GENERIC_ALIASES.has(root) && aliasIn(q, root)) return login;
+    if (catalog && siteOf(catalog.host) === siteOf(host)) return login;
+  }
+  return null;
+}
+
+/**
+ * "Log in to Restore 365 and tell me the current jobs", "go into Xactimate",
+ * "check my JobNimbus": an outside site named together with an action.
+ * Saved Logins count as named sites when given.
+ */
+export function looksLikeOutsideSiteCommand(
+  question: string,
+  logins: ReadonlyArray<Pick<ComputerLoginRow, 'label' | 'host'>> = [],
+): boolean {
+  const q = String(question ?? '').trim().toLowerCase();
+  if (!q) return false;
+  const named =
+    Boolean(findKnown(q)) || Boolean(catalogSiteInQuestion(q)) || Boolean(savedLoginInQuestion(q, logins));
+  if (named && (OUTSIDE_ACTION.test(q) || LOGIN_REQUEST.test(q))) return true;
+  // "Can you log in to <any site> and …": an explicit sign-in request, site unknown yet.
+  if (LOGIN_COMMAND.test(q) && LOGIN_REQUEST.test(q) && !/\b(?:atmosphere|field\s*capture|this\s+app)\b/.test(q)) return true;
+  // "my X account", "our X portal"
+  if (named && /\b(?:my|our)\s+[\w' .-]{2,30}\s+(?:account|portal|login|dashboard)\b/.test(q)) return true;
+  // "log in to <anything that looks like a host>"
+  if (LOGIN_REQUEST.test(q) && /\b(?:[a-z0-9-]+\.)+[a-z]{2,12}\b/.test(q)) return true;
+  return false;
+}
+
 /** "Fill the claim form…", "email the homeowner a summary", "what's outstanding in AccuLynx". */
 export function looksLikeComputerTask(question: string): boolean {
   const q = String(question ?? '').trim().toLowerCase();
   if (!q) return false;
+  if (looksLikeOutsideSiteCommand(q)) return true;
   if (/\buse (?:the )?(?:computer|browser)\b/.test(q)) return true;
   if (looksLikeSupplyOrderAsk(q)) return true;
   if (looksLikeMaterialsListAsk(q)) return true;
@@ -183,6 +296,11 @@ function findKnown(text: string): (typeof KNOWN_COMPUTER_SITES)[number] | null {
     }
   }
   return best;
+}
+
+/** Built-in Chat sites first, then the Logins catalog (Restore 365, DASH, …). */
+function findKnownOrCatalog(text: string): KnownSite | null {
+  return findKnown(text) ?? catalogSiteInQuestion(text);
 }
 
 
@@ -294,8 +412,9 @@ export function extractUserEmailSubjectBody(question: string): { subject: string
 
 export function parseComputerCommand(question: string): ParsedComputerCommand {
   const q = String(question ?? '').trim();
-  const known = findKnown(q);
-  const siteMention = known?.aliases.find((a) => q.toLowerCase().includes(a)) ?? firstUrlOrHost(q);
+  const known = findKnownOrCatalog(q);
+  const siteMention =
+    known?.aliases.find((a) => q.toLowerCase().includes(a) || aliasIn(q, a)) ?? firstUrlOrHost(q);
   const wantsSummary = SUMMARY.test(q);
   const wantsOutstanding = OUTSTANDING.test(q) || (Boolean(known?.kind === 'crm') && /\bwhat\b/i.test(q));
   const wantsEstimate = ESTIMATE.test(q);
@@ -403,7 +522,98 @@ export function matchSavedLogin(logins: ComputerLoginRow[], command: ParsedCompu
       if (hit) return { login: hit, via: 'alias' };
     }
   }
+  // Any saved Login named in the request by its label or domain.
+  const named = savedLoginInQuestion(command.question, logins);
+  if (named) return { login: named as ComputerLoginRow, via: 'label' };
   return null;
+}
+
+/** The site an outside-site command is about, and whether a saved Login covers it. */
+export type OutsideSiteTarget =
+  | { kind: 'saved'; login: ComputerLoginRow }
+  | { kind: 'known'; name: string; url: string; host: string }
+  | { kind: 'named'; name: string };
+
+const TRAILING_SITE_WORDS = /\s+(?:account|portal|site|website|web\s*site|app|login|dashboard|page)$/i;
+
+/** "log in to acme claims hub and list jobs" -> "acme claims hub". */
+export function siteNameFromCommand(question: string): string | null {
+  const q = String(question ?? '').trim();
+  const m = q.match(
+    /\b(?:log\s*-?\s*(?:in|on)|login|sign\s*-?\s*(?:in|on)|signin|go\s+into|go\s+to|get\s+into|open|check|access|visit|pull\s+up|hop\s+on)\s*(?:to|into|on)?\s+(?:my\s+|our\s+|the\s+)?(.+?)(?=\s+(?:and|to|for|then|so|n)\b|[,.?!;]|$)/i,
+  );
+  let name = (m?.[1] ?? '').trim();
+  for (let i = 0; i < 2; i += 1) name = name.replace(TRAILING_SITE_WORDS, '').trim();
+  if (!name || name.length < 2 || name.length > 60) return null;
+  if (/^(?:it|this|that|there|here|them|me|us|you|computer|browser)$/i.test(name)) return null;
+  return name;
+}
+
+function displayName(known: KnownSite): string {
+  const catalog = SITE_CATALOG.find((s) => s.hosts.includes(known.host));
+  if (catalog) return catalog.name;
+  const alias = known.aliases[0] ?? known.host;
+  return alias.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+/**
+ * For an outside-site command: the saved Login to use, else the site we know
+ * (catalog, built-ins, or a typed address), else the name the person used so
+ * the caller can look the site up on the web. Null when it is not such a command.
+ */
+export function outsideSiteTarget(question: string, logins: ComputerLoginRow[]): OutsideSiteTarget | null {
+  const q = String(question ?? '').trim();
+  if (!looksLikeOutsideSiteCommand(q, logins)) return null;
+  if (looksLikeSupplyOrderAsk(q) || looksLikeMaterialsListAsk(q)) return null;
+  const matched = matchSavedLogin(logins, parseComputerCommand(q));
+  if (matched) return { kind: 'saved', login: matched.login };
+  const known = findKnownOrCatalog(q);
+  if (known) return { kind: 'known', name: displayName(known), url: known.url, host: known.host };
+  const typed = firstUrlOrHost(q);
+  if (typed) {
+    const url = typed.startsWith('http') ? typed : `https://${typed}`;
+    let host = typed;
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      /* keep typed */
+    }
+    return { kind: 'known', name: host.replace(/^www\./, ''), url, host };
+  }
+  const name = siteNameFromCommand(q);
+  return name ? { kind: 'named', name } : null;
+}
+
+/** Hosts that are never "the site" a person asked to sign in to. */
+const NOT_A_SITE_HOST =
+  /(?:^|\.)(?:google\.[a-z.]+|bing\.com|wikipedia\.org|youtube\.com|reddit\.com|facebook\.com|linkedin\.com|x\.com|twitter\.com|yelp\.com|glassdoor\.com|indeed\.com|g2\.com|capterra\.com|trustpilot\.com|bbb\.org|apps\.apple\.com|play\.google\.com|crunchbase\.com|zoominfo\.com)$/i;
+
+/** First web result that looks like the site itself (its sign-in page or home page). */
+export function siteFromWebHits(
+  name: string,
+  hits: ReadonlyArray<{ url?: string | null; title?: string | null }>,
+): { name: string; url: string; host: string } | null {
+  const words = name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const scored = hits
+    .map((hit, index) => {
+      try {
+        const url = new URL(String(hit.url ?? ''));
+        const host = url.hostname.toLowerCase();
+        if (!/^https?:$/.test(url.protocol) || NOT_A_SITE_HOST.test(host)) return null;
+        const hay = `${host} ${String(hit.title ?? '').toLowerCase()}`;
+        const overlap = words.filter((w) => hay.includes(w)).length;
+        const loginish = /log\s*-?in|sign\s*-?in|account|portal/i.test(`${url.pathname} ${hit.title ?? ''}`) ? 1 : 0;
+        return { url: url.toString(), host, score: overlap * 2 + loginish - index * 0.1 };
+      } catch {
+        return null;
+      }
+    })
+    .filter((row): row is { url: string; host: string; score: number } => Boolean(row) && (row as { score: number }).score > 0)
+    .sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  if (!best) return null;
+  const pretty = name.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  return { name: pretty, url: best.url, host: best.host };
 }
 
 /** A person we can email, resolved from the job file / access roster. */
@@ -1809,3 +2019,26 @@ export async function planSupplyOrderComputerTask(input: {
 }
 
 export { extractJobMaterials, formatMaterialsListForChat, materialsRowsForUi, looksLikeMaterialsListAsk };
+
+/** What the in-thread add-login card needs. Never carries a secret. */
+export type AddLoginPrompt = {
+  /** Site name shown on the card. */
+  n: string;
+  /** Sign-in (or home) page to save. */
+  u: string;
+  h: string;
+  /** The original request; Chat sends it again once the login is saved. */
+  q: string;
+  /** 1 when the site was found with a web search. */
+  w?: 1;
+};
+
+export function addLoginPath(prompt: AddLoginPrompt): string {
+  return `computer-task:add-login:${Buffer.from(JSON.stringify(prompt), 'utf8').toString('base64url')}`;
+}
+
+export function addLoginLead(prompt: AddLoginPrompt): string {
+  const where = prompt.h.replace(/^www\./, '');
+  const found = prompt.w ? `I searched the web and found ${prompt.n} at ${where}.` : `I found ${prompt.n} (${where}).`;
+  return `${found} You don't have a saved login for it yet. Add it below. It's saved securely to your Logins, never in this chat, and I'll pick up your request as soon as it's saved.`;
+}

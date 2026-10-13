@@ -17,6 +17,7 @@ import { ComputerApprovalCard } from './ComputerApprovalCard';
 import { ComputerLiveView } from './ComputerLiveView';
 import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
 import { MaterialsListCard } from './MaterialsListCard';
+import { ChatAddLoginCard } from './ChatAddLoginCard';
 import { parseMaterialsSummary } from '../../lib/materialsList';
 
 const POLL_MS = 1500;
@@ -55,6 +56,7 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
   // explicit not-set-up sentinel when Browserbase is unconfigured.
   if (!ref) return null;
   if (ref.kind === 'not_set_up') return <ComputerNotSetUpCard />;
+  if (ref.kind === 'add_login') return <ChatAddLoginCard prompt={ref.prompt} />;
   if (ref.kind === 'need_login') {
     return (
       <div data-testid="computer-need-login" className="rounded-xl border border-line bg-paper-50 p-3">

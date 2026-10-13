@@ -23,6 +23,8 @@ import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGround
 import { answerChatUploadsWithModel } from './askUploadAnswer.js';
 import { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } from './askComputerCapability.js';
 import { computerStatus } from '../computer/service.js';
+import { formatComputerResultsForPrompt, loadAskComputerContext } from './askComputerContext.js';
+import { looksLikeOutsideSiteCommand } from './askComputerCommand.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { OrgMemoryFact } from './askOrgMemory.js';
@@ -101,6 +103,16 @@ export function toolStepLabel(tool: string): string | null {
     default:
       return null;
   }
+}
+
+/** The reply for a turn handed to Computer: one short line, then the task card. */
+export function computerTurnAnswer(computer: AskToolResult): string {
+  const lead = computer.ok
+    ? computer.summary || COMPUTER_LEAD
+    : computer.ui?.path === 'computer-task:not-set-up'
+      ? "I can't work in a browser for you yet."
+      : computer.summary;
+  return `${lead}\n\n${formatActionsTrailer([computer])}`;
 }
 
 export const COMPUTER_LEAD = "Opening a browser now, and I'll check with you before anything is submitted.";
@@ -1226,8 +1238,14 @@ export async function answerFromJobFile(input: {
     toolResults: [] as AskToolResult[],
   };
 
+  // Office Chat with Computer: saved Logins and earlier Computer results on this job.
+  const computerCtx = await loadAskComputerContext(input.toolContext);
+  // "Log in to Restore 365 and …", "go into Xactimate", "check my <saved login>".
+  const siteCommand = computerCtx.allowed && looksLikeOutsideSiteCommand(input.question, computerCtx.logins);
+  const computerBlock = formatComputerResultsForPrompt(computerCtx.results);
+
   // "What websites can you log in to?" is about Chat, not the file or an upload.
-  if (looksLikeComputerCapabilityAsk(input.question)) {
+  if (!siteCommand && looksLikeComputerCapabilityAsk(input.question)) {
     logSkipped('skipped_computer_capability');
     const answer = computerCapabilityAnswer({
       access: input.toolContext?.access === 'org' ? 'org' : 'viewer',
@@ -1287,7 +1305,11 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer: fromDocuments, groundedOn };
   }
 
-  const heuristicPicks = input.toolContext ? pickAskToolsHeuristically(input.question, input.toolContext.access) : [];
+  const heuristicPicks = siteCommand
+    ? (['start_computer_task'] as ReturnType<typeof pickAskToolsHeuristically>)
+    : input.toolContext
+      ? pickAskToolsHeuristically(input.question, input.toolContext.access)
+      : [];
   const generalTurn =
     !trim(input.file.mentionSupplement) &&
     isGeneralAsk(input.question) &&
@@ -1383,12 +1405,7 @@ export async function answerFromJobFile(input: {
   // A browser task is the whole turn: one short line, then the card.
   const computer = toolResults.find((r) => r.tool === 'start_computer_task');
   if (computer) {
-    const lead = computer.ok
-      ? computer.summary || COMPUTER_LEAD
-      : computer.ui?.path === 'computer-task:not-set-up'
-        ? "I can't work in a browser for you yet."
-        : computer.summary;
-    const answer = `${lead}\n\n${formatActionsTrailer([computer])}`;
+    const answer = computerTurnAnswer(computer);
     emit(answer);
     return { ...empty, answer, groundedOn: 0, toolResults };
   }
@@ -1403,7 +1420,7 @@ export async function answerFromJobFile(input: {
     .find((text) => text.trim()) ?? '';
 
   const mentionScoped = Boolean(trim(input.file.mentionSupplement));
-  if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
+  if (!mentionScoped && !computerBlock && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
     logSkipped('skipped_empty_job');
     emit(spoken);
     return { ...empty, answer: spoken, groundedOn: 0, toolResults };
@@ -1438,6 +1455,8 @@ export async function answerFromJobFile(input: {
     !mentionScoped &&
     !toolsHandled &&
     !isLongMemoryQuestion(input.question) &&
+    // Follow-ups about Computer results go to the model with those results.
+    !(computerBlock && (input.history ?? []).length) &&
     preferJobFileGroundedFastPath(input.question, grounded) &&
     !webUsable
   ) {
@@ -1540,7 +1559,7 @@ export async function answerFromJobFile(input: {
       history: modelHistory,
       memory: promptMemory,
       jobFileRecord,
-      extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
+      extra: [trim(input.file.mentionSupplement), computerBlock, webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,
       onToken: emit,
@@ -1551,7 +1570,34 @@ export async function answerFromJobFile(input: {
       webSearchDone: webSearchAttempted || toolResults.some((r) => r.tool === 'web_search'),
       onPreviewReset: input.onPreviewReset,
       setPreviewCheck: input.setPreviewCheck,
+      // The model decides: answer from context, search evidence, or hand the
+      // turn to Computer. Commands and Computer follow-ups use the deep model.
+      computer:
+        computerCtx.allowed && input.toolContext
+          ? {
+              preferDeep: Boolean(computerBlock),
+              start: async (args) => {
+                const started = performance.now();
+                const result = await executeAskTool(
+                  'start_computer_task',
+                  { instructions: args.instructions, ...(args.start_url ? { start_url: args.start_url } : {}) },
+                  {
+                    ...input.toolContext!,
+                    fetchFn: input.fetchFn ?? input.toolContext!.fetchFn,
+                    file: input.file,
+                    webSearch: input.webSearch ?? input.toolContext!.webSearch,
+                  },
+                );
+                input.timing?.addTool('start_computer_task', performance.now() - started);
+                toolResults.push(result);
+                return computerTurnAnswer(result);
+              },
+            }
+          : null,
     });
+    if (looked.computerStarted) {
+      return { ...empty, answer: looked.answer, model: looked.model, usage: looked.usage, groundedOn: 0, toolResults };
+    }
     for (const step of looked.trace) {
       if (step.tool !== 'web_search' || !step.result.data || typeof step.result.data !== 'object') continue;
       const data = step.result.data as { answer?: string; results?: AskWebHit[] };
