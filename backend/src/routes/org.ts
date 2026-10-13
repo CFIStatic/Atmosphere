@@ -25,7 +25,7 @@ import { isAppShellRequest } from '../lib/appShell.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
-import { sendSms } from '../shared/smsProvider.js';
+import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
 
 export const orgRouter = Router();
 
@@ -732,7 +732,10 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       erased = Boolean(data);
     }
 
-    if (phone && !email) {
+    // Without a Twilio sender (no number / messaging service), skip the
+    // invite text: the admin tells the crew member, and the sign-in code
+    // itself goes out through Supabase Auth's Twilio Verify.
+    if (phone && !email && smsProviderConfigured()) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')

@@ -10,6 +10,7 @@ import {
 } from '../src/lib/demoBooking.js';
 import {
   bookDemo,
+  notifyHostWithMeet,
   openDemoSlots,
   type DemoBookingStore,
   type DemoMailer,
@@ -119,10 +120,28 @@ function memStore(): DemoBookingStore & { rows: Record<string, unknown>[] } {
       const r = rows.find((x) => x.id === id);
       if (r) r[field] = 'now';
     },
+    async get(id) {
+      const r = rows.find((x) => x.id === id);
+      return r ? ({ host_notified_at: null, ...r } as never) : null;
+    },
+    async setMeet(id, meetUrl, eventId) {
+      const r = rows.find((x) => x.id === id);
+      if (r) Object.assign(r, { meet_url: meetUrl, google_event_id: eventId });
+    },
+    async claimHostNotified(id) {
+      const r = rows.find((x) => x.id === id);
+      if (!r || r.host_notified_at) return false;
+      r.host_notified_at = 'now';
+      return true;
+    },
+    async releaseHostNotified(id) {
+      const r = rows.find((x) => x.id === id);
+      if (r) r.host_notified_at = null;
+    },
   };
 }
 
-test('booking: stores, emails host and guest (stubbed, no .ics), blocks double booking', async () => {
+test('booking: stores, sends no email at booking time, blocks double booking', async () => {
   const store = memStore();
   const sent: Array<{ to: string; subject: string; attachments?: MailAttachment[] }> = [];
   const send: DemoMailer = async (m) => {
@@ -141,13 +160,8 @@ test('booking: stores, emails host and guest (stubbed, no .ics), blocks double b
   });
   const r = await bookDemo(input, { store, send, ip: '203.0.113.9', now: NOW });
   assert.equal(r.slotStart, slot);
-  assert.equal(r.hostEmailed && r.guestEmailed, true);
   assert.equal(store.rows[0]!.client_ip, '203.0.113.9');
-  assert.deepEqual(
-    sent.map((m) => m.to),
-    ['jack@jettx.ai', 'dana@example.com'],
-  );
-  for (const m of sent) assert.equal(m.attachments, undefined, 'no .ics attachment');
+  assert.equal(sent.length, 0, 'no email at booking time');
 
   const open = await openDemoSlots(store, NOW);
   assert.ok(!open.includes(slot), 'booked slot is hidden');
@@ -166,6 +180,40 @@ test('booking: stores, emails host and guest (stubbed, no .ics), blocks double b
   assert.equal(store.rows.length, 1);
 });
 
+test('meet hook: stores event + link, sends Jack ONE email with Join meeting, idempotent', async () => {
+  const store = memStore();
+  const sent: Array<{ to: string; subject: string; text: string; html?: string | null }> = [];
+  let fail = true;
+  const send: DemoMailer = async (m) => {
+    if (fail) return { ok: false, why: 'down' };
+    sent.push(m);
+    return { ok: true };
+  };
+  const input = demoBookingSchema.parse({
+    slotStart: '2026-10-13T16:00:00.000Z',
+    name: 'Jack Cyganiak',
+    email: 'guest@example.com',
+    company: 'Tea time',
+  });
+  const { id } = await bookDemo(input, { store, send, ip: null, now: NOW });
+  const meet = { meetUrl: 'https://meet.google.com/abc-defg-hij', eventId: 'evt1' };
+  await assert.rejects(notifyHostWithMeet(id, meet, { store, send }), (e: { status?: number }) => e.status === 502);
+  assert.equal(store.rows[0]!.host_notified_at, null, 'released after mail failure');
+  fail = false;
+  assert.deepEqual(await notifyHostWithMeet(id, meet, { store, send }), { status: 'sent' });
+  assert.deepEqual(await notifyHostWithMeet(id, meet, { store, send }), { status: 'already_sent' });
+  assert.equal(sent.length, 1);
+  const m = sent[0]!;
+  assert.equal(m.to, 'jack@jettx.ai');
+  assert.equal(m.subject, 'Demo booked: Jack Cyganiak – Tue Oct 13 11:00 AM CT');
+  assert.match(m.html ?? '', /href="https:\/\/meet\.google\.com\/abc-defg-hij"[^>]*>Join meeting</);
+  assert.match(m.html ?? '', /Tea time/);
+  assert.match(m.text, /Join meeting: https:\/\/meet\.google\.com\/abc-defg-hij/);
+  assert.equal(store.rows[0]!.meet_url, meet.meetUrl);
+  assert.equal(store.rows[0]!.google_event_id, 'evt1');
+  await assert.rejects(notifyHostWithMeet('nope', meet, { store, send }), (e: { status?: number }) => e.status === 404);
+});
+
 test('booking: slot is held even when mail fails', async () => {
   const store = memStore();
   const send: DemoMailer = async () => ({ ok: false, why: 'down' });
@@ -175,7 +223,6 @@ test('booking: slot is held even when mail fails', async () => {
     email: 'd@example.com',
     company: 'C',
   });
-  const r = await bookDemo(input, { store, send, ip: null, now: NOW });
-  assert.equal(r.guestEmailed, false);
+  await bookDemo(input, { store, send, ip: null, now: NOW });
   assert.equal(store.rows.length, 1);
 });

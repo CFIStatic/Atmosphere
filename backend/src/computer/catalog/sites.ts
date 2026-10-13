@@ -15,7 +15,7 @@
  *                   and learned like any other, by the customer's choice (2026-10-06), with no
  *                   warning in the Logins UI. Kept so the decision can be revisited.
  *
- * Excluded entirely (EXCLUDED_SITES): Xactimate, XactAnalysis, Restoration Manager and
+ * Excluded entirely (EXCLUDED_SITES): XactAnalysis, Restoration Manager and
  * ClaimXperience, because Verisk's EULA bans AI and automation tools.
  *
  * Quoted clauses for every flagged site, and what was read versus inferred:
@@ -742,13 +742,14 @@ export function signInHostsFor(host: string | null | undefined): string[] {
 
 /** Sites never automated: Verisk's EULA bans AI and automation tools (pending Verisk's permission). */
 export const EXCLUDED_SITES = [
-  { name: 'Xactimate', hosts: ['identity.xactware.com', 'xactimate.com', 'xactware.com'], reason: 'Verisk’s EULA prohibits AI and automation tools.' },
   { name: 'XactAnalysis', hosts: ['www.xactanalysis.com', 'xactanalysis.com'], reason: 'Verisk’s EULA prohibits AI and automation tools.' },
   { name: 'Restoration Manager', hosts: ['rl.restorationmanager.net', 'restorationmanager.net'], reason: 'A Verisk (Xactware) product; signing in accepts Xactware’s license, which prohibits AI and automation tools.' },
   { name: 'ClaimXperience', hosts: ['www.claimxperience.com', 'claimxperience.com'], reason: 'A Verisk product; Verisk’s terms prohibit AI and automation tools.' },
 ];
 
-const EXCLUDED_DOMAINS = ['xactware.com', 'xactimate.com', 'xactanalysis.com', 'claimxperience.com', 'restorationmanager.net', 'verisk.com'];
+// Xactimate (xactimate.com, xactware.com, and the Verisk identity hosts it signs in through) was
+// un-excluded on Oct 12, 2026 at the account owner's direction.
+const EXCLUDED_DOMAINS = ['xactanalysis.com', 'claimxperience.com', 'restorationmanager.net'];
 
 function hostMatches(host: string, candidate: string): boolean {
   const h = host.toLowerCase();

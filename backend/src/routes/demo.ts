@@ -2,7 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { clientIp, clientIpKeyGenerator } from '../lib/clientIp.js';
 import { demoBookingSchema, DEMO_SLOT_MINUTES, DEMO_TIME_ZONE } from '../lib/demoBooking.js';
-import { bookDemo, openDemoSlots, supabaseDemoStore, type DemoBookingStore } from '../lib/demoBookingService.js';
+import { timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
+import { bookDemo, notifyHostWithMeet, openDemoSlots, supabaseDemoStore, type DemoBookingStore } from '../lib/demoBookingService.js';
 import { unscopedAdmin } from '../lib/scopedAdmin.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 
@@ -54,7 +56,7 @@ demoRouter.get('/slots', slotsLimiter, async (_req: Request, res: Response, next
   }
 });
 
-/** POST /api/demo/book — hold the slot, email the host and the guest an invite. */
+/** POST /api/demo/book — hold the slot and notify the host; the guest's invite comes from Google Calendar. */
 demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = demoBookingSchema.parse(req.body);
@@ -64,7 +66,44 @@ demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: 
       return;
     }
     const result = await bookDemo(input, { store: store(), send: sendSystemMail, ip: clientIp(req) });
-    res.json({ ok: true, slotStart: result.slotStart, emailed: result.guestEmailed });
+    res.json({ ok: true, slotStart: result.slotStart, emailed: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const meetSchema = z.object({
+  meetUrl: z.string().trim().url().max(500).refine((u) => u.startsWith('https://'), 'meetUrl must be https'),
+  eventId: z.string().trim().min(1).max(1024),
+});
+
+function secretOk(given: string | undefined): boolean {
+  const want = (process.env.DEMO_MEET_WEBHOOK_SECRET || '').trim();
+  if (want.length < 32 || !given) return false;
+  const a = Buffer.from(given.trim());
+  const b = Buffer.from(want);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * POST /api/demo/bookings/:id/meet — staff routine only (X-Demo-Meet-Secret).
+ * Stores the booking's Google event + Meet link and sends the host ONE email
+ * with a Join meeting button. Idempotent: a second call does not resend.
+ */
+demoRouter.post('/bookings/:id/meet', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!secretOk(req.get('x-demo-meet-secret'))) {
+      res.status(401).json({ error: 'Unauthorized', code: 'unauthorized' });
+      return;
+    }
+    const id = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      res.status(404).json({ error: 'Booking not found.', code: 'not_found' });
+      return;
+    }
+    const input = meetSchema.parse(req.body);
+    const r = await notifyHostWithMeet(id, input, { store: store(), send: sendSystemMail });
+    res.json({ ok: true, ...r });
   } catch (err) {
     next(err);
   }

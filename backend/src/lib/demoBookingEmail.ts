@@ -119,6 +119,7 @@ function rowsHtml(rows: Row[]): string {
 
 function layout(input: {
   invite: string;
+  meetUrl?: string | null;
   title: string;
   preheader: string;
   eyebrow: string;
@@ -181,9 +182,23 @@ function layout(input: {
             </td></tr>
           </table>
         </td></tr>
-        <tr><td class="em-pad" style="padding:16px 32px 0;">
+        ${
+          input.meetUrl
+            ? `<tr><td class="em-pad" style="padding:22px 32px 0;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td bgcolor="${ACCENT}" style="background:${ACCENT};border-radius:12px;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${esc(input.meetUrl)}" style="height:54px;v-text-anchor:middle;width:260px;" arcsize="22%" stroke="f" fillcolor="${ACCENT}"><center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:17px;font-weight:bold;">Join meeting</center></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="${esc(input.meetUrl)}" style="display:inline-block;padding:16px 36px;font-family:${FONT};font-size:17px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:12px;background:${ACCENT};">Join meeting</a><!--<![endif]-->
+            </td>
+          </tr></table>
+          <p class="em-soft" style="margin:12px 0 0;font-size:14px;line-height:1.6;color:${INK_SOFT};">
+            <a href="${esc(input.meetUrl)}" class="em-link" style="color:${ACCENT};text-decoration:none;">${esc(input.meetUrl)}</a>
+          </p>
+        </td></tr>`
+            : `<tr><td class="em-pad" style="padding:16px 32px 0;">
           <p class="em-ink" style="margin:0;font-size:15px;line-height:1.55;color:${INK};">${esc(input.invite)}</p>
-        </td></tr>
+        </td></tr>`
+        }
         <tr><td class="em-pad" style="padding:22px 32px 4px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${rowsHtml(input.rows)}
           </table>
@@ -228,11 +243,14 @@ const TEXT_FOOTER = [
 export function demoHostEmail(
   b: DemoBookingInput,
   start: Date,
+  meetUrl: string | null = null,
 ): { subject: string; text: string; html: string } {
   const ct = slotParts(start, DEMO_TIME_ZONE);
   const guestZone = b.timeZone ? validZone(b.timeZone) : null;
   const theirs = guestZone && guestZone !== DEMO_TIME_ZONE ? slotParts(start, guestZone) : null;
-  const subject = `New demo booked: ${b.name}, ${slotSubjectLabel(start)}`;
+  const subject = meetUrl
+    ? `Demo booked: ${b.name} – ${slotSubjectLabel(start).replace(',', '')}`
+    : `New demo booked: ${b.name}, ${slotSubjectLabel(start)}`;
   const rows: Row[] = [
     { label: 'Name', value: b.name },
     { label: 'Email', value: b.email, href: `mailto:${b.email}` },
@@ -246,9 +264,10 @@ export function demoHostEmail(
   const invite = hostInviteLine(start, b.name);
   const html = layout({
     invite,
+    meetUrl,
     title: subject,
     preheader: `${b.name} from ${b.company} booked ${slotSubjectLabel(start)}.`,
-    eyebrow: 'New demo booked',
+    eyebrow: meetUrl ? 'Demo booked' : 'New demo booked',
     heading: `${b.name} booked a demo`,
     intro: `${esc(b.company)} picked a time on atmosphereteam.com/demo.`,
     when: ct,
@@ -266,7 +285,7 @@ export function demoHostEmail(
     theirs ? `Their time: ${theirs.time} (${guestZone})` : null,
     b.notes ? `Notes:    ${b.notes}` : null,
     '',
-    invite,
+    ...(meetUrl ? [`Join meeting: ${meetUrl}`] : [invite]),
     '',
     'Reply to this email to reach them.',
     '',
