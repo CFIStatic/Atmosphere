@@ -1,3 +1,5 @@
+import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
+import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
 import { approveAskApproval, denyAskApproval, getAskApproval, listAskFeedback, listAskPins, pinAskAnswer, rateAskAnswer, searchAskChats, unpinAskAnswer } from './askExtras.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -915,6 +917,20 @@ sharedJobsRouter.post(
       const input = partySchema.parse(req.body ?? {});
 
       const partyRole = input.role ?? 'subcontractor';
+      // Crew invited by mobile number only sign in with an SMS code (#752).
+      const partyEmail = input.email?.trim().toLowerCase() || null;
+      const partyPhone = input.phone ? normalizePhoneE164(input.phone) : null;
+      if (input.phone && !partyPhone) {
+        throw new HttpError(400, 'Enter a valid mobile number.', 'invalid_phone');
+      }
+      if (partyPhone && !partyEmail) {
+        if (partyRole === 'owner' || partyRole === 'adjuster') {
+          throw new HttpError(400, 'Homeowners are invited by email.', 'invite_email_required');
+        }
+        if (!phoneAuthEnabled()) {
+          throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
+        }
+      }
       // Homeowner/owner/adjuster parties force matching service titles.
       const forcedHomeowner = partyRole === 'owner';
       const forcedAdjuster = partyRole === 'adjuster';
@@ -944,8 +960,8 @@ sharedJobsRouter.post(
           company: input.company,
           trade: input.trade ?? null,
           contact_name: input.contactName ?? null,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
+          email: partyEmail,
+          phone: partyPhone,
           role: partyRole,
           service_role: serviceNorm.service_role,
           service_role_custom: serviceNorm.service_role_custom,
@@ -1049,9 +1065,35 @@ sharedJobsRouter.post(
         emailed = delivery.emailed;
       }
 
+      let texted = false;
+      if (partyPhone && !email && token && smsProviderConfigured()) {
+        const [{ data: org }, inviterName] = await Promise.all([
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+          actorLabelFor(supabase, userId),
+        ]);
+        const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
+        const params = new URLSearchParams({
+          phone: partyPhone,
+          invited: '1',
+          next: fieldCaptureInvitePath(token),
+        });
+        const sms = await sendSms({
+          to: partyPhone,
+          orgId,
+          body: orgInviteSms({
+            orgName: (org as any)?.name ?? 'your team',
+            inviterName,
+            link: `${origin}/login?${params.toString()}`,
+          }),
+        });
+        if (!sms.ok) console.warn(`[job-party] invite text failed: ${sms.reason}`);
+        texted = sms.ok;
+      }
+
       res.status(201).json({
         party,
         emailed,
+        texted,
         sharePath: token ? jobSharePagePath(token, email) : null,
         fieldCapturePath: token ? fieldCaptureInvitePath(token) : null,
       });

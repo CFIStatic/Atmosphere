@@ -753,6 +753,8 @@ export interface JobAccessPerson {
   kind: JobAccessKind;
   name: string | null;
   email: string | null;
+  /** Crew invited by mobile number only. */
+  phone?: string | null;
   accessType: string;
   /** Curated service role slug for Analysis. */
   role: string;
@@ -3989,12 +3991,16 @@ export const api = {
       trade?: string | null;
       contactName?: string | null;
       email?: string | null;
+      /** Crew invited by mobile number only (SMS code sign-in). */
+      phone?: string | null;
       role?: string;
+      serviceRole?: string | null;
     },
   ) =>
     request<{
       party: JobParty;
       emailed?: boolean;
+      texted?: boolean;
       sharePath?: string | null;
       fieldCapturePath?: string | null;
     }>(`/api/operations/shared/${jobId}/parties`, {

@@ -20,7 +20,7 @@ import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } f
  */
 export const phoneAuthRouter = Router();
 
-/** A live crew invite (org_invites) for this E.164 number. */
+/** A live crew invite (org_invites, or a job party) for this E.164 number. */
 async function hasPendingPhoneInvite(phone: string): Promise<boolean> {
   const admin = unscopedAdminOrNull();
   if (!admin) return false;
@@ -31,7 +31,16 @@ async function hasPendingPhoneInvite(phone: string): Promise<boolean> {
     .eq('phone', phone)
     .limit(1)
     .maybeSingle();
-  return Boolean(data);
+  if (data) return true;
+  // Crew invited to one job by mobile number (Access tab → Invite).
+  const { data: party } = await admin
+    .from('job_parties')
+    .select('id')
+    .eq('phone', phone)
+    .is('revoked_at', null)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(party);
 }
 
 const sendThrottle = createOtpThrottle();
