@@ -1,0 +1,91 @@
+# Side-by-side test of cheaper models for video analysis.
+# Read-only on production: re-runs the dictation, day-film and conversation
+# passes on a few real clips under each model set and prints what each
+# produced and what it cost. Nothing is written back to the database.
+# Costs a few dollars of provider usage per run.
+name: Video model eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      proof_ids:
+        description: Comma-separated job_proofs ids
+        required: false
+  push:
+    branches: [claude/project-thread-jjia2b]
+    paths:
+      - backend/scripts/videoModelEval.ts
+      - .github/workflows/video-model-eval.yml
+
+concurrency:
+  group: video-model-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Compare model sets on real clips
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: Keys
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || 'https://ccxatzfsvzetciiwsjlj.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || vars.GOOGLE_API_KEY }}
+      # 25 s to 2.5 min clips from the test job, with speech.
+      EVAL_PROOF_IDS: ${{ inputs.proof_ids || '9fad3454-aa69-4f41-97ea-1acfd31904e9,d088682f-b5c8-400f-ae51-fcbeed97258a,e4e95e5a-4df0-445f-8114-17a42665b3a4,cedca9e4-5f44-4094-bd03-e4289f44e183,626d2992-6f45-49af-9e88-3035324bd12c,ca5130c7-7d1f-4ad8-a864-06a1966321e1' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Current production models
+        working-directory: backend
+        env:
+          EVAL_ARM: current
+          EVAL_OUT: current.json
+          ANTHROPIC_MODEL: claude-opus-5-5
+          VERIFICATION_PRIMARY_MODEL: gemini-3.1-pro-preview
+        run: npx tsx scripts/videoModelEval.ts
+
+      - name: Sonnet 5.5 + Gemini 3.8 Flash
+        working-directory: backend
+        env:
+          EVAL_ARM: sonnet-flash
+          EVAL_OUT: sonnet-flash.json
+          ANTHROPIC_MODEL: claude-sonnet-5-5
+          VERIFICATION_PRIMARY_MODEL: gemini-3.8-flash
+        run: npx tsx scripts/videoModelEval.ts
+
+      - name: Haiku 4.5 + Gemini 3.5 Flash-Lite
+        working-directory: backend
+        env:
+          EVAL_ARM: haiku-flashlite
+          EVAL_OUT: haiku-flashlite.json
+          ANTHROPIC_MODEL: claude-haiku-4-5
+          VERIFICATION_PRIMARY_MODEL: gemini-3.5-flash-lite
+        run: npx tsx scripts/videoModelEval.ts
+
+      - name: Report
+        working-directory: backend
+        run: |
+          npx tsx scripts/videoModelEval.ts --compare current.json sonnet-flash.json haiku-flashlite.json > report.md
+          cat report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video-model-eval
+          path: |
+            backend/report.md
+            backend/*.json
