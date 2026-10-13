@@ -27,12 +27,15 @@ export function ShareJobProgressPanel({
   creating: creatingProp,
   onCreatingChange,
   modal = false,
+  onInvited,
 }: {
   jobId: string;
   creating?: boolean;
   onCreatingChange?: (open: boolean) => void;
   /** Inside the Share popup: just the form and invite list, no card. */
   modal?: boolean;
+  /** Called after a successful invite, e.g. to refresh "Who has access". */
+  onInvited?: () => void;
 }) {
   const actionsLocked = useProductActionsLocked();
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
@@ -93,6 +96,7 @@ export function ShareJobProgressPanel({
       setEmail('');
       if (!modal) setCreating(false);
       await load();
+      onInvited?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the invite.');
     } finally {

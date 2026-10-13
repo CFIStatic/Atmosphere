@@ -27,6 +27,8 @@ export type JobAccessPerson = {
   kind: JobAccessKind;
   name: string | null;
   email: string | null;
+  /** Crew invited by mobile number only. */
+  phone?: string | null;
   accessType: string;
   /** Curated service role slug — stable for speaker-identity. */
   role: string;
@@ -62,6 +64,7 @@ export type RosterPartyRow = {
   trade: string | null;
   contact_name: string | null;
   email: string | null;
+  phone?: string | null;
   role: string | null;
   service_role?: string | null;
   service_role_custom?: string | null;
@@ -250,6 +253,7 @@ export function presentJobAccessRoster(input: {
       party.contact_name?.trim() ||
       party.company?.trim() ||
       email ||
+      party.phone?.trim() ||
       'Crew';
     const label = partyServiceLabel(party);
 
@@ -260,6 +264,7 @@ export function presentJobAccessRoster(input: {
           kind: 'field_capture',
           name,
           email,
+          phone: party.phone ?? null,
           grantedByName: granter.name,
           grantedByEmail: granter.email,
           grantedAt: party.invited_at ?? party.created_at,

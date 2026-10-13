@@ -224,3 +224,34 @@ test('presentJobAccessRoster — service_role override beats trade', () => {
   assert.equal(people[0]?.displayName, 'Alex Rivera — Electrician');
   assert.equal(people[0]?.accessType, 'Electrician');
 });
+
+test('crew invited by mobile number only shows the number and Last access never', () => {
+  const people = presentJobAccessRoster({
+    shares: [],
+    grants: [],
+    profiles: [{ id: 'u-1', full_name: 'Alex Office', email: 'alex@example.com' }],
+    parties: [
+      {
+        id: 'p-phone',
+        company: 'Sam Rivera',
+        trade: null,
+        contact_name: null,
+        email: null,
+        phone: '+15550100000',
+        role: 'subcontractor',
+        service_role: 'crew',
+        created_by: 'u-1',
+        created_at: '2026-10-12T00:00:00.000Z',
+        invited_at: '2026-10-12T00:00:00.000Z',
+        last_seen_at: null,
+        revoked_at: null,
+      },
+    ],
+  });
+  assert.equal(people.length, 1);
+  assert.equal(people[0].phone, '+15550100000');
+  assert.equal(people[0].email, null);
+  assert.equal(people[0].grantedByName, 'Alex Office');
+  assert.equal(people[0].lastAccessedAt, null);
+  assert.equal(people[0].role, 'crew');
+});

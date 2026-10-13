@@ -27,7 +27,7 @@ export async function loadJobAccessPeople(
     supabase
       .from('job_parties')
       .select(
-        'id, company, trade, contact_name, email, role, service_role, service_role_custom, created_by, created_at, invited_at, last_seen_at, revoked_at',
+        'id, company, trade, contact_name, email, phone, role, service_role, service_role_custom, created_by, created_at, invited_at, last_seen_at, revoked_at',
       )
       .eq('org_id', orgId)
       .eq('job_id', jobId)
