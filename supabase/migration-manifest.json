@@ -228,7 +228,8 @@
     "20261010200100_duplicate_job_file_contents.sql",
     "20261010210000_homeowner_portal_grants.sql",
     "20261011230000_computer_login_company_id.sql",
-    "20261012190000_demo_bookings.sql"
+    "20261012190000_demo_bookings.sql",
+    "20261013000000_demo_bookings_meet.sql"
   ],
   "migrations": [
     {
@@ -6922,6 +6923,20 @@
         "index|public.demo_bookings.demo_bookings_slot_booked_uniq",
         "rls|public.demo_bookings",
         "table|public.demo_bookings"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261013000000_demo_bookings_meet",
+      "file": "20261013000000_demo_bookings_meet.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.demo_bookings.google_event_id",
+        "column|public.demo_bookings.host_notified_at",
+        "column|public.demo_bookings.meet_url"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
