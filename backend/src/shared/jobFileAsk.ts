@@ -26,8 +26,10 @@ import { computerStatus } from '../computer/service.js';
 import { formatComputerResultsForPrompt, loadAskComputerContext } from './askComputerContext.js';
 import { looksLikeOutsideSiteCommand } from './askComputerCommand.js';
 import type { DocumentFacts } from '../documents/types.js';
-import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
-import type { OrgMemoryFact } from './askOrgMemory.js';
+import { formatThreadMemoryForPrompt, isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
+import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
+import { askAgentEnabled, runAskAgent } from './askAgent.js';
+import { anthropicAskApiKey } from '../lib/askModel.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
@@ -1154,6 +1156,116 @@ export function webBackedWithoutJobCite(
   return !answerHasJobCitation(answer);
 }
 
+/**
+ * The new single-agent Chat: one model with the whole job file and every tool.
+ * Null when the model gave nothing, so the classic path still answers.
+ */
+async function answerWithAgent(
+  input: Parameters<typeof answerFromJobFile>[0],
+  ctx: { computerAllowed: boolean; computerBlock: string; apiKey: string },
+): Promise<Awaited<ReturnType<typeof answerFromJobFile>> | null> {
+  const lookup = input.lookup!;
+  const zone = lookup.timeZone || 'America/Chicago';
+  const toolResults: AskToolResult[] = [];
+  const toolCtx = input.toolContext
+    ? {
+        ...input.toolContext,
+        fetchFn: input.fetchFn ?? input.toolContext.fetchFn,
+        file: input.file,
+        webSearch: input.webSearch ?? input.toolContext.webSearch,
+      }
+    : null;
+  const office = toolCtx?.access === 'org' && Boolean(toolCtx.userId);
+  const uploads = readableUploads(input.sessionDocuments);
+  const modelHistory = historyWithoutPrivateUploads(input.history ?? [], input.sessionDocuments) ?? input.history ?? [];
+  const privateRemoved = (input.history ?? []).some((turn) => turn.officeOnly === true);
+  let uploadBudget = 40_000;
+  const uploadBlock = uploads
+    .map((doc) => {
+      const text = (trim(doc.extractedText) || (doc.chunks ?? []).map((c) => trim(c.text)).join('\n')).slice(0, uploadBudget);
+      uploadBudget = Math.max(0, uploadBudget - text.length);
+      return text ? `Uploaded in this chat: ${doc.filename}\n${text}` : '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+  const memory = privateRemoved && input.memory ? { ...input.memory, summary: '', notes: [] } : input.memory;
+  const turnContext = [
+    formatOrgMemoryForPrompt(input.orgMemory ?? []),
+    memory ? formatThreadMemoryForPrompt(memory, zone) : '',
+    trim(input.file.mentionSupplement),
+    ctx.computerBlock,
+    uploadBlock,
+    stylePromptAddendum(input.styleSummary ?? ''),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const runTool = async (name: string, args: Record<string, unknown>) => {
+    const started = performance.now();
+    const result = await executeAskTool(name, args, toolCtx!);
+    input.timing?.addTool(name, performance.now() - started);
+    toolResults.push(result);
+    return result;
+  };
+  const search = input.webSearch ?? searchAskWebDetailed;
+  const ran = await runAskAgent({
+    question: input.question,
+    catalog: lookup,
+    jobFileRecord: formatJobFileRecord({ ...input.file, clips: [], mentionSupplement: null }).trim(),
+    history: modelHistory,
+    turnContext,
+    apiKey: ctx.apiKey || null,
+    timeZone: zone,
+    now: input.now,
+    signal: input.signal,
+    onToken: (text) => {
+      if (text) input.timing?.markFirstToken();
+      input.onToken?.(text);
+    },
+    onStatus: input.onStatus,
+    onPreviewReset: input.onPreviewReset,
+    webSearch: (query, includeDomains) =>
+      search(query, { fetchFn: input.fetchFn, limit: 5, includeDomains, now: input.now, timeZone: zone }),
+    actions: office
+      ? {
+          tools: askModelActionTools('org'),
+          run: async (name, args) => {
+            const result = await runTool(name, args);
+            return { ok: result.ok, tool: result.tool, summary: result.summary, data: result.data };
+          },
+        }
+      : null,
+    computer:
+      office && ctx.computerAllowed
+        ? async (args) =>
+            computerTurnAnswer(
+              await runTool('start_computer_task', {
+                instructions: args.instructions,
+                ...(args.start_url ? { start_url: args.start_url } : {}),
+              }),
+            )
+        : null,
+    extraChunks: documentChunksForGrounding(documentViews(input.file)),
+    callModel: input.agentCall,
+  });
+  input.timing?.noteModel(ran.model);
+  input.timing?.noteRoute('deep', 'agent');
+  if (!trim(ran.answer)) return null;
+  const empty = { webHits: [] as AskWebHit[], toolResults, usage: ran.usage, model: ran.model };
+  if (ran.computerStarted) return { ...empty, answer: ran.answer, groundedOn: 0, agent: true };
+  let answer = trimChatFiller(normalizeAskProse(ran.answer), { question: input.question });
+  const actions = formatActionsTrailer(toolResults);
+  if (actions && !/⟦actions:/i.test(answer)) answer = `${answer.trimEnd()}\n\n${actions}`;
+  return {
+    ...empty,
+    answer,
+    webHits: ran.webHits,
+    groundedOn: answerHasJobCitation(answer) ? countJobFileSources(input.file) : 0,
+    answeredFromLookup: true,
+    agent: true,
+    ...(answerQuotesPrivateUpload(answer, input.sessionDocuments) ? { officeOnly: true } : {}),
+  };
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -1208,6 +1320,10 @@ export async function answerFromJobFile(input: {
   setPreviewCheck?: (check: ((sentence: string) => boolean) | null) => void;
   /** Test hook for the general (public question) answer. */
   generalComplete?: typeof completeAskText;
+  /** "agent" asks for the new single-agent Chat (see askAgent.ts for the switch). */
+  engine?: string | null;
+  /** Test hook: the agent's model call. */
+  agentCall?: Parameters<typeof runAskAgent>[0]['callModel'];
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1228,6 +1344,8 @@ export async function answerFromJobFile(input: {
   webDerivedAnswer?: boolean;
   /** Compact research trace for debugging. Absent on the single pass. */
   research?: AskResearchTrace | null;
+  /** The new single-agent Chat wrote this reply. */
+  agent?: boolean;
 }> {
   const emit = (text: string) => {
     if (text) input.timing?.markFirstToken();
@@ -1265,6 +1383,15 @@ export async function answerFromJobFile(input: {
   // "Log in to Restore 365 and …", "go into Xactimate", "check my <saved login>".
   const siteCommand = computerCtx.allowed && looksLikeOutsideSiteCommand(input.question, computerCtx.logins);
   const computerBlock = formatComputerResultsForPrompt(computerCtx.results);
+
+  if (
+    input.lookup &&
+    askAgentEnabled(input.engine) &&
+    (input.agentCall || (apiKey || anthropicAskApiKey()).trim())
+  ) {
+    const agent = await answerWithAgent(input, { computerAllowed: computerCtx.allowed, computerBlock, apiKey });
+    if (agent) return agent;
+  }
 
   // "What websites can you log in to?" is about Chat, not the file or an upload.
   if (!siteCommand && looksLikeComputerCapabilityAsk(input.question)) {

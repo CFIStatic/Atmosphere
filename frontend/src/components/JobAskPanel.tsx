@@ -53,6 +53,7 @@ import { loadOrgMentions } from './mentions/useOrgMentions';
 import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 import { isAppShellDocument } from '../lib/appShell';
+import { readChatEngine, writeChatEngine, type ChatEngine } from '../lib/chatEngine';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -758,6 +759,8 @@ export function JobAskPanel({
   const feedbackAskedRef = useRef<Set<string>>(new Set());
   const [pins, setPins] = useState<AskPinnedAnswer[]>([]);
   const [editing, setEditing] = useState<{ turnId: string; text: string } | null>(null);
+  /** Classic Chat or the new single-agent Chat (beta), chosen per browser. */
+  const [engine, setEngine] = useState<ChatEngine>(() => readChatEngine());
   const [highlightTurnId, setHighlightTurnId] = useState<string | null>(null);
   const threadsRef = useRef<AskThread[]>([]);
   useEffect(() => {
@@ -1884,6 +1887,25 @@ export function JobAskPanel({
             </button>
           )}
         </form>
+        {officeExtras ? (
+          <div className="mt-1.5 flex justify-end">
+            <button
+              type="button"
+              data-testid="ask-engine-toggle"
+              aria-pressed={engine === 'agent'}
+              onClick={() => {
+                const next: ChatEngine = engine === 'agent' ? 'classic' : 'agent';
+                writeChatEngine(next);
+                setEngine(next);
+              }}
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
+                engine === 'agent' ? 'bg-brand-50 text-brand-700 hover:bg-brand-100' : 'text-ink-500 hover:text-ink-900'
+              }`}
+            >
+              {engine === 'agent' ? 'New Chat (beta) is on · switch back' : 'Try the new Chat (beta)'}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );

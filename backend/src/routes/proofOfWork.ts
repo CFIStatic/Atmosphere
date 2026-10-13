@@ -3077,6 +3077,8 @@ async function runProofAskTurn(input: {
    * (they stay on the record).
    */
   supersedesId?: string | null;
+  /** "agent" asks for the new single-agent Chat (honored per ASK_AGENT). */
+  engine?: 'agent' | 'classic' | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3801,6 +3803,7 @@ async function runProofAskTurn(input: {
         webSearch,
       },
       styleSummary,
+      engine: input.engine ?? null,
     });
     if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
@@ -3833,6 +3836,7 @@ async function runProofAskTurn(input: {
       noGroundedClaim: !answerHasJobCitation(storedAnswer),
       // A Computer command or a question about Chat itself is never an evidence miss.
       nonEvidence:
+        ('agent' in result && result.agent === true) ||
         (Array.isArray(result.toolResults) &&
           (result.toolResults as Array<{ tool?: string }>).some((r) => r?.tool === 'start_computer_task')) ||
         looksLikeComputerTask(input.question) ||
@@ -4082,6 +4086,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         timeZone: z.string().trim().min(1).max(64).optional(),
         documentIds: z.array(z.string().uuid()).max(8).optional(),
         supersedesId: z.string().uuid().optional().nullable(),
+        engine: z.enum(['agent', 'classic']).optional(),
       })
       .parse(req.body ?? {});
     const canManage =
@@ -4125,6 +4130,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           partyId,
           documentIds: access === 'org' ? input.documentIds : undefined,
           supersedesId: input.supersedesId ?? null,
+          engine: input.engine ?? null,
           signal: abort.signal,
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
           // Checked sentences stream as they are written; `done` replaces them.
@@ -4162,6 +4168,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       partyId,
       documentIds: access === 'org' ? input.documentIds : undefined,
       supersedesId: input.supersedesId ?? null,
+      engine: input.engine ?? null,
     });
     res.status(201).json(result);
   } catch (err) {
