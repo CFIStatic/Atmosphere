@@ -150,7 +150,7 @@ const COMPUTER_FINISHED_PREFIX = 'Computer finished:';
 function AskFollowUps({ questions, onPick }: { questions: string[]; onPick: (question: string) => void }) {
   if (!questions.length) return null;
   return (
-    <div className="mt-1.5 flex flex-col items-start gap-1" data-testid="ask-followups">
+    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-followups">
       {questions.slice(0, 3).map((q) => (
         <button
           key={q}
@@ -244,6 +244,7 @@ function AskAnswerFooter({
   onOpenSource,
   children,
   trailing,
+  below,
 }: {
   text: string;
   sources: AskSourceChip[];
@@ -251,6 +252,7 @@ function AskAnswerFooter({
   onOpenSource: (source: AskSourceChip) => void;
   children?: ReactNode;
   trailing?: ReactNode;
+  below?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const actions = answerStepActions(text);
@@ -275,6 +277,7 @@ function AskAnswerFooter({
       {open && count ? (
         <AskStepsSourcesBody sources={sources} webSources={webSources} actions={actions} onOpenSource={onOpenSource} />
       ) : null}
+      {below}
     </div>
   );
 }
@@ -1721,23 +1724,23 @@ export function JobAskPanel({
                       webSources={turn.webSources}
                       onOpenSource={openAskSource}
                       trailing={
+                        office && turn.id === lastAssistantId && !inFlight && !extractAskSources(turn.content).followUps.length ? (
+                          <AskActionCards
+                            cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
+                            onPick={(card) => {
+                              if (card.mode === 'send') {
+                                void ask(card.prompt);
+                              } else {
+                                setDraft(card.prompt);
+                                inputRef.current?.focus();
+                              }
+                            }}
+                          />
+                        ) : null
+                      }
+                      below={
                         turn.id === lastAssistantId && !inFlight ? (
-                          <>
-                            {office ? (
-                              <AskActionCards
-                                cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
-                                onPick={(card) => {
-                                  if (card.mode === 'send') {
-                                    void ask(card.prompt);
-                                  } else {
-                                    setDraft(card.prompt);
-                                    inputRef.current?.focus();
-                                  }
-                                }}
-                              />
-                            ) : null}
-                            <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
-                          </>
+                          <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
                         ) : null
                       }
                     >

@@ -400,14 +400,16 @@ function ComputerTaskLive({ taskId, onFinished }: { taskId: string; onFinished?:
             Stop
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => setShowSteps((v) => !v)}
-          className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
-          aria-expanded={showSteps}
-        >
-          {showSteps ? 'Hide steps' : `Steps (${steps.length})`}
-        </button>
+        {steps.length ? (
+          <button
+            type="button"
+            onClick={() => setShowSteps((v) => !v)}
+            className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
+            aria-expanded={showSteps}
+          >
+            {showSteps ? 'Hide steps' : `Steps (${steps.length})`}
+          </button>
+        ) : null}
       </div>
 
       {showSteps ? (
