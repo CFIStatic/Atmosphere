@@ -1,3 +1,4 @@
+import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type JobParty } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
@@ -105,7 +106,7 @@ export function InviteCrewPanel({
     }
     const name = company.trim();
     const to = email.trim().toLowerCase();
-    const number = phone.trim();
+    const number = normalizePhoneE164(phone) ?? phone.trim();
     if (!name || (byPhone ? !number : !to)) {
       setError(
         byPhone
@@ -195,7 +196,7 @@ export function InviteCrewPanel({
                   via === key ? 'bg-ink-900/10 text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
                 }`}
               >
-                {key === 'email' ? 'Email' : 'Mobile number'}
+                {key === 'email' ? 'Email' : 'Phone'}
               </button>
             ))}
           </div>
@@ -209,8 +210,8 @@ export function InviteCrewPanel({
               inputMode="tel"
               autoComplete="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(555) 010-0000"
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+              placeholder="(555) 123-4567"
               className={field}
             />
           </label>
@@ -248,9 +249,9 @@ export function InviteCrewPanel({
         >
           {'phone' in made ? (
             made.texted ? (
-              `Invite texted to ${made.phone}. They sign in with that number and a 6-digit code.`
+              `Invite texted to ${formatPhone(made.phone)}. They sign in with that number and a 6-digit code.`
             ) : (
-              `Added to the job. No invite text was sent, so tell ${made.phone} to open the Atmosphere sign-in page and tap "Text me a code".`
+              `Added to the job. No invite text was sent, so tell ${formatPhone(made.phone)} to open the Atmosphere sign-in page and tap "Text me a code".`
             )
           ) : made.emailed ? (
             `Invite sent to ${made.email}. The link opens on the web and in Field Capture.`

@@ -162,6 +162,36 @@ export function InvitePanel() {
       ) : null}
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
+        {phoneEnabled ? (
+          <div
+            role="radiogroup"
+            aria-label="Invite by"
+            data-testid="invite-via"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-ink-900/5 p-1 ring-1 ring-inset ring-ink-900/10"
+          >
+            {(['email', 'phone'] as const).map((key) => {
+              const on = key === 'phone' ? byPhone : !byPhone;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  data-testid={`invite-via-${key}`}
+                  onClick={() => {
+                    setByPhone(key === 'phone');
+                    setError(null);
+                  }}
+                  className={`h-7 rounded-md px-3 text-xs font-medium transition ${
+                    on ? 'bg-ink-900/10 text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  {key === 'email' ? 'Email' : 'Phone'}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {usingPhone ? (
           <input
             type="tel"
@@ -169,6 +199,7 @@ export function InvitePanel() {
             required
             aria-label="Mobile number"
             data-testid="invite-phone"
+            autoComplete="tel"
             value={phone}
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             placeholder="(555) 123-4567"
@@ -178,6 +209,8 @@ export function InvitePanel() {
           <input
             type="email"
             required
+            aria-label="Email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="their@email.com"
@@ -233,19 +266,6 @@ export function InvitePanel() {
           {t('settings.invites.button')}
         </button>
       </form>
-      {phoneEnabled && (
-        <button
-          type="button"
-          data-testid="invite-toggle-phone"
-          onClick={() => {
-            setByPhone((v) => !v);
-            setError(null);
-          }}
-          className="mt-2 text-xs font-medium text-brand-600 transition hover:text-brand-700"
-        >
-          {byPhone ? 'Invite by email instead' : 'No email? Invite by phone number'}
-        </button>
-      )}
       <p className="mt-1.5 text-[11px] text-ink-400">
         {t('settings.invites.rolesHint')}
         {seats
