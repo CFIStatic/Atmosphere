@@ -119,7 +119,7 @@ export function InvitePanel() {
         usingPhone
           ? res.texted
             ? `Invited. Atmosphere texted ${formatPhone(phoneE164)} a sign-in link.`
-            : `Invited. Tell them to open app.atmosphereteam.com, tap "Use phone number instead", and enter ${formatPhone(phoneE164)}. We'll text them a sign-in code.`
+            : `Invited. Tell them to open app.atmosphereteam.com, tap "Text me a code instead", and enter ${formatPhone(phoneE164)}. We'll text them a sign-in code.`
           : res.emailed
             ? `Invited — Atmosphere emailed ${email}.`
             : `Invited. Atmosphere could not email them, so let them know to check with you.`,

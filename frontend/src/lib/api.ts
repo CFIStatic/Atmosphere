@@ -3392,6 +3392,19 @@ export const api = {
       body: JSON.stringify({ phone, code, acceptedTermsVersion }),
     }),
 
+  /** Email a 6-digit sign-in code to an existing account (never creates one). */
+  emailCodeStart: (email: string) =>
+    request<{ ok: boolean; email: string }>('/api/auth/email-code/start', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  emailCodeVerify: (email: string, code: string) =>
+    request<AuthResponse>('/api/auth/email-code/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
+
   me: () => request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/me', { method: 'GET' }),
 
   getTerms: () =>

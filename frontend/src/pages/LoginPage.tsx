@@ -8,6 +8,7 @@ import { isHomeownerViewerPath } from '../lib/homeownerHub';
 import { shareTokenFromLogin } from '../lib/homeownerLogin';
 import { HomeownerEmailLink } from '../components/HomeownerEmailLink';
 import { PhoneSignIn } from '../components/PhoneSignIn';
+import { EmailCodeSignIn } from '../components/EmailCodeSignIn';
 import { usePhoneAuthEnabled } from '../hooks/usePhoneAuthEnabled';
 import { accountContact } from '../lib/phone';
 import { PLATFORM_HOME } from '../lib/platforms';
@@ -83,6 +84,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const phoneEnabled = usePhoneAuthEnabled();
   const [usePhone, setUsePhone] = useState(() => Boolean(searchParams.get('phone')));
+  const [useEmailCode, setUseEmailCode] = useState(false);
 
   useEffect(() => {
     if (!fieldEmbed || user || switchAccount) return;
@@ -263,6 +265,17 @@ export function LoginPage() {
                       }}
                     />
                   </div>
+                ) : useEmailCode ? (
+                  <div className="mt-6">
+                    <EmailCodeSignIn
+                      initialEmail={email}
+                      onSignedIn={async (nextMembership) => {
+                        queueRedirect(
+                          await destinationAfterLogin(nextMembership, redirectTo, searchParams.get('intent')),
+                        );
+                      }}
+                    />
+                  </div>
                 ) : (
                 <>
                 {error && (
@@ -354,6 +367,22 @@ export function LoginPage() {
                 </>
                 )}
 
+                {!(phoneEnabled && usePhone) && (
+                  <p className="mt-4 text-center text-sm">
+                    <button
+                      type="button"
+                      data-testid="toggle-email-code-signin"
+                      onClick={() => {
+                        setError(null);
+                        setUseEmailCode((v) => !v);
+                      }}
+                      className="font-medium text-brand-600 transition hover:text-brand-700"
+                    >
+                      {useEmailCode ? 'Use password instead' : 'Email me a code instead'}
+                    </button>
+                  </p>
+                )}
+
                 {phoneEnabled && (
                   <p className="mt-4 text-center text-sm">
                     <button
@@ -361,11 +390,12 @@ export function LoginPage() {
                       data-testid="toggle-phone-signin"
                       onClick={() => {
                         setError(null);
+                        setUseEmailCode(false);
                         setUsePhone((v) => !v);
                       }}
                       className="font-medium text-brand-600 transition hover:text-brand-700"
                     >
-                      {usePhone ? 'Use email instead' : 'Use phone number instead'}
+                      {usePhone ? 'Use email instead' : 'Text me a code instead'}
                     </button>
                   </p>
                 )}

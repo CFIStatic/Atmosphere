@@ -55,6 +55,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<Membership | null>;
   /** Finish a text-message-code sign-in (or sign-up when terms are passed). */
   loginWithPhone: (phone: string, code: string, acceptedTermsVersion?: string) => Promise<Membership | null>;
+  loginWithEmailCode: (email: string, code: string) => Promise<Membership | null>;
   signup: (email: string, password: string, acceptedTermsVersion: string) => Promise<SignupResult>;
   /** Adopt a session the backend just established (e.g. after a password reset). */
   adoptUser: (user: AuthUser) => Promise<Membership | null>;
@@ -235,6 +236,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadMembership],
   );
 
+  const loginWithEmailCode = useCallback(
+    async (email: string, code: string) => {
+      const { user, session, terms: nextTerms } = await api.emailCodeVerify(email, code);
+      rememberSession(session);
+      explicitAuthRef.current = true;
+      userIdRef.current = user?.id ?? null;
+      setUser(user);
+      announceAccountChange();
+      setTerms(nextTerms ?? publicTermsStatus());
+      return loadMembership();
+    },
+    [loadMembership],
+  );
+
   const signup = useCallback(
     async (
       email: string,
@@ -323,6 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile,
       login,
       loginWithPhone,
+      loginWithEmailCode,
       signup,
       adoptUser,
       logout,
@@ -340,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       login,
       loginWithPhone,
+      loginWithEmailCode,
       signup,
       adoptUser,
       logout,

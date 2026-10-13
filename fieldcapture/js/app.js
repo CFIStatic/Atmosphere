@@ -1616,6 +1616,97 @@
           });
       });
     }
+    // Email code sign-in: existing accounts get a 6-digit code instead of a password.
+    var codeForm = $('#email-code-form');
+    if (codeForm && form) {
+      var codeSentTo = null;
+      var codeError = function (msg) {
+        var el = $('#email-code-err');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.hidden = !msg;
+      };
+      var setCodeStep = function (sent) {
+        $('#code-email-wrap').hidden = Boolean(sent);
+        $('#email-code-wrap').hidden = !sent;
+        $('#email-code-resend').hidden = !sent;
+        $('#email-code-btn-lbl').textContent = sent ? 'Sign in' : 'Email me a code';
+        if (sent) {
+          $('#email-code-label').textContent = 'Enter the 6-digit code we emailed to ' + sent;
+          $('#email-code').focus();
+        }
+      };
+      var showCode = function (on) {
+        form.hidden = on;
+        codeForm.hidden = !on;
+        if (!on) return;
+        codeSentTo = null;
+        codeError('');
+        setCodeStep(null);
+        var typed = ($('#login-email') && $('#login-email').value || '').trim();
+        $('#code-email').value = typed;
+        $('#code-email').focus();
+      };
+      var sendEmailCode = function () {
+        var email = codeSentTo || ($('#code-email').value || '').trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          codeError('Enter a valid email address.');
+          return Promise.resolve();
+        }
+        codeError('');
+        return Core.startEmailCodeSignIn(email, API_BASE).then(function () {
+          codeSentTo = email;
+          setCodeStep(email);
+        }, function (err) {
+          codeError(err.message || 'Could not send a code. Try again.');
+        });
+      };
+      when('#email-code-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showCode(true); });
+      });
+      when('#email-code-back', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showCode(false); });
+      });
+      when('#email-code-resend', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); void sendEmailCode(); });
+      });
+      codeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = $('#email-code-btn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var done = function () { btn.disabled = false; };
+        if (!codeSentTo) {
+          sendEmailCode().then(done, done);
+          return;
+        }
+        var code = String($('#email-code').value || '').replace(/\D/g, '');
+        if (code.length !== 6) {
+          codeError('Enter the 6-digit code.');
+          done();
+          return;
+        }
+        codeError('');
+        Core.verifyEmailCodeSignIn(codeSentTo, code, API_BASE)
+          .then(function (res) {
+            var session = (res && res.session) || {};
+            if (!session.accessToken) throw new Error('Signed in, but no session came back. Try again.');
+            allowPlatformAdoption();
+            writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) return openInviteAfterAccountSignIn();
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            if (isTermsRequired(err)) { showTermsGate(); return; }
+            if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
+              return joinOfficeByInvite().catch(failJoinOffice);
+            }
+            codeError(err.message || 'That code did not work. Try again.');
+          })
+          .then(done, done);
+      });
+    }
     // Phone sign-in for crew without email: number → 6-digit text code.
     var phoneForm = $('#phone-form');
     if (phoneForm && form) {

@@ -21,6 +21,7 @@ import {
   internalStaffVerifySchema,
 } from '../lib/validation.js';
 import { phoneAuthRouter } from './authPhone.js';
+import { emailCodeAuthRouter } from './authEmailCode.js';
 import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
@@ -39,6 +40,7 @@ import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } f
 
 export const authRouter = Router();
 authRouter.use(phoneAuthRouter);
+authRouter.use(emailCodeAuthRouter);
 
 /**
  * Rate limiter for authentication endpoints to blunt credential-stuffing and
