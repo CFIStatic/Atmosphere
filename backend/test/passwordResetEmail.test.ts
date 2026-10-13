@@ -31,9 +31,10 @@ describe('passwordResetEmail', () => {
     assert.ok(!text.includes('access_token'));
   });
 
-  it('uses the five-bar mark, a terracotta button, and the expiry receipt', () => {
+  it('uses the website lockup PNG, a terracotta button, and the expiry receipt', () => {
     const { text, html } = passwordResetEmail({ url });
-    assert.ok(html.includes('#A8A29E'));
+    assert.ok(html.includes('atmosphere-lockup-light-3x.png'));
+    assert.ok(html.includes('alt="Atmosphere"'));
     assert.ok(html.includes('#F2670C'));
     assert.ok(html.includes('#D2500A'));
     assert.ok(html.includes('Choose a new password'));
