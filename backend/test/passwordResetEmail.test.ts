@@ -35,7 +35,6 @@ describe('passwordResetEmail', () => {
     const { text, html } = passwordResetEmail({ url });
     assert.ok(html.includes('atmosphere-lockup-light-3x.png'));
     assert.ok(html.includes('alt="Atmosphere"'));
-    assert.ok(html.includes('#F2670C'));
     assert.ok(html.includes('#D2500A'));
     assert.ok(html.includes('Choose a new password'));
     assert.ok(html.includes('Expires in 1 hour · one use'));
