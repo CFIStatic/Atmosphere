@@ -12,8 +12,13 @@
  * (every quote must be an exact transcript line). The quote check fixes
  * quotes only; it never deletes the rest of an answer.
  *
- * Switch: ASK_AGENT=on (everyone), off (nobody), or beta (default: only turns
- * that ask for engine "agent", which the Chat toggle sends).
+ * Model: every turn starts on the fast model, which hands the turn to the
+ * deepest model itself (think_harder) when the request deserves it. No keyword
+ * list picks the model.
+ *
+ * Switch: ASK_AGENT=on (default: everyone; a turn can still ask for "classic"),
+ * off (nobody: the classic path answers), or beta (only turns that ask for
+ * engine "agent").
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
@@ -39,8 +44,7 @@ import {
   type AskLookupResult,
   type AskLookupTraceStep,
 } from './askLookup.js';
-import { localStamp, classifyAskIntent, isJobOverview } from './askPolish.js';
-import { needsCriticalEscalation } from './askRoute.js';
+import { localStamp } from './askPolish.js';
 import { parseMomentSource } from './askMoments.js';
 import { chunkClipTranscript, type TranscriptChunk } from './askTranscriptIndex.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
@@ -58,7 +62,7 @@ export type AskEngine = 'agent' | 'classic';
 
 /** Whether this turn runs on the agent. */
 export function askAgentEnabled(requested?: string | null): boolean {
-  const mode = (process.env.ASK_AGENT ?? 'beta').trim().toLowerCase();
+  const mode = (process.env.ASK_AGENT ?? 'on').trim().toLowerCase();
   if (mode === 'off' || mode === '0' || mode === 'false') return false;
   if (mode === 'on' || mode === '1' || mode === 'true') return requested !== 'classic';
   return requested === 'agent';
@@ -97,6 +101,12 @@ DOING THINGS
   ⟦/artifact⟧
   with one sentence before it. Never invent a price.
 
+HOW HARD TO THINK
+- You start on a fast model. Before writing anything, call think_harder when the request deserves the deepest model: money, estimates, supplements or line items; a dispute, claim denial, liability or safety question; deadlines and legal or insurance wording; a summary or recap of a whole job; a draft that will be sent to a homeowner, adjuster or crew; comparing several clips or jobs; a multi-step task; or whenever you are unsure you would get it right. Quick look-ups, simple facts, chit-chat and short how-tos do not need it.
+
+COMPUTER RESULTS
+- A message that starts "Computer finished:" comes from the app, not the person: Computer just finished a task they asked for. Report what it found or did from the Computer results (the numbers, names, what was sent), plainly and briefly, and offer the obvious next step. If it failed or stopped, say why in one sentence and what they can do.
+
 WRITING
 ${CHAT_VOICE_RULES}
 - Markdown is rendered. Short paragraphs; bullets only for parallel items; a table for comparisons.
@@ -118,6 +128,17 @@ const WEB_TOOL = {
       include_domains: { type: 'array', items: { type: 'string' }, description: 'Optional hostnames.' },
     },
     required: ['query'],
+  },
+};
+
+const DEEP_TOOL = {
+  name: 'think_harder',
+  description:
+    'Hand this turn to the deepest model before answering. Call it alone, first, for money, estimates, disputes, safety, deadlines, whole-job summaries, drafts that will be sent, comparisons, multi-step work, or when unsure.',
+  input_schema: {
+    type: 'object' as const,
+    properties: { reason: { type: 'string', description: 'A few words on why.' } },
+    required: [],
   },
 };
 
@@ -183,17 +204,11 @@ export function agentJobContext(catalog: AskLookupCatalog, jobFileRecord: string
   return `${build(false).slice(0, JOB_CONTEXT_CHARS)}\n\n(Transcripts are not inlined for this large job. Use search_transcripts and get_clip.)`;
 }
 
-/** Opus for drafts, overviews, money, safety, disputes and deadlines; Sonnet for the rest. */
-export function agentModelFor(question: string): { model: string; deep: boolean } {
-  const q = question.trim();
-  const deep =
-    needsCriticalEscalation(q) ||
-    classifyAskIntent(q).kind === 'task' ||
-    isJobOverview(q) ||
-    /\b(?:summar(?:y|ize|ise)|recap|walk me through|compare|versus|draft|write up|estimate|scope of work|supplement)\b/i.test(q);
+/** The fast model every turn starts on, and the deep model it can hand the turn to. */
+export function agentModels(): { fast: string; deep: string } {
   const fast = (process.env.ASK_AGENT_MODEL ?? '').trim() || askFastAnthropicModel();
-  const strong = (process.env.ASK_AGENT_DEEP_MODEL ?? '').trim() || askReasoningConfig().anthropicModel;
-  return deep ? { model: strong, deep: true } : { model: fast, deep: false };
+  const deep = (process.env.ASK_AGENT_DEEP_MODEL ?? '').trim() || askReasoningConfig().anthropicModel;
+  return { fast, deep };
 }
 
 /** Keep only source ids that point at this job's clips (or non-clip job records). */
@@ -268,6 +283,8 @@ export type AskAgentResult = {
   trace: AskLookupTraceStep[];
   webHits: AskWebHit[];
   computerStarted: boolean;
+  /** The fast model handed this turn to the deep model. */
+  escalated: boolean;
 };
 
 const anthropicCall: AskAgentModelCall = async (req) => {
@@ -315,14 +332,18 @@ function historyMessages(history: AskAgentInput['history'], catalog: AskLookupCa
 export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult> {
   const { catalog } = input;
   const zone = input.timeZone || catalog.timeZone || 'America/Chicago';
-  const pick = agentModelFor(input.question);
-  const shaped = pick.deep ? anthropicReasoningRequest(pick.model, askInteractiveDeepEffort()) : null;
-  const tools = [
+  const models = agentModels();
+  let model = models.fast;
+  let shaped: ReturnType<typeof anthropicReasoningRequest> | null = null;
+  let escalated = false;
+  const baseTools = [
     ...ASK_LOOKUP_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     ...(input.webSearch && isAskWebSearchConfigured() ? [WEB_TOOL] : []),
     ...(input.computer ? [COMPUTER_TOOL] : []),
     ...(input.actions?.tools ?? []),
   ];
+  const canEscalate = models.deep !== models.fast;
+  let tools = canEscalate ? [...baseTools, DEEP_TOOL] : baseTools;
   const actionNames = new Set((input.actions?.tools ?? []).map((t) => t.name));
   // Cached: the instructions, then the whole job file. Both stay the same for
   // every question on this job; the question and this turn's context follow.
@@ -339,24 +360,22 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
     `${askClockSystemRules(input.now ?? new Date(), zone)}` +
     (turnContext ? `\n\n${turnContext}` : '') +
     `\n\n${input.question.trim()}`;
-  const messages: Anthropic.MessageParam[] = [
-    ...historyMessages(input.history, catalog),
-    { role: 'user', content: userText },
-  ];
+  const opening: Anthropic.MessageParam[] = [...historyMessages(input.history, catalog), { role: 'user', content: userText }];
+  let messages: Anthropic.MessageParam[] = [...opening];
   const call = input.callModel ?? anthropicCall;
   const deadline = AbortSignal.timeout(TURN_BUDGET_MS);
   const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
   const trace: AskLookupTraceStep[] = [];
   const webHits: AskWebHit[] = [];
   const usages: Array<MeasuredUsage | null> = [];
-  let model: string | null = null;
+  let servedBy: string | null = null;
   let answer = '';
 
   for (let round = 0; round < MAX_ROUNDS && !signal.aborted; round += 1) {
     let streamed = '';
     let sawTool = false;
     const turn = await call({
-      model: pick.model,
+      model,
       system,
       messages,
       tools,
@@ -374,9 +393,10 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
       return null;
     });
     if (!turn) break;
-    model = turn.model || model;
+    servedBy = turn.model || servedBy;
     usages.push(turn.usage);
     const calls = turn.blocks.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+    const wantsDeep = !escalated && calls.some((c) => c.name === DEEP_TOOL.name);
     const text = turn.blocks
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
@@ -399,12 +419,12 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
         start_url: typeof args.start_url === 'string' ? args.start_url : null,
       });
       input.onToken?.(reply);
-      return { answer: reply, model, usage: mergeMeasuredUsages(usages, model), trace, webHits, computerStarted: true };
+      return { answer: reply, model: servedBy, usage: mergeMeasuredUsages(usages, servedBy), trace, webHits, computerStarted: true, escalated };
     }
 
     messages.push({ role: 'assistant', content: turn.blocks as Anthropic.ContentBlockParam[] });
     const results = await Promise.all(
-      calls.map(async (c) => {
+      calls.filter((c) => c.name !== DEEP_TOOL.name).map(async (c) => {
         const args = (c.input ?? {}) as Record<string, unknown>;
         input.onStatus?.(statusFor(c.name));
         let result: AskLookupResult;
@@ -439,6 +459,21 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
       }),
     );
     messages.push({ role: 'user', content: results });
+    if (wantsDeep) {
+      // Start the turn over on the deep model. Lookups already done this turn
+      // ride along as notes, so the deep model does not repeat them.
+      escalated = true;
+      model = models.deep;
+      shaped = anthropicReasoningRequest(model, askInteractiveDeepEffort());
+      tools = baseTools;
+      if (streamed) input.onPreviewReset?.();
+      input.onStatus?.('Thinking it through…');
+      const done = trace.map((t) => `- ${t.tool}: ${t.result.summary}`).join('\n').slice(0, 6000);
+      messages = done
+        ? [...opening.slice(0, -1), { role: 'user', content: `${userText}\n\n(Looked up so far this turn:\n${done})` }]
+        : [...opening];
+      continue;
+    }
   }
 
   if (!answer) {
@@ -455,7 +490,7 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
   finished = filterSources(finished, catalog);
   if (chunks.length) finished = enforceQuoteGrounding(finished, { chunks, question: input.question }).answer;
   finished = stripExternalAskLinks(finished).trim();
-  return { answer: finished, model, usage: mergeMeasuredUsages(usages, model), trace, webHits, computerStarted: false };
+  return { answer: finished, model: servedBy, usage: mergeMeasuredUsages(usages, servedBy), trace, webHits, computerStarted: false, escalated };
 }
 
 function statusFor(tool: string): string {

@@ -50,7 +50,16 @@ export function ComputerNotSetUpCard() {
  * active (that is the status stream), and shows the approval or Needs-you
  * card when the agent is waiting on the person.
  */
-export function ComputerTaskCard({ path, summary }: { path?: string; summary?: string }) {
+export function ComputerTaskCard({
+  path,
+  summary,
+  onFinished,
+}: {
+  path?: string;
+  summary?: string;
+  /** Called once when a task this view watched running reaches a final state. */
+  onFinished?: (task: ComputerTaskView) => void;
+}) {
   const ref = computerTaskRef(path);
   // Unknown / missing path is not "Computer isn't set up" — that is only the
   // explicit not-set-up sentinel when Browserbase is unconfigured.
@@ -119,10 +128,16 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
       </div>
     );
   }
-  return <ComputerTaskLive taskId={ref.id} />;
+  return <ComputerTaskLive taskId={ref.id} onFinished={onFinished} />;
 }
 
-function ComputerTaskLive({ taskId }: { taskId: string }) {
+function ComputerTaskLive({ taskId, onFinished }: { taskId: string; onFinished?: (task: ComputerTaskView) => void }) {
+  const onFinishedRef = useRef(onFinished);
+  useEffect(() => {
+    onFinishedRef.current = onFinished;
+  }, [onFinished]);
+  /** Only a task seen running here reports finishing (reopening an old chat does not). */
+  const sawActive = useRef(false);
   const [task, setTask] = useState<ComputerTaskView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<'watch' | 'control' | null>(null);
@@ -161,6 +176,11 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     const tick = async () => {
       const next = await load();
       if (stopped) return;
+      if (next && computerTaskIsActive(next.status)) sawActive.current = true;
+      else if (next && sawActive.current) {
+        sawActive.current = false;
+        onFinishedRef.current?.(next);
+      }
       if (!next || computerTaskIsActive(next.status)) timer = window.setTimeout(tick, POLL_MS);
     };
     void tick();

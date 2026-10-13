@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type Anthropic from '@anthropic-ai/sdk';
 import {
   agentJobContext,
-  agentModelFor,
+  agentModels,
   askAgentEnabled,
   runAskAgent,
   type AskAgentModelCall,
@@ -64,15 +64,15 @@ function scripted(turns: Scripted, seen: Parameters<AskAgentModelCall>[0][] = []
   };
 }
 
-test('the switch: beta by default (only turns that ask), on, off', () => {
+test('the switch: on for everyone by default (classic only when a turn asks), beta, off', () => {
   const prev = process.env.ASK_AGENT;
   try {
     delete process.env.ASK_AGENT;
-    assert.equal(askAgentEnabled(undefined), false);
-    assert.equal(askAgentEnabled('agent'), true);
-    process.env.ASK_AGENT = 'on';
     assert.equal(askAgentEnabled(undefined), true);
     assert.equal(askAgentEnabled('classic'), false);
+    process.env.ASK_AGENT = 'beta';
+    assert.equal(askAgentEnabled(undefined), false);
+    assert.equal(askAgentEnabled('agent'), true);
     process.env.ASK_AGENT = 'off';
     assert.equal(askAgentEnabled('agent'), false);
   } finally {
@@ -91,12 +91,48 @@ test('the cached job file has every clip with its cite and transcript, and nothi
   assert.equal(ctx, agentJobContext(catalog(), 'Brief: lockbox on side door'));
 });
 
-test('Sonnet by default, the deep model for drafts, money and summaries', () => {
-  assert.equal(agentModelFor('what did they say about the carpet pad?').deep, false);
-  assert.equal(agentModelFor('who won the packers game').deep, false);
-  assert.equal(agentModelFor('summarize this job').deep, true);
-  assert.equal(agentModelFor('draft an email to the adjuster').deep, true);
-  assert.equal(agentModelFor('how much is the deductible').deep, true);
+test('every turn starts on the fast model; the model hands itself to the deep model with think_harder', async () => {
+  const prev = { fast: process.env.ASK_AGENT_MODEL, deep: process.env.ASK_AGENT_DEEP_MODEL };
+  process.env.ASK_AGENT_MODEL = 'fast-test-model';
+  process.env.ASK_AGENT_DEEP_MODEL = 'deep-test-model';
+  try {
+    assert.deepEqual(agentModels(), { fast: 'fast-test-model', deep: 'deep-test-model' });
+    const seen: Parameters<AskAgentModelCall>[0][] = [];
+    const quick = await runAskAgent({
+      question: 'what did they say about the carpet pad?',
+      catalog: catalog(),
+      callModel: scripted([{ text: 'The carpet pad is soaked along the north wall.' }], seen),
+    });
+    assert.equal(seen[0]!.model, 'fast-test-model');
+    assert.ok(seen[0]!.tools.some((t) => t.name === 'think_harder'));
+    assert.equal(quick.escalated, false);
+
+    const deepSeen: Parameters<AskAgentModelCall>[0][] = [];
+    const deep = await runAskAgent({
+      question: 'draft the supplement request for the adjuster',
+      catalog: catalog(),
+      callModel: scripted(
+        [
+          { tools: [{ name: 'search_transcripts', input: { query: 'dehumidifiers' } }, { name: 'think_harder', input: { reason: 'draft to adjuster' } }] },
+          { text: 'Here is the draft.' },
+        ],
+        deepSeen,
+      ),
+    });
+    assert.equal(deep.escalated, true);
+    assert.deepEqual(deepSeen.map((r) => r.model), ['fast-test-model', 'deep-test-model']);
+    // The deep model starts the turn over (no half-finished tool exchange), without the escalation tool,
+    // and with what was already looked up.
+    assert.ok(!deepSeen[1]!.tools.some((t) => t.name === 'think_harder'));
+    assert.equal(deepSeen[1]!.messages.length, 1);
+    assert.match(String(deepSeen[1]!.messages[0]!.content), /Looked up so far this turn/);
+    assert.match(deep.answer, /Here is the draft/);
+  } finally {
+    for (const [k, v] of [['ASK_AGENT_MODEL', prev.fast], ['ASK_AGENT_DEEP_MODEL', prev.deep]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });
 
 test('one turn: job file and question go to the model, the system prompt is cached, the answer streams', async () => {

@@ -29,7 +29,7 @@ import type { DocumentFacts } from '../documents/types.js';
 import { formatThreadMemoryForPrompt, isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
 import { askAgentEnabled, runAskAgent } from './askAgent.js';
-import { anthropicAskApiKey } from '../lib/askModel.js';
+import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
@@ -1391,6 +1391,8 @@ export async function answerFromJobFile(input: {
   ) {
     const agent = await answerWithAgent(input, { computerAllowed: computerCtx.allowed, computerBlock, apiKey });
     if (agent) return agent;
+    // Emergency fallback only: the agent gave no answer, so the classic path answers this turn.
+    logAskFailure('ask_agent_fallback', new Error('agent returned no answer'));
   }
 
   // "What websites can you log in to?" is about Chat, not the file or an upload.
