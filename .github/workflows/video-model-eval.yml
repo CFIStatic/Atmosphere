@@ -11,11 +11,6 @@ on:
       proof_ids:
         description: Comma-separated job_proofs ids
         required: false
-  push:
-    branches: [claude/project-thread-jjia2b]
-    paths:
-      - backend/scripts/videoModelEval.ts
-      - .github/workflows/video-model-eval.yml
 
 concurrency:
   group: video-model-eval

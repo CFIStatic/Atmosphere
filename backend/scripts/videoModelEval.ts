@@ -15,6 +15,7 @@
  * the 6-still day-film read, and the conversation summary. Cost comes from
  * the providers' own usage numbers on each response, priced by the rate card.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { modelPriceTable, tokenCostUsd } from '../src/metering/modelPriceTable.js';
 
