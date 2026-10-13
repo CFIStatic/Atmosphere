@@ -343,6 +343,33 @@ export function askToolsForAccess(access: AskAccessRole): ToolDef[] {
   });
 }
 
+/**
+ * Office actions the job Chat model may call mid-answer, so a command works
+ * however it is phrased. Texts and access removals only propose a card.
+ * Tools that already ran this turn are left out so nothing is proposed twice.
+ */
+export const ASK_MODEL_ACTION_TOOLS: AskToolName[] = [
+  'send_job_sms',
+  'update_job_fields',
+  'propose_revoke_access',
+  'list_who_has_access',
+  'get_punch_list',
+  'get_crm_record',
+  'search_crm',
+];
+
+export function askModelActionTools(access: AskAccessRole, alreadyRan: Iterable<string> = []) {
+  if (access !== 'org') return [];
+  const ran = new Set(alreadyRan);
+  return askToolsForAccess(access)
+    .filter((t) => ASK_MODEL_ACTION_TOOLS.includes(t.name) && !ran.has(t.name))
+    .map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: { type: 'object' as const, ...t.input_schema },
+    }));
+}
+
 export function anthropicToolsForAccess(access: AskAccessRole) {
   return askToolsForAccess(access).map((t) => ({
     name: t.name,

@@ -7,6 +7,7 @@
  */
 
 import { appShellSafeBillingText, isInAppShell } from './appShell';
+import { readChatEngine } from './chatEngine';
 import type { ComputerOrderSelection } from './supplyOrderApproval';
 import type {
   ComputerLiveLink,
@@ -4322,6 +4323,7 @@ export const api = {
         documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
         supersedesId: opts?.supersedesId ?? undefined,
         timeZone: browserTimeZone(),
+        engine: readChatEngine() === 'agent' ? 'agent' : undefined,
       }),
     }),
 
@@ -4366,6 +4368,7 @@ export const api = {
           documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
           supersedesId: opts?.supersedesId ?? undefined,
           timeZone: browserTimeZone(),
+          engine: readChatEngine() === 'agent' ? 'agent' : undefined,
         }),
       });
     } catch (err) {
