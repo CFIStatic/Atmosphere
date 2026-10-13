@@ -120,26 +120,26 @@ describe('SharePopup access variant (Access tab → Invite)', () => {
     expect(screen.getByRole('option', { name: /Subcontractor/ })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Homeowner/ })).toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Crew/ }));
-    await user.click(await screen.findByRole('radio', { name: 'Mobile number' }));
+    await user.click(await screen.findByRole('radio', { name: 'Phone' }));
     await user.type(screen.getByPlaceholderText('Delgado Roofing'), 'Sam Rivera');
-    await user.type(screen.getByPlaceholderText('(555) 010-0000'), '5550100000');
+    await user.type(screen.getByPlaceholderText('(555) 123-4567'), '3125550100');
     await user.click(screen.getByRole('button', { name: 'Text crew invite' }));
     await waitFor(() =>
       expect(addJobParty).toHaveBeenCalledWith('job-1', {
         company: 'Sam Rivera',
-        phone: '5550100000',
+        phone: '+13125550100',
         role: 'subcontractor',
         serviceRole: 'crew',
       }),
     );
     await waitFor(() => expect(onInvited).toHaveBeenCalled());
-    expect(await screen.findByText(/Invite texted to 5550100000/)).toBeInTheDocument();
+    expect(await screen.findByText(/Invite texted to \(312\) 555-0100/)).toBeInTheDocument();
   });
 
   it('hides the mobile option when phone sign-in is off', async () => {
     phoneAuthConfig.mockResolvedValue({ enabled: false });
     render(<SharePopup jobId="job-1" variant="access" onClose={() => {}} />);
     await waitFor(() => expect(phoneAuthConfig).toHaveBeenCalled());
-    expect(screen.queryByRole('radio', { name: 'Mobile number' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Phone' })).not.toBeInTheDocument();
   });
 });
