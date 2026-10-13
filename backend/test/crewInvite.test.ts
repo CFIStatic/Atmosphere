@@ -25,7 +25,6 @@ test('an invite with no email cannot be claimed by whoever holds the link', () =
 test('the invite summary names the company and job, never more', () => {
   assert.deepEqual(crewInviteSummary({ email: ' Sub@X.com ' }, 'Acme GC', ' Roof '), {
     recipientEmail: 'sub@x.com',
-    recipientPhone: null,
     orgName: 'Acme GC',
     jobTitle: 'Roof',
   });

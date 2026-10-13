@@ -168,7 +168,6 @@ export type PartyRow = {
   trade: string | null;
   contact_name: string | null;
   email: string | null;
-  phone?: string | null;
   role: string | null;
   invited_at: string | null;
   last_seen_at: string | null;
@@ -176,7 +175,7 @@ export type PartyRow = {
 };
 
 const PARTY_TOKEN_SELECT =
-  'id, org_id, job_id, company, trade, contact_name, email, phone, role, invited_at, last_seen_at, revoked_at';
+  'id, org_id, job_id, company, trade, contact_name, email, role, invited_at, last_seen_at, revoked_at';
 
 /**
  * Resolve a job-share / Field Capture token to one party, then return an

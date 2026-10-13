@@ -103,9 +103,10 @@ export function orgInviteSms(input: { orgName: string; inviterName?: string | nu
   return `${who ? `${who} invited you` : 'You are invited'} to join ${org} on Atmosphere. Open ${input.link} and sign in with this number. We will text you a 6-digit code.`;
 }
 
-/** Text for a sub or homeowner invited to one job by phone. */
-export function jobInviteSms(input: { orgName: string; jobTitle?: string | null; link: string }): string {
-  const org = input.orgName.trim() || 'Your contractor';
-  const job = input.jobTitle?.trim();
-  return `${org} shared ${job ? `"${job}"` : 'a job'} with you on Atmosphere. Open ${input.link} and sign in with this number. We will text you a 6-digit code.`;
+/**
+ * Phone codes create accounts only for numbers with a live crew invite.
+ * Everyone else signs up with email; an existing phone account still signs in.
+ */
+export function effectivePhoneIntent(requested: 'signin' | 'signup', invited: boolean): 'signin' | 'signup' {
+  return requested === 'signup' && invited ? 'signup' : 'signin';
 }

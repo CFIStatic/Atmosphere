@@ -2,8 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
 import { InviteList } from './InviteList';
-import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
-import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 import {
   planRequiredMessage,
   UpgradePrompt,
@@ -46,11 +44,6 @@ export function ShareJobProgressPanel({
     else setCreatingInternal(open);
   }
   const [email, setEmail] = useState('');
-  const phoneEnabled = usePhoneAuthEnabled();
-  const [byPhone, setByPhone] = useState(false);
-  const [phone, setPhone] = useState('');
-  const usingPhone = phoneEnabled && byPhone;
-  const phoneE164 = normalizePhoneE164(phone);
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<CreateEvidenceShareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,22 +76,21 @@ export function ShareJobProgressPanel({
       setError(planRequiredMessage());
       return;
     }
-    const to = usingPhone ? phoneE164 : email.trim().toLowerCase();
+    const to = email.trim().toLowerCase();
     if (!to) {
-      setError(usingPhone ? 'Enter a valid mobile number.' : 'Enter an email to send the invite.');
+      setError('Enter an email to send the invite.');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.createProgressShare(
-        usingPhone
-          ? { jobId, label: formatPhone(to), recipientPhone: to }
-          : { jobId, label: to, recipientEmail: to },
-      );
+      const res = await api.createProgressShare({
+        jobId,
+        label: to,
+        recipientEmail: to,
+      });
       setMade(res);
       setEmail('');
-      setPhone('');
       if (!modal) setCreating(false);
       await load();
     } catch (err) {
@@ -131,46 +123,21 @@ export function ShareJobProgressPanel({
 
       {creating && (
         <form onSubmit={create} className={`space-y-3 ${modal ? '' : 'mt-4'}`}>
-          {usingPhone ? (
-            <label className="block">
-              <span className="text-xs font-medium text-ink-700">Homeowner mobile number</span>
-              <input
-                required
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-                placeholder="(555) 123-4567"
-                className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
-              />
-            </label>
-          ) : (
-            <label className="block">
-              <span className="text-xs font-medium text-ink-700">Homeowner email</span>
-              <input
-                required
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="homeowner@example.com"
-                className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
-              />
-            </label>
-          )}
-          {phoneEnabled && (
-            <button
-              type="button"
-              onClick={() => setByPhone((v) => !v)}
-              className="text-xs font-medium text-brand-600 transition hover:text-brand-700"
-            >
-              {byPhone ? 'Use email instead' : 'Use phone number instead'}
-            </button>
-          )}
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Homeowner email</span>
+            <input
+              required
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="homeowner@example.com"
+              className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
+            />
+          </label>
           <button
             type="submit"
-            disabled={busy || (usingPhone ? !phoneE164 : !email.trim())}
+            disabled={busy || !email.trim()}
             className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
@@ -182,12 +149,10 @@ export function ShareJobProgressPanel({
       {made && (
         <p
           className={`mt-3 rounded-lg px-3 py-2 text-xs ${
-            made.emailed || made.texted ? 'bg-success-50 text-success-600' : 'bg-danger-50 text-danger-600'
+            made.emailed ? 'bg-success-50 text-success-600' : 'bg-danger-50 text-danger-600'
           }`}
         >
-          {made.texted
-            ? `Invite texted to ${made.share.label}.`
-            : made.emailed
+          {made.emailed
             ? `Invite sent to ${made.share.label}.`
             : `Invite created for ${made.share.label}, but the email did not send. Try again.`}
         </p>

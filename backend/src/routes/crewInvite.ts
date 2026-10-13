@@ -7,7 +7,6 @@ import { adminForPartyToken } from '../lib/scopedAdmin.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { claimInvitedPartiesForUser, normalizeInviteEmail } from '../shared/inviteeJobAccess.js';
 import { jobProgressPath } from '../shared/jobProgressGrants.js';
-import { authPhoneToE164, formatPhoneForDisplay, normalizePhoneE164 } from '../auth/phoneAuth.js';
 
 /**
  * A subcontractor's invite link (Share > Subcontractor or crew), opened on
@@ -40,37 +39,23 @@ const TokenBody = z.object({ token: z.string().trim().min(8).max(400) });
 
 /** What the sign-in page needs: who it was sent to, from which company, which job. */
 export function crewInviteSummary(
-  party: { email?: string | null; phone?: string | null },
+  party: { email?: string | null },
   orgName: string | null | undefined,
   jobTitle: string | null | undefined,
-): { recipientEmail: string | null; recipientPhone: string | null; orgName: string; jobTitle: string | null } {
-  const recipientEmail = normalizeInviteEmail(party.email) || null;
+): { recipientEmail: string | null; orgName: string; jobTitle: string | null } {
   return {
-    recipientEmail,
-    recipientPhone: recipientEmail ? null : normalizePhoneE164(party.phone),
+    recipientEmail: normalizeInviteEmail(party.email) || null,
     orgName: orgName?.trim() || 'Your contractor',
     jobTitle: jobTitle?.trim() || null,
   };
 }
 
-/** The signed-in account may claim only an invite addressed to its own email or phone. */
+/** The signed-in account may claim only an invite addressed to its own email. */
 export function assertMayClaimCrewInvite(
-  party: { email?: string | null; phone?: string | null },
+  party: { email?: string | null },
   userEmail: string | null | undefined,
-  userPhone?: string | null,
 ): void {
   const invited = normalizeInviteEmail(party.email);
-  const invitedPhone = invited ? null : normalizePhoneE164(party.phone);
-  if (invitedPhone) {
-    if (authPhoneToE164(userPhone) !== invitedPhone) {
-      throw new HttpError(
-        403,
-        `This job was shared with ${formatPhoneForDisplay(invitedPhone)}. Sign in with that number.`,
-        'invite_phone_mismatch',
-      );
-    }
-    return;
-  }
   if (!invited) {
     throw new HttpError(
       409,
@@ -112,9 +97,9 @@ crewInviteRouter.post('/claim', requireAuth, async (req: Request, res: Response,
   try {
     const { token } = TokenBody.parse(req.body ?? {});
     const { party, admin } = await adminForPartyToken(token);
-    assertMayClaimCrewInvite(party as any, req.user!.email, req.user!.phone);
+    assertMayClaimCrewInvite(party as any, req.user!.email);
     await jobAndOrg(admin.raw, party as any);
-    await claimInvitedPartiesForUser(admin.raw, { id: req.user!.id, email: req.user!.email, phone: req.user!.phone });
+    await claimInvitedPartiesForUser(admin.raw, { id: req.user!.id, email: req.user!.email });
     res.json({ ok: true, orgId: party.org_id, jobId: party.job_id, path: jobProgressPath(party.job_id) });
   } catch (err) {
     next(err);

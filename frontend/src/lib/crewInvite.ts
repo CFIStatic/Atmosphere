@@ -16,12 +16,3 @@ export function crewInviteLoginHref(token: string, email?: string | null): strin
   if (address) params.set('email', address);
   return `/login?${params.toString()}`;
 }
-
-/** Phone-only invite: sign in (or create the account) with the invited number. */
-export function crewInvitePhoneLoginHref(token: string, phone: string): string {
-  const params = new URLSearchParams();
-  params.set('next', crewInvitePath(token));
-  params.set('phone', phone);
-  params.set('invited', '1');
-  return `/login?${params.toString()}`;
-}

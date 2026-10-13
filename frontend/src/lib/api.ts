@@ -1862,7 +1862,6 @@ export interface CreateEvidenceShareResult {
   };
   /** Whether the notification actually left the org's connected mailbox. */
   emailed: boolean;
-  texted?: boolean;
   /** Whether the pinned address already answers to an Atmosphere account. */
   recipientHasAccount: boolean;
 }
@@ -3977,14 +3976,12 @@ export const api = {
       trade?: string | null;
       contactName?: string | null;
       email?: string | null;
-      phone?: string | null;
       role?: string;
     },
   ) =>
     request<{
       party: JobParty;
       emailed?: boolean;
-      texted?: boolean;
       sharePath?: string | null;
       fieldCapturePath?: string | null;
     }>(`/api/operations/shared/${jobId}/parties`, {
@@ -4624,8 +4621,7 @@ export const api = {
   createProgressShare: (input: {
     jobId: string;
     label: string;
-    recipientEmail?: string;
-    recipientPhone?: string;
+    recipientEmail: string;
     expiresInDays?: number;
   }) =>
     request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {
@@ -4698,7 +4694,7 @@ export const api = {
   },
 
   crewInviteInfo: (token: string) =>
-    request<{ recipientEmail: string | null; recipientPhone?: string | null; orgName: string; jobTitle: string | null }>('/api/crew-invite/info', {
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>('/api/crew-invite/info', {
       method: 'POST',
       body: JSON.stringify({ token }),
     }),

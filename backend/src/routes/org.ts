@@ -739,14 +739,15 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         .eq('id', req.user!.id)
         .maybeSingle();
       const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
-      const params = new URLSearchParams({ intent: 'join', phone });
+      // Sign in with this number (the code creates the account), then join.
+      const params = new URLSearchParams({ phone, invited: '1', next: '/signup?intent=join' });
       const sms = await sendSms({
         to: phone,
         orgId,
         body: orgInviteSms({
           orgName: name,
           inviterName: (profile as any)?.full_name ?? null,
-          link: `${origin}/signup?${params.toString()}`,
+          link: `${origin}/login?${params.toString()}`,
         }),
       });
       if (!sms.ok) console.warn(`[org-invite] text to ${phone} failed: ${sms.reason}`);

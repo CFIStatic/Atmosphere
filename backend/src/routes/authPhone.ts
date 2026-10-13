@@ -5,10 +5,11 @@ import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { config } from '../config.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { setSessionCookies } from '../lib/session.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import { recordEvent } from '../lib/memory.js';
 import { publicUser, sessionTokens } from '../auth/passwordAccount.js';
-import { createOtpThrottle, normalizePhoneE164, phoneAuthEnabled } from '../auth/phoneAuth.js';
+import { createOtpThrottle, effectivePhoneIntent, normalizePhoneE164, phoneAuthEnabled } from '../auth/phoneAuth.js';
 import { clientIp, clientUserAgent } from '../legal/terms.js';
 import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
 
@@ -18,6 +19,20 @@ import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } f
  * Mounted under /api/auth.
  */
 export const phoneAuthRouter = Router();
+
+/** A live crew invite (org_invites) for this E.164 number. */
+async function hasPendingPhoneInvite(phone: string): Promise<boolean> {
+  const admin = unscopedAdminOrNull();
+  if (!admin) return false;
+  const { data } = await admin
+    .from('org_invites')
+    .select('id')
+    .eq('status', 'pending')
+    .eq('phone', phone)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
 
 const sendThrottle = createOtpThrottle();
 
@@ -82,7 +97,10 @@ phoneAuthRouter.get('/phone/config', (_req: Request, res: Response) => {
 phoneAuthRouter.post('/phone/start', startLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     requireEnabled();
-    const { phone, intent } = startSchema.parse(req.body ?? {});
+    let { phone, intent } = startSchema.parse(req.body ?? {});
+    // New accounts by phone are for invited crew only. Anyone else signs up
+    // with email; an existing phone account can always sign in.
+    if (intent === 'signup') intent = effectivePhoneIntent(intent, await hasPendingPhoneInvite(phone));
     const verdict = sendThrottle.check(phone);
     if (!verdict.ok) {
       res.setHeader('Retry-After', String(verdict.retryAfterSeconds));
@@ -98,7 +116,11 @@ phoneAuthRouter.post('/phone/start', startLimiter, async (req: Request, res: Res
     });
     if (error) {
       if (/signups? not allowed|user not found/i.test(error.message)) {
-        throw new HttpError(404, 'No account uses this number yet. Create an account to continue.', 'phone_not_registered');
+        throw new HttpError(
+          404,
+          'This number has not been invited. Ask your Global Admin to invite it, or sign in with email.',
+          'phone_not_invited',
+        );
       }
       if (/rate limit|security purposes/i.test(error.message)) {
         throw new HttpError(429, 'Too many codes requested. Please wait a minute.', 'rate_limited');

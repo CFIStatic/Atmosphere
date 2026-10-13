@@ -4,8 +4,8 @@ import {
   accountLabel,
   authPhoneToE164,
   createOtpThrottle,
+  effectivePhoneIntent,
   formatPhoneForDisplay,
-  jobInviteSms,
   normalizePhoneE164,
   orgInviteSms,
   phoneAuthEnabled,
@@ -65,32 +65,11 @@ test('invite texts carry the link and the code hint', () => {
   assert.match(org, /Jack invited you to join Acme Restoration/);
   assert.match(org, /https:\/\/x\.co\/s/);
   assert.match(org, /6-digit code/);
-  assert.match(jobInviteSms({ orgName: 'Acme', jobTitle: '12 Oak St', link: 'L' }), /shared "12 Oak St"/);
 });
 
-test('crew invite claim: phone-only invite matches the signed-in number', async () => {
-  const { assertMayClaimCrewInvite, crewInviteSummary } = await import('../src/routes/crewInvite.js');
-  const party = { email: null, phone: '+13125550100' };
-  assert.doesNotThrow(() => assertMayClaimCrewInvite(party, null, '13125550100'));
-  assert.throws(() => assertMayClaimCrewInvite(party, null, '13125550199'), /\(312\) 555-0100/);
-  assert.throws(() => assertMayClaimCrewInvite(party, 'a@b.co', null), /Sign in with that number/);
-  assert.deepEqual(crewInviteSummary(party, 'Acme', 'Oak'), {
-    recipientEmail: null,
-    recipientPhone: '+13125550100',
-    orgName: 'Acme',
-    jobTitle: 'Oak',
-  });
-  // Email invites behave as before.
-  assert.doesNotThrow(() => assertMayClaimCrewInvite({ email: 'sub@x.co', phone: '+13125550100' }, 'SUB@x.co', null));
-});
 
-test('partiesInvitedToPhone: phone-only live rows for that number', async () => {
-  const { partiesInvitedToPhone } = await import('../src/shared/inviteeJobAccess.js');
-  const rows = [
-    { id: '1', phone: '+13125550100', email: null, revoked_at: null },
-    { id: '2', phone: '(312) 555-0100', email: null, revoked_at: null },
-    { id: '3', phone: '+13125550100', email: 'x@y.co', revoked_at: null },
-    { id: '4', phone: '+13125550100', email: null, revoked_at: '2026-01-01' },
-  ];
-  assert.deepEqual(partiesInvitedToPhone(rows, '13125550100').map((r) => r.id), ['1', '2']);
+test('only invited numbers can create an account by text code', () => {
+  assert.equal(effectivePhoneIntent('signup', true), 'signup');
+  assert.equal(effectivePhoneIntent('signup', false), 'signin');
+  assert.equal(effectivePhoneIntent('signin', true), 'signin');
 });
