@@ -754,3 +754,26 @@ test('Restore 365 (restore365.net) is DASH: its company ID box is filled, and a 
   assert.equal(typed[1], COMPANY_ID);
   assert.ok(!res.message.includes(PASSWORD) && !res2.message.includes(COMPANY_ID));
 });
+
+test('adding a Company ID to a saved login keeps the saved password when the password box is left blank', async () => {
+  const t = setup();
+  const login = await seedLogin(t.store, 'restore365.net');
+  await saveCredential({ orgId: ORG, loginId: login.id, userId: ADMIN, canManage: true, credential: { username: USERNAME, password: PASSWORD } });
+  const view = await saveCredential({
+    orgId: ORG,
+    loginId: login.id,
+    userId: ADMIN,
+    canManage: true,
+    credential: { username: USERNAME, password: '', companyId: COMPANY_ID },
+  });
+  assert.equal(view.credential?.companyId, COMPANY_ID);
+  const row = (await t.store.getCredential(ORG, login.id))!;
+  assert.equal(openCredential(row.password_sealed, ORG, login.id, 'password', row.key_fingerprint), PASSWORD);
+  assert.equal(openCredential(row.company_id_sealed!, ORG, login.id, 'company_id', row.key_fingerprint), COMPANY_ID);
+  // A site with nothing saved yet still needs a password.
+  const fresh = await seedLogin(t.store, 'portal.other-carrier.test');
+  await assert.rejects(
+    saveCredential({ orgId: ORG, loginId: fresh.id, userId: ADMIN, canManage: true, credential: { username: USERNAME, password: '' } }),
+    /Enter the password/,
+  );
+});
