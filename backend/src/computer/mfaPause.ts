@@ -8,6 +8,8 @@ import type { NeedsYouReason, PageSignals } from './types.js';
 export interface MfaPause {
   reason: NeedsYouReason;
   message: string;
+  /** The approval number to show big in Chat. */
+  code?: string;
 }
 
 /** Build the Needs-you pause for a verification / number-matching page. */
@@ -15,7 +17,8 @@ export function mfaPauseFromSignals(signals: PageSignals): MfaPause | null {
   if (signals.approvalNumber) {
     return {
       reason: 'number_match',
-      message: `Approve ${signals.approvalNumber} on your phone, then press Resume.`,
+      message: `Enter ${signals.approvalNumber} in your authenticator app. Computer carries on once you approve.`,
+      code: signals.approvalNumber,
     };
   }
   if (signals.visibleOtpCode) {

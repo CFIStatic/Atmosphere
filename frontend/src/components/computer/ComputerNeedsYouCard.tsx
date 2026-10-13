@@ -14,6 +14,42 @@ export function ComputerNeedsYouCard({
   onResume: () => void;
   onCancel: () => void;
 }) {
+  // Number matching: show the number big; approving on the phone is all it takes.
+  if (needsYou.reason === 'number_match' && needsYou.code) {
+    return (
+      <div className="space-y-2.5 rounded-xl border border-brand-300 bg-brand-50 p-3" data-testid="computer-needs-you-card">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">Needs you</p>
+        <p className="text-[15px] font-semibold text-ink-900">Open your authenticator app and enter this number</p>
+        <p
+          className="rounded-lg border border-line bg-paper-0 py-3 text-center font-mono text-5xl font-bold tracking-widest text-ink-900"
+          data-testid="computer-needs-you-code"
+          aria-label={`Number to enter: ${needsYou.code.split('').join(' ')}`}
+        >
+          {needsYou.code}
+        </p>
+        <p className="text-sm text-ink-700">Computer keeps going by itself once you approve. You don&apos;t need to press anything here.</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onResume}
+            className="rounded-full border border-line bg-paper-0 px-3.5 py-1.5 text-[13px] font-semibold text-ink-800 transition hover:border-brand-200 disabled:opacity-50"
+          >
+            I approved it
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-full border border-line bg-paper-0 px-3.5 py-1.5 text-[13px] font-medium text-ink-600 transition hover:text-danger-600 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const step =
     needsYou.reason === 'captcha'
       ? 'Complete the captcha in the live view below.'

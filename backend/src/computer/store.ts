@@ -27,6 +27,8 @@ export interface ComputerTaskRow {
     since: string;
     /** JPEG of the page when Computer got stuck (shown with the handoff message). */
     screenshot_jpeg_b64?: string | null;
+    /** The number a sign-in page shows to approve in an authenticator app (read off the page, never made up). */
+    code?: string | null;
   } | null;
   human_control_by: string | null;
   human_control_since: string | null;

@@ -374,16 +374,17 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
   };
 
   /** Poll the task (and an approval) until a person acts, cancels, or the idle timeout passes. */
-  const waitForPerson = async (kind: 'approval' | 'needs_you' | 'control', approvalId?: string): Promise<WaitResult> => {
+  const waitForPerson = async (kind: 'approval' | 'needs_you' | 'control', approvalId?: string, done?: () => Promise<boolean>): Promise<WaitResult> => {
     try {
-      return await pollForPerson(kind, approvalId);
+      return await pollForPerson(kind, approvalId, done);
     } finally {
       if (kind !== 'approval') await finishRecording();
     }
   };
 
-  const pollForPerson = async (kind: 'approval' | 'needs_you' | 'control', approvalId?: string): Promise<WaitResult> => {
+  const pollForPerson = async (kind: 'approval' | 'needs_you' | 'control', approvalId?: string, done?: () => Promise<boolean>): Promise<WaitResult> => {
     const started = run.now();
+    let lastDoneCheck = started;
     if (kind === 'control') await startRecording();
     for (;;) {
       await run.sleep(settings.pollMs);
@@ -398,6 +399,10 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
       }
       // resume_requested_at is cleared when the pause starts, so any value is this pause's Resume.
       if (kind === 'needs_you' && fresh.resume_requested_at) return 'resumed';
+      if (done && !fresh.human_control_by && run.now() - lastDoneCheck >= Math.min(3_000, settings.pollMs * 3)) {
+        lastDoneCheck = run.now();
+        if (await done().catch(() => false)) return 'resumed';
+      }
       if (kind === 'control' && !fresh.human_control_by) return 'resumed';
       if (run.now() - started > settings.idleTimeoutMs) return 'timeout';
       if (run.now() - lastHeartbeat > 15_000) await heartbeat();
@@ -405,6 +410,12 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
   };
 
   /** A person holds the mouse: wait for them to hand it back. */
+  /** The number-match page is gone (approved on the phone): nothing left asking for a number, code or password. */
+  const numberApproved = async (): Promise<boolean> => {
+    const s = await driver.pageSignals();
+    return !s.approvalNumber && !s.hasOneTimeCodeField && !s.mentionsVerificationCode && !s.hasPasswordField && !s.hasCaptcha;
+  };
+
   const waitForControlRelease = async () => {
     await store.updateTask(task.id, { status_detail: 'You have control. Hand it back when you are done.' });
     const result = await waitForPerson('control');
@@ -416,7 +427,7 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
     await store.updateTask(task.id, { status_detail: null });
   };
 
-  const pauseForPerson = async (reason: NeedsYouReason, message: string, extra: { screenshot?: string | null } = {}): Promise<'resumed'> => {
+  const pauseForPerson = async (reason: NeedsYouReason, message: string, extra: { screenshot?: string | null; code?: string | null } = {}): Promise<'resumed'> => {
     if (practice) {
       // Practice runs never wait on a person: record why and stop.
       await audit('practice_stopped', { reason });
@@ -435,13 +446,15 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
         message: clip(message, 400),
         since,
         ...(extra.screenshot && extra.screenshot.length <= 600_000 ? { screenshot_jpeg_b64: extra.screenshot } : {}),
+        ...(extra.code ? { code: extra.code } : {}),
       },
       status_detail: clip(message, 400),
       resume_requested_at: null,
       heartbeat_at: since,
     });
     await audit('needs_you', { reason });
-    const result = await waitForPerson('needs_you');
+    // A number to approve on the phone: no need to press Resume, the page moves on by itself once approved.
+    const result = await waitForPerson('needs_you', undefined, reason === 'number_match' ? numberApproved : undefined);
     if (result === 'canceled') throw new Halt({ status: 'canceled', summary: 'Canceled while waiting for you.' });
     if (result === 'timeout') {
       throw new Halt({ status: 'failed', error: 'Stopped: nobody finished the step in the live view within the idle timeout.' });
@@ -766,8 +779,8 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
       case 'number_match': {
         const signals = await driver.pageSignals().catch(() => null);
         const pause = signals ? mfaPauseFromSignals(signals) : null;
-        await pauseForPerson('number_match', pause?.message ?? result.message);
-        return 'The person approved on their phone and pressed Resume. Take a screenshot and continue.';
+        await pauseForPerson('number_match', pause?.message ?? result.message, { code: pause?.code ?? null });
+        return 'The person approved on their phone. Take a screenshot and continue.';
       }
       case 'captcha':
         captchaAckUrl = await driver.currentUrl();
@@ -1402,13 +1415,13 @@ export async function runComputerAgent(run: AgentRun): Promise<AgentOutcome> {
       if (mfa && captchaAckUrl !== signals!.url) {
         // Reuse captchaAckUrl as "already paused for this URL" so we do not loop.
         captchaAckUrl = signals!.url;
-        await pauseForPerson(mfa.reason, mfa.message);
+        await pauseForPerson(mfa.reason, mfa.message, { code: mfa.code ?? null });
         messages.push({
           role: 'user',
           content: [
             textBlock(
               mfa.reason === 'number_match'
-                ? 'The person approved on their phone and pressed Resume.'
+                ? 'The person approved on their phone.'
                 : 'The person entered the code and pressed Resume.',
             ),
             await screenshotBlock(),

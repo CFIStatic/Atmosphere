@@ -231,6 +231,28 @@ describe('ComputerTaskCard', () => {
     await waitFor(() => expect(computerCancel).toHaveBeenCalledWith(ID));
   });
 
+  it('number to approve: shown big in Chat, live view opens to watch (no take control)', async () => {
+    computerTask.mockResolvedValue({
+      task: task({
+        status: 'needs_you',
+        needsYou: {
+          reason: 'number_match',
+          message: 'Enter 47 in your authenticator app. Computer carries on once you approve.',
+          since: '2026-10-04T15:01:00Z',
+          code: '47',
+        },
+      }),
+    });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} />);
+    expect(await screen.findByTestId('computer-needs-you-code')).toHaveTextContent('47');
+    await waitFor(() => expect(computerLiveView).toHaveBeenCalledWith(ID, 'watch'));
+    expect(computerLiveView).not.toHaveBeenCalledWith(ID, 'control');
+    const card = screen.getByTestId('computer-needs-you-card');
+    expect(within(card).queryByRole('button', { name: 'Take control' })).toBeNull();
+    await userEvent.click(within(card).getByRole('button', { name: 'I approved it' }));
+    await waitFor(() => expect(computerResume).toHaveBeenCalledWith(ID));
+  });
+
   it('finished task shows the result and no live controls', async () => {
     computerTask.mockResolvedValue({
       task: task({ status: 'succeeded', canWatch: false, resultSummary: 'Saved the draft. Nothing was submitted.' }),

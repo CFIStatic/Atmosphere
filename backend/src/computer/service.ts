@@ -137,6 +137,8 @@ export interface ComputerTaskView {
     since: string;
     /** Data URL of the page when Computer got stuck (handoff), else null. */
     screenshot: string | null;
+    /** The number to approve in the person's authenticator app, read off the sign-in page. */
+    code: string | null;
   };
   humanControl: boolean;
   youHaveControl: boolean;
@@ -202,6 +204,7 @@ export function taskView(
             message: task.needs_you.message,
             since: task.needs_you.since,
             screenshot: task.needs_you.screenshot_jpeg_b64 ? `data:image/jpeg;base64,${task.needs_you.screenshot_jpeg_b64}` : null,
+            code: task.needs_you.code ?? null,
           }
         : null,
     humanControl: Boolean(task.human_control_by),
