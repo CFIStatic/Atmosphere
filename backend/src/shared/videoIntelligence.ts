@@ -278,7 +278,7 @@ export async function dictatePreparedFrames(
   }
 
   const response = await anthropicClient().messages.stream({
-    model: config.technician.assistant.model,
+    model: config.technician.assistant.lightModel,
     max_tokens: 12_288,
     system,
     messages: [

@@ -416,7 +416,7 @@ export async function analyseProofDay(input: {
       ].join(' ');
 
   const response = await anthropicClient().messages.stream({
-    model: config.technician.assistant.model,
+    model: config.technician.assistant.lightModel,
     max_tokens: 1200,
     system: SYSTEM,
     messages: [
