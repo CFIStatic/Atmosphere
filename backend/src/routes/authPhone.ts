@@ -97,7 +97,9 @@ phoneAuthRouter.get('/phone/config', (_req: Request, res: Response) => {
 phoneAuthRouter.post('/phone/start', startLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     requireEnabled();
-    let { phone, intent } = startSchema.parse(req.body ?? {});
+    const parsed = startSchema.parse(req.body ?? {});
+    const phone = parsed.phone;
+    let intent = parsed.intent;
     // New accounts by phone are for invited crew only. Anyone else signs up
     // with email; an existing phone account can always sign in.
     if (intent === 'signup') intent = effectivePhoneIntent(intent, await hasPendingPhoneInvite(phone));
