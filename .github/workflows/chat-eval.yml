@@ -1,26 +1,28 @@
-# Live check of the new single-agent job Chat on a made-up job (no customer
-# data). Prints each answer, the tools used, time to first word, and token
-# use including prompt-cache reads. Costs a few cents per run.
-name: Chat agent smoke test
+# Chat eval: real questions people have asked Chat, run against the real
+# models on a made-up job (no customer data). Fails when fewer than 90% of the
+# cases pass, so Chat can't quietly get worse. Costs well under a dollar.
+name: Chat eval
 
 on:
   workflow_dispatch:
   push:
-    branches: ['claude/**']
+    branches: ['claude/**', 'main']
     paths:
-      - backend/src/shared/askAgent.ts
-      - backend/scripts/askAgentSmoke.ts
-      - .github/workflows/ask-agent-smoke.yml
+      - backend/src/shared/ask*.ts
+      - backend/src/shared/jobFileAsk.ts
+      - backend/src/lib/askModel.ts
+      - backend/scripts/askAgentEval.ts
+      - .github/workflows/chat-eval.yml
 
 concurrency:
-  group: ask-agent-smoke-${{ github.ref }}
+  group: chat-eval-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  smoke:
-    name: Ask the new Chat real questions
+  eval:
+    name: Chat answers real questions
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: Keys
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
@@ -44,4 +46,4 @@ jobs:
 
       - name: Ask the questions
         working-directory: backend
-        run: npx tsx scripts/askAgentSmoke.ts
+        run: npx tsx scripts/askAgentEval.ts

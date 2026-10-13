@@ -613,7 +613,7 @@ test('geminiWebSearchModel prefers ASK_WEB_SEARCH_MODEL and ignores verification
       VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
     },
     () => {
-      assert.equal(geminiWebSearchModel(), 'gemini-2.5-flash');
+      assert.equal(geminiWebSearchModel(), 'gemini-3.8-flash');
     },
   );
   await withEnv(
