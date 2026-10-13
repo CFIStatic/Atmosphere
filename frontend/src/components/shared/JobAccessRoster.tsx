@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type JobAccessPerson } from '../../lib/api';
-import { TrashIcon } from '../icons';
+import { PlusIcon, TrashIcon } from '../icons';
+import { SharePopup } from './SharePopup';
 
 /**
  * Everyone with a path into this job file — homeowners (progress shares) and
- * Field Capture crew. Last open + who granted, for the office on /job-progress.
- * Org members only (parent hides this for homeowner viewers). Trash revokes.
+ * Field Capture crew. Last open + who granted. The homeowner sees the same
+ * list read-only; only the office gets the trash (revoke).
  */
 
 function when(iso: string | null): string {
@@ -40,7 +41,7 @@ function grantedLine(person: JobAccessPerson): string {
 /** Subtitle: email · role · Granted by … — skip role when already in the title. */
 function personSubtitle(person: JobAccessPerson, title: string): string {
   const parts: string[] = [];
-  const email = person.email?.trim();
+  const email = person.email?.trim() || person.phone?.trim();
   if (email) parts.push(email);
 
   const role = (person.accessType || person.displayLabel || '').trim();
@@ -59,10 +60,17 @@ function statusBadgeLabel(person: JobAccessPerson): string {
   return 'Field Capture';
 }
 
-export function JobAccessRoster({ jobId }: { jobId: string }) {
+export function JobAccessRoster({
+  jobId,
+  readOnly = false,
+}: {
+  jobId: string;
+  readOnly?: boolean;
+}) {
   const [people, setPeople] = useState<JobAccessPerson[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -104,13 +112,30 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
   }
 
   return (
-    <section className="rounded-xl glass-card p-5" data-testid="job-access-roster" data-job-section="access">
-      <div>
-        <h2 className="text-base font-semibold text-ink-900">Who has access</h2>
-        <p className="mt-0.5 text-xs text-ink-500">
-          Homeowners on job progress and people invited to Field Capture — last visit and who
-          invited them.
-        </p>
+    <section
+      className="rounded-xl glass-card p-5"
+      data-testid="job-access-roster"
+      data-job-section="access"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-ink-900">Who has access</h2>
+          <p className="mt-0.5 text-xs text-ink-500">
+            Homeowners on job progress and people invited to Field Capture — last visit and who
+            invited them.
+          </p>
+        </div>
+        {readOnly ? null : (
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            data-testid="job-access-invite"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800"
+          >
+            <PlusIcon width={13} height={13} />
+            Invite
+          </button>
+        )}
       </div>
 
       {error && (
@@ -155,21 +180,36 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
                       {statusBadgeLabel(person)}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void revoke(person)}
-                    disabled={revokingId === person.id}
-                    aria-label={`Revoke access for ${title}`}
-                    className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
-                  >
-                    <TrashIcon width={14} height={14} />
-                  </button>
+                  {readOnly ? null : (
+                    <button
+                      type="button"
+                      onClick={() => void revoke(person)}
+                      disabled={revokingId === person.id}
+                      aria-label={`Revoke access for ${title}`}
+                      className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+                    >
+                      <TrashIcon width={14} height={14} />
+                    </button>
+                  )}
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+
+      {inviteOpen && !readOnly ? (
+        <SharePopup
+          jobId={jobId}
+          variant="access"
+          onClose={() => setInviteOpen(false)}
+          onInvited={() => {
+            void load().catch((err: unknown) =>
+              setError(err instanceof Error ? err.message : 'Could not load who has access.'),
+            );
+          }}
+        />
+      ) : null}
     </section>
   );
 }

@@ -1,3 +1,5 @@
+import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
+import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
 import { approveAskApproval, denyAskApproval, getAskApproval, listAskFeedback, listAskPins, pinAskAnswer, rateAskAnswer, searchAskChats, unpinAskAnswer } from './askExtras.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -44,9 +46,10 @@ import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import {
-  findJobProgressGrant,
   listJobProgressGrants,
+  listJobPartyViews,
   touchJobProgressGrantAccess,
+  resolveOrgOrViewerAccess,
 } from '../shared/jobProgressGrants.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
@@ -213,7 +216,12 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grants = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
+      const homeowner = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
+      const granted = new Set(homeowner.map((g) => g.jobId));
+      const grants = [
+        ...homeowner,
+        ...(await listJobPartyViews(admin, req.user!.email)).filter((v) => !granted.has(v.jobId)),
+      ];
       if (!grants.length) throw err;
       const jobIds = grants.map((g) => g.jobId);
       const { data: jobs } = await admin
@@ -335,22 +343,11 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
 /** GET /api/operations/shared/:jobId — the record itself. */
 sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let orgId: string;
-    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
-    let access: 'org' | 'viewer' = 'org';
-    try {
-      const ctx = await requireOrgContext(req);
-      orgId = ctx.orgId;
-      supabase = ctx.supabase;
-    } catch (err) {
-      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
-      const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grant = await findJobProgressGrant(admin, req.user!.id, req.params.jobId, req.user!.email);
-      if (!grant) throw err;
-      orgId = grant.orgId;
-      supabase = admin as typeof supabase;
-      access = 'viewer';
-    }
+    // Org member; or, read-only, a homeowner who claimed a share or a
+    // subcontractor invited to this job (own org or none).
+    const resolved = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, access } = resolved;
+    const supabase = resolved.supabase as Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
 
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
@@ -372,6 +369,8 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     }
 
     // Viewers see the job file without contractor money / private thread chatter.
+    // Homeowners and subcontractors see the same scope as the contractor,
+    // without the money. (A sub's only difference is the videos.)
     const scope = access === 'viewer'
       ? record.scope.map((item: any) => ({ ...item, amount: null }))
       : record.scope;
@@ -429,15 +428,16 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
 
 /**
  * GET /api/operations/shared/:jobId/access-roster
- * Office view: everyone with job-progress / Field Capture access, last open, grantor.
- * Org members only — homeowners (viewer grants) do not see the full roster.
+ * Everyone with job-progress / Field Capture access, last open, grantor.
+ * The office and the homeowner see the same list (read-only for the
+ * homeowner: revoking stays org-only).
  */
 sharedJobsRouter.get(
   '/shared/:jobId/access-roster',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const jobId = z.string().uuid().parse(req.params.jobId);
-      const { orgId, supabase } = await requireOrgContext(req);
+      const { orgId, supabase } = await resolveOrgOrViewerAccess(req, jobId);
 
       const { data: job, error: jobError } = await supabase
         .from('crm_jobs')
@@ -917,6 +917,20 @@ sharedJobsRouter.post(
       const input = partySchema.parse(req.body ?? {});
 
       const partyRole = input.role ?? 'subcontractor';
+      // Crew invited by mobile number only sign in with an SMS code (#752).
+      const partyEmail = input.email?.trim().toLowerCase() || null;
+      const partyPhone = input.phone ? normalizePhoneE164(input.phone) : null;
+      if (input.phone && !partyPhone) {
+        throw new HttpError(400, 'Enter a valid mobile number.', 'invalid_phone');
+      }
+      if (partyPhone && !partyEmail) {
+        if (partyRole === 'owner' || partyRole === 'adjuster') {
+          throw new HttpError(400, 'Homeowners are invited by email.', 'invite_email_required');
+        }
+        if (!phoneAuthEnabled()) {
+          throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
+        }
+      }
       // Homeowner/owner/adjuster parties force matching service titles.
       const forcedHomeowner = partyRole === 'owner';
       const forcedAdjuster = partyRole === 'adjuster';
@@ -946,8 +960,8 @@ sharedJobsRouter.post(
           company: input.company,
           trade: input.trade ?? null,
           contact_name: input.contactName ?? null,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
+          email: partyEmail,
+          phone: partyPhone,
           role: partyRole,
           service_role: serviceNorm.service_role,
           service_role_custom: serviceNorm.service_role_custom,
@@ -1051,9 +1065,35 @@ sharedJobsRouter.post(
         emailed = delivery.emailed;
       }
 
+      let texted = false;
+      if (partyPhone && !email && token && smsProviderConfigured()) {
+        const [{ data: org }, inviterName] = await Promise.all([
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+          actorLabelFor(supabase, userId),
+        ]);
+        const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
+        const params = new URLSearchParams({
+          phone: partyPhone,
+          invited: '1',
+          next: fieldCaptureInvitePath(token),
+        });
+        const sms = await sendSms({
+          to: partyPhone,
+          orgId,
+          body: orgInviteSms({
+            orgName: (org as any)?.name ?? 'your team',
+            inviterName,
+            link: `${origin}/login?${params.toString()}`,
+          }),
+        });
+        if (!sms.ok) console.warn(`[job-party] invite text failed: ${sms.reason}`);
+        texted = sms.ok;
+      }
+
       res.status(201).json({
         party,
         emailed,
+        texted,
         sharePath: token ? jobSharePagePath(token, email) : null,
         fieldCapturePath: token ? fieldCaptureInvitePath(token) : null,
       });
@@ -1916,6 +1956,8 @@ jobShareRouter.get(
       res.json({
         you: { company: party.company, trade: party.trade, role: party.role },
         job: {
+          // Opens the job file on Platform after sign-in (their own videos only).
+          id: record.job.id,
           jobNumber: record.job.job_number,
           title: record.job.title,
           claimNumber: record.job.claim_number,

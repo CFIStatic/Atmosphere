@@ -53,11 +53,39 @@ export type StoredChildPrivacyRedactions = {
 };
 
 const CHILD_PRESENCE_RE =
-  /\b(child|children|kid|kids|toddler|toddlers|infant|infants|baby|babies|preschooler|school[- ]?age|teen(?:ager)?s?|adolescent|minor)\b/i;
+  /\b(child|children|kid|kids|toddler|toddlers|infant|infants|baby|babies|preschooler|preschoolers|school[- ]?age|schoolkids?|teen(?:ager)?s?|adolescents?|minors?|boy|boys|girl|girls|son|sons|daughter|daughters|youngsters?|little ones?|grandkids?|grandchild(?:ren)?|stepson|stepdaughter)\b/i;
 
 /** Avoid false positives from non-person uses of "child". */
 const CHILD_FALSE_POSITIVE_RE =
-  /\b(child\s+process|child\s+lock|child\s+seat|child[- ]proof|grandchild\s+clause)\b/i;
+  /\b(child\s+process|child\s+lock|child\s+seat|child[- ]proof|grandchild\s+clause|baby\s+monitor|baby\s+gate|minor\s+(?:damage|repairs?|leaks?|cracks?|issues?|scratch(?:es)?|stain|stains|dent|dents|crack|work|changes?|adjustments?)|in\s+minor)\b/i;
+
+/**
+ * Vision ranges come from sparse stills, so a child seen at one still may be
+ * on camera a moment before or after it. Pad every vision range.
+ */
+export const CHILD_VISION_PAD_BEFORE_SEC = 2;
+export const CHILD_VISION_PAD_AFTER_SEC = 3;
+/** Boxes are drawn from a few stills; widen them so movement stays covered. */
+const REGION_MARGIN = 0.5;
+/** Longer than this, a boxed range blurs the whole frame. */
+export const MAX_REGION_RANGE_SEC = 10;
+
+/** Grow a box by REGION_MARGIN of its size on every side, clamped to the frame. */
+export function widenChildRegion(box: ChildPrivacyRegion): ChildPrivacyRegion {
+  const padX = box.w * REGION_MARGIN;
+  const padY = box.h * REGION_MARGIN;
+  const x = Math.max(0, box.x - padX);
+  const y = Math.max(0, box.y - padY);
+  const right = Math.min(1, box.x + box.w + padX);
+  const bottom = Math.min(1, box.y + box.h + padY);
+  return {
+    ...box,
+    x: Math.round(x * 1000) / 1000,
+    y: Math.round(y * 1000) / 1000,
+    w: Math.round((right - x) * 1000) / 1000,
+    h: Math.round((bottom - y) * 1000) / 1000,
+  };
+}
 
 function roundTime(seconds: number): number {
   return Math.round(Math.max(0, seconds) * 100) / 100;
@@ -230,8 +258,20 @@ function mergeChildRanges(ranges: ChildPrivacyRange[]): ChildPrivacyRange[] {
     prev.confidence = Math.max(prev.confidence, next.confidence);
     if (prev.source !== next.source) prev.source = 'merged';
     if (next.reason && next.reason.length > prev.reason.length) prev.reason = next.reason;
-    const combined = [...(prev.regions ?? []), ...(next.regions ?? [])].slice(0, 8);
-    prev.regions = combined.length ? combined : undefined;
+    // A full-frame range merged with a boxed one stays full-frame: boxes drawn
+    // for one moment cannot cover a stretch the model blurred whole.
+    if (!prev.regions?.length || !next.regions?.length) {
+      prev.regions = undefined;
+      continue;
+    }
+    prev.regions = [...prev.regions, ...next.regions].slice(0, 8);
+  }
+  // A box is a guess from a few stills; over a long stretch the child moves
+  // out from under it. Long ranges blur the whole frame instead.
+  for (const range of out) {
+    if (range.regions?.length && range.endSec - range.startSec > MAX_REGION_RANGE_SEC) {
+      range.regions = undefined;
+    }
   }
   return out.slice(0, 64);
 }
@@ -329,9 +369,10 @@ export function deriveChildPrivacyRedactions(input: {
   for (const note of input.peopleNotes ?? []) {
     const t = Number(note.tSec);
     const age = normalizeAgeAppearance(note.ageAppearance);
-    if (age === 'cannotTell' || age === 'adult') continue;
     const text = String(note.note || '').trim();
     const childByAge = age === 'child';
+    // A note that names a child counts even when this person reads as an
+    // adult or unclear ("parent carrying a baby", "kid by the door").
     const childByText = isChildPresenceText(text);
     if (!childByAge && !childByText) continue;
     if (!Number.isFinite(t)) continue;
@@ -368,6 +409,9 @@ export function deriveChildPrivacyRedactions(input: {
   const vision = (input.visionRanges ?? [])
     .map((r) => ({
       ...r,
+      startSec: Math.max(0, r.startSec - CHILD_VISION_PAD_BEFORE_SEC),
+      endSec: duration != null ? Math.min(duration, r.endSec + CHILD_VISION_PAD_AFTER_SEC) : r.endSec + CHILD_VISION_PAD_AFTER_SEC,
+      regions: r.regions?.length ? r.regions.map(widenChildRegion) : undefined,
       source:
         normalizeSource(r.source) === 'heuristic'
           ? ('heuristic' as const)

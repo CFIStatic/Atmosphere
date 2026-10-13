@@ -883,6 +883,40 @@
     });
   }
 
+  /** Phone sign-in: is it offered, send a code, trade the code for a session. */
+  function phoneAuthConfig(apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/config', {});
+  }
+
+  function startPhoneSignIn(phone, apiBase, intent) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/start', {
+      method: 'POST',
+      body: { phone: phone, intent: intent || 'signin' },
+    });
+  }
+
+  function verifyPhoneSignIn(phone, code, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/verify', {
+      method: 'POST',
+      body: { phone: phone, code: code },
+    });
+  }
+
+  /** Email code sign-in (existing accounts): send a 6-digit code, trade it for a session. */
+  function startEmailCodeSignIn(email, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/email-code/start', {
+      method: 'POST',
+      body: { email: email },
+    });
+  }
+
+  function verifyEmailCodeSignIn(email, code, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/email-code/verify', {
+      method: 'POST',
+      body: { email: email, code: code },
+    });
+  }
+
   var CURRENT_TERMS_VERSION = '2026-09-10';
 
   function loadAuthMe(apiBase, accessToken) {
@@ -1033,6 +1067,70 @@
     return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
   }
 
+  /* ---- Per-launch sign-in (iPhone/Android app and home-screen web app) ----
+     Stay signed in while backgrounded, locked or switched away; sign in
+     again only after the app is force closed (or Sign out). The tokens live
+     in sessionStorage, which survives backgrounding and reloads of the same
+     web view and is empty again on a cold launch. A launch marker in that
+     same sessionStorage tells the two apart. */
+  var APP_LAUNCHED_KEY = 'atm.app.launched';
+
+  /** Capacitor shell or a home-screen (standalone) web app. Browser tabs are not. */
+  function isAppLaunchContext(win) {
+    var w = win || (typeof window !== 'undefined' ? window : {});
+    var nav = w.navigator || {};
+    var cap = w.Capacitor;
+    if (/AtmosphereFieldCapture/.test(nav.userAgent || '')) return true;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) return true;
+    if (nav.standalone === true) return true; /* iOS home-screen web app */
+    try {
+      if (typeof w.matchMedia === 'function' && w.matchMedia('(display-mode: standalone)').matches) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  /**
+   * True once per launch: the first page load after a force close / kill.
+   * Clears the stored tokens and blocks silent sign-in from the office
+   * cookie. Later calls in the same launch (resume, reload) return false.
+   */
+  function claimColdAppLaunch(store, keys) {
+    if (!store) return false;
+    try {
+      if (store.getItem(APP_LAUNCHED_KEY) === '1') return false;
+      store.setItem(APP_LAUNCHED_KEY, '1');
+      (keys && keys.tokens ? keys.tokens : []).forEach(function (k) {
+        store.removeItem(k);
+      });
+      if (keys && keys.noAdopt) store.setItem(keys.noAdopt, '1');
+    } catch (e) {
+      return false;
+    }
+    return true;
+  }
+
+  /** Seconds-since-epoch exp of a JWT access token, or null. */
+  function accessTokenExpiry(token) {
+    try {
+      var part = String(token || '').split('.')[1];
+      if (!part) return null;
+      var b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var json = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+      var exp = JSON.parse(json).exp;
+      return typeof exp === 'number' ? exp : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Renew ahead of time: the access token is gone or ends within marginMs. */
+  function accessTokenNeedsRefresh(token, nowMs, marginMs) {
+    var exp = accessTokenExpiry(token);
+    if (exp == null) return false;
+    return exp * 1000 - (nowMs || Date.now()) <= (marginMs == null ? 5 * 60 * 1000 : marginMs);
+  }
+
   /**
    * Trade the refresh token for a new session. A day queued at 8 AM and sent
    * at 5 PM has outlived its one-hour access token; filing must not.
@@ -1116,6 +1214,31 @@
   /** After invite account=1 sign-in: several jobs → Today; one job can deep-open. */
   function preferTodayAfterInviteSignIn(jobs) {
     return Array.isArray(jobs) && jobs.length > 1;
+  }
+
+  /** The invite token inside a Today row's job-file link (/shared/<token>?email=…). */
+  function shareTokenFromPath(path) {
+    var m = /\/shared\/([^/?#]+)/.exec(String(path || ''));
+    if (!m) return '';
+    try {
+      return decodeURIComponent(m[1]);
+    } catch (e) {
+      return m[1];
+    }
+  }
+
+  /**
+   * After invite sign-in: the Today row for the job this invite opened, so a
+   * sub lands on the normal job list with that job already picked.
+   */
+  function inviteJobIdInToday(jobs, token) {
+    var want = String(token || '').trim();
+    if (!want || !Array.isArray(jobs)) return '';
+    for (var i = 0; i < jobs.length; i += 1) {
+      var j = jobs[i];
+      if (j && j.id && shareTokenFromPath(j.sharePath) === want) return j.id;
+    }
+    return '';
   }
 
   function loadTodayJobs(apiBase, accessToken) {
@@ -3753,6 +3876,11 @@
     nextUploadBackoffMs: nextUploadBackoffMs,
     PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,
     refreshSession: refreshSession,
+    APP_LAUNCHED_KEY: APP_LAUNCHED_KEY,
+    isAppLaunchContext: isAppLaunchContext,
+    claimColdAppLaunch: claimColdAppLaunch,
+    accessTokenExpiry: accessTokenExpiry,
+    accessTokenNeedsRefresh: accessTokenNeedsRefresh,
     adoptPlatformSession: adoptPlatformSession,
     signOutPlatform: signOutPlatform,
     deleteAccount: deleteAccount,
@@ -3790,6 +3918,11 @@
     POSITION_FRESH_MS: POSITION_FRESH_MS,
     loginWithPassword: loginWithPassword,
     signupWithPassword: signupWithPassword,
+    phoneAuthConfig: phoneAuthConfig,
+    startPhoneSignIn: startPhoneSignIn,
+    verifyPhoneSignIn: verifyPhoneSignIn,
+    startEmailCodeSignIn: startEmailCodeSignIn,
+    verifyEmailCodeSignIn: verifyEmailCodeSignIn,
     loadAuthMe: loadAuthMe,
     acceptTerms: acceptTerms,
     CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,
@@ -3814,6 +3947,8 @@
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
     preferTodayAfterInviteSignIn: preferTodayAfterInviteSignIn,
+    shareTokenFromPath: shareTokenFromPath,
+    inviteJobIdInToday: inviteJobIdInToday,
     createTodayJob: createTodayJob,
     placesStatus: placesStatus,
     placesAutocomplete: placesAutocomplete,

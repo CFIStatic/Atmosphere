@@ -66,30 +66,26 @@
   }
   var REFRESH_KEY = 'atm.field.refreshToken';
 
-  /* iPhone / Android app only (Capacitor shell, apps/mobile): a force-quit
-     ends the sign-in. sessionStorage lives as long as the app's web view, so
-     it survives backgrounding, locking the phone and reloads, and is empty
-     again on a cold launch. On a cold launch nothing signs back in on its own:
-     the office cookie is not adopted (and is logged out below), so the crew
-     signs in again. Day films waiting in IndexedDB and job drafts are kept;
-     they file once the same person signs back in. Browsers never run this. */
-  var APP_LAUNCHED_KEY = 'atm.app.launched';
+  /* iPhone / Android app and the home-screen web app (Core.isAppLaunchContext):
+     stay signed in while backgrounded, locked, switched away or reloaded;
+     a force close ends the sign-in. sessionStorage lives as long as the
+     app's web view and is empty again on a cold launch. On a cold launch
+     nothing signs back in on its own: the office cookie is not adopted (and
+     is logged out below), so the crew signs in again. Day films waiting in
+     IndexedDB and job drafts are kept; they file once the same person signs
+     back in. Browser tabs never run this. */
   var COLD_APP_START = (function () {
-    var cap = window.Capacitor;
-    var native =
-      /AtmosphereFieldCapture/.test(navigator.userAgent || '') ||
-      Boolean(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-    if (!native) return false;
+    if (!Core || !Core.isAppLaunchContext || !Core.isAppLaunchContext(window)) return false;
+    var store = null;
     try {
-      if (sessionStorage.getItem(APP_LAUNCHED_KEY) === '1') return false;
-      sessionStorage.setItem(APP_LAUNCHED_KEY, '1');
-      sessionStorage.removeItem(ACCESS_KEY);
-      sessionStorage.removeItem(REFRESH_KEY);
-      sessionStorage.setItem('atm.field.noPlatformAdopt', '1');
+      store = window.sessionStorage;
     } catch (e) {
       return false;
     }
-    return true;
+    return Core.claimColdAppLaunch(store, {
+      tokens: [ACCESS_KEY, REFRESH_KEY],
+      noAdopt: 'atm.field.noPlatformAdopt',
+    });
   })();
 
   function $(sel) {
@@ -499,6 +495,7 @@
   function jobMetaLine(j) {
     var bits = [];
     if (j.addr) bits.push(escapeHtml(j.addr));
+    if (j.shared) bits.push(escapeHtml(j.sharedBy ? 'Shared by ' + j.sharedBy : 'Shared job'));
     if (j.pending || (Core.isLocalJobId && Core.isLocalJobId(j.id))) {
       bits.push('<span class="pendingpin">On this phone</span>');
     } else if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
@@ -519,6 +516,8 @@
       situation: j.situation || '',
       createdAt: j.createdAt || '',
       sharePath: j.sharePath || '',
+      shared: Boolean(j.shared),
+      sharedBy: j.sharedBy || '',
     };
   }
 
@@ -533,11 +532,11 @@
    * is the job file (scope, brief, recordings). Signed-in office jobs already
    * open Platform — hide this row there.
    */
-  function paintJobFileLink(sharePath) {
+  function paintJobFileLink(sharePath, onAccountList) {
     var row = $('#job-file-link');
     var href = $('#job-file-href');
     if (!row || !href) return;
-    if (!LIVE || !sharePath || sharePath === '/guest') {
+    if ((!LIVE && !onAccountList) || !sharePath || sharePath === '/guest') {
       row.hidden = true;
       href.removeAttribute('href');
       return;
@@ -549,6 +548,19 @@
     href.target = '_blank';
     href.rel = 'noopener noreferrer';
     row.hidden = false;
+  }
+
+  /**
+   * Signed-in list: a job another contractor shared has no Dashboard of this
+   * workspace behind it, so keep the same job-file link the invite showed.
+   */
+  function paintSelectedJobFileLink() {
+    if (LIVE) return;
+    var job = jobById(state.activeJobId);
+    paintJobFileLink(
+      job && job.shared && !job.pending ? '/job-progress?job=' + encodeURIComponent(job.id) : '',
+      true,
+    );
   }
 
   function bindJobSearch() {
@@ -687,6 +699,17 @@
           return run(fresh);
         });
       });
+  }
+
+  /**
+   * Back from the background (hours later, the 1-hour access token has
+   * lapsed): renew before anything calls the office, so the crew stays
+   * signed in instead of hitting a 401. Single-flight via refreshAccess.
+   */
+  function renewIfStale() {
+    if (!state.accessToken || !Core.accessTokenNeedsRefresh) return;
+    if (!Core.accessTokenNeedsRefresh(state.accessToken, Date.now())) return;
+    refreshAccess(captureSession());
   }
 
   function refreshAccess(bound) {
@@ -1113,6 +1136,7 @@
         );
       })
       .join('');
+    paintSelectedJobFileLink();
     root.querySelectorAll('[data-job-id]').forEach(function (row) {
       row.addEventListener('click', function () {
         state.activeJobId = row.getAttribute('data-job-id');
@@ -1158,8 +1182,11 @@
       },
     ]);
     showJobAdd(false);
-    paintJobFileLink(sharePath);
-    setStatus('Ready — film here, or open the job file for scope and recordings.');
+    // The job file is the same Platform page the contractor uses; for an
+    // invited sub it shows only the videos they recorded.
+    var jobId = payload.job && payload.job.id;
+    paintJobFileLink(jobId ? '/job-progress?job=' + encodeURIComponent(jobId) : sharePath);
+    setStatus('Ready — film here, or open the job file for scope and your videos.');
     when('#daybtn', function (btn) { btn.disabled = false; });
     state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
     if (filmQueue) filmQueue.kick('session');
@@ -1188,20 +1215,48 @@
     bootLive(preloaded);
   }
 
-  function openInviteAfterAccountSignIn() {
-    if (!TOKEN) return finishAccountConnect();
-    if (!Core.loadTodayJobs) return enterLiveMode();
+  /**
+   * Signed in with an invite open (link token or the share cookie): when the
+   * invited job is on their Today list, they get the normal job list and
+   * record button like any Field Capture user, with that job already picked.
+   * The single-job invite screen is only the fallback. Resolves true when
+   * Today took over.
+   */
+  function preferAccountToday(preloaded) {
+    if (!Core.loadTodayJobs || !state.accessToken) return Promise.resolve(false);
+    var inviteJobId = (preloaded && preloaded.job && preloaded.job.id) || '';
     return Core.loadTodayJobs(API_BASE, state.accessToken).then(
       function (jobs) {
-        if (Core.preferTodayAfterInviteSignIn && Core.preferTodayAfterInviteSignIn(jobs)) {
-          return finishAccountConnect();
+        var invited = Core.inviteJobIdInToday ? Core.inviteJobIdInToday(jobs, TOKEN) : '';
+        if (!invited && inviteJobId && jobs.some(function (j) { return j && j.id === inviteJobId; })) {
+          invited = inviteJobId;
         }
-        return enterLiveMode();
+        if (!invited && !(Core.preferTodayAfterInviteSignIn && Core.preferTodayAfterInviteSignIn(jobs))) {
+          return false;
+        }
+        if (invited) state.activeJobId = invited;
+        return true;
       },
       function () {
-        return enterLiveMode();
+        return false;
       },
     );
+  }
+
+  /** App opened on an invite while already signed in. */
+  function openInviteSignedIn(preloaded) {
+    return preferAccountToday(preloaded).then(function (today) {
+      if (today) return bootAccount();
+      return enterLiveMode(preloaded);
+    });
+  }
+
+  function openInviteAfterAccountSignIn() {
+    if (!TOKEN) return finishAccountConnect();
+    return preferAccountToday(null).then(function (today) {
+      if (today) return finishAccountConnect();
+      return enterLiveMode();
+    });
   }
 
   function showBlockedMsg(message) {
@@ -1321,6 +1376,10 @@
   }
 
   function enterAccountHome(me, jobs) {
+    /* The job list is up: films file against the picked job, never the
+       invite link this tab may have opened on. */
+    LIVE = false;
+    document.body.setAttribute('data-mode', 'account');
     state.account = true;
     var pending = Core.readPendingJobs ? Core.readPendingJobs() : [];
     var merged = Core.mergeTodayJobs ? Core.mergeTodayJobs(jobs || [], pending) : (jobs || []);
@@ -1555,6 +1614,190 @@
           .then(function () {
             btn.disabled = false;
           });
+      });
+    }
+    // Email code sign-in: existing accounts get a 6-digit code instead of a password.
+    var codeForm = $('#email-code-form');
+    if (codeForm && form) {
+      var codeSentTo = null;
+      var codeError = function (msg) {
+        var el = $('#email-code-err');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.hidden = !msg;
+      };
+      var setCodeStep = function (sent) {
+        $('#code-email-wrap').hidden = Boolean(sent);
+        $('#email-code-wrap').hidden = !sent;
+        $('#email-code-resend').hidden = !sent;
+        $('#email-code-btn-lbl').textContent = sent ? 'Sign in' : 'Email me a code';
+        if (sent) {
+          $('#email-code-label').textContent = 'Enter the 6-digit code we emailed to ' + sent;
+          $('#email-code').focus();
+        }
+      };
+      var showCode = function (on) {
+        form.hidden = on;
+        codeForm.hidden = !on;
+        if (!on) return;
+        codeSentTo = null;
+        codeError('');
+        setCodeStep(null);
+        var typed = ($('#login-email') && $('#login-email').value || '').trim();
+        $('#code-email').value = typed;
+        $('#code-email').focus();
+      };
+      var sendEmailCode = function () {
+        var email = codeSentTo || ($('#code-email').value || '').trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          codeError('Enter a valid email address.');
+          return Promise.resolve();
+        }
+        codeError('');
+        return Core.startEmailCodeSignIn(email, API_BASE).then(function () {
+          codeSentTo = email;
+          setCodeStep(email);
+        }, function (err) {
+          codeError(err.message || 'Could not send a code. Try again.');
+        });
+      };
+      when('#email-code-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showCode(true); });
+      });
+      when('#email-code-back', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showCode(false); });
+      });
+      when('#email-code-resend', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); void sendEmailCode(); });
+      });
+      codeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = $('#email-code-btn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var done = function () { btn.disabled = false; };
+        if (!codeSentTo) {
+          sendEmailCode().then(done, done);
+          return;
+        }
+        var code = String($('#email-code').value || '').replace(/\D/g, '');
+        if (code.length !== 6) {
+          codeError('Enter the 6-digit code.');
+          done();
+          return;
+        }
+        codeError('');
+        Core.verifyEmailCodeSignIn(codeSentTo, code, API_BASE)
+          .then(function (res) {
+            var session = (res && res.session) || {};
+            if (!session.accessToken) throw new Error('Signed in, but no session came back. Try again.');
+            allowPlatformAdoption();
+            writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) return openInviteAfterAccountSignIn();
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            if (isTermsRequired(err)) { showTermsGate(); return; }
+            if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
+              return joinOfficeByInvite().catch(failJoinOffice);
+            }
+            codeError(err.message || 'That code did not work. Try again.');
+          })
+          .then(done, done);
+      });
+    }
+    // Phone sign-in for crew without email: number → 6-digit text code.
+    var phoneForm = $('#phone-form');
+    if (phoneForm && form) {
+      var phoneSentTo = null;
+      var showPhone = function (on) {
+        form.hidden = on;
+        phoneForm.hidden = !on;
+        if (on && $('#phone-number')) $('#phone-number').focus();
+      };
+      var phoneError = function (msg) {
+        var el = $('#phone-err');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.hidden = !msg;
+      };
+      var toE164 = function (raw) {
+        var t = String(raw || '').trim();
+        var d = t.replace(/\D/g, '');
+        if (t.charAt(0) === '+') return d.length >= 8 && d.length <= 15 ? '+' + d : null;
+        if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+        return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+1' + d : null;
+      };
+      var setPhoneStep = function (sent) {
+        $('#phone-number-wrap').hidden = Boolean(sent);
+        $('#phone-code-wrap').hidden = !sent;
+        $('#phone-resend').hidden = !sent;
+        $('#phone-btn-lbl').textContent = sent ? 'Sign in' : 'Text me a code';
+        if (sent) $('#phone-code').focus();
+      };
+      var sendPhoneCode = function () {
+        var phone = phoneSentTo || toE164($('#phone-number').value);
+        if (!phone) {
+          phoneError('Enter a valid mobile number.');
+          return Promise.resolve();
+        }
+        phoneError('');
+        // Crew invited by phone may not have an account yet; the code creates it.
+        return Core.startPhoneSignIn(phone, API_BASE, 'signup').then(function () {
+          phoneSentTo = phone;
+          setPhoneStep(true);
+        }, function (err) {
+          phoneError(err.message || 'Could not text a code. Try again.');
+        });
+      };
+      Core.phoneAuthConfig(API_BASE).then(function (res) {
+        if (res && res.enabled && $('#phone-toggle-wrap')) $('#phone-toggle-wrap').hidden = false;
+      }, function () {});
+      when('#phone-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showPhone(true); });
+      });
+      when('#email-toggle', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); showPhone(false); });
+      });
+      when('#phone-resend', function (el) {
+        el.addEventListener('click', function (e) { e.preventDefault(); void sendPhoneCode(); });
+      });
+      phoneForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var btn = $('#phone-btn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var done = function () { btn.disabled = false; };
+        if (!phoneSentTo) {
+          sendPhoneCode().then(done, done);
+          return;
+        }
+        var code = String($('#phone-code').value || '').replace(/\D/g, '');
+        if (code.length !== 6) {
+          phoneError('Enter the 6-digit code.');
+          done();
+          return;
+        }
+        phoneError('');
+        Core.verifyPhoneSignIn(phoneSentTo, code, API_BASE)
+          .then(function (res) {
+            var session = (res && res.session) || {};
+            if (!session.accessToken) throw new Error('Signed in, but no session came back. Try again.');
+            allowPlatformAdoption();
+            writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) return openInviteAfterAccountSignIn();
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            if (isTermsRequired(err)) { showTermsGate(); return; }
+            if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
+              return joinOfficeByInvite().catch(failJoinOffice);
+            }
+            phoneError(err.message || 'That code did not work. Try again.');
+          })
+          .then(done, done);
       });
     }
     var signupForm = $('#signup-form');
@@ -1876,6 +2119,13 @@
     if (!jobId || (Core.isLocalJobId && Core.isLocalJobId(jobId))) return;
     if (!LIVE && !(state.account && state.accessToken)) return;
     if (LIVE && !TOKEN && !state.shareToken) return;
+    /* A job shared by another contractor publishes through its invite, the
+       same as the link would; the office watching is theirs, not ours. */
+    var sharedJob = !LIVE ? jobById(jobId) : null;
+    var sharedToken =
+      sharedJob && sharedJob.shared && Core.shareTokenFromPath
+        ? Core.shareTokenFromPath(sharedJob.sharePath)
+        : '';
     try {
       if (rec.livePublisher && rec.livePublisher.stop) rec.livePublisher.stop();
       rec.livePublisher = Core.createLiveRtcPublisher({
@@ -1886,7 +2136,7 @@
         accessToken: function () {
           return state.accessToken;
         },
-        shareToken: LIVE ? TOKEN || state.shareToken || null : null,
+        shareToken: LIVE ? TOKEN || state.shareToken || null : sharedToken || null,
       });
     } catch (e) {
       /* never block capture */
@@ -3076,13 +3326,16 @@
     });
     /* Field Capture back in front (home-screen app resumed, tab refocused). */
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') flushFieldWork('visible');
+      if (document.visibilityState !== 'visible') return;
+      renewIfStale();
+      flushFieldWork('visible');
     });
     window.addEventListener('pageshow', function () {
       flushFieldWork('visible');
     });
     /* Safety tick: a missed event must never leave a day on this phone. */
     window.setInterval(function () {
+      renewIfStale();
       flushFieldWork('tick');
     }, 15000);
   })();
@@ -3091,7 +3344,7 @@
   if (LIVE) {
     readStoredSession();
     if (state.accessToken) {
-      enterLiveMode();
+      openInviteSignedIn();
     } else {
       bootAccount();
       showLoginError('');
@@ -3111,6 +3364,8 @@
     /* Token already left the URL after /exchange. A refresh still has the cookie. */
     Core.loadShareJob('', API_BASE)
       .then(function (payload) {
+        readStoredSession();
+        if (state.accessToken) return openInviteSignedIn(payload);
         enterLiveMode(payload);
       })
       .catch(function () {

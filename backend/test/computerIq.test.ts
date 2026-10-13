@@ -71,11 +71,13 @@ afterEach(() => {
 
 /* ------------------------------------------------------------- catalog -- */
 
-test('catalog: no Xactimate or XactAnalysis anywhere, and Verisk hosts are restricted', () => {
+test('catalog: no XactAnalysis anywhere; other Verisk hosts restricted, Xactimate allowed', () => {
   const blob = JSON.stringify(SITE_CATALOG).toLowerCase();
-  assert.ok(!/xactimate|xactanalysis|xactware/.test(blob));
+  assert.ok(!/xactanalysis/.test(blob));
   assert.ok(!PRACTICE_TASKS.some((t) => /xact/i.test(JSON.stringify(t))));
-  for (const h of ['identity.xactware.com', 'www.xactanalysis.com', 'xactimate.com', 'www.verisk.com', 'www.claimxperience.com']) assert.equal(isAutomationRestrictedSite(h), true, h);
+  for (const h of ['www.xactanalysis.com', 'www.claimxperience.com', 'rl.restorationmanager.net']) assert.equal(isAutomationRestrictedSite(h), true, h);
+  for (const h of ['identity.xactware.com', 'xactimate.com', 'identity.verisk.com']) assert.equal(isAutomationRestrictedSite(h), false, h);
+  assert.ok(!EXCLUDED_SITES.some((e) => e.name === 'Xactimate'));
   assert.ok(!/claimxperience/.test(blob), 'ClaimXperience (Verisk) is excluded, not catalogued');
 });
 

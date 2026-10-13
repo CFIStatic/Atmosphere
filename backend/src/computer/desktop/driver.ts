@@ -26,6 +26,7 @@ import type {
   PageSignals,
   ScreenshotFormat,
   SignInFill,
+  SignInCredentials,
   SignInHints,
   TargetDescriptor,
 } from '../types.js';
@@ -261,7 +262,7 @@ export class DesktopDriver implements ComputerDriver {
    * Type a saved login into the front window's sign-in form. The address
    * check runs here, right before the agent is given the password.
    */
-  async fillSignIn(creds: { username: string; password: string }, hints: SignInHints = {}): Promise<SignInFill> {
+  async fillSignIn(creds: SignInCredentials, hints: SignInHints = {}): Promise<SignInFill> {
     const url = await this.currentUrl();
     let host = '';
     try {
@@ -271,7 +272,7 @@ export class DesktopDriver implements ComputerDriver {
     }
     if (url.startsWith('app://')) return 'no_form';
     if (hints.allowHost && !hints.allowHost(host)) return 'other_site';
-    const out = await this.agent.call<{ result?: string }>('/signin', { username: creds.username, password: creds.password }, 60_000);
+    const out = await this.agent.call<{ result?: string }>('/signin', { username: creds.username, password: creds.password, ...(creds.companyId ? { companyId: creds.companyId } : {}) }, 60_000);
     const result = out.result;
     return result === 'submitted' || result === 'username_only' || result === 'no_form' ? result : 'no_form';
   }

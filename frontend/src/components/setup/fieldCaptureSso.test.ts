@@ -136,7 +136,7 @@ describe('Field Capture single sign-on with the Platform', () => {
     expect(allow).toContain('localStorage.removeItem(NO_ADOPT_KEY)');
   });
 
-  it('a password sign-in re-allows Platform adoption', () => {
-    expect((fieldApp.match(/allowPlatformAdoption\(\);\n\s+writeStoredSession\(session\.accessToken, session\.refreshToken\)/g) || []).length).toBe(2);
+  it('a password, email-code, phone-code or new-account sign-in re-allows Platform adoption', () => {
+    expect((fieldApp.match(/allowPlatformAdoption\(\);\n\s+writeStoredSession\(session\.accessToken, session\.refreshToken\)/g) || []).length).toBe(4);
   });
 });

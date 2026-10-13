@@ -144,6 +144,8 @@ export interface ComputerCredentialRow {
   org_id: string;
   username_sealed: string;
   password_sealed: string;
+  /** Optional company / tenant ID some sites ask for (DASH). Sealed like the password; null when not saved. */
+  company_id_sealed?: string | null;
   key_fingerprint: string;
   login_url: string | null;
   status: 'ok' | 'needs_attention';
@@ -157,11 +159,11 @@ export interface ComputerCredentialRow {
 
 export type NewCredential = Pick<
   ComputerCredentialRow,
-  'login_id' | 'org_id' | 'username_sealed' | 'password_sealed' | 'key_fingerprint' | 'login_url'
+  'login_id' | 'org_id' | 'username_sealed' | 'password_sealed' | 'company_id_sealed' | 'key_fingerprint' | 'login_url'
 > & { user_id: string | null; at: string };
 
 export type CredentialPatch = Partial<
-  Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at' | 'username_sealed' | 'password_sealed' | 'key_fingerprint'>
+  Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at' | 'username_sealed' | 'password_sealed' | 'company_id_sealed' | 'key_fingerprint'>
 >;
 
 export interface ComputerAuditRow {

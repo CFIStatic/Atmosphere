@@ -29,6 +29,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 export interface AuthUser {
   id: string;
   email: string | null;
+  /** E.164 when the account signs in by text message code. */
+  phone?: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   emailConfirmed: boolean;
@@ -751,6 +753,8 @@ export interface JobAccessPerson {
   kind: JobAccessKind;
   name: string | null;
   email: string | null;
+  /** Crew invited by mobile number only. */
+  phone?: string | null;
   accessType: string;
   /** Curated service role slug for Analysis. */
   role: string;
@@ -1251,6 +1255,8 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   job?: { id: string; number: number | null; name: string | null };
+  /** Set when this account is on the job as an invited subcontractor (own videos only). */
+  viewerScope?: { role: 'subcontractor'; company: string | null };
   days: ProofDay[];
   videos?: ProofVideoRecord[];
   /** Job-level rooms. The same physical room filmed on different days is one row. */
@@ -1932,7 +1938,9 @@ export interface DuplicatePair {
 
 export interface OrgInvite {
   id: string;
-  email: string;
+  /** Null for crew invited by phone only. */
+  email: string | null;
+  phone?: string | null;
   /** Advisory — the joiner picks their own role at onboarding. */
   role: MemberRole;
   note?: string | null;
@@ -3370,6 +3378,35 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
+  /** Whether "Use phone number instead" is offered on this deployment. */
+  phoneAuthConfig: () => request<{ enabled: boolean }>('/api/auth/phone/config', { method: 'GET' }),
+
+  /** Text a 6-digit sign-in code. intent 'signup' may create the account. */
+  phoneAuthStart: (phone: string, intent: 'signin' | 'signup') =>
+    request<{ ok: boolean; phone: string }>('/api/auth/phone/start', {
+      method: 'POST',
+      body: JSON.stringify({ phone, intent }),
+    }),
+
+  phoneAuthVerify: (phone: string, code: string, acceptedTermsVersion?: string) =>
+    request<AuthResponse>('/api/auth/phone/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code, acceptedTermsVersion }),
+    }),
+
+  /** Email a 6-digit sign-in code to an existing account (never creates one). */
+  emailCodeStart: (email: string) =>
+    request<{ ok: boolean; email: string }>('/api/auth/email-code/start', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  emailCodeVerify: (email: string, code: string) =>
+    request<AuthResponse>('/api/auth/email-code/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
+
   me: () => request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/me', { method: 'GET' }),
 
   getTerms: () =>
@@ -3949,11 +3986,21 @@ export const api = {
 
   addJobParty: (
     jobId: string,
-    input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
+    input: {
+      company: string;
+      trade?: string | null;
+      contactName?: string | null;
+      email?: string | null;
+      /** Crew invited by mobile number only (SMS code sign-in). */
+      phone?: string | null;
+      role?: string;
+      serviceRole?: string | null;
+    },
   ) =>
     request<{
       party: JobParty;
       emailed?: boolean;
+      texted?: boolean;
       sharePath?: string | null;
       fieldCapturePath?: string | null;
     }>(`/api/operations/shared/${jobId}/parties`, {
@@ -4007,13 +4054,14 @@ export const api = {
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
   createOrgInvite: (input: {
-    email: string;
+    email?: string;
+    phone?: string;
     role?: MemberRole;
     note?: string;
     serviceRole?: string;
     serviceRoleCustom?: string | null;
   }) =>
-    request<{ invite: OrgInvite; emailed: boolean }>('/api/org/invites', {
+    request<{ invite: OrgInvite; emailed: boolean; texted?: boolean }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -4664,6 +4712,24 @@ export const api = {
     );
   },
 
+  crewInviteInfo: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>('/api/crew-invite/info', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  claimCrewInvite: (token: string) =>
+    request<{ ok: boolean; orgId: string; jobId: string; path: string }>('/api/crew-invite/claim', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  progressShareInvite: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>(
+      progressShareApiPath(token, '/invite'),
+      { method: 'GET' },
+    ),
+
   claimProgressShare: (token: string) =>
     request<{ ok: boolean; orgId: string; jobId: string; path: string }>(
       progressShareApiPath(token, '/claim'),
@@ -4683,6 +4749,19 @@ export const api = {
     request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
       progressShareApiPath(token, '/email-sign-in/verify'),
       { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  /** "Homeowner? Sign in with your email": always { ok: true }, never says whether the email is known. */
+  homeownerEmailSignIn: (email: string) =>
+    request<{ ok: boolean }>('/api/progress-share/email-sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  homeownerVerifyEmailSignIn: (email: string, code: string) =>
+    request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
+      '/api/progress-share/email-sign-in/verify',
+      { method: 'POST', body: JSON.stringify({ email, code }) },
     ),
 
   progressShareGrants: () =>

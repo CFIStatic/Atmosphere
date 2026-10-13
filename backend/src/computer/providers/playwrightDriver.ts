@@ -40,6 +40,7 @@ import type {
   TargetDescriptor,
   TaskFile,
   SignInFill,
+  SignInCredentials,
   SignInHints,
 } from '../types.js';
 
@@ -108,6 +109,40 @@ const USERNAME_SELECTORS = [
   'input[id*="identifier" i]:visible',
 ];
 const PASSWORD_SELECTOR = 'input[type="password"]:visible';
+
+/** A company / tenant / customer / account ID box on a sign-in form (DASH and similar). */
+export const COMPANY_ID_SELECTORS = ['company', 'tenant', 'customer', 'account', 'org'].flatMap((w) => [
+  `input[name*="${w}" i]:visible`,
+  `input[id*="${w}" i]:visible`,
+  `input[placeholder*="${w}" i]:visible`,
+  `input[aria-label*="${w}" i]:visible`,
+]);
+
+/** True when a field's attributes say it is the username, email or password, not a company ID. */
+export function looksLikeUsernameOrPassword(attrs: { type?: string | null; name?: string | null; id?: string | null; autocomplete?: string | null }): boolean {
+  const type = (attrs.type ?? 'text').toLowerCase();
+  if (!['text', 'search', 'tel', 'number', ''].includes(type)) return true;
+  const words = `${attrs.name ?? ''} ${attrs.id ?? ''} ${attrs.autocomplete ?? ''}`.toLowerCase();
+  return /user|e-?mail|login|pass|identifier/.test(words);
+}
+
+/** Type the saved company ID into the form's company / tenant / account box, when there is one. Best effort. */
+async function fillCompanyId(scope: Scope, companyId: string, extra: string[] = []): Promise<boolean> {
+  for (const sel of [...extra.map((s) => (s.includes(':visible') ? s : `${s}:visible`)), ...COMPANY_ID_SELECTORS]) {
+    const loc = scope.locator(sel);
+    const n = Math.min(await loc.count().catch(() => 0), 4);
+    for (let i = 0; i < n; i += 1) {
+      const el = loc.nth(i);
+      const attrs = await el
+        .evaluate((e) => ({ type: e.getAttribute('type'), name: e.getAttribute('name'), id: e.getAttribute('id'), autocomplete: e.getAttribute('autocomplete') }))
+        .catch(() => null);
+      if (!attrs || looksLikeUsernameOrPassword(attrs)) continue;
+      await el.fill(companyId).catch(() => undefined);
+      return true;
+    }
+  }
+  return false;
+}
 
 /** A page or one of its frames: both expose the locator API used here. */
 type Scope = Page | Frame;
@@ -680,7 +715,7 @@ export class PlaywrightDriver implements ComputerDriver {
     return Math.max(0, before - after);
   }
 
-  async fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill> {
+  async fillSignIn(creds: SignInCredentials, hints?: SignInHints): Promise<SignInFill> {
     try {
       const page = await this.active();
       // Never type a saved login into a frame or page the login doesn't belong to.
@@ -705,6 +740,7 @@ export class PlaywrightDriver implements ComputerDriver {
         if (found.password) {
           if (found.username && !sentUsername) await found.username.fill(creds.username);
           await found.password.fill(creds.password);
+          if (creds.companyId) await fillCompanyId(found.frame, creds.companyId, hints?.companyIdSelectors);
           await submitFrom(found.password);
           await waitForSignInAnswer(page);
           return 'submitted';

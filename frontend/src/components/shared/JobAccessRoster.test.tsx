@@ -172,3 +172,19 @@ describe('JobAccessRoster', () => {
   });
 
 });
+
+describe('JobAccessRoster invite', () => {
+  beforeEach(() => {
+    jobAccessRoster.mockReset();
+    jobAccessRoster.mockResolvedValue({ people: [] });
+  });
+
+  it('shows Invite for the office and hides it read-only', async () => {
+    const { unmount } = render(<JobAccessRoster jobId="job-1" />);
+    expect(await screen.findByTestId('job-access-invite')).toBeInTheDocument();
+    unmount();
+    render(<JobAccessRoster jobId="job-1" readOnly />);
+    await waitFor(() => expect(jobAccessRoster).toHaveBeenCalled());
+    expect(screen.queryByTestId('job-access-invite')).not.toBeInTheDocument();
+  });
+});

@@ -37,7 +37,32 @@ underlying media — share/export of the raw signed URL could still expose bytes
 (same as private moments). Treat client enforcement + stored ranges as the
 in-app guarantee.
 
-## Phase 2 (follow-up)
+## Phase 2 (shipped): blurred copy
+
+`backend/src/lib/proofPrivacySafe.ts` burns a full-frame blur (and mute, where
+the player mutes) through every child and private-moment range, padded 1 s
+before and 1.5 s after, into `*.safe-<hash>.mp4` beside the original. The hash
+covers the ranges, so a re-analysis builds a fresh copy.
+
+- **Download** always hands out the blurred copy for a clip with ranges, for
+  everyone (contractor included). If the copy cannot be built, the download
+  is refused; it never falls back to the original.
+- **Playback** (`proofVideoUrl`) serves the blurred copy once it exists.
+  Until then it serves the original plus `privacyWindows`, and the Dashboard
+  player (`verifier/index.html`) blurs and mutes through them; the job-page
+  player blurs from the clip's stored ranges as before.
+- **Posters and stills** never come from inside a window; the Dashboard never
+  grabs its own still from the original of such a clip.
+- **Evidence report PDF** drops stills and quotes inside child ranges.
+- The Dashboard library kicks the build for a few flagged clips per load so
+  the copy is usually ready before anyone presses Play or Download.
+
+Detection hardening: vision ranges padded 2 s / 3 s, boxes widened 50% per
+side, boxed ranges longer than 10 s blur the whole frame, a full-frame range
+merged with a boxed one stays full-frame, and everyday words (boy, girl, son,
+daughter, little ones…) count as a child.
+
+## Phase 2 notes (original plan)
 
 Server-side path for share / export (same plan as private moments):
 

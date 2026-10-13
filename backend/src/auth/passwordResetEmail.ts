@@ -1,4 +1,4 @@
-import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
+import { ATMOSPHERE_EMAIL_LOGO_STYLE, atmosphereWordmarkHtml } from '../lib/brandMark.js';
 
 /**
  * Atmosphere password-reset email.
@@ -54,6 +54,7 @@ export function passwordResetEmail(input: { url: string }): {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <title>${escapeHtml(subject)}</title>
+${ATMOSPHERE_EMAIL_LOGO_STYLE}
 </head>
 <body style="margin:0;padding:0;background:${PAPER};font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">

@@ -265,8 +265,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
-assert.match(html, /js\/app\.js\?v=app-shell-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-session-1/);
+assert.match(html, /js\/app\.js\?v=app-session-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -1759,6 +1759,31 @@ assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }, { id: 'b' }]), true
 assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }]), false);
 assert.match(appSrc, /openInviteAfterAccountSignIn/, 'account=1 sign-in can prefer Today');
 
+// Invited subcontractor: the shared job sits on the normal Today list,
+// selectable, and the invite opens with that job already picked.
+assert.equal(Core.shareTokenFromPath('/shared/abc%2Bdef?email=a%40b.co'), 'abc+def');
+assert.equal(Core.shareTokenFromPath('/job-progress?job=1'), '');
+assert.equal(Core.shareTokenFromPath(null), '');
+assert.equal(
+  Core.inviteJobIdInToday(
+    [
+      { id: 'own', sharePath: '/shared/zzz' },
+      { id: 'sub-job', sharePath: '/shared/tok123?email=sub%40alpha.co', shared: true },
+    ],
+    'tok123',
+  ),
+  'sub-job',
+);
+assert.equal(Core.inviteJobIdInToday([{ id: 'own', sharePath: '/shared/zzz' }], 'tok123'), '');
+assert.equal(Core.inviteJobIdInToday([{ id: 'x', sharePath: '/shared/tok123' }], ''), '');
+assert.match(appSrc, /function preferAccountToday/, 'a signed-in invite prefers the job list');
+assert.match(
+  appSrc,
+  /function enterAccountHome\(me, jobs\) \{[\s\S]{0,200}LIVE = false;/,
+  'the job list files against the picked job, not the invite link',
+);
+assert.match(appSrc, /Shared by /, 'shared jobs say whose job they are');
+
 
 assert.match(appSrc, /Recording disclosure gate removed/, 'web FC no longer gates startLiveDay on disclosure');
 assert.doesNotMatch(appSrc, /bindRecordingConsent\(\);/, 'disclosure removal must not leave a crashing bindRecordingConsent() call');
@@ -1854,8 +1879,8 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 }
 
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=app-shell-1/);
-assert.match(html, /js\/app\.js\?v=app-shell-1/);
+assert.match(html, /js\/capture-core\.js\?v=app-session-1/);
+assert.match(html, /js\/app\.js\?v=app-session-1/);
 
 const DENIED_GUM =
   'The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.';
@@ -2072,3 +2097,6 @@ console.log('keyboard chrome: ok');
   assert.doesNotMatch(coreSrc, /\/proof\/(?:safety-live|safety-sample|wellness-heartbeat)/);
   console.log('no live safety stream: ok');
 }
+
+// Stay signed in until force close (runs in the same CI step).
+await import('./app-session.test.mjs');

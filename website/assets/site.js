@@ -30,7 +30,7 @@
     'platform.html': 'product', 'sales.html': 'product', 'operations.html': 'product',
     'field.html': 'product', 'hardware.html': 'product', 'manager.html': 'product',
     'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',
-    'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about',
+    'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about', 'demo.html': 'about',
     'investors.html': 'about'
   };
   var group = NAV_GROUP[page] || (page.indexOf('doc-') === 0 ? 'resources' : null);

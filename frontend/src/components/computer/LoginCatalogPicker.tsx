@@ -6,12 +6,7 @@ import {
   type LoginCatalog,
   type LoginCatalogEntry,
 } from '../../lib/computer';
-
-/** Public favicon for a site host (Google’s favicon service). Falls back to the monogram on error. */
-export function siteLogoUrl(host: string): string {
-  const clean = host.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(clean)}&sz=128`;
-}
+import { siteLogoSrc } from '../../lib/siteLogos';
 
 function sizeClass(size: 'sm' | 'md' | 'lg'): string {
   if (size === 'lg') return 'h-10 w-10 text-sm';
@@ -24,11 +19,12 @@ export function SiteLogo({
   site,
   size = 'md',
 }: {
-  site: Pick<LoginCatalogEntry, 'logo' | 'name' | 'host'>;
+  site: Pick<LoginCatalogEntry, 'logo' | 'name' | 'host'> & { id?: string };
   size?: 'sm' | 'md' | 'lg';
 }) {
   return (
     <HostLogo
+      src={siteLogoSrc(site.id)}
       host={site.host}
       name={site.name}
       monogram={site.logo}
@@ -37,13 +33,18 @@ export function SiteLogo({
   );
 }
 
-/** Logo by hostname (saved login rows and catalog). Monogram when the image fails. */
+/**
+ * A site's logo: the locally hosted icon when there is one (catalog sites),
+ * otherwise the monogram. Never loads an image from another website.
+ */
 export function HostLogo({
+  src = null,
   host,
   name,
   monogram,
   size = 'md',
 }: {
+  src?: string | null;
   host: string;
   name: string;
   monogram?: { text: string; color: string } | null;
@@ -60,7 +61,7 @@ export function HostLogo({
   const initials = monogram?.text || fromName || host.slice(0, 2).toUpperCase() || '?';
   const color = monogram?.color ?? '#475569';
 
-  if (!failed && host.trim()) {
+  if (!failed && src) {
     return (
       <span
         aria-hidden="true"
@@ -68,11 +69,10 @@ export function HostLogo({
         data-testid="site-logo"
       >
         <img
-          src={siteLogoUrl(host)}
+          src={src}
           alt=""
           className="h-full w-full object-contain p-1"
           loading="lazy"
-          referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
         />
       </span>

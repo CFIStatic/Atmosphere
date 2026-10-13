@@ -1,6 +1,7 @@
 import { adminForOrg, unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 import { toOrgProductRole, type OrgProductRole } from './productRoles.js';
+import { authPhoneToE164 } from '../auth/phoneAuth.js';
 
 /**
  * Org seats after the first Global Admin are invite-only.
@@ -11,9 +12,12 @@ import { toOrgProductRole, type OrgProductRole } from './productRoles.js';
  */
 
 export type PendingOrgInvite = {
+  /** The org_invites row, so the join can mark it answered. */
+  inviteId: string;
   orgId: string;
   role: OrgProductRole;
-  email: string;
+  email: string | null;
+  phone: string | null;
   /** Advisory person service title from the invite. */
   serviceRole: string | null;
   serviceRoleCustom: string | null;
@@ -23,9 +27,13 @@ export type PendingOrgInvite = {
 
 export async function requirePendingOrgInvite(input: {
   email: string | null | undefined;
+  /** Verified auth phone (Supabase stores it without "+"). */
+  phone?: string | null | undefined;
 }): Promise<PendingOrgInvite> {
   const email = input.email?.trim().toLowerCase() ?? '';
-  if (!email || !email.includes('@')) {
+  const hasEmail = Boolean(email && email.includes('@'));
+  const phone = authPhoneToE164(input.phone);
+  if (!hasEmail && !phone) {
     throw new HttpError(
       403,
       'Ask your Global Admin to invite this email, then create the account with that address.',
@@ -35,11 +43,17 @@ export async function requirePendingOrgInvite(input: {
 
   const raw = unscopedAdmin();
 
-  const { data: invite, error: inviteError } = await raw
+  let query = raw
     .from('org_invites')
-    .select('id, role, email, org_id, service_role, service_role_custom')
-    .eq('status', 'pending')
-    .eq('email', email)
+    .select('id, role, email, phone, org_id, service_role, service_role_custom')
+    .eq('status', 'pending');
+  query =
+    hasEmail && phone
+      ? query.or(`email.eq.${email},phone.eq.${phone}`)
+      : hasEmail
+        ? query.eq('email', email)
+        : query.eq('phone', phone as string);
+  const { data: invite, error: inviteError } = await query
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -47,7 +61,9 @@ export async function requirePendingOrgInvite(input: {
   if (!invite?.org_id) {
     throw new HttpError(
       403,
-      'This email has not been invited yet. Ask your Global Admin to send an invite.',
+      hasEmail
+        ? 'This email has not been invited yet. Ask your Global Admin to send an invite.'
+        : 'This number has not been invited yet. Ask your Global Admin to send an invite.',
       'invite_required',
     );
   }
@@ -67,7 +83,9 @@ export async function requirePendingOrgInvite(input: {
   return {
     orgId: org.id as string,
     role: toOrgProductRole(String(invite.role)),
-    email: String(invite.email),
+    inviteId: String(invite.id),
+    email: (invite as { email?: string | null }).email ?? null,
+    phone: (invite as { phone?: string | null }).phone ?? null,
     serviceRole: (invite as { service_role?: string | null }).service_role ?? null,
     serviceRoleCustom: (invite as { service_role_custom?: string | null }).service_role_custom ?? null,
     joinCode,

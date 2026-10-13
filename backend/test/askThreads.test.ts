@@ -318,10 +318,8 @@ test('a thread the caller does not own is not kept for memory', () => {
   assert.match(proof, /loadAskThreadMemory\(writeDb, \{ orgId, jobId, threadId, owner \}\)/);
 });
 
-test('progress-share Ask persists share-scoped threads', () => {
+test('progress-share Ask by token is retired', () => {
   const progress = readFileSync(join(here, '../src/routes/progressShare.ts'), 'utf8');
-  assert.match(progress, /ask\/threads/);
-  assert.match(progress, /ask\/threads\/:threadId/);
-  assert.match(progress, /shareId: share\.id/);
-  assert.match(progress, /kind: 'share'/);
+  assert.match(progress, /all\('\/:token\/ask\/\*', retiredGuestApi\)/);
+  assert.doesNotMatch(progress, /createAskThread|runProofAsk/);
 });

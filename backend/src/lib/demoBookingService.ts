@@ -1,0 +1,182 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { HttpError } from './errors.js';
+import {
+  DEMO_WINDOW_DAYS,
+  demoSlotStarts,
+  isBookableSlot,
+  type DemoBookingInput,
+} from './demoBooking.js';
+import { demoHostEmail } from './demoBookingEmail.js';
+
+export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
+export const DEMO_ORGANIZER_NAME = (process.env.DEMO_BOOKING_HOST_NAME || 'Jack Cyganiak').trim();
+
+export type DemoBookingStore = {
+  /** Booked slot starts (ISO) between from and to. */
+  bookedBetween(fromIso: string, toIso: string): Promise<string[]>;
+  /** Insert; resolves 'taken' when the slot's unique index rejects it. */
+  insert(row: Record<string, unknown>): Promise<{ id: string } | 'taken'>;
+  markEmailed(id: string, field: 'host_emailed_at' | 'guest_emailed_at'): Promise<void>;
+  /** The booking, or null. */
+  get(id: string): Promise<DemoBookingRow | null>;
+  /** Store the per-booking calendar event and Meet link. */
+  setMeet(id: string, meetUrl: string, eventId: string): Promise<void>;
+  /** Atomically set host_notified_at if still null; false if already set. */
+  claimHostNotified(id: string): Promise<boolean>;
+  releaseHostNotified(id: string): Promise<void>;
+};
+
+export type DemoBookingRow = {
+  id: string;
+  slot_start: string;
+  status: string;
+  name: string;
+  email: string;
+  company: string;
+  phone: string | null;
+  notes: string | null;
+  guest_time_zone: string | null;
+  host_notified_at: string | null;
+};
+
+/**
+ * The host's one email for a booking, sent once the routine has created the
+ * Google Calendar event: booker details plus a Join meeting button.
+ * Idempotent via host_notified_at.
+ */
+export async function notifyHostWithMeet(
+  id: string,
+  input: { meetUrl: string; eventId: string },
+  deps: { store: DemoBookingStore; send: DemoMailer },
+): Promise<{ status: 'sent' | 'already_sent' }> {
+  const row = await deps.store.get(id);
+  if (!row) throw new HttpError(404, 'Booking not found.', 'not_found');
+  await deps.store.setMeet(id, input.meetUrl, input.eventId);
+  if (row.host_notified_at || !(await deps.store.claimHostNotified(id))) return { status: 'already_sent' };
+  const b = {
+    slotStart: new Date(row.slot_start).toISOString(),
+    name: row.name,
+    email: row.email,
+    company: row.company,
+    phone: row.phone ?? '',
+    notes: row.notes ?? '',
+    timeZone: row.guest_time_zone ?? '',
+    website: '',
+  } as DemoBookingInput;
+  const sent = await deps.send({
+    to: DEMO_ORGANIZER_EMAIL,
+    ...demoHostEmail(b, new Date(row.slot_start), input.meetUrl),
+    replyTo: `"${row.name.replaceAll('"', "'")}" <${row.email}>`,
+    keepReplyTo: true,
+  });
+  if (!sent.ok) {
+    await deps.store.releaseHostNotified(id).catch(() => undefined);
+    throw new HttpError(502, `Host email failed: ${sent.why}`, 'mail_failed');
+  }
+  return { status: 'sent' };
+}
+
+export type DemoMailer = (input: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string | null;
+  replyTo?: string | null;
+  keepReplyTo?: boolean;
+}) => Promise<{ ok: true } | { ok: false; why: string }>;
+
+export function supabaseDemoStore(client: SupabaseClient): DemoBookingStore {
+  return {
+    async bookedBetween(fromIso, toIso) {
+      const { data, error } = await client
+        .from('demo_bookings')
+        .select('slot_start')
+        .eq('status', 'booked')
+        .gte('slot_start', fromIso)
+        .lte('slot_start', toIso);
+      if (error) throw new Error(`demo_bookings read failed: ${error.message}`);
+      return (data ?? []).map((r) => new Date(String(r.slot_start)).toISOString());
+    },
+    async insert(row) {
+      const { data, error } = await client.from('demo_bookings').insert(row).select('id').single();
+      if (error) {
+        if (error.code === '23505') return 'taken';
+        throw new Error(`demo_bookings insert failed: ${error.message}`);
+      }
+      return { id: String(data.id) };
+    },
+    async get(id) {
+      const { data, error } = await client
+        .from('demo_bookings')
+        .select('id, slot_start, status, name, email, company, phone, notes, guest_time_zone, host_notified_at')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw new Error(`demo_bookings read failed: ${error.message}`);
+      return (data as DemoBookingRow | null) ?? null;
+    },
+    async setMeet(id, meetUrl, eventId) {
+      const { error } = await client.from('demo_bookings').update({ meet_url: meetUrl, google_event_id: eventId }).eq('id', id);
+      if (error) throw new Error(`demo_bookings update failed: ${error.message}`);
+    },
+    async claimHostNotified(id) {
+      const { data, error } = await client
+        .from('demo_bookings')
+        .update({ host_notified_at: new Date().toISOString() })
+        .eq('id', id)
+        .is('host_notified_at', null)
+        .select('id');
+      if (error) throw new Error(`demo_bookings update failed: ${error.message}`);
+      return (data ?? []).length > 0;
+    },
+    async releaseHostNotified(id) {
+      await client.from('demo_bookings').update({ host_notified_at: null }).eq('id', id);
+    },
+    async markEmailed(id, field) {
+      await client.from('demo_bookings').update({ [field]: new Date().toISOString() }).eq('id', id);
+    },
+  };
+}
+
+export async function openDemoSlots(store: DemoBookingStore, now: Date = new Date()): Promise<string[]> {
+  const all = demoSlotStarts(now);
+  if (all.length === 0) return [];
+  const taken = new Set(await store.bookedBetween(all[0]!, all[all.length - 1]!));
+  return all.filter((s) => !taken.has(s));
+}
+
+/**
+ * Book a slot, with no email; Google's Calendar invite and notifyHostWithMeet follow. The row is the
+ * source of truth: once it is in, the slot is held even if mail fails.
+ */
+export async function bookDemo(
+  input: DemoBookingInput,
+  deps: { store: DemoBookingStore; send: DemoMailer; ip: string | null; now?: Date },
+): Promise<{ id: string; slotStart: string }> {
+  const now = deps.now ?? new Date();
+  if (!isBookableSlot(input.slotStart, now)) {
+    throw new HttpError(409, 'That time is no longer available. Pick another.', 'slot_unavailable');
+  }
+  const start = new Date(Date.parse(input.slotStart));
+  const slotStart = start.toISOString();
+  const inserted = await deps.store.insert({
+    slot_start: slotStart,
+    name: input.name,
+    email: input.email,
+    company: input.company,
+    phone: input.phone || null,
+    notes: input.notes || null,
+    guest_time_zone: input.timeZone || null,
+    client_ip: deps.ip,
+    status: 'booked',
+  });
+  if (inserted === 'taken') {
+    throw new HttpError(409, 'Someone just booked that time. Pick another.', 'slot_taken');
+  }
+
+  // No email at booking time. The guest's email is Google's own Calendar
+  // invite; the host's single email goes out from notifyHostWithMeet once
+  // the per-booking Meet link exists.
+  return { id: inserted.id, slotStart };
+}
+
+export { DEMO_WINDOW_DAYS };

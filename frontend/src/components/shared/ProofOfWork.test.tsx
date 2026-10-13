@@ -550,3 +550,26 @@ describe('ProofOfWork video collection', () => {
     await waitFor(() => expect(proofDownloadUrl).toHaveBeenCalledWith('proof-morning'));
   });
 });
+
+describe('ProofOfWork when the API hiccups', () => {
+  it('retries a failed first load instead of showing an empty job', async () => {
+    jobProofs.mockReset();
+    proofQuestions.mockResolvedValue({ questions: [] });
+    evidenceLibrary.mockResolvedValue({ items: [], jobs: [] });
+    jobProofs
+      .mockRejectedValueOnce(new Error('Atmosphere API is not reachable.'))
+      .mockResolvedValue(catalog);
+    render(<ProofOfWork jobId="job-1" readOnly />);
+    await waitFor(() => expect(screen.getByTestId('job-video-count')).toBeInTheDocument(), { timeout: 4000 });
+    expect(screen.queryByText(/Nothing filed yet/)).toBeNull();
+    expect(jobProofs).toHaveBeenCalledTimes(2);
+  });
+
+  it('never paints "Nothing filed yet" when every attempt fails', async () => {
+    jobProofs.mockReset();
+    jobProofs.mockRejectedValue(new Error('Atmosphere API is not reachable.'));
+    render(<ProofOfWork jobId="job-1" readOnly />);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Retrying/), { timeout: 5000 });
+    expect(screen.queryByText(/Nothing filed yet/)).toBeNull();
+  });
+});

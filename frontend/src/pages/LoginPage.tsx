@@ -5,6 +5,12 @@ import { ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
 import { isInAppShell, WEBSITE_SIGNUP_URL } from '../lib/appShell';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
+import { shareTokenFromLogin } from '../lib/homeownerLogin';
+import { HomeownerEmailLink } from '../components/HomeownerEmailLink';
+import { PhoneSignIn } from '../components/PhoneSignIn';
+import { EmailCodeSignIn } from '../components/EmailCodeSignIn';
+import { usePhoneAuthEnabled } from '../hooks/usePhoneAuthEnabled';
+import { accountContact } from '../lib/phone';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
@@ -69,12 +75,16 @@ export function LoginPage() {
 
   const fieldEmbed = isFieldEmbedMarked() || isFieldEmbedQuery(location.search);
   const switchAccount = searchParams.get('switch') === '1';
+  const shareToken = shareTokenFromLogin(searchParams.get('share'));
 
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [usePhone, setUsePhone] = useState(() => Boolean(searchParams.get('phone')));
+  const [useEmailCode, setUseEmailCode] = useState(false);
 
   useEffect(() => {
     if (!fieldEmbed || user || switchAccount) return;
@@ -96,6 +106,12 @@ export function LoginPage() {
     if (email) params.set('email', email);
     const qs = params.toString();
     return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
+  }
+
+  // /login?homeowner=1 opens the same email-link step as the sign-up page.
+  if (searchParams.get('homeowner') === '1' && !user) {
+    const email = searchParams.get('email');
+    return <Navigate to={`/signup?homeowner=1${email ? `&email=${encodeURIComponent(email)}` : ''}`} replace />;
   }
 
   if (loading || (user && membershipLoading && !switchAccount)) {
@@ -124,6 +140,28 @@ export function LoginPage() {
           <SpinnerIcon className="animate-spin" width={28} height={28} />
           <p className="text-sm font-medium text-ink-700">Opening your workspace…</p>
         </div>
+      </div>
+    );
+  }
+
+  // Opened from a homeowner share link: email-only, no password or sign-up.
+  if (shareToken) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper-100">
+        <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
+          <Logo size="lg" />
+          <ThemeToggle />
+        </header>
+        <main className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-md animate-fade-in-up">
+            <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10" data-testid="homeowner-login">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Your job</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome</h1>
+              <p className="mt-1.5 text-sm text-ink-600">Sign in to see the job shared with you.</p>
+              <HomeownerEmailLink token={shareToken} email={searchParams.get('email')} />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -185,7 +223,7 @@ export function LoginPage() {
                   <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
                     <p>
                       You&apos;re signed in as{' '}
-                      <span className="font-medium text-ink-900">{user.email}</span>
+                      <span className="font-medium text-ink-900">{accountContact(user)}</span>
                       {membership?.org?.name ? (
                         <>
                           {' '}
@@ -215,6 +253,31 @@ export function LoginPage() {
                 )}
 
 
+                {phoneEnabled && usePhone ? (
+                  <div className="mt-6">
+                    <PhoneSignIn
+                      intent={searchParams.get('invited') === '1' ? 'signup' : 'signin'}
+                      initialPhone={searchParams.get('phone')}
+                      onSignedIn={async (nextMembership) => {
+                        queueRedirect(
+                          await destinationAfterLogin(nextMembership, redirectTo, searchParams.get('intent')),
+                        );
+                      }}
+                    />
+                  </div>
+                ) : useEmailCode ? (
+                  <div className="mt-6">
+                    <EmailCodeSignIn
+                      initialEmail={email}
+                      onSignedIn={async (nextMembership) => {
+                        queueRedirect(
+                          await destinationAfterLogin(nextMembership, redirectTo, searchParams.get('intent')),
+                        );
+                      }}
+                    />
+                  </div>
+                ) : (
+                <>
                 {error && (
                   <div
                     role="alert"
@@ -301,6 +364,52 @@ export function LoginPage() {
                   </button>
                 </form>
 
+                </>
+                )}
+
+                {!(phoneEnabled && usePhone) && (
+                  <p className="mt-4 text-center text-sm">
+                    <button
+                      type="button"
+                      data-testid="toggle-email-code-signin"
+                      onClick={() => {
+                        setError(null);
+                        setUseEmailCode((v) => !v);
+                      }}
+                      className="font-medium text-brand-600 transition hover:text-brand-700"
+                    >
+                      {useEmailCode ? 'Use password instead' : 'Email me a code instead'}
+                    </button>
+                  </p>
+                )}
+
+                {phoneEnabled && (
+                  <p className="mt-4 text-center text-sm">
+                    <button
+                      type="button"
+                      data-testid="toggle-phone-signin"
+                      onClick={() => {
+                        setError(null);
+                        setUseEmailCode(false);
+                        setUsePhone((v) => !v);
+                      }}
+                      className="font-medium text-brand-600 transition hover:text-brand-700"
+                    >
+                      {usePhone ? 'Use email instead' : 'Text me a code instead'}
+                    </button>
+                  </p>
+                )}
+
+                <p className="mt-4 text-center text-sm">
+                  <Link
+                    to="/signup?homeowner=1"
+                    data-testid="homeowner-email-option"
+                    className="font-medium text-brand-600 transition hover:text-brand-700"
+                  >
+                    Homeowner? Sign in with your email
+                  </Link>
+                </p>
+
                 <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
                   Don&apos;t have an account?{' '}
                   {isInAppShell() ? (
@@ -325,9 +434,11 @@ export function LoginPage() {
                 </div>
           </div>
 
-          <p className="mt-6 text-center text-xs text-ink-400">
-            Passwords are encrypted, never stored in plain text, and never seen by this page.
-          </p>
+          {!(phoneEnabled && usePhone) && (
+            <p className="mt-6 text-center text-xs text-ink-400">
+              Passwords are encrypted, never stored in plain text, and never seen by this page.
+            </p>
+          )}
         </div>
       </main>
     </div>

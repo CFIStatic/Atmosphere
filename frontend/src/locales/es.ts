@@ -89,6 +89,7 @@ export const ES: MessageCatalog = {
   'settings.account.emailConfirmed': 'Correo confirmado',
   'settings.account.emailConfirmedYes': 'Sí',
   'settings.account.emailConfirmedNo': 'Aún no confirmado',
+  'settings.account.phone': 'Número de móvil',
   'settings.account.memberSince': 'Miembro desde',
   'settings.account.lastSignIn': 'Último acceso',
   'settings.account.emailLocked':

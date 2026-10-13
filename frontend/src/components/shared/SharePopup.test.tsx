@@ -8,6 +8,7 @@ const sharedJob = vi.fn();
 const addJobParty = vi.fn();
 const revokeJobParty = vi.fn();
 const getBillingOnboarding = vi.fn();
+const phoneAuthConfig = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   api: {
@@ -16,6 +17,7 @@ vi.mock('../../lib/api', () => ({
     addJobParty: (...args: unknown[]) => addJobParty(...args),
     revokeJobParty: (...args: unknown[]) => revokeJobParty(...args),
     getBillingOnboarding: (...args: unknown[]) => getBillingOnboarding(...args),
+    phoneAuthConfig: (...args: unknown[]) => phoneAuthConfig(...args),
   },
 }));
 
@@ -96,5 +98,48 @@ describe('Share popup — crew', () => {
     await screen.findByText('Delgado Roofing');
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
     expect(revokeJobParty).toHaveBeenCalledWith('job-1', 'p-1');
+  });
+});
+
+describe('SharePopup access variant (Access tab → Invite)', () => {
+  beforeEach(() => {
+    evidenceShares.mockReset().mockResolvedValue({ shares: [] });
+    sharedJob.mockReset().mockResolvedValue({ parties: [] });
+    addJobParty.mockReset();
+    getBillingOnboarding.mockReset().mockResolvedValue({ planRequired: false });
+    phoneAuthConfig.mockReset().mockResolvedValue({ enabled: true });
+  });
+
+  it('opens on Crew and invites a mobile number as crew', async () => {
+    addJobParty.mockResolvedValue({ party: party({ email: null, phone: '+15550100000' }), texted: true });
+    const onInvited = vi.fn();
+    render(<SharePopup jobId="job-1" variant="access" onClose={() => {}} onInvited={onInvited} />);
+    const user = userEvent.setup();
+    expect(screen.getByTestId('access-invite-role')).toHaveTextContent('Crew');
+    await user.click(screen.getByTestId('access-invite-role'));
+    expect(screen.getByRole('option', { name: /Subcontractor/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Homeowner/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Crew/ }));
+    await user.click(await screen.findByRole('radio', { name: 'Mobile number' }));
+    await user.type(screen.getByPlaceholderText('Delgado Roofing'), 'Sam Rivera');
+    await user.type(screen.getByPlaceholderText('(555) 010-0000'), '5550100000');
+    await user.click(screen.getByRole('button', { name: 'Text crew invite' }));
+    await waitFor(() =>
+      expect(addJobParty).toHaveBeenCalledWith('job-1', {
+        company: 'Sam Rivera',
+        phone: '5550100000',
+        role: 'subcontractor',
+        serviceRole: 'crew',
+      }),
+    );
+    await waitFor(() => expect(onInvited).toHaveBeenCalled());
+    expect(await screen.findByText(/Invite texted to 5550100000/)).toBeInTheDocument();
+  });
+
+  it('hides the mobile option when phone sign-in is off', async () => {
+    phoneAuthConfig.mockResolvedValue({ enabled: false });
+    render(<SharePopup jobId="job-1" variant="access" onClose={() => {}} />);
+    await waitFor(() => expect(phoneAuthConfig).toHaveBeenCalled());
+    expect(screen.queryByRole('radio', { name: 'Mobile number' })).not.toBeInTheDocument();
   });
 });

@@ -73,13 +73,9 @@ test('assertGuestMayMintRawMedia allows clean proofs and refuses redacted ones',
   );
 });
 
-test('progress-share video excludes soft-deleted proofs and gates privacy redactions', () => {
-  const start = progressShare.indexOf("'/:token/proof/:proofId/video'");
-  assert.ok(start > 0);
-  const body = progressShare.slice(start, start + 1800);
-  assert.match(body, /\.is\('deleted_at',\s*null\)/);
-  assert.match(body, /assertGuestMayMintRawMedia/);
-  assert.match(body, /ai_findings/);
+test('progress-share video by token is retired (no raw media without sign-in)', () => {
+  assert.match(progressShare, /progressShareRouter\.all\('\/:token\/proof\/\*', retiredGuestApi\)/);
+  assert.doesNotMatch(progressShare, /createSignedPlayableProofUrl/);
 });
 
 test('progress-share token lookup rejects soft-deleted jobs', () => {
@@ -134,13 +130,40 @@ test('verifier-share clip detail and Ask exclude deleted proofs', () => {
   assert.match(ask, /\.is\('deleted_at',\s*null\)/);
 });
 
-test('shared proof video applies the guest rules to progress-grant viewers', () => {
+test('shared proof video: no removed clips for viewers; raw-media rule only for subs', () => {
   const proofOfWork = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
   const start = proofOfWork.indexOf('export async function proofVideoUrl');
   assert.ok(start > 0);
   const body = proofOfWork.slice(start, start + 2600);
-  assert.match(body, /guest = ctx\.access === 'viewer'/);
+  assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(body, /guest = access === 'viewer'/);
   assert.match(body, /guest && \(proof as any\)\.deleted_at/);
-  assert.match(body, /if \(guest\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  // The homeowner plays every clip like the contractor; a sub keeps the guest rule.
+  assert.match(body, /if \(viewerPartyId\(viewer\)\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  assert.doesNotMatch(body, /if \(guest\) assertGuestMayMintRawMedia/);
   assert.match(body, /select\('[^']*ai_findings[^']*'\)/);
+});
+
+test('homeowner downloads every clip of a shared job; a sub keeps the guest rules', () => {
+  const portal = readFileSync(join(here, '../src/routes/evidencePortal.ts'), 'utf8');
+  const start = portal.indexOf("'/evidence/:proofId/download'");
+  assert.ok(start > 0);
+  const body = portal.slice(start, start + 2000);
+  assert.match(body, /resolveProofAccess\(req, req\.params\.proofId\)/);
+  assert.match(body, /viewer && \(proof as any\)\.deleted_at/);
+  assert.match(body, /if \(viewerPartyId\(resolved\)\) assertGuestMayMintRawMedia\(\(proof as any\)\.ai_findings\)/);
+  assert.doesNotMatch(body, /if \(viewer\) assertGuestMayMintRawMedia/);
+});
+
+test('an invited subcontractor only ever gets the videos they recorded', () => {
+  const proofOfWork = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
+  const start = proofOfWork.indexOf('export async function listPartyProofs');
+  assert.ok(start > 0);
+  const body = proofOfWork.slice(start, start + 400);
+  assert.match(body, /listAllVisibleProofs\(admin, \{ partyId: party\.id \}\)/);
+
+  // The sub's job view carries no other videos at all.
+  const shared = readFileSync(join(here, '../src/routes/sharedJobs.ts'), 'utf8');
+  const view = shared.slice(shared.indexOf("the sub's view of the job"), shared.indexOf("the sub's view of the job") + 3500);
+  assert.doesNotMatch(view, /job_proofs|videos:|listAllVisibleProofs/);
 });

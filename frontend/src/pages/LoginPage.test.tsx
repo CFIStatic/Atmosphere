@@ -25,11 +25,13 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
+const progressShareEmailSignIn = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => ({ ok: true })));
 const progressShareGrants = vi.hoisted(() => vi.fn(async () => ({ grants: [] as unknown[] })));
 
 vi.mock('../lib/api', () => ({
   api: {
     progressShareGrants: () => progressShareGrants(),
+    progressShareEmailSignIn: (...a: unknown[]) => progressShareEmailSignIn(...a),
   },
   ApiError: class ApiError extends Error {
     status = 401;
@@ -89,6 +91,11 @@ describe('LoginPage', () => {
     expect(container.querySelector('header')?.className).toContain('py-8');
     expect(container.querySelector('[data-atmosphere-lockup]')?.className).toContain('text-ink-900');
     expect(screen.getByRole('button', { name: /Switch to (light|dark) mode/ })).toBeInTheDocument();
+  });
+
+  it('offers homeowners the email-link sign-in', () => {
+    renderLogin();
+    expect(screen.getByTestId('homeowner-email-option')).toHaveAttribute('href', '/signup?homeowner=1');
   });
 
   it('offers a single create-account link instead of org vs office cards', () => {
@@ -258,5 +265,72 @@ describe('LoginPage in the iPhone/Android app shell', () => {
     const link = screen.getByRole('link', { name: 'Create an account' });
     expect(link.getAttribute('href')).toMatch(/^\/signup/);
     expect(link.getAttribute('target')).toBeNull();
+  });
+});
+
+describe('LoginPage from a homeowner share link', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('prefills the invited email and offers Email me a code, sent to the share (not the typed address)', async () => {
+    authState.user = null;
+    renderLogin('/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com');
+    expect(screen.getByLabelText('Email')).toHaveValue('home@owner.com');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
+    expect(screen.getByText('Sign in to see the job shared with you.')).toBeInTheDocument();
+    // Email-only: no password, no contractor sign-in or sign-up.
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Sign in$/ })).toBeNull();
+    expect(screen.queryByText(/Create an account/)).toBeNull();
+    expect(screen.queryByText(/use a password|forgot password/i)).toBeNull();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toContain('Email me a code');
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
+    expect(progressShareEmailSignIn).toHaveBeenCalledWith('tok_0123456789abcdef0123');
+    expect(await screen.findByRole('status')).toHaveTextContent('home@owner.com');
+  });
+
+  it('plain /login has no homeowner link option', () => {
+    authState.user = null;
+    renderLogin('/login');
+    expect(screen.queryByRole('button', { name: 'Email me a code' })).toBeNull();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByText(/Create an account/)).toBeInTheDocument();
+  });
+});
+
+describe('homeowner email-link errors always leave a next step', () => {
+  beforeEach(() => sessionStorage.clear());
+  const url = '/login?next=%2Fprogress%2Ftok_0123456789abcdef0123&share=tok_0123456789abcdef0123&email=home%40owner.com';
+  async function failWith(code: string, message: string) {
+    const { ApiError } = await import('../lib/api');
+    const err = new (ApiError as unknown as new (m: string) => Error & { code: string })(message);
+    err.code = code;
+    progressShareEmailSignIn.mockRejectedValueOnce(err);
+  }
+
+  it('rate limited: says wait, keeps the button', async () => {
+    authState.user = null;
+    await failWith('rate_limited', 'Too many sign-in emails.');
+    renderLogin(url);
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Wait a few minutes/);
+    expect(screen.getByRole('button', { name: 'Email me a code' })).toBeEnabled();
+  });
+
+  it('revoked link: explains and links to sign in', async () => {
+    authState.user = null;
+    await failWith('revoked', 'This link was revoked.');
+    renderLogin(url);
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/share the job again/);
+    expect(screen.getByTestId('email-link-dead-action')).toHaveAttribute('href', '/login');
+  });
+
+  it('a send failure keeps the retry button', async () => {
+    authState.user = null;
+    await failWith('signin_send_failed', 'Could not send the sign-in email.');
+    renderLogin(url);
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/try again/);
+    expect(screen.getByRole('button', { name: 'Email me a code' })).toBeEnabled();
   });
 });

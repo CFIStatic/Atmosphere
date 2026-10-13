@@ -56,6 +56,20 @@ function matchSeekVideo(
   return videos[0];
 }
 
+/** jobProofs with two quick retries for a transient gateway error. */
+async function jobProofsWithRetry(jobId: string, delaysMs: number[] = [800, 2000]) {
+  let last: unknown;
+  for (let i = 0; i <= delaysMs.length; i += 1) {
+    try {
+      return await api.jobProofs(jobId);
+    } catch (err) {
+      last = err;
+      if (i < delaysMs.length) await new Promise((r) => setTimeout(r, delaysMs[i]));
+    }
+  }
+  throw last;
+}
+
 export function ProofOfWork({
   jobId,
   heading = 'Videos',
@@ -101,7 +115,9 @@ export function ProofOfWork({
     if (!jobId) return;
     try {
       const [proofs, qs] = await Promise.all([
-        api.jobProofs(jobId),
+        // A momentary 502/503 on first open used to paint "Nothing filed yet"
+        // over a job full of clips. Retry briefly before giving up.
+        opts?.silent ? api.jobProofs(jobId) : jobProofsWithRetry(jobId),
         readOnly
           ? Promise.resolve({ questions: [] as ProofQuestion[] })
           : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
@@ -120,14 +136,14 @@ export function ProofOfWork({
       setQuestions(qs.questions);
       setError(null);
     } catch (err) {
+      // Never show an empty list because a request failed: keep what is on
+      // screen (or Loading…) and let the 12-second refresh fill it in.
       if (!opts?.silent) {
-        setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-        setData({
-          days: [],
-          videos: [],
-          counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
-          siteKnown: false,
-        });
+        setError(
+          err instanceof Error && !/not reachable|API_UPSTREAM/i.test(err.message)
+            ? err.message
+            : 'Could not load the videos just now. Retrying…',
+        );
       }
     }
   }
@@ -190,6 +206,13 @@ export function ProofOfWork({
         Every video recorded on this job, kept in one place. Open one to watch it, read the
         transcript, or download it.
       </p>
+      {data?.viewerScope?.role === 'subcontractor' && (
+        <p className="mt-2 rounded-lg border border-line px-3 py-2 text-xs text-ink-600" data-testid="sub-video-scope">
+          You're on this job as {data.viewerScope.company ? `${data.viewerScope.company}, a subcontractor` : 'a subcontractor'}, so
+          you see only the videos you recorded. To see every video, ask the contractor to add you under Share
+          &gt; Homeowner.
+        </p>
+      )}
 
       {freshNotice && (
         <p role="status" className="mb-3 mt-3 rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">
@@ -215,7 +238,7 @@ export function ProofOfWork({
             jobId={jobId}
             videos={data.videos ?? []}
             videoFetcher={videoFetcher}
-            allowDownload={allowDownload && !readOnly && Boolean(jobId)}
+            allowDownload={allowDownload && Boolean(jobId)}
             seekProofId={seekProofId}
             seekAt={seekAt}
             seekNonce={seekNonce}
@@ -403,8 +426,8 @@ function libraryClipMetaKey(videos: ProofVideoRecord[]): string {
 
 /**
  * Titles and poster stills from the Dashboard's library rows, so the Videos
- * tab names a clip exactly as the Dashboard does. Office only — the library
- * is an org endpoint; a homeowner's read-only file keeps the fallback name.
+ * tab names a clip exactly as the Dashboard does, for the contractor and for
+ * anyone the job is shared with (the library answers job viewers too).
  */
 function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[]) {
   const [meta, setMeta] = useState<Map<string, LibraryClipMeta>>(() => new Map());

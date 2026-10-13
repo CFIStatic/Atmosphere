@@ -143,6 +143,27 @@ function UsernameInput({
   );
 }
 
+/** Optional company / tenant ID some sites (DASH) ask for along with the username and password. */
+function CompanyIdInput({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <label className={labelClass}>
+      Company ID (optional)
+      <input
+        type="text"
+        name="company-id"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={128}
+        className={inputClass}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        data-testid="logins-company-id"
+      />
+    </label>
+  );
+}
+
 /** "More options": a small disclosure for the rarely needed bits. */
 function MoreOptions({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -180,9 +201,10 @@ const cardClass = 'max-w-xl rounded-2xl border border-line bg-paper-0 p-4 sm:p-5
 interface Credentials {
   username: string;
   password: string;
+  companyId: string;
   loginUrl: string;
 }
-const EMPTY_CREDS: Credentials = { username: '', password: '', loginUrl: '' };
+const EMPTY_CREDS: Credentials = { username: '', password: '', companyId: '', loginUrl: '' };
 
 function credentialOf(c: Credentials, fallbackLoginUrl: string | null) {
   const username = c.username.trim();
@@ -190,6 +212,7 @@ function credentialOf(c: Credentials, fallbackLoginUrl: string | null) {
   return {
     username,
     password: c.password,
+    companyId: c.companyId.trim() || null,
     loginUrl: c.loginUrl.trim() || fallbackLoginUrl,
   } satisfies ComputerCredentialInput;
 }
@@ -410,6 +433,7 @@ function AddLoginForm({
               value={creds.password}
               onChange={(password) => setCreds({ ...creds, password })}
             />
+            <CompanyIdInput value={creds.companyId} onChange={(companyId) => setCreds({ ...creds, companyId })} />
           </>
         ) : null}
       </div>
@@ -501,7 +525,7 @@ function ManageLogin({
 
   function openEdit() {
     setConfirm(null);
-    setCreds({ username: cred?.username ?? '', password: '', loginUrl: cred?.loginUrl ?? '' });
+    setCreds({ username: cred?.username ?? '', password: '', companyId: cred?.companyId ?? '', loginUrl: cred?.loginUrl ?? '' });
     setEditing(true);
   }
 
@@ -575,6 +599,7 @@ function ManageLogin({
             value={creds.password}
             onChange={(password) => setCreds({ ...creds, password })}
           />
+          <CompanyIdInput value={creds.companyId} onChange={(companyId) => setCreds({ ...creds, companyId })} />
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" disabled={working !== null} className={primaryButton}>
               {working === `password:${login.id}` ? 'Saving…' : 'Save'}

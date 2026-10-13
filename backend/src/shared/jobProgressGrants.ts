@@ -12,6 +12,7 @@ import { HttpError } from '../lib/errors.js';
 import { requireOrgContext, type OrgContext } from '../lib/orgContext.js';
 import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { normalizeServiceRoleInput } from './serviceRole.js';
+import { partiesInvitedToEmail } from './inviteeJobAccess.js';
 
 export type JobProgressGrant = {
   orgId: string;
@@ -79,6 +80,12 @@ export type SharedJobAccess =
       productRole: 'employee';
       supabase: SupabaseClient;
       readOnly: true;
+      /**
+       * Set for an invited subcontractor (job party): same job file, but only
+       * the videos this party recorded. Null/absent for a homeowner, who sees
+       * every recording.
+       */
+      partyId?: string | null;
     };
 
 function missingGrantsTable(error: { message?: string; code?: string } | null | undefined): boolean {
@@ -167,11 +174,91 @@ async function liveGrants(
 }
 
 /** Every live job this person was invited to, across contractor orgs, newest first. */
+/**
+ * Every live homeowner invite (Share > Homeowner) addressed to this email,
+ * not yet claimed by this account. Pure so it can be tested without a DB.
+ */
+export function unclaimedSharesForEmail<
+  S extends { id: string; job_id: string; recipient_email: string | null; revoked_at: string | null; expires_at?: string | null },
+>(shares: S[], live: Array<{ job_id: string; share_id: string | null; revoked_at?: string | null }>, email: string, now = Date.now()): S[] {
+  const want = email.trim().toLowerCase();
+  if (!want) return [];
+  const claimed = new Set(live.filter((g) => !g.revoked_at && g.share_id).map((g) => `${g.job_id}:${g.share_id}`));
+  const seenJobs = new Set<string>();
+  return shares.filter((s) => {
+    if (s.revoked_at) return false;
+    if (s.expires_at && new Date(s.expires_at).getTime() < now) return false;
+    if ((s.recipient_email ?? '').trim().toLowerCase() !== want) return false;
+    if (claimed.has(`${s.job_id}:${s.id}`) || seenJobs.has(s.job_id)) return false;
+    seenJobs.add(s.job_id);
+    return true;
+  });
+}
+
+/**
+ * The homeowner account is the email. Any job a contractor shares with that
+ * email (now or years later) joins the account without clicking each invite
+ * link: live invites to the signed-in email become grants, the same row the
+ * link claim writes. Best-effort; the per-link claim still works.
+ */
+async function adoptSharesForEmail(
+  admin: SupabaseClient,
+  userId: string,
+  userEmail: string | null | undefined,
+  jobId?: string,
+): Promise<void> {
+  const email = userEmail?.trim().toLowerCase() || '';
+  if (!email) return;
+  try {
+    let q = admin
+      .from('verifier_shares')
+      .select('id, org_id, job_id, recipient_email, revoked_at, expires_at')
+      .eq('share_kind', 'progress')
+      .is('revoked_at', null)
+      .ilike('recipient_email', escapeLike(email))
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (jobId) q = q.eq('job_id', jobId);
+    const { data: shares, error } = await q;
+    if (error || !shares?.length) return;
+    let gq = admin.from('job_progress_grants').select('job_id, share_id, revoked_at').eq('user_id', userId);
+    if (jobId) gq = gq.eq('job_id', jobId);
+    const { data: grants, error: grantsError } = await gq;
+    if (grantsError) return;
+    type ShareRow = {
+      id: string;
+      org_id: string;
+      job_id: string;
+      recipient_email: string | null;
+      revoked_at: string | null;
+      expires_at: string | null;
+    };
+    type GrantPeek = { job_id: string; share_id: string | null; revoked_at: string | null };
+    const todo = unclaimedSharesForEmail(shares as ShareRow[], (grants ?? []) as GrantPeek[], email);
+    if (!todo.length) return;
+    const homeowner = normalizeServiceRoleInput({ forceHomeowner: true });
+    const rows = todo.map((s) => ({
+      org_id: s.org_id,
+      job_id: s.job_id,
+      user_id: userId,
+      share_id: s.id,
+      recipient_email: email,
+      service_role: homeowner.service_role,
+      revoked_at: null,
+    }));
+    const { error: upsertError } = await admin.from('job_progress_grants').upsert(rows, { onConflict: 'job_id,user_id' });
+    if (upsertError) console.warn('[grants] adopt by email failed:', upsertError.message);
+  } catch (err) {
+    console.warn('[grants] adopt by email failed:', err instanceof Error ? err.message : err);
+  }
+}
+
 export async function listJobProgressGrants(
   admin: SupabaseClient,
   userId: string,
   userEmail?: string | null,
 ): Promise<JobProgressGrant[]> {
+  await adoptSharesForEmail(admin, userId, userEmail);
   const rows = await selectGrantRows(admin, userId);
   if (!rows) return [];
   return liveGrants(admin, rows, userEmail);
@@ -183,6 +270,7 @@ export async function findJobProgressGrant(
   jobId: string,
   userEmail?: string | null,
 ): Promise<JobProgressGrant | null> {
+  await adoptSharesForEmail(admin, userId, userEmail, jobId);
   const rows = await selectGrantRows(admin, userId, jobId);
   if (!rows) return null;
   const [grant] = await liveGrants(admin, rows, userEmail);
@@ -261,8 +349,15 @@ export async function claimProgressShareForUser(input: {
     }
   }
 
-  // Progress-share claim always labels the person as Homeowner for Analysis.
-  await admin.from('profiles').upsert(
+  // Progress-share claim labels the person as Homeowner for Analysis, unless
+  // they have a work account: a contractor opening a shared job keeps their role.
+  const { data: memberships, error: memberError } = await admin
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', input.userId)
+    .limit(1);
+  const hasWorkAccount = Boolean(memberError) || (memberships ?? []).length > 0;
+  if (!hasWorkAccount) await admin.from('profiles').upsert(
     {
       id: input.userId,
       email: email,
@@ -309,40 +404,149 @@ export async function touchJobProgressGrantAccess(
   await admin.from('verifier_shares').update({ last_opened_at: now }).eq('id', shareId);
 }
 
-/** Org member, or a homeowner who claimed a progress share for this job. */
+/**
+ * A job that belongs to a different org than the caller's, which the caller
+ * was invited to by a claimed progress share (email must still match). Null
+ * for the caller's own jobs, unknown jobs, or no grant.
+ */
+export async function viewerGrantForForeignJob(
+  req: Request,
+  callerOrgId: string,
+  jobId: string,
+): Promise<JobProgressGrant | null> {
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  const { data: job } = await admin.from('crm_jobs').select('org_id').eq('id', jobId).maybeSingle();
+  const jobOrg = (job as { org_id?: string } | null)?.org_id;
+  if (!jobOrg || jobOrg === callerOrgId) return null;
+  return findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
+}
+
+function viewerAccess(req: Request, orgId: string, partyId: string | null = null): SharedJobAccess {
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  return {
+    access: 'viewer',
+    orgId,
+    userId: req.user!.id,
+    role: 'viewer',
+    productRole: 'employee',
+    supabase: admin,
+    readOnly: true,
+    partyId,
+  } as SharedJobAccess;
+}
+
+/** The sub's party id when this access is an invited subcontractor, else null. */
+export function viewerPartyId(access: SharedJobAccess): string | null {
+  return access.access === 'viewer' ? access.partyId ?? null : null;
+}
+
+/** An invited subcontractor opens only clips they recorded (404 otherwise). */
+export function assertViewerMayOpenProof(
+  access: SharedJobAccess,
+  proof: { party_id?: string | null } | null | undefined,
+): void {
+  const partyId = viewerPartyId(access);
+  if (partyId && proof?.party_id !== partyId) {
+    throw new HttpError(404, 'No such video.', 'not_found');
+  }
+}
+
+export type JobPartyView = { orgId: string; jobId: string; partyId: string };
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Jobs this person was invited to as a subcontractor or crew (Share >
+ * Subcontractor or crew): live job_parties rows addressed to their email.
+ * Signing in proves the email, the same proof the invite link carries.
+ */
+export async function listJobPartyViews(
+  admin: SupabaseClient,
+  userEmail: string | null | undefined,
+  jobId?: string,
+): Promise<JobPartyView[]> {
+  const email = userEmail?.trim().toLowerCase() || '';
+  if (!email) return [];
+  let q = admin
+    .from('job_parties')
+    .select('id, org_id, job_id, email, revoked_at, created_at')
+    .ilike('email', escapeLike(email))
+    .is('revoked_at', null);
+  if (jobId) q = q.eq('job_id', jobId);
+  const { data, error } = await q.order('created_at', { ascending: false });
+  if (error) return [];
+  const rows = partiesInvitedToEmail((data ?? []) as any[], email);
+  const seen = new Set<string>();
+  const out: JobPartyView[] = [];
+  for (const row of rows) {
+    if (seen.has(row.job_id)) continue;
+    seen.add(row.job_id);
+    out.push({ orgId: row.org_id, jobId: row.job_id, partyId: row.id });
+  }
+  return out;
+}
+
+async function findJobPartyView(
+  admin: SupabaseClient,
+  userEmail: string | null | undefined,
+  jobId: string,
+): Promise<JobPartyView | null> {
+  const [view] = await listJobPartyViews(admin, userEmail, jobId);
+  return view ?? null;
+}
+
+/**
+ * Org member, a homeowner who claimed a progress share for this job, or a
+ * subcontractor invited to it (viewer scoped to their own videos). A
+ * homeowner grant wins over a sub invite on the same job.
+ */
 export async function resolveOrgOrViewerAccess(
   req: Request,
   jobId?: string,
 ): Promise<SharedJobAccess> {
   try {
     const ctx = await requireOrgContext(req);
+    if (jobId) {
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const { data: job } = await admin.from('crm_jobs').select('org_id').eq('id', jobId).maybeSingle();
+      const jobOrg = (job as { org_id?: string } | null)?.org_id;
+      if (jobOrg && jobOrg !== ctx.orgId) {
+        // A contractor invited to another company's job opens it as a viewer.
+        const grant = await findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
+        if (grant) return viewerAccess(req, grant.orgId);
+        const party = await findJobPartyView(admin, req.user!.email, jobId);
+        if (party && party.orgId === jobOrg) return viewerAccess(req, party.orgId, party.partyId);
+      }
+    }
     return { ...ctx, access: 'org' };
   } catch (err) {
     if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
     const admin = unscopedAdminOrNull() ?? requireAdmin();
     if (jobId) {
       const grant = await findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
-      if (!grant) throw err;
-      return {
-        access: 'viewer',
-        orgId: grant.orgId,
-        userId: req.user!.id,
-        role: 'viewer',
-        productRole: 'employee',
-        supabase: admin,
-        readOnly: true,
-      };
+      if (grant) return viewerAccess(req, grant.orgId);
+      const party = await findJobPartyView(admin, req.user!.email, jobId);
+      if (party) return viewerAccess(req, party.orgId, party.partyId);
+      throw err;
     }
     const grants = await listJobProgressGrants(admin, req.user!.id, req.user!.email);
-    if (!grants.length) throw err;
-    return {
-      access: 'viewer',
-      orgId: grants[0]!.orgId,
-      userId: req.user!.id,
-      role: 'viewer',
-      productRole: 'employee',
-      supabase: admin,
-      readOnly: true,
-    };
+    if (grants.length) return viewerAccess(req, grants[0]!.orgId);
+    throw err;
   }
+}
+
+/**
+ * Who may open one clip: the clip's own org, or someone the clip's job was
+ * shared with (viewer). Peeks the job with admin, then the normal job check.
+ */
+export async function resolveProofAccess(req: Request, proofId: string) {
+  const admin = unscopedAdminOrNull();
+  if (admin) {
+    const { data: peek } = await admin.from('job_proofs').select('job_id').eq('id', proofId).maybeSingle();
+    const jobId = (peek as { job_id?: string } | null)?.job_id;
+    if (jobId) return resolveOrgOrViewerAccess(req, jobId);
+  }
+  return resolveOrgOrViewerAccess(req);
 }

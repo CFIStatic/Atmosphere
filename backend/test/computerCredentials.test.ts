@@ -25,6 +25,9 @@ import {
 } from '../src/computer/credentialCrypto.js';
 import { rotateComputerCredentials } from '../src/computer/rotateCredentials.js';
 import { loginsState, resetSignInsForTests, saveCredential } from '../src/computer/logins.js';
+import { looksLikeUsernameOrPassword } from '../src/computer/providers/playwrightDriver.js';
+import { signInHintsFor } from '../src/computer/autoSignIn.js';
+import { catalogSiteForHost } from '../src/computer/catalog/sites.js';
 import { MockComputerProvider, MockSite } from '../src/computer/providers/mock.js';
 import { setComputerProviderForTests } from '../src/computer/providers/index.js';
 import { loadTaskView, resumeTask, startComputerTask } from '../src/computer/service.js';
@@ -636,4 +639,77 @@ test('a saved sign-in is only used for a site the task names', async () => {
   assert.doesNotMatch(first, /mail\.example-mail\.test/, 'only saved sites this task names are listed');
   assert.match(JSON.stringify(t.seen[1].messages.at(-1)), /No saved sign-in for that site/);
   assert.ok(!t.site.actions.includes('fill_sign_in'));
+});
+
+/* -------------------------------------------------------------- company ID -- */
+
+const COMPANY_ID = 'CO-ZQ9-RESTORE-4417';
+
+test('an optional Company ID is sealed like the password, shown only to admins, and typed in at sign-in', async () => {
+  const t = setup({
+    turns: [[tool('sign_in_saved', { site: SITE_HOST })], [tool('finish', { title: 'Signed in', fields: [], submitted: false })]],
+  });
+  const login = await seedLogin(t.store);
+  const admin = await api('global_admin');
+  const member = await api('employee');
+  try {
+    const put = await admin.call('PUT', `/logins/${login.id}/credential`, { username: USERNAME, password: PASSWORD, companyId: `  ${COMPANY_ID} ` });
+    assert.equal(put.status, 200, put.text);
+    assert.equal(put.json.login.credential.companyId, COMPANY_ID);
+    const row = (await t.store.getCredential(ORG, login.id))!;
+    assert.ok(row.company_id_sealed?.startsWith('v1.'));
+    assert.ok(!JSON.stringify(row).includes(COMPANY_ID), 'company ID is sealed');
+    assert.equal(openCredential(row.company_id_sealed!, ORG, login.id, 'company_id', row.key_fingerprint), COMPANY_ID);
+    assert.throws(() => openCredential(row.company_id_sealed!, ORG, login.id, 'password', row.key_fingerprint), 'bound to its field');
+    const asMember = await member.call('GET', '/logins');
+    assert.equal(asMember.json.logins[0].credential.companyId, null);
+    assert.ok(!asMember.text.includes(COMPANY_ID));
+    const tooLong = await admin.call('PUT', `/logins/${login.id}/credential`, { username: USERNAME, password: PASSWORD, companyId: 'x'.repeat(129) });
+    assert.equal(tooLong.status, 400);
+    // Saved again without one: cleared.
+    await admin.call('PUT', `/logins/${login.id}/credential`, { username: USERNAME, password: PASSWORD, companyId: '' });
+    assert.equal((await t.store.getCredential(ORG, login.id))!.company_id_sealed ?? null, null);
+    await admin.call('PUT', `/logins/${login.id}/credential`, { username: USERNAME, password: PASSWORD, companyId: COMPANY_ID });
+  } finally {
+    await admin.close();
+    await member.close();
+  }
+  await startTask(t.h);
+  const out = await runComputerTask(t.h.taskId);
+  assert.equal(out?.status, 'succeeded');
+  assert.equal(t.site.values.company_id, COMPANY_ID, 'typed into the company box');
+  for (const req of t.seen) assert.ok(!JSON.stringify(req).includes(COMPANY_ID), 'the company ID never reaches the model');
+});
+
+test('key rotation re-seals the Company ID too', () => {
+  const a = 'login-rot';
+  const row = {
+    org_id: ORG,
+    login_id: a,
+    username_sealed: sealCredential(USERNAME, ORG, a, 'username'),
+    password_sealed: sealCredential(PASSWORD, ORG, a, 'password'),
+    company_id_sealed: sealCredential(COMPANY_ID, ORG, a, 'company_id'),
+    key_fingerprint: credentialKeyFingerprint(),
+  };
+  process.env.COMPUTER_CREDENTIAL_KEY_PREVIOUS = KEY;
+  process.env.COMPUTER_CREDENTIAL_KEY = NEW_KEY;
+  const next = resealCredential(row)!;
+  assert.equal(openCredential(next.company_id_sealed!, ORG, a, 'company_id', next.key_fingerprint), COMPANY_ID);
+});
+
+test('DASH / Restore 365 is in the catalog with a company ID hint, and the generic fill skips username and password boxes', () => {
+  const dash = catalogSiteForHost('dash-ngs.net');
+  assert.ok(dash);
+  assert.ok(dash!.aliases.includes('restore 365'));
+  assert.ok(dash!.signIn?.companyIdSelectors?.length);
+  const hints = signInHintsFor({
+    login: { host: 'dash-ngs.net', cookie_domains: [] } as never,
+    credential: { login_url: null } as never,
+  });
+  assert.ok(hints.companyIdSelectors?.some((s) => /company/i.test(s)));
+  assert.equal(looksLikeUsernameOrPassword({ type: 'text', name: 'ctl00$CompanyID' }), false);
+  assert.equal(looksLikeUsernameOrPassword({ type: 'text', id: 'tenant' }), false);
+  assert.equal(looksLikeUsernameOrPassword({ type: 'text', name: 'accountUser' }), true);
+  assert.equal(looksLikeUsernameOrPassword({ type: 'email', name: 'account' }), true);
+  assert.equal(looksLikeUsernameOrPassword({ type: 'password', name: 'companyPass' }), true);
 });

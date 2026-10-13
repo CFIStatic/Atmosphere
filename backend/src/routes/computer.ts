@@ -20,7 +20,7 @@
  *   POST   /api/chat-computer/logins/sign-ins/:id/cancel close without saving
  *   POST   /api/chat-computer/logins/:id/verify          Check login: open site, report signed-in vs login page
  *   DELETE /api/chat-computer/logins/:id                 remove the site, its saved password, and its cookies
- *   PUT    /api/chat-computer/logins/:id/credential      { username, password, loginUrl? } save/replace (Global Admin)
+ *   PUT    /api/chat-computer/logins/:id/credential      { username, password, companyId?, loginUrl? } save/replace (Global Admin)
  *   DELETE /api/chat-computer/logins/:id/credential      delete the saved password (Global Admin)
  *
  * Saved passwords: only a Global Admin (productRole 'global_admin': DB roles
@@ -192,6 +192,7 @@ computerRouter.post(
 const credentialSchema = z.object({
   username: z.string(),
   password: z.string(),
+  companyId: z.string().nullable().optional(),
   loginUrl: z.string().max(2048).nullable().optional(),
 });
 

@@ -86,6 +86,7 @@ export const EN = {
   'settings.account.emailConfirmed': 'Email confirmed',
   'settings.account.emailConfirmedYes': 'Yes',
   'settings.account.emailConfirmedNo': 'Not yet confirmed',
+  'settings.account.phone': 'Mobile number',
   'settings.account.memberSince': 'Member since',
   'settings.account.lastSignIn': 'Last sign-in',
   'settings.account.emailLocked':

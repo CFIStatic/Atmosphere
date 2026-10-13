@@ -56,7 +56,15 @@ import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
-import { listJobProgressGrants } from '../shared/jobProgressGrants.js';
+import { ensurePrivacySafeCopy, hasPrivacyBlur, privacyBlurWindows, schedulePrivacySafeCopy, secondsInBlurWindow } from '../lib/proofPrivacySafe.js';
+import {
+  assertViewerMayOpenProof,
+  listJobPartyViews,
+  listJobProgressGrants,
+  resolveOrgOrViewerAccess,
+  resolveProofAccess,
+  viewerPartyId,
+} from '../shared/jobProgressGrants.js';
 import { ilikeExact } from '../lib/ilikeExact.js';
 
 /**
@@ -416,7 +424,7 @@ async function backfillStills(proofIds: string[]): Promise<void> {
  * routes that hand over frames, the analysis, or the file itself.
  */
 async function posterUrls(
-  proofs: Array<{ id: string; duration_seconds?: number | null }>,
+  proofs: Array<{ id: string; duration_seconds?: number | null; ai_findings?: unknown; storage_path?: string | null }>,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const proofIds = proofs.map((proof) => proof.id);
@@ -441,8 +449,15 @@ async function posterUrls(
     const durationByProof = new Map(
       proofs.map((proof) => [proof.id, proof.duration_seconds ?? null]),
     );
+    // Never a poster from a stretch with a child or a private moment in it.
+    // When every still falls in one, the clip has no poster.
+    const windowsByProof = new Map(proofs.map((proof) => [proof.id, privacyBlurWindows(proof.ai_findings)]));
     const pathByProof = new Map<string, string>();
-    for (const [proofId, list] of framesByProof) {
+    for (const [proofId, all] of framesByProof) {
+      const windows = windowsByProof.get(proofId) ?? [];
+      const list = windows.length
+        ? all.filter((frame) => !secondsInBlurWindow(Number(frame.at_seconds), windows))
+        : all;
       const picked = pickPosterFrame(list, durationByProof.get(proofId));
       if (picked?.storage_path) pathByProof.set(proofId, picked.storage_path);
     }
@@ -451,8 +466,20 @@ async function posterUrls(
     // no frame to sign. Backfilling them here is what makes an old row heal
     // itself the next time somebody opens the library, rather than waiting for
     // a re-upload. Off the response: the list must not wait on FFmpeg.
-    const missing = proofIds.filter((id) => !pathByProof.has(id));
+    const missing = proofIds.filter(
+      (id) => !pathByProof.has(id) && !framesByProof.has(id),
+    );
     if (missing.length) void backfillStills(missing);
+
+    // Have the blurred copy ready before anyone presses Play or Download.
+    // A few per list; each build is shared and skipped once the copy exists.
+    let kicked = 0;
+    for (const proof of proofs) {
+      if (kicked >= 4) break;
+      if (!proof.storage_path || !(windowsByProof.get(proof.id) ?? []).length) continue;
+      kicked += 1;
+      schedulePrivacySafeCopy({ admin, storagePath: proof.storage_path, aiFindings: proof.ai_findings, bucket: PROOF_BUCKET });
+    }
 
     if (!pathByProof.size) return out;
 
@@ -482,13 +509,19 @@ async function posterUrls(
 async function frameUrls(proofId: string) {
   const admin = unscopedAdminOrNull();
   if (!admin) return [];
-  const { data: frames } = await admin
-    .from('job_proof_frames')
-    .select('at_seconds, storage_path')
-    .eq('proof_id', proofId)
-    .order('at_seconds');
+  const [{ data: frames }, { data: proofRow }] = await Promise.all([
+    admin
+      .from('job_proof_frames')
+      .select('at_seconds, storage_path')
+      .eq('proof_id', proofId)
+      .order('at_seconds'),
+    admin.from('job_proofs').select('ai_findings').eq('id', proofId).maybeSingle(),
+  ]);
+  // No still from a stretch with a child or a private moment in it.
+  const windows = privacyBlurWindows((proofRow as any)?.ai_findings);
   const out: Array<{ atSeconds: number; url: string }> = [];
   for (const frame of (frames ?? []) as any[]) {
+    if (windows.length && secondsInBlurWindow(Number(frame.at_seconds), windows)) continue;
     const { data } = await admin.storage
       .from(PROOF_BUCKET)
       .createSignedUrl(frame.storage_path, 600);
@@ -712,8 +745,20 @@ export async function viewerLibraryPayload(
   admin: any,
   userId: string,
   userEmail: string | null | undefined,
+  /** Leave out jobs from this org (the caller's own workspace lists those). */
+  excludeOrgId?: string,
 ): Promise<Record<string, unknown> | null> {
-  const grants = await listJobProgressGrants(admin, userId, userEmail);
+  const homeownerGrants = (await listJobProgressGrants(admin, userId, userEmail)).filter(
+    (g) => g.orgId !== excludeOrgId,
+  );
+  // Invited subcontractors list their jobs too, but each job carries only
+  // the clips that sub recorded.
+  const granted = new Set(homeownerGrants.map((g) => g.jobId));
+  const partyViews = (await listJobPartyViews(admin, userEmail)).filter(
+    (v) => !granted.has(v.jobId) && v.orgId !== excludeOrgId,
+  );
+  const partyByJob = new Map(partyViews.map((v) => [v.jobId, v.partyId]));
+  const grants: Array<{ orgId: string; jobId: string }> = [...homeownerGrants, ...partyViews];
   if (!grants.length) return null;
   const jobIdsByOrg = new Map<string, string[]>();
   for (const g of grants) {
@@ -748,13 +793,21 @@ export async function viewerLibraryPayload(
     ]);
     if (proofsError) throw new HttpError(500, proofsError.message, 'library_failed');
     if (jobsError) throw new HttpError(500, jobsError.message, 'library_failed');
-    const proofRows = (proofs ?? []) as any[];
+    const proofRows = ((proofs ?? []) as any[]).filter((p) => {
+      const partyId = partyByJob.get(p.job_id as string);
+      return !partyId || p.party_id === partyId;
+    });
+    // The homeowner gets every clip like the contractor; a sub's clips keep
+    // the guest rule (no raw stills of a clip with privacy redactions).
     const redacted = new Set(
-      proofRows.filter((p) => proofFindingsHavePrivacyRedactions(p.ai_findings)).map((p) => p.id as string),
+      proofRows
+        .filter((p) => partyByJob.has(p.job_id as string) && proofFindingsHavePrivacyRedactions(p.ai_findings))
+        .map((p) => p.id as string),
     );
     const orgItems = await assembleLibrary(admin, orgId, proofRows);
     for (const item of orgItems as any[]) {
       if (redacted.has(item.id)) item.posterUrl = null;
+      item.sharedWithMe = true;
       items.push(item);
     }
     const addr = await propertyAddresses(admin, ((jobRows ?? []) as any[]).map((j) => j.property_id));
@@ -769,6 +822,7 @@ export async function viewerLibraryPayload(
         company: orgName.get(orgId) ?? 'Contractor',
         person: null,
         createdAt: j.created_at ?? null,
+        sharedWithMe: true,
       });
     }
   }
@@ -789,6 +843,24 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: z.string().uuid().optional(),
       })
       .parse(req.query);
+    if (jobId) {
+      // A job shared with someone who also has a workspace of their own: the
+      // clips (and their AI names) come from the job's org, exactly as the
+      // homeowner and contractor see them, not from the viewer's workspace.
+      const access = await resolveOrgOrViewerAccess(req, jobId).catch(() => null);
+      const admin = access?.access === 'viewer' ? unscopedAdminOrNull() : null;
+      if (admin) {
+        const payload = await viewerLibraryPayload(admin, req.user!.id, req.user!.email);
+        if (payload) {
+          res.json({
+            ...payload,
+            items: ((payload.items ?? []) as any[]).filter((item) => item?.jobId === jobId),
+            jobs: ((payload.jobs ?? []) as any[]).filter((job) => job?.jobId === jobId),
+          });
+          return;
+        }
+      }
+    }
     let orgCtx: Awaited<ReturnType<typeof requireOrgContext>>;
     try {
       orgCtx = await requireOrgContext(req);
@@ -849,6 +921,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       company: string | null;
       person: string | null;
       createdAt?: string | null;
+      sharedWithMe?: boolean;
     };
     let jobs: LibraryJob[] = [];
     const { data: jobRows, error: jobsError } = await supabase
@@ -921,6 +994,28 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       });
     }
 
+    if (!jobId) {
+      // Jobs other companies shared with this person (as homeowner or
+      // invited sub) sit on the same Dashboard, read-only, with only the
+      // clips they may see.
+      const viewerAdmin = unscopedAdminOrNull();
+      const shared = viewerAdmin
+        ? await viewerLibraryPayload(viewerAdmin, req.user!.id, req.user!.email, orgId).catch((err) => {
+            console.warn('[library] shared jobs unavailable:', err instanceof Error ? err.message : err);
+            return null;
+          })
+        : null;
+      if (shared) {
+        const known = new Set(jobs.map((j) => j.jobId));
+        items = [...items, ...((shared.items ?? []) as any[])];
+        for (const job of (shared.jobs ?? []) as LibraryJob[]) {
+          if (known.has(job.jobId)) continue;
+          known.add(job.jobId);
+          jobs.push(job);
+        }
+      }
+    }
+
     if (q?.trim()) {
       // Names, addresses, dates, companies, hashes — whatever a person types
       // to find a video. Substring, case-blind, in memory: 500 rows is small.
@@ -976,11 +1071,11 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     jobs = sortJobsForOpen(jobs, lastWorkDateByJob, todayKey());
 
     const admin = unscopedAdminOrNull();
-    if (admin) kickUnreadLibraryReads(admin, orgId, items);
+    if (admin) kickUnreadLibraryReads(admin, orgId, items.filter((item: any) => !item.sharedWithMe));
 
     res.json({
       items,
-      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person, createdAt }) => ({
+      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person, createdAt, sharedWithMe }) => ({
         jobId,
         jobName,
         jobNumber,
@@ -990,6 +1085,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         person,
         createdAt: createdAt ?? null,
         captureStatus: libraryJobCaptureStatus(lastWorkDateByJob.has(jobId)),
+        ...(sharedWithMe ? { sharedWithMe: true } : {}),
       })),
       counts: {
         total: items.length,
@@ -1008,7 +1104,11 @@ evidencePortalRouter.get(
   '/evidence/:proofId',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId } = await requireOrgContext(req);
+      // The office, or someone the job was shared with (homeowner, invited
+      // sub): the same clip panel on their Dashboard as the contractor's.
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId } = resolved;
+      const viewer = resolved.access === 'viewer';
       const { data: proof, error } = await supabase
         .from('job_proofs')
         .select(PORTAL_PROOF_SELECT)
@@ -1016,7 +1116,9 @@ evidencePortalRouter.get(
         .eq('id', req.params.proofId)
         .maybeSingle();
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      // An invited subcontractor opens only what they recorded.
+      assertViewerMayOpenProof(resolved, proof as any);
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const admin = writerForJob(
@@ -1024,10 +1126,14 @@ evidencePortalRouter.get(
         supabase,
       ).raw;
       const item = await readClipForOpen(admin, orgId, items[0]);
+      // The homeowner sees every clip like the contractor; a sub gets no raw
+      // stills of a clip with privacy redactions.
+      const guestRedacted = Boolean(viewerPartyId(resolved)) && proofFindingsHavePrivacyRedactions((proof as any).ai_findings);
+      if (guestRedacted && item) item.posterUrl = null;
 
       const [custody, frames] = await Promise.all([
         custodyFor(supabase, req.params.proofId),
-        frameUrls(req.params.proofId),
+        guestRedacted ? Promise.resolve([]) : frameUrls(req.params.proofId),
       ]);
 
       res.json({ item, custody, frames });
@@ -1156,7 +1262,9 @@ evidencePortalRouter.post(
   askLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId, userId } = await requireOrgContext(req);
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId, userId } = resolved;
+      const viewer = resolved.access === 'viewer';
       const input = askBody.parse(req.body ?? {});
       const { data: proof, error } = await supabase
         .from('job_proofs')
@@ -1165,7 +1273,8 @@ evidencePortalRouter.post(
         .eq('id', req.params.proofId)
         .maybeSingle();
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      assertViewerMayOpenProof(resolved, proof as any);
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = items[0];
@@ -1184,11 +1293,12 @@ evidencePortalRouter.post(
         item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
-        documentIds: input.documentIds,
+        // The office's uploaded documents and @teammates stay with the office.
+        documentIds: viewer ? undefined : input.documentIds,
         askedBy: userId,
-        orgMentions: true,
+        orgMentions: !viewer,
         actorLabel: await actorLabelFor(supabase, userId),
-        actorRole: 'general_contractor',
+        actorRole: viewer ? (resolved.access === 'viewer' && resolved.partyId ? 'subcontractor' : 'homeowner') : 'general_contractor',
       });
 
       res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });
@@ -1210,14 +1320,22 @@ evidencePortalRouter.get(
   '/evidence/:proofId/download',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { supabase, orgId, userId } = await requireOrgContext(req);
+      // The office, or someone the job was shared with: same Download button.
+      // The homeowner downloads every clip like the contractor; a sub keeps
+      // the guest media rules.
+      const resolved = await resolveProofAccess(req, req.params.proofId);
+      const { supabase, orgId, userId, access } = resolved;
+      const viewer = access === 'viewer';
       const { data: proof } = await supabase
         .from('job_proofs')
-        .select('id, job_id, storage_path, phase, work_date')
+        .select('id, job_id, party_id, storage_path, phase, work_date, deleted_at, ai_findings')
         .eq('org_id', orgId)
         .eq('id', req.params.proofId)
         .maybeSingle();
-      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      if (!proof || (viewer && (proof as any).deleted_at)) throw new HttpError(404, 'No such clip.', 'not_found');
+      // An invited subcontractor downloads only what they recorded.
+      assertViewerMayOpenProof(resolved, proof as any);
+      if (viewerPartyId(resolved)) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const admin = unscopedAdminOrNull();
       if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
@@ -1234,13 +1352,41 @@ evidencePortalRouter.get(
         requester_email: req.user?.email ?? '',
         fee_cents: 0,
         status: 'waived',
-        paid_via: 'org_member',
+        paid_via: viewer ? 'job_share' : 'org_member',
         paid_at: new Date().toISOString(),
       });
 
+      // A child or a private moment on file: the download is the blurred
+      // copy, for everyone. Never the original as a fallback.
+      let downloadPath = (proof as any).storage_path as string;
+      let blurred = false;
+      if (hasPrivacyBlur((proof as any).ai_findings)) {
+        try {
+          const safePath = await ensurePrivacySafeCopy({
+            admin,
+            storagePath: downloadPath,
+            aiFindings: (proof as any).ai_findings,
+            bucket: PROOF_BUCKET,
+          });
+          if (safePath) {
+            downloadPath = safePath;
+            blurred = true;
+          }
+        } catch (err) {
+          console.warn('[download] blurred copy failed:', err instanceof Error ? err.message : err);
+        }
+        if (!blurred) {
+          throw new HttpError(
+            503,
+            'This clip has a child or a private moment in it. Its blurred copy is not ready yet; try again in a minute.',
+            'privacy_safe_pending',
+          );
+        }
+      }
+
       const { data, error } = await admin.storage
         .from(PROOF_BUCKET)
-        .createSignedUrl((proof as any).storage_path, 600, { download: true });
+        .createSignedUrl(downloadPath, 600, { download: true });
       if (error) throw new HttpError(500, error.message, 'signed_url_failed');
 
       await recordAccess(supabase, {
@@ -1250,8 +1396,8 @@ evidencePortalRouter.get(
         action: 'downloaded',
         actorId: userId,
         actorLabel: await actorLabelFor(supabase, userId),
-        actorRole: 'general_contractor',
-        detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date}`,
+        actorRole: viewer ? (resolved.access === 'viewer' && resolved.partyId ? 'subcontractor' : 'homeowner') : 'general_contractor',
+        detail: `${blurred ? 'blurred copy (child / private moment)' : 'original file'} · ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
       res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });

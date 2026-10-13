@@ -705,7 +705,7 @@ test('short messages are accepted by every Ask route', async () => {
   const { askQuestionText } = await import('../src/shared/askQuestionSchema.js');
   for (const q of ['?', 'ok', 'hi', '  ?  ']) assert.equal(askQuestionText.safeParse(q).success, true, q);
   assert.equal(askQuestionText.safeParse('   ').success, false);
-  for (const route of ['proofOfWork', 'progressShare', 'evidencePortal', 'chatDocuments']) {
+  for (const route of ['proofOfWork', 'evidencePortal', 'chatDocuments']) {
     const src = readFileSync(join(here, `../src/routes/${route}.ts`), 'utf8');
     assert.match(src, /question: askQuestionText/, route);
     assert.doesNotMatch(src, /question: z\.string\(\)\.trim\(\)\.min\(3\)/, route);

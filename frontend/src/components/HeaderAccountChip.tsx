@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { accountContact } from '../lib/phone';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { displayName, nameFromMetadata } from '../lib/display';
@@ -6,6 +7,7 @@ import { useT } from '../lib/i18n';
 import { setPreference, usePreferences } from '../lib/preferences';
 import { cycleThemePreference, setThemePreference } from '../lib/theme';
 import { usePlatformSupportUrl } from '../lib/contactSupport';
+import { useHomeownerPortal } from '../lib/homeownerPortal';
 import { PersonAvatar } from './PersonAvatar';
 import { HelpIcon, LogOutIcon, MoonIcon, SettingsIcon, SpinnerIcon, SunIcon } from './icons';
 
@@ -18,6 +20,8 @@ import { HelpIcon, LogOutIcon, MoonIcon, SettingsIcon, SpinnerIcon, SunIcon } fr
 export function HeaderAccountChip() {
   const t = useT();
   const { user, profile, membership, logout } = useAuth();
+  // Invited homeowner: no Settings, same as the Dashboard frame.
+  const { homeowner } = useHomeownerPortal();
   const { confirmSignOut, theme } = usePreferences();
   const navigate = useNavigate();
   const supportUrl = usePlatformSupportUrl();
@@ -26,8 +30,8 @@ export function HeaderAccountChip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const fullName = profile?.fullName || nameFromMetadata(user?.metadata);
-  const name = displayName(fullName, user?.email);
-  const orgName = membership?.org?.name || user?.email || 'Atmosphere';
+  const name = displayName(fullName, user?.email || accountContact(user));
+  const orgName = membership?.org?.name || accountContact(user) || 'Atmosphere';
   const nextTheme = cycleThemePreference(theme);
   const appearanceLabel = t('nav.appearance', {
     theme: t(theme === 'light' ? 'theme.light' : 'theme.dark'),
@@ -90,7 +94,7 @@ export function HeaderAccountChip() {
         >
           <div className="border-b border-line px-2.5 py-2.5">
             <p className="truncate text-[13px] font-semibold text-ink-900">{name}</p>
-            {user?.email && <p className="mt-0.5 break-all text-[11.5px] text-ink-500">{user.email}</p>}
+            {accountContact(user) && <p className="mt-0.5 break-all text-[11.5px] text-ink-500">{accountContact(user)}</p>}
             {membership?.org?.name && (
               <p className="mt-1 text-[11.5px] text-ink-600">{membership.org.name}</p>
             )}
@@ -118,18 +122,20 @@ export function HeaderAccountChip() {
             {appearanceLabel}
           </button>
 
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              navigate('/settings');
-            }}
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-ink-900 transition hover:bg-paper-200"
-          >
-            <SettingsIcon width={14} height={14} className="shrink-0 text-ink-600" />
-            {t('nav.settings')}
-          </button>
+          {!homeowner && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                navigate('/settings');
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-ink-900 transition hover:bg-paper-200"
+            >
+              <SettingsIcon width={14} height={14} className="shrink-0 text-ink-600" />
+              {t('nav.settings')}
+            </button>
+          )}
 
           <a
             role="menuitem"
