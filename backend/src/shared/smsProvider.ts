@@ -2,7 +2,8 @@
  * Twilio SMS for Chat (e.g. text the adjuster a status request).
  *
  * Env (set on the host; not applied here): TWILIO_ACCOUNT_SID,
- * TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER. Callers must get human approval
+ * TWILIO_AUTH_TOKEN, and either TWILIO_MESSAGING_SERVICE_SID (preferred, for
+ * US A2P 10DLC) or TWILIO_FROM_NUMBER. Callers must get human approval
  * before sendSms — this module never bypasses that.
  */
 export type SmsSendInput = {
@@ -16,12 +17,13 @@ export type SmsSendResult =
   | { ok: true; provider: 'twilio'; id: string }
   | { ok: false; reason: 'not_configured' | 'invalid_number' | 'provider_error'; message: string };
 
-function twilioCreds(): { sid: string; token: string; from: string } | null {
+function twilioCreds(): { sid: string; token: string; from: string; messagingServiceSid: string } | null {
   const sid = String(process.env.TWILIO_ACCOUNT_SID ?? '').trim();
   const token = String(process.env.TWILIO_AUTH_TOKEN ?? '').trim();
   const from = String(process.env.TWILIO_FROM_NUMBER ?? '').trim();
-  if (!sid || !token || !from) return null;
-  return { sid, token, from };
+  const messagingServiceSid = String(process.env.TWILIO_MESSAGING_SERVICE_SID ?? '').trim();
+  if (!sid || !token || (!from && !messagingServiceSid)) return null;
+  return { sid, token, from, messagingServiceSid };
 }
 
 /** True when Twilio env vars are present for this deployment. */
@@ -53,7 +55,7 @@ export async function sendSms(input: SmsSendInput): Promise<SmsSendResult> {
       ok: false,
       reason: 'not_configured',
       message:
-        'SMS is not connected yet. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER on the server, then try again.',
+        'SMS is not connected yet. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_MESSAGING_SERVICE_SID (or TWILIO_FROM_NUMBER) on the server, then try again.',
     };
   }
   const to = normalizeSmsNumber(input.to);
@@ -67,7 +69,9 @@ export async function sendSms(input: SmsSendInput): Promise<SmsSendResult> {
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(creds.sid)}/Messages.json`;
   const auth = Buffer.from(`${creds.sid}:${creds.token}`).toString('base64');
-  const form = new URLSearchParams({ To: to, From: creds.from, Body: body });
+  const form = new URLSearchParams({ To: to, Body: body });
+  if (creds.messagingServiceSid) form.set('MessagingServiceSid', creds.messagingServiceSid);
+  else form.set('From', creds.from);
 
   try {
     const res = await fetch(url, {

@@ -129,6 +129,7 @@ export async function linkFieldOffice(
 
   const invite = await requirePendingOrgInvite({
     email: user.email,
+    phone: (user as { phone?: string | null }).phone,
   });
   const { data, error } = await supabase.rpc('join_org', {
     p_code: invite.joinCode,
@@ -147,5 +148,12 @@ export async function linkFieldOffice(
     throw new HttpError(400, message, 'join_org_failed');
   }
   await saveFieldUsageIntents(supabase, user.id);
+  if (!invite.email) {
+    await unscopedAdminOrNull()
+      ?.from('org_invites')
+      .update({ status: 'joined', joined_at: new Date().toISOString() })
+      .eq('id', invite.inviteId)
+      .eq('status', 'pending');
+  }
   return serializeFieldOrg(data);
 }

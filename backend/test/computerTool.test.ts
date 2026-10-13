@@ -25,6 +25,7 @@ import {
 } from '../src/shared/askTools.js';
 import { classifyTokenFeature, TOKEN_FEATURE_LABELS, TOKEN_FEATURES } from '../src/metering/tokenFeatures.js';
 import { featureLabel } from '../src/metering/aiBudget.js';
+import { config } from '../src/config.js';
 
 const ORG = '0a000000-0000-4000-8000-000000000001';
 const JOB = '0d000000-0000-4000-8000-000000000004';
@@ -529,7 +530,11 @@ test('a text-the-adjuster request becomes an approval card holding the whole dra
     sid: process.env.TWILIO_ACCOUNT_SID,
     tok: process.env.TWILIO_AUTH_TOKEN,
     from: process.env.TWILIO_FROM_NUMBER,
+    serviceRole: config.supabase.serviceRoleKey,
   };
+  // Keep the approval on the stub client below: with a real service-role key in
+  // the environment the tool would otherwise write to a live database.
+  config.supabase.serviceRoleKey = '';
   process.env.TWILIO_ACCOUNT_SID = 'ACtest';
   process.env.TWILIO_AUTH_TOKEN = 'token';
   process.env.TWILIO_FROM_NUMBER = '+15551234567';
@@ -574,6 +579,7 @@ test('a text-the-adjuster request becomes an approval card holding the whole dra
     assert.equal(twilioCalls, 0, 'proposing a text never sends it');
   } finally {
     globalThis.fetch = realFetch;
+    config.supabase.serviceRoleKey = prev.serviceRole;
     for (const [k, v] of [['TWILIO_ACCOUNT_SID', prev.sid], ['TWILIO_AUTH_TOKEN', prev.tok], ['TWILIO_FROM_NUMBER', prev.from]] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;

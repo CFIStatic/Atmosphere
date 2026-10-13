@@ -883,6 +883,25 @@
     });
   }
 
+  /** Phone sign-in: is it offered, send a code, trade the code for a session. */
+  function phoneAuthConfig(apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/config', {});
+  }
+
+  function startPhoneSignIn(phone, apiBase, intent) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/start', {
+      method: 'POST',
+      body: { phone: phone, intent: intent || 'signin' },
+    });
+  }
+
+  function verifyPhoneSignIn(phone, code, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/phone/verify', {
+      method: 'POST',
+      body: { phone: phone, code: code },
+    });
+  }
+
   var CURRENT_TERMS_VERSION = '2026-09-10';
 
   function loadAuthMe(apiBase, accessToken) {
@@ -3884,6 +3903,9 @@
     POSITION_FRESH_MS: POSITION_FRESH_MS,
     loginWithPassword: loginWithPassword,
     signupWithPassword: signupWithPassword,
+    phoneAuthConfig: phoneAuthConfig,
+    startPhoneSignIn: startPhoneSignIn,
+    verifyPhoneSignIn: verifyPhoneSignIn,
     loadAuthMe: loadAuthMe,
     acceptTerms: acceptTerms,
     CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,

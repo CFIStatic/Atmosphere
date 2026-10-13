@@ -285,6 +285,8 @@ export async function sendSystemMail(input: {
   fromName?: string | null;
   attachments?: MailAttachment[];
 }): Promise<{ ok: true } | { ok: false; why: string }> {
+  // Phone-only accounts have no inbox. Skip quietly instead of erroring.
+  if (!String(input.to ?? '').trim()) return { ok: false, why: 'no_email_address' };
   const from = mailFrom();
   const driver = driverOverride();
   const requestedReplyTo = input.replyTo?.trim() || defaultReplyTo();

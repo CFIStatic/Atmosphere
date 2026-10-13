@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { accountContact } from '../lib/phone';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { displayName, nameFromMetadata } from '../lib/display';
@@ -29,8 +30,8 @@ export function HeaderAccountChip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const fullName = profile?.fullName || nameFromMetadata(user?.metadata);
-  const name = displayName(fullName, user?.email);
-  const orgName = membership?.org?.name || user?.email || 'Atmosphere';
+  const name = displayName(fullName, user?.email || accountContact(user));
+  const orgName = membership?.org?.name || accountContact(user) || 'Atmosphere';
   const nextTheme = cycleThemePreference(theme);
   const appearanceLabel = t('nav.appearance', {
     theme: t(theme === 'light' ? 'theme.light' : 'theme.dark'),
@@ -93,7 +94,7 @@ export function HeaderAccountChip() {
         >
           <div className="border-b border-line px-2.5 py-2.5">
             <p className="truncate text-[13px] font-semibold text-ink-900">{name}</p>
-            {user?.email && <p className="mt-0.5 break-all text-[11.5px] text-ink-500">{user.email}</p>}
+            {accountContact(user) && <p className="mt-0.5 break-all text-[11.5px] text-ink-500">{accountContact(user)}</p>}
             {membership?.org?.name && (
               <p className="mt-1 text-[11.5px] text-ink-600">{membership.org.name}</p>
             )}

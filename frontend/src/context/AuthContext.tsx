@@ -53,6 +53,8 @@ interface AuthContextValue {
   membershipLoading: boolean; // true while resolving membership for a known user
   profile: Profile | null; // display name etc.; null until loaded
   login: (email: string, password: string) => Promise<Membership | null>;
+  /** Finish a text-message-code sign-in (or sign-up when terms are passed). */
+  loginWithPhone: (phone: string, code: string, acceptedTermsVersion?: string) => Promise<Membership | null>;
   signup: (email: string, password: string, acceptedTermsVersion: string) => Promise<SignupResult>;
   /** Adopt a session the backend just established (e.g. after a password reset). */
   adoptUser: (user: AuthUser) => Promise<Membership | null>;
@@ -218,6 +220,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadMembership],
   );
 
+  const loginWithPhone = useCallback(
+    async (phone: string, code: string, acceptedTermsVersion?: string) => {
+      const { user, session, terms: nextTerms } = await api.phoneAuthVerify(phone, code, acceptedTermsVersion);
+      rememberSession(session);
+      explicitAuthRef.current = true;
+      userIdRef.current = user?.id ?? null;
+      setUser(user);
+      announceAccountChange();
+      setTerms(nextTerms ?? publicTermsStatus());
+      if (acceptedTermsVersion) markSessionTermsAccepted(acceptedTermsVersion);
+      return loadMembership();
+    },
+    [loadMembership],
+  );
+
   const signup = useCallback(
     async (
       email: string,
@@ -305,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       setProfile,
       login,
+      loginWithPhone,
       signup,
       adoptUser,
       logout,
@@ -321,6 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       membershipLoading,
       profile,
       login,
+      loginWithPhone,
       signup,
       adoptUser,
       logout,

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { accountContact } from '../lib/phone';
 import { Check, Eye, LogOut, Moon, Sun, User } from 'lucide-react';
 import { Badge, Button, Popover, cn } from '../design';
 import { useAuth } from '../context/AuthContext';
@@ -45,7 +46,7 @@ export function UserMenu() {
       }
     >
       <div className="border-b border-line/10 px-2.5 pb-2.5 pt-1.5">
-        <p className="truncate text-xs font-medium text-fg">{user?.email}</p>
+        <p className="truncate text-xs font-medium text-fg">{accountContact(user)}</p>
         <p className="mt-0.5 text-2xs text-fg-3">{labelForRole(actualRole)}</p>
       </div>
 

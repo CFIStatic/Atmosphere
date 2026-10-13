@@ -29,6 +29,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 export interface AuthUser {
   id: string;
   email: string | null;
+  /** E.164 when the account signs in by text message code. */
+  phone?: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   emailConfirmed: boolean;
@@ -1934,7 +1936,9 @@ export interface DuplicatePair {
 
 export interface OrgInvite {
   id: string;
-  email: string;
+  /** Null for crew invited by phone only. */
+  email: string | null;
+  phone?: string | null;
   /** Advisory — the joiner picks their own role at onboarding. */
   role: MemberRole;
   note?: string | null;
@@ -3372,6 +3376,22 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
+  /** Whether "Use phone number instead" is offered on this deployment. */
+  phoneAuthConfig: () => request<{ enabled: boolean }>('/api/auth/phone/config', { method: 'GET' }),
+
+  /** Text a 6-digit sign-in code. intent 'signup' may create the account. */
+  phoneAuthStart: (phone: string, intent: 'signin' | 'signup') =>
+    request<{ ok: boolean; phone: string }>('/api/auth/phone/start', {
+      method: 'POST',
+      body: JSON.stringify({ phone, intent }),
+    }),
+
+  phoneAuthVerify: (phone: string, code: string, acceptedTermsVersion?: string) =>
+    request<AuthResponse>('/api/auth/phone/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code, acceptedTermsVersion }),
+    }),
+
   me: () => request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/me', { method: 'GET' }),
 
   getTerms: () =>
@@ -3951,7 +3971,13 @@ export const api = {
 
   addJobParty: (
     jobId: string,
-    input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
+    input: {
+      company: string;
+      trade?: string | null;
+      contactName?: string | null;
+      email?: string | null;
+      role?: string;
+    },
   ) =>
     request<{
       party: JobParty;
@@ -4009,13 +4035,14 @@ export const api = {
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
   createOrgInvite: (input: {
-    email: string;
+    email?: string;
+    phone?: string;
     role?: MemberRole;
     note?: string;
     serviceRole?: string;
     serviceRoleCustom?: string | null;
   }) =>
-    request<{ invite: OrgInvite; emailed: boolean }>('/api/org/invites', {
+    request<{ invite: OrgInvite; emailed: boolean; texted?: boolean }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
