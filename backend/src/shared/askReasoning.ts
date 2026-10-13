@@ -54,6 +54,7 @@ import {
   splitLookupPrompt,
   suggestFollowUps,
   type AskLookupCatalog,
+  type AskLookupResult,
   type AskLookupTraceStep,
 } from './askLookup.js';
 import {
@@ -157,7 +158,8 @@ Rules:
 14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
 16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.
-17. Use only the job context, the tool results, and the earlier turns in this request. No guessing and no outside knowledge about this job. When a fact is missing, write that it is not on file.
+17. Facts about this job come only from the job context, the tool results, and the earlier turns in this request. No guessing about this job. When a job fact is missing, write that it is not on file. General know-how is different: trade practice, drying and mitigation standards, codes, insurance terms, how-to steps, math, and definitions may come from what you know (or web_search for anything current), applied to this job's facts. Say plainly when a point is general guidance rather than something on the file, and never present it as job evidence.
+17b. Commands are work, not questions. When the person asks you to text someone, change the job file (title, claim number, address, a note), remove someone's access, or pull CRM or access details, call that tool and do it. A text or an access removal only appears as a card the person must approve: say it is ready for them to send or confirm, never that it was sent or removed. Use start_computer_task for anything on an outside website or app, including sending an email from their Outlook or Gmail. You may chain steps in one turn: look up what you need from the file first (homeowner phone, claim number, what was done), then act.
 18. Quote only words that appear in a transcript line, exactly as written there, and cite that clip at the time the line was said. Put every quote in “ ” and follow it with the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15). Never paraphrase inside quotation marks. When the request lists "Retrieved transcript lines", those are the exact lines that match the question: quote from them. If that list says nothing matched, say the transcripts do not mention it and do not quote other lines as if they were about it. Times, dates, clip clocks, job numbers, and names must be ones that appear in the context or tool results.
 19. Speakers: use only diarization labels ("Speaker 1", "Speaker 2") or a name the file explicitly attaches to that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name (not even from who filmed the clip), a role (homeowner, adjuster, contractor, client), a posture, or a relationship, and never write visual labels such as "Person 1 (Seated…)" or "Seated man". When asked who committed to or will do something and the file does not identify that speaker, say the owner is an unidentified speaker.
 20. Your answer is checked against the file before anyone sees it. Unsupported quotes, times, names, and speech counts are removed.
@@ -185,7 +187,8 @@ Rules:
 6. Then two or three follow-ups the file can answer:
    ⟦followups: question one? ;; question two?⟧
 7. Do not put those machine lines inside the sentences.
-8. Use only this context and tool results. No guessing. When a fact is missing, write that it is not on file.
+8. Facts about this job come only from this context and tool results. No guessing. When a job fact is missing, write that it is not on file. General know-how (trade practice, standards, codes, insurance terms, how-to, math) may come from what you know; say when a point is general guidance, not from the file.
+8b. When the person asks you to text someone, update the job file, remove access, or pull CRM details, call that tool. A text or access removal only becomes a card they approve; never say it was sent or removed. Outside websites and email from their mailbox go to start_computer_task.
 9. Quote only exact words from a transcript line and cite that clip at the time the line was said. Put every quote in “ ” followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15). Never paraphrase inside quotation marks. When the request lists "Retrieved transcript lines", quote from them; if it says nothing matched, say the transcripts do not mention it. Times, dates, and names must appear in the context.
 10. Speakers: only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)". If asked who committed to something and the speaker is not identified, say the owner is an unidentified speaker.
 11. The raw transcript (authoritative) decides what was said and how much. The AI summary may be stale; when they disagree, follow the transcript and do not repeat the summary's claim.
@@ -223,6 +226,18 @@ export function askLookupStatus(tool: string): string {
       return 'Checking other jobs…';
     case 'list_person_activity':
       return 'Looking up who was on site…';
+    case 'send_job_sms':
+      return 'Writing the text…';
+    case 'update_job_fields':
+      return 'Updating the job file…';
+    case 'get_crm_record':
+    case 'search_crm':
+      return 'Checking the CRM…';
+    case 'list_who_has_access':
+    case 'propose_revoke_access':
+      return 'Checking who has access…';
+    case 'get_punch_list':
+      return 'Building the punch list…';
     default:
       return 'Looking through clips…';
   }
@@ -362,9 +377,21 @@ export const START_COMPUTER_MODEL_TOOL = {
   },
 };
 
-function lookupModelTools(includeWeb = true, includeComputer = false) {
+/** Words that make a turn a command for the office action tools. */
+const ASK_ACTION_COMMAND =
+  /\b(?:text|sms|send|remove|revoke|update|change|rename|set|save|add (?:a |this )?note|log (?:a |this )?note)\b/i;
+
+/** An office action Chat may call mid-answer (propose a text, update the file, read the CRM). */
+export type AskActionModelTool = {
+  name: string;
+  description: string;
+  input_schema: { type: 'object'; properties?: unknown; [key: string]: unknown };
+};
+
+function lookupModelTools(includeWeb = true, includeComputer = false, actionTools: AskActionModelTool[] = []) {
   const base = !includeWeb || !isAskWebSearchConfigured() ? LOOKUP_TOOLS : [...LOOKUP_TOOLS, WEB_SEARCH_MODEL_TOOL];
-  return includeComputer ? [...base, START_COMPUTER_MODEL_TOOL] : base;
+  const withComputer = includeComputer ? [...base, START_COMPUTER_MODEL_TOOL] : base;
+  return actionTools.length ? [...withComputer, ...actionTools] : withComputer;
 }
 
 type LookupCall = { id: string; name: string; input: Record<string, unknown> };
@@ -435,6 +462,7 @@ function anthropicLookupSession(input: {
   onToken?: (text: string) => void;
   includeWeb?: boolean;
   includeComputer?: boolean;
+  actionTools?: AskActionModelTool[];
 }): (state: { system: string; stable?: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
   const messages: Anthropic.MessageParam[] = [];
   let traced = 0;
@@ -475,7 +503,7 @@ function anthropicLookupSession(input: {
         max_tokens: input.maxTokens,
         system: asAnthropicSystem(anthropicCachedSystem(state.system, state.stable ?? '')),
         messages,
-        tools: lookupModelTools(input.includeWeb !== false, input.includeComputer === true),
+        tools: lookupModelTools(input.includeWeb !== false, input.includeComputer === true, input.actionTools ?? []),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(input.outputConfig ? { output_config: input.outputConfig } : {}),
       },
@@ -520,10 +548,10 @@ function anthropicLookupSession(input: {
 
 type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } };
 
-export function geminiLookupTools(includeWeb = true, includeComputer = false) {
+export function geminiLookupTools(includeWeb = true, includeComputer = false, actionTools: AskActionModelTool[] = []) {
   return [
     {
-      functionDeclarations: lookupModelTools(includeWeb, includeComputer).map(toGeminiFunctionDeclaration),
+      functionDeclarations: lookupModelTools(includeWeb, includeComputer, actionTools).map(toGeminiFunctionDeclaration),
     },
   ];
 }
@@ -617,10 +645,11 @@ async function geminiLookupTurn(input: {
   onCache?: (state: 'hit' | 'miss' | 'skip') => void;
   includeWeb?: boolean;
   includeComputer?: boolean;
+  actionTools?: AskActionModelTool[];
 }): Promise<LookupModelTurn> {
   const fast = input.route === 'fast';
   const requested = fast ? askFastGeminiModel() : geminiAskModel('reasoning');
-  const tools = geminiLookupTools(input.includeWeb !== false, input.includeComputer === true);
+  const tools = geminiLookupTools(input.includeWeb !== false, input.includeComputer === true, input.actionTools ?? []);
   const stable = input.stable ?? '';
   const cacheName = geminiCachedContentName({
     apiKey: input.apiKey,
@@ -692,8 +721,11 @@ export function providerLookupStep(input: {
   effort?: AnthropicEffort | null;
   /** Offer start_computer_task to the model (office job Chat with Computer). */
   computerTool?: boolean;
+  /** Office actions the model may call (texts, file updates, CRM, access). */
+  actionTools?: AskActionModelTool[];
 }): LookupModelStep {
   const includeComputer = input.computerTool === true;
+  const actionTools = input.actionTools ?? [];
   const route = input.route ?? 'deep';
   const includeWeb = input.webTool !== false;
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
@@ -711,6 +743,7 @@ export function providerLookupStep(input: {
           onToken: input.onToken,
           includeWeb,
           includeComputer,
+          actionTools,
         })
       : null;
   // Simple / lookup (fast): prefer Gemini Flash — cheapest capable on providers we
@@ -753,6 +786,7 @@ export function providerLookupStep(input: {
           onCache: input.onCache,
           includeWeb,
           includeComputer,
+          actionTools,
         });
       } catch (err) {
         logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
@@ -788,6 +822,7 @@ export function providerLookupStep(input: {
               onCache: input.onCache,
               includeWeb,
               includeComputer,
+              actionTools,
             });
           } catch (err2) {
             logAskFailure('ask_lookup_gemini_failed', err2);
@@ -1009,6 +1044,15 @@ export async function answerFromAskLookup(input: {
     start: (args: { instructions: string; start_url?: string | null }) => Promise<string>;
     preferDeep?: boolean;
   } | null;
+  /**
+   * Office job Chat: actions the model may call mid-answer (propose a text,
+   * update the job file, read the CRM or the access list). Anything that
+   * reaches a person or removes access only proposes an approval card.
+   */
+  actions?: {
+    tools: AskActionModelTool[];
+    run: (name: string, input: Record<string, unknown>) => Promise<AskLookupResult>;
+  } | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1102,6 +1146,7 @@ export async function answerFromAskLookup(input: {
     });
   }
   const stopped = () => input.signal?.aborted === true;
+  const actionNames = new Set((input.actions?.tools ?? []).map((tool) => tool.name));
   const runCalls = async (calls: Array<{ name: string; input: Record<string, unknown> }>) => {
     if (stopped() || !calls.length) return;
     const batch = calls.slice(0, 6);
@@ -1112,7 +1157,11 @@ export async function answerFromAskLookup(input: {
         const result =
           call.name === 'web_search'
             ? await webSearchLookupResult(call.input, input.fetchFn, input.catalog.timeZone)
-            : executeAskLookup(call.name, call.input, input.catalog);
+            : input.actions && actionNames.has(call.name)
+              ? await input.actions.run(call.name, call.input).catch(
+                  (): AskLookupResult => ({ ok: false, tool: call.name, summary: 'That action did not go through.' }),
+                )
+              : executeAskLookup(call.name, call.input, input.catalog);
         input.timing?.addTool(call.name, performance.now() - started);
         return { tool: call.name, input: call.input, result };
       }),
@@ -1124,8 +1173,14 @@ export async function answerFromAskLookup(input: {
   let researchMeta: AskResearchTrace | null = null;
   let researchFellBack = false;
   const askStarted = Date.now();
+  // A command ("text Dana what changed since the first visit") needs the
+  // action tools, which only the single pass offers.
   const researchDecision =
-    input.researchMode === 'off' ? { route: 'single' as const, reason: 'off' } : routeAskResearch(resolved);
+    input.researchMode === 'off'
+      ? { route: 'single' as const, reason: 'off' }
+      : input.actions?.tools.length && ASK_ACTION_COMMAND.test(resolved)
+        ? { route: 'single' as const, reason: 'action_command' }
+        : routeAskResearch(resolved);
   if (researchDecision.route === 'research' && !stopped()) {
     try {
       const askWindow = askReasoningTimeoutMs();
@@ -1275,6 +1330,7 @@ export async function answerFromAskLookup(input: {
         webTool: !input.webSearchDone,
         effort: deepEffort,
         computerTool: Boolean(input.computer),
+        actionTools: input.actions?.tools ?? [],
       });
     if (decision.route === 'fast') {
       await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));

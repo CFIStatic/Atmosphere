@@ -70,6 +70,7 @@ import {
   parseJobFieldUpdatesFromQuestion,
   partitionAskTools,
   pickAskToolsHeuristically,
+  askModelActionTools,
   type AskToolContext,
   type AskToolResult,
 } from './askTools.js';
@@ -214,7 +215,7 @@ The record may contain any mix of: job identity, brief facts (any labels), scope
 
 Rules:
 1. Answer questions about this job, its videos, people, findings, or records only from the record given. Do not invent job facts, prices, or coverage decisions. Web search never replaces or overrides that evidence.
-2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job and WEB SEARCH RESULTS are provided, answer from those results for any public topic. Never invent what happened on this job from the web, and never quote web text as a speaker.
+2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job, answer it: from WEB SEARCH RESULTS for anything current (scores, weather, prices, news), and from general know-how for trade practice, drying and mitigation standards, codes, insurance terms, how-to steps, math, and definitions. Say plainly when a point is general guidance rather than something on the file. Never invent what happened on this job from the web, and never quote web text as a speaker.
 2b. Inventory questions ("what videos do we have", "how many clips", "who is on this job", "what rooms", "what days were filmed"): lead with the count from the record, then one clean bullet per item with the date, length when known, and what it shows. Never open with "nothing matches" or "this job file does not have that" when those videos or people are on the record, and never dump truncated blurbs on one semicolon-joined line.
 3. LAYERED DEFAULT for broad asks: the first sentence is the answer, then a few short sentences or, only for parallel facts, a tight bullet list. Do not dump every quote or document excerpt on the first pass, and do not end with an invite or a "let me know" line.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
@@ -813,7 +814,25 @@ Rules:
 - A vague subject ("the ball game", "the game tonight"): use CURRENT DATE AND TIME and cover the one or two most likely matches in a line each. Do not ask which one.
 - Scores, times, odds, prices, and names must come from the results. If the results are thin, give the best general take and say in one short clause that live details were not in the results.
 - A short "-" list only for a schedule or a few options, one item per line, in your own words.
-- No links or URLs, no headings, no "[...]", no quotation marks around web text, no page labels. The app shows the sources separately.`;
+- No links or URLs, no headings, no "[...]", no quotation marks around web text, no page labels. The app shows the sources separately.
+- Trade, code, how-to, math and definition questions may also use what you know. The THIS JOB card is the open job file: use it when the question touches the job (its city for weather, its type of loss), and never invent job facts beyond it.`;
+
+/** A short card of the open job for a general turn (weather at the site, codes for its city). */
+export function generalJobCard(file: JobFileAskContext | null | undefined, budget = 1200): string {
+  if (!file) return '';
+  const record = formatJobFileRecord({
+    ...file,
+    clips: [],
+    messages: [],
+    documents: [],
+    workLogs: [],
+    memory: [],
+    tasks: [],
+    mentionSupplement: null,
+  }).trim();
+  if (!record) return '';
+  return record.length > budget ? `${record.slice(0, budget).trimEnd()}…` : record;
+}
 
 /**
  * A public question with nothing to do with the job: one web search (often
@@ -833,6 +852,8 @@ export async function answerGeneralQuestion(input: {
   now?: Date;
   timeZone?: string;
   complete?: typeof completeAskText;
+  /** The open job, so a general answer can still use it (see generalJobCard). */
+  jobCard?: string | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -866,6 +887,7 @@ export async function answerGeneralQuestion(input: {
     system: `${GENERAL_ANSWER_SYSTEM}\n\n${askClockSystemRules(input.now ?? new Date(), zone)}`,
     user:
       `WEB SEARCH RESULTS (public web):\n${results || '(none: live search returned nothing usable)'}` +
+      (trim(input.jobCard) ? `\n\nTHIS JOB (the open job file, for context):\n${trim(input.jobCard)}` : '') +
       (history ? `\n\nEarlier in this chat:\n${history}` : '') +
       `\n\nQuestion: ${input.question}`,
     anthropicApiKey: trim(input.apiKey) || null,
@@ -1329,6 +1351,7 @@ export async function answerFromJobFile(input: {
       now: input.now,
       timeZone: input.lookup?.timeZone || 'America/Chicago',
       complete: input.generalComplete,
+      jobCard: generalJobCard(input.file),
     });
     if (general) {
       input.timing?.noteRoute('general', 'general_web');
@@ -1591,6 +1614,26 @@ export async function answerFromJobFile(input: {
                 input.timing?.addTool('start_computer_task', performance.now() - started);
                 toolResults.push(result);
                 return computerTurnAnswer(result);
+              },
+            }
+          : null,
+      // Commands (text someone, update the file, remove access, CRM) work
+      // however they are phrased: the model calls the tool itself.
+      actions:
+        input.toolContext?.access === 'org' && input.toolContext.userId
+          ? {
+              tools: askModelActionTools('org', toolResults.map((r) => r.tool)),
+              run: async (name, args) => {
+                const started = performance.now();
+                const result = await executeAskTool(name, args, {
+                  ...input.toolContext!,
+                  fetchFn: input.fetchFn ?? input.toolContext!.fetchFn,
+                  file: input.file,
+                  webSearch: input.webSearch ?? input.toolContext!.webSearch,
+                });
+                input.timing?.addTool(name, performance.now() - started);
+                toolResults.push(result);
+                return { ok: result.ok, tool: result.tool, summary: result.summary, data: result.data };
               },
             }
           : null,
