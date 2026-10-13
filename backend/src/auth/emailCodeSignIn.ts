@@ -10,10 +10,11 @@ import { createOtpThrottle } from './phoneAuth.js';
 /**
  * "Email me a code": a 6-digit one-time code as an alternative to the password.
  *
- * Existing accounts only. Admin generateLink({ type: 'magiclink' }) fails for
- * an unknown address and never creates a user (the same as signInWithOtp with
- * shouldCreateUser: false), and it returns the email OTP without Supabase
- * sending its own mail. We mail just the code through platform mail
+ * Existing accounts only. Admin generateLink({ type: 'recovery' }) fails with
+ * "User not found" for an unknown address and never creates a user (the same
+ * as signInWithOtp with shouldCreateUser: false). Do NOT use 'magiclink'
+ * here: for an unknown address it silently creates an unconfirmed user. It
+ * returns the email OTP without Supabase sending its own mail. We mail just the code through platform mail
  * (Resend), so it works inside the mobile app: no link to open.
  *
  * The response is the same whether or not the account exists, so this
@@ -23,6 +24,9 @@ import { createOtpThrottle } from './phoneAuth.js';
 export function normalizeCodeEmail(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
+
+/** Recovery never creates users; magiclink does. */
+export const EMAIL_CODE_LINK_TYPE = 'recovery' as const;
 
 const throttle = createOtpThrottle();
 
@@ -40,7 +44,7 @@ export async function sendEmailSignInCode(email: string): Promise<void> {
   if (!admin) throw new HttpError(503, 'Email codes are not available right now.', 'signin_unavailable');
   throttle.record(address);
 
-  const generated = await admin.auth.admin.generateLink({ type: 'magiclink', email: address });
+  const generated = await admin.auth.admin.generateLink({ type: EMAIL_CODE_LINK_TYPE, email: address });
   const code = generated.data?.properties?.email_otp;
   if (generated.error || !code) {
     // No account (or Auth hiccup): same answer as success, no mail.
@@ -57,7 +61,7 @@ export async function sendEmailSignInCode(email: string): Promise<void> {
 
 export async function verifyEmailSignInCode(email: string, code: string): Promise<{ session: Session; user: User }> {
   const address = normalizeCodeEmail(email);
-  const { data, error } = await createAnonClient().auth.verifyOtp({ type: 'email', email: address, token: code });
+  const { data, error } = await createAnonClient().auth.verifyOtp({ type: EMAIL_CODE_LINK_TYPE, email: address, token: code });
   if (error || !data.session || !data.user) {
     throw new HttpError(401, 'That code is incorrect or expired. Request a new one.', 'otp_invalid');
   }
