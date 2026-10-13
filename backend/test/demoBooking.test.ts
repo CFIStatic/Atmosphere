@@ -141,7 +141,7 @@ function memStore(): DemoBookingStore & { rows: Record<string, unknown>[] } {
   };
 }
 
-test('booking: stores, sends no email at booking time, blocks double booking', async () => {
+test('booking: stores, sends the guest one invite, blocks double booking', async () => {
   const store = memStore();
   const sent: Array<{ to: string; subject: string; attachments?: MailAttachment[] }> = [];
   const send: DemoMailer = async (m) => {
@@ -161,7 +161,9 @@ test('booking: stores, sends no email at booking time, blocks double booking', a
   const r = await bookDemo(input, { store, send, ip: '203.0.113.9', now: NOW });
   assert.equal(r.slotStart, slot);
   assert.equal(store.rows[0]!.client_ip, '203.0.113.9');
-  assert.equal(sent.length, 0, 'no email at booking time');
+  assert.equal(r.invite, 'email');
+  assert.equal(sent.filter((m) => m.to === input.email).length, 1, 'guest gets exactly one email');
+  assert.equal(sent.filter((m) => m.to === 'jack@jettx.ai').length, 1, 'host gets one email');
 
   const open = await openDemoSlots(store, NOW);
   assert.ok(!open.includes(slot), 'booked slot is hidden');
@@ -224,5 +226,117 @@ test('booking: slot is held even when mail fails', async () => {
     company: 'C',
   });
   await bookDemo(input, { store, send, ip: null, now: NOW });
+  assert.equal(store.rows.length, 1);
+});
+
+test('no Google Calendar: guest gets ONE branded email with Join meeting link and .ics invite', async () => {
+  const store = memStore();
+  const sent: Array<Parameters<DemoMailer>[0]> = [];
+  const send: DemoMailer = async (m) => {
+    sent.push(m);
+    return { ok: true };
+  };
+  const input = demoBookingSchema.parse({
+    slotStart: '2026-10-15T15:00:00.000Z',
+    name: 'Dana Ortiz',
+    email: 'dana@example.com',
+    company: 'Ortiz Roofing',
+    timeZone: 'America/Chicago',
+  });
+  const r = await bookDemo(input, { store, send, ip: null, now: NOW, calendar: null });
+  assert.equal(r.invite, 'email');
+  const guest = sent.filter((m) => m.to === 'dana@example.com');
+  assert.equal(guest.length, 1);
+  const g = guest[0]!;
+  assert.match(g.subject, /Your Atmosphere demo is confirmed/);
+  assert.match(g.html ?? '', /href="https:\/\/meet\.google\.com\/[^"]+"[^>]*>Join meeting</);
+  assert.match(g.text, /Join meeting: https:\/\/meet\.google\.com\//);
+  assert.equal(g.attachments?.length, 1);
+  assert.match(g.attachments![0]!.contentType, /text\/calendar/);
+  assert.match(g.attachments![0]!.content, /METHOD:REQUEST/);
+  assert.match(g.attachments![0]!.content.replace(/\r\n /g, ''), /ATTENDEE;CN=Dana Ortiz;.*mailto:dana@example\.com/);
+  assert.match(g.attachments![0]!.content, /meet\.google\.com/);
+  assert.equal(store.rows[0]!.guest_emailed_at, 'now');
+  const host = sent.filter((m) => m.to === 'jack@jettx.ai');
+  assert.equal(host.length, 1);
+  assert.match(host[0]!.text, /Join meeting: https:\/\/meet\.google\.com\//);
+});
+
+test('Google Calendar: Google sends the invite, we send the guest nothing, host gets the Meet link', async () => {
+  const store = memStore();
+  const sent: Array<Parameters<DemoMailer>[0]> = [];
+  const send: DemoMailer = async (m) => {
+    sent.push(m);
+    return { ok: true };
+  };
+  const calls: unknown[] = [];
+  const input = demoBookingSchema.parse({
+    slotStart: '2026-10-15T16:00:00.000Z',
+    name: 'Dana Ortiz',
+    email: 'dana@example.com',
+    company: 'Ortiz Roofing',
+  });
+  const r = await bookDemo(input, {
+    store,
+    send,
+    ip: null,
+    now: NOW,
+    calendar: async (ev) => {
+      calls.push(ev);
+      assert.equal(ev.guestEmail, 'dana@example.com');
+      assert.equal(ev.hostEmail, 'jack@jettx.ai');
+      assert.equal(ev.end.getTime() - ev.start.getTime(), 30 * 60 * 1000);
+      return { eventId: 'evt-9', meetUrl: 'https://meet.google.com/xyz-abcd-efg' };
+    },
+  });
+  assert.equal(r.invite, 'google');
+  assert.equal(calls.length, 1);
+  assert.equal(sent.filter((m) => m.to === 'dana@example.com').length, 0, 'Google sends the guest invite');
+  const host = sent.filter((m) => m.to === 'jack@jettx.ai');
+  assert.equal(host.length, 1);
+  assert.match(host[0]!.text, /Join meeting: https:\/\/meet\.google\.com\/xyz-abcd-efg/);
+  assert.equal(store.rows[0]!.google_event_id, 'evt-9');
+  assert.equal(store.rows[0]!.meet_url, 'https://meet.google.com/xyz-abcd-efg');
+});
+
+test('Google Calendar failure falls back to our one email invite', async () => {
+  const store = memStore();
+  const sent: Array<Parameters<DemoMailer>[0]> = [];
+  const send: DemoMailer = async (m) => {
+    sent.push(m);
+    return { ok: true };
+  };
+  const input = demoBookingSchema.parse({
+    slotStart: '2026-10-15T17:00:00.000Z',
+    name: 'Dana Ortiz',
+    email: 'dana@example.com',
+    company: 'Ortiz Roofing',
+  });
+  const r = await bookDemo(input, {
+    store,
+    send,
+    ip: null,
+    now: NOW,
+    calendar: async () => {
+      throw new Error('Google OAuth 401');
+    },
+  });
+  assert.equal(r.invite, 'email');
+  const guest = sent.filter((m) => m.to === 'dana@example.com');
+  assert.equal(guest.length, 1);
+  assert.equal(guest[0]!.attachments?.length, 1);
+});
+
+test('guest invite mail failure reports invite none but keeps the slot', async () => {
+  const store = memStore();
+  const send: DemoMailer = async () => ({ ok: false, why: 'down' });
+  const input = demoBookingSchema.parse({
+    slotStart: '2026-10-15T18:00:00.000Z',
+    name: 'D',
+    email: 'd@example.com',
+    company: 'C',
+  });
+  const r = await bookDemo(input, { store, send, ip: null, now: NOW });
+  assert.equal(r.invite, 'none');
   assert.equal(store.rows.length, 1);
 });

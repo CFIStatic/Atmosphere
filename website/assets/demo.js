@@ -138,6 +138,10 @@
         if (r.ok) {
           document.getElementById('demo-done-when').textContent = longFmt.format(new Date(chosen)) + ' · 30 minutes';
           document.getElementById('demo-done-email').textContent = payload.email;
+          if (r.body && r.body.emailed === false) {
+            document.getElementById('demo-done-note').textContent =
+              'Your time is held, but the invite email did not go out. Jack will email ' + payload.email + ' the join link shortly.';
+          }
           grid.classList.add('booked');
           document.getElementById('demo-picker').hidden = true;
           form.hidden = true;

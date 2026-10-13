@@ -300,6 +300,7 @@ export function demoGuestEmail(
   b: DemoBookingInput,
   start: Date,
   hostName: string,
+  meetUrl: string | null = null,
 ): { subject: string; text: string; html: string } {
   const zone = validZone(b.timeZone || DEMO_TIME_ZONE);
   const when = slotParts(start, zone);
@@ -314,14 +315,17 @@ export function demoGuestEmail(
   const invite = guestInviteLine(start, hostName);
   const html = layout({
     invite,
+    meetUrl,
     title: subject,
-    preheader: `You're booked for ${slotSubjectLabel(start, zone)}. Your calendar invite is on its way.`,
+    preheader: meetUrl
+      ? `You're booked for ${slotSubjectLabel(start, zone)}. Join link and calendar invite inside.`
+      : `You're booked for ${slotSubjectLabel(start, zone)}. Your calendar invite is on its way.`,
     eyebrow: 'Demo confirmed',
     heading: `You're booked, ${first}`,
     intro: `Thanks for booking time with Atmosphere. ${esc(hostName)} will walk you through what Atmosphere would do on the jobs you run.`,
     when,
     rows,
-    after: `<strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
+    after: `${meetUrl ? 'The calendar invite is attached; open it to add the demo to your calendar.<br /><br />' : ''}<strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
   });
   const text = [
     `Hi ${first},`,
@@ -331,7 +335,9 @@ export function demoGuestEmail(
     `When:   ${when.date}, ${when.time} (${DEMO_SLOT_MINUTES} min)`,
     `With:   ${hostName}, Founder`,
     '',
-    invite,
+    ...(meetUrl
+      ? [`Join meeting: ${meetUrl}`, '', 'The calendar invite is attached. Open it to add the demo to your calendar.']
+      : [invite]),
     '',
     'Need to reschedule or have a question? Just reply to this email.',
     '',

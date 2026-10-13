@@ -1,12 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from './errors.js';
 import {
+  DEMO_MEET_URL,
+  DEMO_SLOT_MINUTES,
   DEMO_WINDOW_DAYS,
+  buildDemoIcs,
   demoSlotStarts,
   isBookableSlot,
   type DemoBookingInput,
 } from './demoBooking.js';
-import { demoHostEmail } from './demoBookingEmail.js';
+import { demoGuestEmail, demoHostEmail } from './demoBookingEmail.js';
+import type { DemoCalendarEvent } from './googleCalendar.js';
+import type { MailAttachment } from './systemMail.js';
 
 export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
 export const DEMO_ORGANIZER_NAME = (process.env.DEMO_BOOKING_HOST_NAME || 'Jack Cyganiak').trim();
@@ -19,8 +24,8 @@ export type DemoBookingStore = {
   markEmailed(id: string, field: 'host_emailed_at' | 'guest_emailed_at'): Promise<void>;
   /** The booking, or null. */
   get(id: string): Promise<DemoBookingRow | null>;
-  /** Store the per-booking calendar event and Meet link. */
-  setMeet(id: string, meetUrl: string, eventId: string): Promise<void>;
+  /** Store the booking's Meet link and, when Google made one, its calendar event. */
+  setMeet(id: string, meetUrl: string, eventId: string | null): Promise<void>;
   /** Atomically set host_notified_at if still null; false if already set. */
   claimHostNotified(id: string): Promise<boolean>;
   releaseHostNotified(id: string): Promise<void>;
@@ -46,7 +51,7 @@ export type DemoBookingRow = {
  */
 export async function notifyHostWithMeet(
   id: string,
-  input: { meetUrl: string; eventId: string },
+  input: { meetUrl: string; eventId: string | null },
   deps: { store: DemoBookingStore; send: DemoMailer },
 ): Promise<{ status: 'sent' | 'already_sent' }> {
   const row = await deps.store.get(id);
@@ -83,7 +88,14 @@ export type DemoMailer = (input: {
   html?: string | null;
   replyTo?: string | null;
   keepReplyTo?: boolean;
+  attachments?: MailAttachment[];
 }) => Promise<{ ok: true } | { ok: false; why: string }>;
+
+/** Creates the booking's Google Calendar event (Google emails the guest). */
+export type DemoCalendar = (event: DemoCalendarEvent) => Promise<{ eventId: string; meetUrl: string }>;
+
+/** How the guest's one invite went out. */
+export type DemoInvite = 'google' | 'email' | 'none';
 
 export function supabaseDemoStore(client: SupabaseClient): DemoBookingStore {
   return {
@@ -145,13 +157,20 @@ export async function openDemoSlots(store: DemoBookingStore, now: Date = new Dat
 }
 
 /**
- * Book a slot, with no email; Google's Calendar invite and notifyHostWithMeet follow. The row is the
- * source of truth: once it is in, the slot is held even if mail fails.
+ * Book a slot and send the guest exactly one invite with a join link. The row
+ * is the source of truth: once it is in, the slot is held even if mail fails.
  */
 export async function bookDemo(
   input: DemoBookingInput,
-  deps: { store: DemoBookingStore; send: DemoMailer; ip: string | null; now?: Date },
-): Promise<{ id: string; slotStart: string }> {
+  deps: {
+    store: DemoBookingStore;
+    send: DemoMailer;
+    ip: string | null;
+    now?: Date;
+    /** Google Calendar, when credentials are set; null sends our own .ics invite. */
+    calendar?: DemoCalendar | null;
+  },
+): Promise<{ id: string; slotStart: string; invite: DemoInvite }> {
   const now = deps.now ?? new Date();
   if (!isBookableSlot(input.slotStart, now)) {
     throw new HttpError(409, 'That time is no longer available. Pick another.', 'slot_unavailable');
@@ -173,10 +192,81 @@ export async function bookDemo(
     throw new HttpError(409, 'Someone just booked that time. Pick another.', 'slot_taken');
   }
 
-  // No email at booking time. The guest's email is Google's own Calendar
-  // invite; the host's single email goes out from notifyHostWithMeet once
-  // the per-booking Meet link exists.
-  return { id: inserted.id, slotStart };
+  const invite = await inviteGuest(inserted.id, input, start, deps);
+  return { id: inserted.id, slotStart, invite };
+}
+
+/**
+ * The guest gets ONE email with a join link:
+ *  - Google Calendar configured: a per-booking event with its own Meet link,
+ *    and Google sends the guest its invite (sendUpdates=all).
+ *  - Otherwise, or if Google fails: our branded email with the host's Meet
+ *    room, a Join meeting button and an .ics invite attached.
+ * Then the host gets one email with the same link. Mail failures never undo
+ * the booking.
+ */
+async function inviteGuest(
+  id: string,
+  input: DemoBookingInput,
+  start: Date,
+  deps: { store: DemoBookingStore; send: DemoMailer; calendar?: DemoCalendar | null },
+): Promise<DemoInvite> {
+  const notifyHost = (meetUrl: string, eventId: string | null) =>
+    notifyHostWithMeet(id, { meetUrl, eventId }, deps).catch((err) =>
+      console.error('[demo] host email failed:', (err as Error)?.message ?? err),
+    );
+
+  if (deps.calendar) {
+    try {
+      const ev = await deps.calendar({
+        requestId: `demo-${id}`,
+        start,
+        end: new Date(start.getTime() + DEMO_SLOT_MINUTES * 60 * 1000),
+        summary: `Atmosphere product demo: ${input.name} (${input.company})`,
+        description: [
+          `Atmosphere product demo with ${DEMO_ORGANIZER_NAME}.`,
+          '',
+          `Guest: ${input.name} (${input.company}), ${input.email}`,
+          input.phone ? `Phone: ${input.phone}` : '',
+          input.notes ? `Notes: ${input.notes}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        hostEmail: DEMO_ORGANIZER_EMAIL,
+        guestEmail: input.email,
+        guestName: input.name,
+      });
+      // Google has sent the invite; nothing after this may fall through to a second one.
+      await deps.store.markEmailed(id, 'guest_emailed_at').catch(() => undefined);
+      await notifyHost(ev.meetUrl, ev.eventId);
+      return 'google';
+    } catch (err) {
+      console.error('[demo] Google Calendar invite failed, sending our own:', (err as Error)?.message ?? err);
+    }
+  }
+
+  const ics = buildDemoIcs({
+    uid: id,
+    start,
+    organizerEmail: DEMO_ORGANIZER_EMAIL,
+    organizerName: DEMO_ORGANIZER_NAME,
+    attendeeEmail: input.email,
+    attendeeName: input.name,
+    company: input.company,
+    phone: input.phone,
+    notes: input.notes,
+  });
+  const sent = await deps.send({
+    to: input.email,
+    ...demoGuestEmail(input, start, DEMO_ORGANIZER_NAME, DEMO_MEET_URL),
+    replyTo: `"${DEMO_ORGANIZER_NAME.replaceAll('"', "'")}" <${DEMO_ORGANIZER_EMAIL}>`,
+    keepReplyTo: true,
+    attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=REQUEST' }],
+  });
+  if (sent.ok) await deps.store.markEmailed(id, 'guest_emailed_at').catch(() => undefined);
+  else console.error('[demo] guest invite email failed:', sent.why);
+  await notifyHost(DEMO_MEET_URL, null);
+  return sent.ok ? 'email' : 'none';
 }
 
 export { DEMO_WINDOW_DAYS };

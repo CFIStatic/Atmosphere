@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { bookDemo, notifyHostWithMeet, openDemoSlots, supabaseDemoStore, type DemoBookingStore } from '../lib/demoBookingService.js';
 import { unscopedAdmin } from '../lib/scopedAdmin.js';
 import { sendSystemMail } from '../lib/systemMail.js';
+import { createGoogleDemoEvent, googleCalendarConfigured } from '../lib/googleCalendar.js';
 
 /**
  * atmosphereteam.com/demo — public by design (like /api/contact): strict
@@ -56,7 +57,7 @@ demoRouter.get('/slots', slotsLimiter, async (_req: Request, res: Response, next
   }
 });
 
-/** POST /api/demo/book — hold the slot and notify the host; the guest's invite comes from Google Calendar. */
+/** POST /api/demo/book — hold the slot, send the guest one invite with a join link, notify the host. */
 demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = demoBookingSchema.parse(req.body);
@@ -65,8 +66,13 @@ demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: 
       res.json({ ok: true, slotStart: input.slotStart });
       return;
     }
-    const result = await bookDemo(input, { store: store(), send: sendSystemMail, ip: clientIp(req) });
-    res.json({ ok: true, slotStart: result.slotStart, emailed: true });
+    const result = await bookDemo(input, {
+      store: store(),
+      send: sendSystemMail,
+      ip: clientIp(req),
+      calendar: googleCalendarConfigured() ? (ev) => createGoogleDemoEvent(ev) : null,
+    });
+    res.json({ ok: true, slotStart: result.slotStart, emailed: result.invite !== 'none' });
   } catch (err) {
     next(err);
   }
