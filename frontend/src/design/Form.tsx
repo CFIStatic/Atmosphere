@@ -8,7 +8,7 @@ import {
 import { cn } from './cn';
 
 const FIELD =
-  'w-full rounded-lg border border-line/10 bg-raised/80 px-3 py-2 text-sm text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50';
+  'w-full rounded-lg border border-line/10 bg-raised/80 px-3 py-2 text-sm text-fg placeholder-fg-4 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50';
 
 export function Label({
   htmlFor,

@@ -312,7 +312,7 @@ function AskInlineNodes({
           return (
             <code
               key={`c-${index}`}
-              className="rounded bg-paper-100 px-1 py-px font-mono text-[0.9em] text-ink-900"
+              className="rounded-sm bg-paper-100 px-1 py-px font-mono text-[0.9em] text-ink-900"
             >
               {node.text}
             </code>
@@ -1463,7 +1463,7 @@ export function JobAskPanel({
       className={
         fill
           ? 'flex h-full min-h-0 flex-1 flex-col bg-paper-50'
-          : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
+          : 'flex min-h-112 flex-col rounded-xl glass-card'
       }
       aria-label="Ask this job"
       data-testid="job-ask-panel"
@@ -1474,7 +1474,7 @@ export function JobAskPanel({
         className={
           fill
             ? 'relative min-h-0 flex-1 overflow-y-auto px-4 py-3'
-            : 'relative max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
+            : 'relative max-h-112 flex-1 overflow-y-auto px-5 py-4'
         }
       >
         {office ? (
@@ -1584,7 +1584,7 @@ export function JobAskPanel({
                           }
                         }}
                         rows={Math.min(6, Math.max(2, Math.ceil(editing.text.length / 48)))}
-                        className="w-full min-w-[16rem] resize-none rounded-lg border-0 bg-paper-0 px-2.5 py-1.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                        className="w-full min-w-[16rem] resize-none rounded-lg border-0 bg-paper-0 px-2.5 py-1.5 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
                       />
                       <div className="flex justify-end gap-1.5">
                         <button type="button" onClick={() => setEditing(null)} className="rounded-full px-2.5 py-0.5 text-[11px] font-medium text-paper-0/80 hover:text-paper-0">
@@ -1844,7 +1844,7 @@ export function JobAskPanel({
             jobId={jobId}
             placeholder="Ask what you forgot…"
             disabled={asking}
-            className="min-h-[2.5rem] w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-h-10 w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
           {inFlight ? (
             <button

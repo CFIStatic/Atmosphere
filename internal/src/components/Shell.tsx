@@ -227,7 +227,7 @@ export function Shell() {
           </button>
           <div className="flex min-w-0 items-end gap-2.5">
             <Logo />
-            <span className="mb-[1px] hidden border-l border-line-strong pl-2.5 font-display text-[19px] leading-none text-ink-700 sm:inline">
+            <span className="mb-px hidden border-l border-line-strong pl-2.5 font-display text-[19px] leading-none text-ink-700 sm:inline">
               Analytics
             </span>
           </div>
@@ -264,7 +264,7 @@ export function Shell() {
             aria-modal="true"
             aria-label="Navigation"
             onKeyDown={trapFocus}
-            className="absolute inset-y-0 left-0 flex w-[17rem] max-w-[85vw] flex-col border-r border-line bg-paper-50"
+            className="absolute inset-y-0 left-0 flex w-68 max-w-[85vw] flex-col border-r border-line bg-paper-50"
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
               <span className="eyebrow">Atmosphere Analytics</span>
@@ -307,7 +307,7 @@ export function Shell() {
               onMouseLeave={() => setHint(null)}
               onFocus={hintFor(toggleLabel)}
               onBlur={() => setHint(null)}
-              className="grid h-8 w-8 place-items-center text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+              className="grid h-8 w-8 place-items-center text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
               data-testid="sidebar-toggle"
             >
               {collapsed ? (
@@ -318,7 +318,7 @@ export function Shell() {
             </button>
           </div>
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4 pt-0.5 [scrollbar-width:thin] ${collapsed ? 'px-2' : 'px-3'}`}
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4 pt-0.5 scrollbar-thin ${collapsed ? 'px-2' : 'px-3'}`}
             onScroll={() => setHint(null)}
             data-testid="sidebar-scroll"
           >

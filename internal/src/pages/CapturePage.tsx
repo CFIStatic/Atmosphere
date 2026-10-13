@@ -177,7 +177,7 @@ export function CapturePage() {
               />
             }
           >
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 [&>*]:min-w-0">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 *:min-w-0">
               <div className="overflow-x-auto">
               <table className="report-table">
                 <thead>

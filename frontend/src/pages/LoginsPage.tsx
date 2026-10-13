@@ -37,7 +37,7 @@ const INTRO_LINE =
   'Save your sign-ins once and Computer uses them for you. Passwords are encrypted and never seen by the AI.';
 
 const inputClass =
-  'mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2.5 text-base text-ink-900 outline-none transition placeholder:text-ink-500 focus:border-brand-600 sm:text-sm';
+  'mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2.5 text-base text-ink-900 outline-hidden transition placeholder:text-ink-500 focus:border-brand-600 sm:text-sm';
 const labelClass = 'block text-xs font-medium text-ink-700';
 const primaryButton =
   'rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50';
@@ -293,7 +293,7 @@ function FormSiteHeader({
           <h2 className="min-w-0 truncate text-base font-semibold text-ink-900">{name}</h2>
         ) : (
           <span
-            className="h-4 w-32 animate-pulse rounded bg-paper-50"
+            className="h-4 w-32 animate-pulse rounded-sm bg-paper-50"
             aria-label="Finding the site"
             role="status"
             data-testid="logins-add-site-finding"

@@ -90,7 +90,7 @@ export function CaptureGuidePanel({
         <select
           value={jobId}
           onChange={(e) => setJobId(e.target.value)}
-          className="mt-2.5 w-full rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          className="mt-2.5 w-full rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
           aria-label="Job"
         >
           {jobs.map((job) => (

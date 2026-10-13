@@ -82,9 +82,9 @@ describe('phone and Field Capture frame', () => {
     expect(shell).toContain("t('nav.open')");
     expect(shell).toContain('operations-main');
     expect(shell).toContain('operations-rail');
-    expect(shell).toContain('h-[100dvh]');
+    expect(shell).toContain('h-dvh');
     expect(shell).toContain('w-[min(280px,86vw)]');
-    expect(shell).toContain('start-0');
+    expect(shell).toContain('inset-s-0');
     expect(shell).toContain('-translate-x-full rtl:translate-x-full');
   });
 });

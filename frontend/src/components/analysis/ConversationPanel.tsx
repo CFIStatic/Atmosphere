@@ -83,7 +83,7 @@ function FactList({
                   type="button"
                   data-at={item.tSec!}
                   onClick={() => onSeek?.(item.tSec!)}
-                  className="flex w-full items-start gap-2.5 rounded px-1 py-1 text-left hover:bg-paper-100/80"
+                  className="flex w-full items-start gap-2.5 rounded-sm px-1 py-1 text-left hover:bg-paper-100/80"
                 >
                   <span className="w-10 shrink-0 font-mono text-[11px] tabular-nums text-ink-500">
                     {eventClock(item.tSec!)}

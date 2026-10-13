@@ -748,7 +748,7 @@ export function JobFilePlayer({
                   : 'No captions available'
           }
           className={
-            'inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-bold tracking-wide ' +
+            'inline-flex h-7 min-w-8 items-center justify-center rounded-md px-1.5 text-[11px] font-bold tracking-wide ' +
             (captionsAvailable && !forceMute
               ? captionsOn
                 ? 'bg-ink-900 text-paper-50'

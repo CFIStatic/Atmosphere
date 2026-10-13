@@ -69,7 +69,7 @@ export function SetupWizardShell({
                         onClick={() => onStepSelect?.(item.step)}
                         className={`flex w-full gap-4 rounded-xl border px-4 py-4 text-left transition ${
                           active
-                            ? 'border-brand-300 bg-brand-50 shadow-sm'
+                            ? 'border-brand-300 bg-brand-50 shadow-xs'
                             : 'border-line bg-paper-0 hover:border-brand-200 hover:bg-brand-50/70'
                         }`}
                       >

@@ -31,7 +31,7 @@ export function Tabs({
             value={item.value}
             className={cn(
               'relative whitespace-nowrap px-3 py-2.5 text-sm font-medium text-fg-3 transition',
-              'hover:text-fg-2 focus-visible:outline-none focus-visible:text-fg',
+              'hover:text-fg-2 focus-visible:outline-hidden focus-visible:text-fg',
               'data-[state=active]:text-fg',
               'after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full',
               'data-[state=active]:after:bg-brand-400',

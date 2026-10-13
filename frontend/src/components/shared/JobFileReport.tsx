@@ -91,7 +91,7 @@ export function JobFileReport({ jobId }: { jobId: string }) {
           onClick={() => void run()}
           disabled={busy}
           data-testid="download-job-report"
-          className="mt-6 flex min-w-[220px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-wait disabled:opacity-60"
+          className="mt-6 flex min-w-[220px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 focus:outline-hidden focus:ring-2 focus:ring-brand-200 disabled:cursor-wait disabled:opacity-60"
         >
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

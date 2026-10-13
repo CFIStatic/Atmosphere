@@ -61,7 +61,7 @@ export function OverviewPage() {
 
       <section
         aria-label="North star"
-        className="mt-6 grid grid-cols-1 items-center gap-x-10 gap-y-4 border-b border-line-strong pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] [&>*]:min-w-0"
+        className="mt-6 grid grid-cols-1 items-center gap-x-10 gap-y-4 border-b border-line-strong pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] *:min-w-0"
       >
         <div>
           <p className="eyebrow">North star</p>

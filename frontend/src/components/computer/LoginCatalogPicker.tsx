@@ -110,7 +110,7 @@ export function SavedCheck() {
 }
 
 const tileClass =
-  'flex min-w-0 items-center gap-2.5 rounded-xl border border-line bg-paper-0 px-3 py-2.5 text-left transition hover:border-brand-600 focus-visible:border-brand-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
+  'flex min-w-0 items-center gap-2.5 rounded-xl border border-line bg-paper-0 px-3 py-2.5 text-left transition hover:border-brand-600 focus-visible:border-brand-600 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
 
 const gridClass = 'grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3';
 
@@ -225,7 +225,7 @@ export function LoginCatalogPicker({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search sites"
-          className="w-full rounded-xl border border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 outline-none transition placeholder:text-ink-500 focus:border-brand-600"
+          className="w-full rounded-xl border border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 outline-hidden transition placeholder:text-ink-500 focus:border-brand-600"
           autoComplete="off"
           autoFocus
           aria-label="Search sites"

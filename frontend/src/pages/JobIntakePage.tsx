@@ -271,7 +271,7 @@ export function JobIntakePage() {
         <div
           className={
             phone
-              ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+              ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pb-1 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
               : 'contents'
           }
         >
@@ -387,7 +387,7 @@ export function JobIntakePage() {
                           type="checkbox"
                           checked={m.selected}
                           onChange={() => toggleMember(m.userId)}
-                          className="h-4 w-4 shrink-0 rounded border-line text-brand-600"
+                          className="h-4 w-4 shrink-0 rounded-sm border-line text-brand-600"
                         />
                         <label htmlFor={`capture-${m.userId}`} className="min-w-0 flex-1 cursor-pointer">
                           <span className="block truncate text-sm font-medium text-ink-900">
@@ -498,7 +498,7 @@ export function JobIntakePage() {
                       type="checkbox"
                       checked={shareWithHomeowner}
                       onChange={(e) => setShareWithHomeowner(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-brand-600"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-line text-brand-600"
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-ink-900">Share with the homeowner</span>
@@ -548,7 +548,7 @@ export function JobIntakePage() {
         <div
           className={
             phone
-              ? 'sticky bottom-0 z-10 -mx-3 shrink-0 border-t border-line bg-paper-100/95 px-3 pt-2 pb-[max(6px,env(safe-area-inset-bottom))] backdrop-blur-sm'
+              ? 'sticky bottom-0 z-10 -mx-3 shrink-0 border-t border-line bg-paper-100/95 px-3 pt-2 pb-[max(6px,env(safe-area-inset-bottom))] backdrop-blur-xs'
               : 'flex flex-wrap items-center justify-end gap-3 pb-8 pt-2'
           }
         >

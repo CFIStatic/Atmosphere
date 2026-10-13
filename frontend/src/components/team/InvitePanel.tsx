@@ -172,7 +172,7 @@ export function InvitePanel() {
             value={phone}
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             placeholder="(555) 123-4567"
-            className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         ) : (
           <input
@@ -181,13 +181,13 @@ export function InvitePanel() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="their@email.com"
-            className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         )}
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as MemberRole)}
-          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
           title={PRODUCT_ROLE_BLURBS[role as OrgProductRole] ?? ''}
         >
           {roles.map((r) => (
@@ -199,7 +199,7 @@ export function InvitePanel() {
         <select
           value={serviceRole}
           onChange={(e) => setServiceRole((e.target.value || '') as ServiceRoleSlug | '')}
-          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
           title="Service title for Analysis labels"
         >
           <option value="">Title (optional)</option>
@@ -221,7 +221,7 @@ export function InvitePanel() {
             value={serviceRoleCustom}
             onChange={(e) => setServiceRoleCustom(e.target.value)}
             placeholder="Custom title"
-            className="min-w-[8rem] rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+            className="min-w-32 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
           />
         ) : null}
         <button

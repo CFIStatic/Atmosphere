@@ -181,7 +181,7 @@ export function CrmConnectPanel({ embedded = false }: { embedded?: boolean } = {
           Loading…
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-line bg-paper-0 shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-line bg-paper-0 shadow-xs">
           {PROVIDERS.map((provider) => {
             const row = rowFor(provider.id);
             const connected = Boolean(row?.connected);

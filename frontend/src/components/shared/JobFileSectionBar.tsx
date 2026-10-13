@@ -59,7 +59,7 @@ export function JobFileSectionBar({
               {selected ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 bottom-0 h-0.5 rounded-sm bg-brand-500"
+                  className="absolute inset-x-0 bottom-0 h-0.5 rounded-xs bg-brand-500"
                 />
               ) : null}
             </button>

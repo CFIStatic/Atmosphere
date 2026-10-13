@@ -104,7 +104,7 @@ export function DataTable<T>({
                 className={cn(
                   'border-b border-line/5 transition last:border-0',
                   onRowClick &&
-                    'cursor-pointer hover:bg-line/[0.03] focus-visible:bg-line/[0.05] focus-visible:outline-none',
+                    'cursor-pointer hover:bg-line/3 focus-visible:bg-line/5 focus-visible:outline-hidden',
                   tone && ROW_TONE[tone],
                 )}
               >

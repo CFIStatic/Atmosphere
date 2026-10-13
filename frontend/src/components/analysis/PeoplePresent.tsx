@@ -70,7 +70,7 @@ function PersonRow({
                 type="button"
                 data-at={m.tSec}
                 onClick={() => onSeek?.(m.tSec)}
-                className="flex w-full items-start gap-2 rounded px-0.5 py-0.5 text-left hover:bg-paper-50"
+                className="flex w-full items-start gap-2 rounded-sm px-0.5 py-0.5 text-left hover:bg-paper-50"
               >
                 <span className="w-10 shrink-0 font-mono text-[11px] tabular-nums text-ink-500">
                   {eventClock(m.tSec)}

@@ -76,7 +76,7 @@ export function SharePopup({
             aria-labelledby="access-invite-role"
             data-testid="access-invite-role"
             onClick={() => setRoleOpen((open) => !open)}
-            className="mt-1.5 flex h-10 w-full items-center justify-between rounded-lg glass-field px-3 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-500/25"
+            className="mt-1.5 flex h-10 w-full items-center justify-between rounded-lg glass-field px-3 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-500/25"
           >
             {tabs.find((t) => t.key === audience)?.label}
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="text-ink-500">
@@ -126,7 +126,7 @@ export function SharePopup({
                 onClick={() => setAudience(tab.key)}
                 className={`h-8 rounded-lg text-[13px] font-medium transition ${
                   selected
-                    ? 'bg-ink-900/10 text-ink-900 shadow-sm ring-1 ring-inset ring-ink-900/10'
+                    ? 'bg-ink-900/10 text-ink-900 shadow-xs ring-1 ring-inset ring-ink-900/10'
                     : 'text-ink-500 hover:text-ink-800'
                 }`}
               >

@@ -54,7 +54,7 @@ export function TermsAckCheckbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-brand-600 focus:ring-brand-200"
+        className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-line text-brand-600 focus:ring-brand-200"
       />
       <span>
         <TermsAckLabel />

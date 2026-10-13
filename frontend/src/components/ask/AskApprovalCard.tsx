@@ -93,7 +93,7 @@ export function AskApprovalCard({ jobId, approvalId }: { jobId: string; approval
   }
 
   return (
-    <div className="rounded-xl border border-brand-200 bg-paper-0 p-3 shadow-sm" data-testid="ask-approval-card" role="group" aria-label={approval.title}>
+    <div className="rounded-xl border border-brand-200 bg-paper-0 p-3 shadow-xs" data-testid="ask-approval-card" role="group" aria-label={approval.title}>
       <p className="flex items-center gap-2 text-[14px] font-semibold text-ink-900">
         {sms ? <MessageSquare size={15} aria-hidden /> : <ShieldOff size={15} aria-hidden />}
         {approval.title}
@@ -109,10 +109,10 @@ export function AskApprovalCard({ jobId, approvalId }: { jobId: string; approval
               maxLength={1600}
               onChange={(e) => setDraft(e.target.value)}
               rows={Math.min(8, Math.max(3, Math.ceil(draft.length / 60)))}
-              className="mt-2 w-full resize-none rounded-lg border border-line bg-paper-0 px-2.5 py-2 text-[14px] text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="mt-2 w-full resize-none rounded-lg border border-line bg-paper-0 px-2.5 py-2 text-[14px] text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
             />
           ) : (
-            <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-paper-50 px-2.5 py-2 text-[14px] text-ink-800" data-testid="ask-approval-body">
+            <p className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg bg-paper-50 px-2.5 py-2 text-[14px] text-ink-800" data-testid="ask-approval-body">
               {draft}
             </p>
           )}

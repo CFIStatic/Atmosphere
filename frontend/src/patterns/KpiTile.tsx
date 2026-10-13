@@ -20,13 +20,13 @@ export function KpiTile({ metric, className }: { metric: MetricTile; className?:
   return (
     <div
       className={cn(
-        'rounded-xl border border-line/10 bg-surface/60 p-3.5 backdrop-blur transition hover:border-line/20',
+        'rounded-xl border border-line/10 bg-surface/60 p-3.5 backdrop-blur-sm transition hover:border-line/20',
         className,
       )}
     >
       {/* Wraps rather than truncates: "Receivables > 30d" clipped to
           "Receivables > 3…" leaves the number meaningless. */}
-      <p className="min-h-[2rem] text-2xs font-medium uppercase leading-tight tracking-wide text-fg-3">
+      <p className="min-h-8 text-2xs font-medium uppercase leading-tight tracking-wide text-fg-3">
         {metric.label}
       </p>
       <div className="mt-1.5 flex items-baseline gap-2">

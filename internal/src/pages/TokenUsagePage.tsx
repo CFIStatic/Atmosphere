@@ -76,7 +76,7 @@ export function TokenUsagePage() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setWindowId(option.id)}
-                  className={`px-3 py-1 text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  className={`px-3 py-1 text-[12px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 ${
                     active ? 'bg-ink-900 text-paper-0' : 'text-ink-600 hover:text-ink-900'
                   }`}
                 >

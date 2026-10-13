@@ -125,7 +125,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Who — e.g. R. Calloway — Alliance Mutual"
-              className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
             />
             <input
               required
@@ -134,12 +134,12 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Their email"
               autoComplete="email"
-              className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+              className="min-w-48 flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
             >
               <option value={7}>Expires in 7 days</option>
               <option value={30}>Expires in 30 days</option>

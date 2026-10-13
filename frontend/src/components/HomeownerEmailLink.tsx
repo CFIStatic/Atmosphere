@@ -103,7 +103,7 @@ export function HomeownerEmailLink({ token, email }: { token: string; email: str
                 type="email"
                 value={email}
                 readOnly
-                className="w-full rounded-lg border border-line bg-paper-100 px-3.5 py-2.5 text-ink-900 outline-none"
+                className="w-full rounded-lg border border-line bg-paper-100 px-3.5 py-2.5 text-ink-900 outline-hidden"
               />
             </div>
           )}

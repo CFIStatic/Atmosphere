@@ -252,9 +252,9 @@ function JumpPalette() {
           }}
           placeholder={t('nav.jumpTo')}
           aria-label={t('nav.jumpToAria')}
-          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
+          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-hidden"
         />
-        <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
+        <kbd className="hidden rounded-sm border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
           ⌘K
         </kbd>
       </div>

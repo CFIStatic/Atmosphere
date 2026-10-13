@@ -149,7 +149,7 @@ export function InviteCrewPanel({
   }
 
   const field =
-    'mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25';
+    'mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25';
 
   return (
     <>
@@ -192,7 +192,7 @@ export function InviteCrewPanel({
                 aria-checked={via === key}
                 onClick={() => setVia(key)}
                 className={`h-7 rounded-md text-xs font-medium transition ${
-                  via === key ? 'bg-ink-900/10 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'
+                  via === key ? 'bg-ink-900/10 text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
                 }`}
               >
                 {key === 'email' ? 'Email' : 'Mobile number'}
@@ -231,7 +231,7 @@ export function InviteCrewPanel({
         <button
           type="submit"
           disabled={busy || !company.trim() || !(byPhone ? phone.trim() : email.trim())}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
           {byPhone ? 'Text crew invite' : mode === 'subcontractor' ? 'Send invite' : 'Send crew invite'}
@@ -262,7 +262,7 @@ export function InviteCrewPanel({
               </p>
               {'link' in made && made.link ? (
                 <div className="mt-2 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded bg-paper-0/40 px-2 py-1 text-[11px] text-ink-700">
+                  <code className="min-w-0 flex-1 truncate rounded-sm bg-paper-0/40 px-2 py-1 text-[11px] text-ink-700">
                     {'link' in made ? made.link : ''}
                   </code>
                   <button

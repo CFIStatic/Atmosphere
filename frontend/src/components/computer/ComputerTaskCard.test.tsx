@@ -396,7 +396,7 @@ describe('ComputerTaskCard text message approval', () => {
     const card = screen.getByTestId('computer-sms-approval');
     expect(card.textContent).toContain(body);
     expect(card.textContent).toContain('To: +15555550123');
-    expect(card.querySelector('p.whitespace-pre-wrap')?.className).toContain('break-words');
+    expect(card.querySelector('p.whitespace-pre-wrap')?.className).toContain('wrap-break-word');
   });
 
   describe('watching it work in Chat', () => {

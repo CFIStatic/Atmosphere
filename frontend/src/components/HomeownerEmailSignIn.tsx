@@ -104,7 +104,7 @@ export function HomeownerEmailSignIn({ initialEmail, onBack }: { initialEmail?: 
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+            className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
           />
           <p className="mt-3 text-sm text-ink-600">No password, no plan. We&apos;ll email you a sign-in code.</p>
           <button

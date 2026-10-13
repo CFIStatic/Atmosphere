@@ -46,11 +46,11 @@ export function AskAttachmentChip({
       className={
         onDark
           ? 'inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-white/15 bg-white/10 px-2.5 py-1 text-xs text-paper-0'
-          : 'inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-800 shadow-sm'
+          : 'inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-800 shadow-xs'
       }
     >
       <FileIcon />
-      <span className="max-w-[12rem] truncate font-medium">{file.filename}</span>
+      <span className="max-w-48 truncate font-medium">{file.filename}</span>
       {typeLabel ? (
         <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">{typeLabel}</span>
       ) : null}

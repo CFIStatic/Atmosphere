@@ -19,7 +19,7 @@ const FAMILY_STYLES: Record<string, string> = {
   task: 'bg-success-50 text-success-600 ring-success-200',
   assignment: 'bg-paper-300 text-ink-700 ring-line-strong',
   work_log: 'bg-caution-50 text-caution-600 ring-caution-200',
-  auth: 'bg-paper-200 text-[color:var(--pm-info)] ring-line-strong',
+  auth: 'bg-paper-200 text-(--pm-info) ring-line-strong',
   export: 'bg-danger-50 text-danger-600 ring-danger-200',
 };
 
