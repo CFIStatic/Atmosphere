@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { LOOKUP_LINK_TYPE } from '../src/auth/passwordAccount.js';
 import assert from 'node:assert/strict';
 import { EMAIL_CODE_LINK_TYPE, normalizeCodeEmail } from '../src/auth/emailCodeSignIn.js';
 
@@ -9,4 +10,8 @@ test('normalizeCodeEmail trims and lowercases', () => {
 
 test('email codes never use a link type that creates accounts', () => {
   assert.equal(EMAIL_CODE_LINK_TYPE, 'recovery');
+});
+
+test('password-account lookup never uses a link type that creates accounts', () => {
+  assert.equal(LOOKUP_LINK_TYPE, 'recovery');
 });
