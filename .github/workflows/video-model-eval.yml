@@ -55,6 +55,7 @@ jobs:
           EVAL_ARM: current
           EVAL_OUT: current.json
           ANTHROPIC_MODEL: claude-opus-5-5
+          VIDEO_LIGHT_MODEL: claude-opus-5-5
           VERIFICATION_PRIMARY_MODEL: gemini-3.1-pro-preview
         run: npx tsx scripts/videoModelEval.ts
 
@@ -64,6 +65,7 @@ jobs:
           EVAL_ARM: sonnet-flash
           EVAL_OUT: sonnet-flash.json
           ANTHROPIC_MODEL: claude-sonnet-5-5
+          VIDEO_LIGHT_MODEL: claude-sonnet-5-5
           VERIFICATION_PRIMARY_MODEL: gemini-3.8-flash
         run: npx tsx scripts/videoModelEval.ts
 
@@ -73,6 +75,7 @@ jobs:
           EVAL_ARM: haiku-flashlite
           EVAL_OUT: haiku-flashlite.json
           ANTHROPIC_MODEL: claude-haiku-4-5
+          VIDEO_LIGHT_MODEL: claude-haiku-4-5
           VERIFICATION_PRIMARY_MODEL: gemini-3.5-flash-lite
         run: npx tsx scripts/videoModelEval.ts
 
