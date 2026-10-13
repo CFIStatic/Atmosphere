@@ -1,3 +1,4 @@
+import { ATMOSPHERE_EMAIL_LOGO_DARK_URL, atmosphereWordmarkHtml } from './brandMark.js';
 import {
   DEMO_SLOT_MINUTES,
   DEMO_TIME_ZONE,
@@ -12,8 +13,7 @@ import {
  * attachment) never disappears on an inverted background.
  */
 
-export const DEMO_EMAIL_LOGO_URL =
-  'https://atmosphereteam.com/assets/email/atmosphere-lockup-dark.png';
+export const DEMO_EMAIL_LOGO_URL = ATMOSPHERE_EMAIL_LOGO_DARK_URL;
 const SITE_URL = 'https://atmosphereteam.com';
 
 const INK = '#1C1917';
@@ -166,7 +166,7 @@ function layout(input: {
       <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0"><tr><td><![endif]-->
       <table role="presentation" class="em-card" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:${CARD};border:1px solid ${LINE};border-radius:16px;overflow:hidden;">
         <tr><td bgcolor="${INK}" style="background:${INK};padding:22px 32px;" class="em-pad">
-          <a href="${SITE_URL}" style="text-decoration:none;"><img src="${DEMO_EMAIL_LOGO_URL}" width="180" height="28" alt="Atmosphere" style="display:block;width:180px;height:28px;border:0;outline:none;color:#FFFFFF;font-family:${FONT};font-size:20px;font-weight:700;" /></a>
+          ${atmosphereWordmarkHtml({ ground: 'dark' })}
         </td></tr>
         <tr><td bgcolor="${ACCENT}" style="background:${ACCENT};height:3px;line-height:3px;font-size:3px;">&nbsp;</td></tr>
         <tr><td class="em-pad" style="padding:32px 32px 8px;">
