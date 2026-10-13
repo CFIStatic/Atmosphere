@@ -902,6 +902,21 @@
     });
   }
 
+  /** Email code sign-in (existing accounts): send a 6-digit code, trade it for a session. */
+  function startEmailCodeSignIn(email, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/email-code/start', {
+      method: 'POST',
+      body: { email: email },
+    });
+  }
+
+  function verifyEmailCodeSignIn(email, code, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/email-code/verify', {
+      method: 'POST',
+      body: { email: email, code: code },
+    });
+  }
+
   var CURRENT_TERMS_VERSION = '2026-09-10';
 
   function loadAuthMe(apiBase, accessToken) {
@@ -3906,6 +3921,8 @@
     phoneAuthConfig: phoneAuthConfig,
     startPhoneSignIn: startPhoneSignIn,
     verifyPhoneSignIn: verifyPhoneSignIn,
+    startEmailCodeSignIn: startEmailCodeSignIn,
+    verifyEmailCodeSignIn: verifyEmailCodeSignIn,
     loadAuthMe: loadAuthMe,
     acceptTerms: acceptTerms,
     CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,
