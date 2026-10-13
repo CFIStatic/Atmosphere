@@ -26,7 +26,7 @@ import {
 import { rotateComputerCredentials } from '../src/computer/rotateCredentials.js';
 import { loginsState, resetSignInsForTests, saveCredential } from '../src/computer/logins.js';
 import { looksLikeUsernameOrPassword } from '../src/computer/providers/playwrightDriver.js';
-import { signInHintsFor } from '../src/computer/autoSignIn.js';
+import { autoSignIn, savedSignIns, signInHintsFor } from '../src/computer/autoSignIn.js';
 import { catalogSiteForHost } from '../src/computer/catalog/sites.js';
 import { MockComputerProvider, MockSite } from '../src/computer/providers/mock.js';
 import { setComputerProviderForTests } from '../src/computer/providers/index.js';
@@ -712,4 +712,45 @@ test('DASH / Restore 365 is in the catalog with a company ID hint, and the gener
   assert.equal(looksLikeUsernameOrPassword({ type: 'text', name: 'accountUser' }), true);
   assert.equal(looksLikeUsernameOrPassword({ type: 'email', name: 'account' }), true);
   assert.equal(looksLikeUsernameOrPassword({ type: 'password', name: 'companyPass' }), true);
+});
+
+test('Restore 365 (restore365.net) is DASH: its company ID box is filled, and a login without a saved Company ID says so', async () => {
+  assert.equal(catalogSiteForHost('restore365.net')?.id, 'nextgear');
+  const hints = signInHintsFor({
+    login: { host: 'restore365.net', cookie_domains: [] } as never,
+    credential: { login_url: null } as never,
+  });
+  assert.ok(hints.companyIdSelectors?.some((s) => /company/i.test(s)));
+
+  const t = setup();
+  const login = await seedLogin(t.store, 'restore365.net');
+  await saveCredential({ orgId: ORG, loginId: login.id, userId: ADMIN, canManage: true, credential: { username: USERNAME, password: PASSWORD } });
+  const typed: Array<string | null | undefined> = [];
+  // DASH stays on its sign-in form (with an error) when the company ID is missing.
+  const driver = {
+    currentUrl: async () => 'https://restore365.net/Enterprise/Module/User/Login.aspx',
+    navigate: async () => undefined,
+    fillSignIn: async (creds: { companyId?: string | null }) => {
+      typed.push(creds.companyId);
+      return 'submitted' as const;
+    },
+    pageSignals: async () => ({ url: '', hasPasswordField: true, hasOneTimeCodeField: false, hasCaptcha: false, mentionsVerificationCode: false, approvalNumber: null, visibleOtpCode: null, signInError: 'Invalid login' }),
+  };
+  const saved = (await savedSignIns(t.store, ORG))[0]!;
+  const res = await autoSignIn({ store: t.store, driver: driver as never, saved, now: () => Date.now(), audit: {} });
+  assert.equal(res.outcome, 'incomplete');
+  assert.match(res.message, /asks for a Company ID, and none is saved/);
+  const cred = (await t.store.getCredential(ORG, login.id))!;
+  assert.equal(cred.status, 'needs_attention');
+  assert.match(cred.attention_reason ?? '', /Company ID/);
+  assert.deepEqual(typed, [null]);
+
+  // Saved with the Company ID: it is typed in.
+  await saveCredential({ orgId: ORG, loginId: login.id, userId: ADMIN, canManage: true, credential: { username: USERNAME, password: PASSWORD, companyId: COMPANY_ID } });
+  const withId = (await savedSignIns(t.store, ORG))[0]!;
+  const ok = { ...driver, pageSignals: async () => ({ ...(await driver.pageSignals()), hasPasswordField: false, signInError: null }) };
+  const res2 = await autoSignIn({ store: t.store, driver: ok as never, saved: withId, now: () => Date.now(), audit: {} });
+  assert.equal(res2.outcome, 'signed_in');
+  assert.equal(typed[1], COMPANY_ID);
+  assert.ok(!res.message.includes(PASSWORD) && !res2.message.includes(COMPANY_ID));
 });
