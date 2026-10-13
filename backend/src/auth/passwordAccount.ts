@@ -130,16 +130,17 @@ async function rawSignIn(
  * Look up an auth user by email without sending mail. Admin generateLink
  * returns the user row and does not deliver the link.
  */
+/** Never a link type that creates users. */
+export const LOOKUP_LINK_TYPE = 'recovery' as const;
+
 async function lookupUserIdByEmail(email: string): Promise<string | null> {
   const admin = unscopedAdminOrNull();
   if (!admin) return null;
 
-  for (const type of ['magiclink', 'recovery'] as const) {
-    const generated = await admin.auth.admin.generateLink({ type, email });
-    const id = generated.data?.user?.id;
-    if (id) return id;
-  }
-  return null;
+  // 'recovery' only: it fails with "User not found" for an unknown address.
+  // 'magiclink' silently creates an unconfirmed user for unknown emails.
+  const generated = await admin.auth.admin.generateLink({ type: LOOKUP_LINK_TYPE, email });
+  return generated.data?.user?.id ?? null;
 }
 
 async function confirmEmail(email: string, userId?: string | null): Promise<boolean> {
