@@ -225,7 +225,7 @@ a { color: inherit; }
 @media (max-width: 480px) {
   .nav-inner { gap: 12px; }
   .nav-links { gap: 8px; }
-  .nav-links a.btn { padding: 8px 16px; }
+  .nav-links a.btn { height: 34px; padding: 0 14px; }
   .nav-links .theme-toggle { display: none; }
 }
 @media (max-width: 400px) {
@@ -261,28 +261,44 @@ html, body { overflow-x: clip; }
 /* Anchored sections land below the sticky chrome. */
 [id] { scroll-margin-top: 122px; }
 
-/* Nav CTAs — pill-shaped, and re-asserted over `.nav-links a`, which
-   otherwise out-specifies `.btn` and turns the label grey. */
-.nav-links a.btn {
-  color: var(--accent-ink);
-  border-radius: 999px;
-  padding: 9px 20px;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, .15), inset 0 1px 0 rgba(255, 255, 255, .14);
-  transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
+/* Nav CTAs — one system: same height, radius, weight and size for all three.
+   Sign in is a plain text link, Book a demo a quiet secondary, Get started the
+   orange primary. Re-asserted over `.nav-links a`, which otherwise out-specifies
+   the button classes and turns labels grey. */
+.nav-links a.btn,
+.nav-links a.btn-quiet,
+.nav-links a.nav-demo {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 36px; padding: 0 16px; box-sizing: border-box;
+  border-radius: 8px; border: 1px solid transparent;
+  font-size: 14px; font-weight: 600; line-height: 1; letter-spacing: -.005em;
+  white-space: nowrap; text-decoration: none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.nav-links a.btn:hover {
-  color: var(--accent-ink);
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(28, 25, 23, .18), inset 0 1px 0 rgba(255, 255, 255, .14);
+.nav-links a.btn-quiet { color: var(--ink-soft); background: transparent; padding: 0 10px; }
+.nav-links a.btn-quiet:hover { color: var(--ink); }
+.nav-links a.nav-demo {
+  color: var(--ink); background: transparent; border-color: var(--line-strong);
 }
-.nav-links a.btn-quiet {
-  color: var(--ink);
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  padding: 8px 18px;
-  transition: border-color .15s ease;
+.nav-links a.nav-demo:hover {
+  border-color: var(--ink-faint);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
-.nav-links a.btn-quiet:hover { border-color: var(--ink-faint); }
+.nav-links a.btn { color: var(--accent-ink); background: var(--accent); }
+.nav-links a.btn:hover { color: var(--accent-ink); background: var(--accent-hover); }
+.nav-links a.btn-quiet:focus-visible,
+.nav-links a.nav-demo:focus-visible,
+.nav-links a.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Tighter gap between the CTA group than between menu links. */
+/* Phones/tablets: Sign in and Book a demo live in the drawer; only the
+   primary stays in the bar. */
+@media (max-width: 860px) {
+  .nav-links a.btn-quiet, .nav-links a.nav-demo { display: none; }
+}
+@media (min-width: 861px) {
+  .nav-links a.nav-demo, .nav-links a.btn { margin-left: -14px; }
+  .nav-links a.btn + .theme-toggle { margin-left: -8px; }
+}
 
 /* Theme toggle — moon in light (switch to dark), sun in dark (switch to light). */
 .theme-toggle {
