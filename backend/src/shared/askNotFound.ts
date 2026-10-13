@@ -149,7 +149,21 @@ export type ApplyHonestNotFoundOptions = {
    * Soft denials and ungrounded absences then get the Not found. lead-in.
    */
   noGroundedClaim?: boolean;
+  /**
+   * The turn was not a question about job evidence (a Computer command, a
+   * question about what Chat can do, small talk, a general question). Such a
+   * reply is never rewritten into an evidence "Not found." search report.
+   */
+  nonEvidence?: boolean;
 };
+
+/** Replies that are about an action or Chat itself, never job-evidence answers. */
+export function isNonEvidenceReply(answer: string): boolean {
+  const text = String(answer ?? '');
+  if (/⟦actions:[^⟧]*(?:start_computer_task|send_job_sms|computer-task:|ask-approval:)/i.test(text)) return true;
+  if (/^\s*(?:With Computer I can|Computer isn't set up|I can't work in a browser|Opening\b)/i.test(text)) return true;
+  return false;
+}
 
 /**
  * If the model hedged / denied / abstained, or echoed empty-job boilerplate on
@@ -162,6 +176,7 @@ export function applyHonestNotFound(
   question: string,
   opts?: ApplyHonestNotFoundOptions,
 ): string {
+  if (opts?.nonEvidence || isNonEvidenceReply(answer)) return answer;
   const cleaned = stripEmptyJobBoilerplate(answer, catalog);
   const clips = clipsInScope(catalog);
   const denied = looksLikeNotFound(cleaned);

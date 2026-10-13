@@ -338,9 +338,33 @@ const WEB_SEARCH_MODEL_TOOL = {
  * `includeWeb: false` when this turn already ran its one web search: the model
  * answers from those results instead of starting a second search round.
  */
-function lookupModelTools(includeWeb = true) {
-  if (!includeWeb || !isAskWebSearchConfigured()) return LOOKUP_TOOLS;
-  return [...LOOKUP_TOOLS, WEB_SEARCH_MODEL_TOOL];
+/**
+ * Office job Chat: the model may hand the turn to Computer (a real browser
+ * with the company's saved Logins) when the person asks it to sign in to or
+ * work on an outside site. The model decides; the server runs the task.
+ */
+export const START_COMPUTER_MODEL_TOOL = {
+  name: 'start_computer_task',
+  description:
+    'Start Computer: open a real browser and do the work on an outside website or app for the person (Restore 365 / DASH, Xactimate, ' +
+    'Outlook, Gmail, AccuLynx, JobNimbus, supplier portals, permit sites, or any saved Login). Call it whenever they ask you to log in to, ' +
+    'sign in to, go into, open, check, look up, pull up or do something on a site or app outside Atmosphere — for example ' +
+    '"log in to Restore 365 and tell me what jobs are running". Computer signs in with the saved Login (Company ID, username and password are typed ' +
+    'by the server, never by you), shows a live view, and asks before anything is submitted. Never answer such a request from the job ' +
+    'evidence and never say "Not found" for it. Do NOT call it for questions about this job file, earlier answers, or results Computer already returned.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      instructions: { type: 'string', description: 'What to do on the site, in the person\'s words, with any detail from earlier turns resolved.' },
+      start_url: { type: 'string', description: 'Website to open first, only if the person named one.' },
+    },
+    required: ['instructions'],
+  },
+};
+
+function lookupModelTools(includeWeb = true, includeComputer = false) {
+  const base = !includeWeb || !isAskWebSearchConfigured() ? LOOKUP_TOOLS : [...LOOKUP_TOOLS, WEB_SEARCH_MODEL_TOOL];
+  return includeComputer ? [...base, START_COMPUTER_MODEL_TOOL] : base;
 }
 
 type LookupCall = { id: string; name: string; input: Record<string, unknown> };
@@ -410,6 +434,7 @@ function anthropicLookupSession(input: {
   outputConfig?: { effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   onToken?: (text: string) => void;
   includeWeb?: boolean;
+  includeComputer?: boolean;
 }): (state: { system: string; stable?: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
   const messages: Anthropic.MessageParam[] = [];
   let traced = 0;
@@ -450,7 +475,7 @@ function anthropicLookupSession(input: {
         max_tokens: input.maxTokens,
         system: asAnthropicSystem(anthropicCachedSystem(state.system, state.stable ?? '')),
         messages,
-        tools: lookupModelTools(input.includeWeb !== false),
+        tools: lookupModelTools(input.includeWeb !== false, input.includeComputer === true),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(input.outputConfig ? { output_config: input.outputConfig } : {}),
       },
@@ -495,10 +520,10 @@ function anthropicLookupSession(input: {
 
 type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } };
 
-export function geminiLookupTools(includeWeb = true) {
+export function geminiLookupTools(includeWeb = true, includeComputer = false) {
   return [
     {
-      functionDeclarations: lookupModelTools(includeWeb).map(toGeminiFunctionDeclaration),
+      functionDeclarations: lookupModelTools(includeWeb, includeComputer).map(toGeminiFunctionDeclaration),
     },
   ];
 }
@@ -591,10 +616,11 @@ async function geminiLookupTurn(input: {
   onToken?: (text: string) => void;
   onCache?: (state: 'hit' | 'miss' | 'skip') => void;
   includeWeb?: boolean;
+  includeComputer?: boolean;
 }): Promise<LookupModelTurn> {
   const fast = input.route === 'fast';
   const requested = fast ? askFastGeminiModel() : geminiAskModel('reasoning');
-  const tools = geminiLookupTools(input.includeWeb !== false);
+  const tools = geminiLookupTools(input.includeWeb !== false, input.includeComputer === true);
   const stable = input.stable ?? '';
   const cacheName = geminiCachedContentName({
     apiKey: input.apiKey,
@@ -664,7 +690,10 @@ export function providerLookupStep(input: {
   webTool?: boolean;
   /** Deep turns only: Opus effort for this question (see askInteractiveDeepEffort). */
   effort?: AnthropicEffort | null;
+  /** Offer start_computer_task to the model (office job Chat with Computer). */
+  computerTool?: boolean;
 }): LookupModelStep {
+  const includeComputer = input.computerTool === true;
   const route = input.route ?? 'deep';
   const includeWeb = input.webTool !== false;
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
@@ -681,6 +710,7 @@ export function providerLookupStep(input: {
           outputConfig: shaped?.output_config,
           onToken: input.onToken,
           includeWeb,
+          includeComputer,
         })
       : null;
   // Simple / lookup (fast): prefer Gemini Flash — cheapest capable on providers we
@@ -722,6 +752,7 @@ export function providerLookupStep(input: {
           onToken: input.onToken,
           onCache: input.onCache,
           includeWeb,
+          includeComputer,
         });
       } catch (err) {
         logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
@@ -756,6 +787,7 @@ export function providerLookupStep(input: {
               onToken: input.onToken,
               onCache: input.onCache,
               includeWeb,
+              includeComputer,
             });
           } catch (err2) {
             logAskFailure('ask_lookup_gemini_failed', err2);
@@ -967,10 +999,22 @@ export async function answerFromAskLookup(input: {
   onPreviewReset?: () => void;
   /** Install the sentence check the live preview runs before showing text. */
   setPreviewCheck?: (check: ((sentence: string) => boolean) | null) => void;
+  /**
+   * Office job Chat with Computer available. The model may call
+   * start_computer_task; `start` runs it and returns the reply for the turn.
+   * `preferDeep` puts the turn on the strongest Ask model (commands and
+   * follow-ups about Computer results).
+   */
+  computer?: {
+    start: (args: { instructions: string; start_url?: string | null }) => Promise<string>;
+    preferDeep?: boolean;
+  } | null;
 }): Promise<{
   answer: string;
   model: string | null;
   usage: MeasuredUsage | null;
+  /** Set when the model handed this turn to Computer; `answer` is the task reply. */
+  computerStarted?: boolean;
   trace: AskLookupTraceStep[];
   followUps: string[];
   answeredFromLookup: true;
@@ -1076,6 +1120,7 @@ export async function answerFromAskLookup(input: {
     trace.push(...rows);
   };
   let forcedOther = false;
+  let computerAnswer: string | null = null;
   let researchMeta: AskResearchTrace | null = null;
   let researchFellBack = false;
   const askStarted = Date.now();
@@ -1146,7 +1191,17 @@ export async function answerFromAskLookup(input: {
         streamed = false;
         // A "let me check" preface streamed before the tool call is not the answer.
         input.onPreviewReset?.();
-        await runCalls(turn.calls);
+        const computerCall = input.computer ? turn.calls.find((call) => call.name === 'start_computer_task') : null;
+        if (computerCall && input.computer) {
+          // A browser task is the whole turn.
+          input.onStatus?.('Starting Computer…');
+          const args = computerCall.input ?? {};
+          const instructions = String(args.instructions ?? '').trim() || input.question;
+          const startUrl = typeof args.start_url === 'string' ? args.start_url : null;
+          computerAnswer = await input.computer.start({ instructions, start_url: startUrl });
+          break;
+        }
+        await runCalls(turn.calls.filter((call) => call.name !== 'start_computer_task'));
         continue;
       }
       if (
@@ -1172,7 +1227,11 @@ export async function answerFromAskLookup(input: {
     input.timing?.noteRoute('deep', 'provided_step');
     await consume(input.step, fullUser, 6);
   } else {
-    const decision = await routePromise!;
+    const routed = await routePromise!;
+    const decision =
+      input.computer?.preferDeep && routed.route === 'fast'
+        ? { ...routed, route: 'deep' as const, reason: `computer_context:${routed.reason}` }
+        : routed;
     input.timing?.noteRoute(decision.route, decision.reason);
     void logAskRouteDecision({
       orgId: input.catalog.orgId,
@@ -1215,6 +1274,7 @@ export async function answerFromAskLookup(input: {
         deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, route) : undefined,
         webTool: !input.webSearchDone,
         effort: deepEffort,
+        computerTool: Boolean(input.computer),
       });
     if (decision.route === 'fast') {
       await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));
@@ -1248,6 +1308,21 @@ export async function answerFromAskLookup(input: {
     } else {
       await consume(stepFor('deep'), parts.volatile, 6);
     }
+  }
+
+  if (computerAnswer) {
+    onToken(computerAnswer);
+    return {
+      answer: computerAnswer,
+      model,
+      usage,
+      computerStarted: true,
+      trace,
+      followUps: [],
+      answeredFromLookup: true,
+      retrievedChunks: [],
+      research: researchMeta,
+    };
   }
 
   if (!prose && !stopped()) {

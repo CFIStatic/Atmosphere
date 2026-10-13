@@ -717,7 +717,7 @@ test('short messages are accepted by every Ask route', async () => {
 test('the Computer capability answer matches what Computer does', async () => {
   const { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } = await import('../src/shared/askComputerCapability.js');
   const ready = computerCapabilityAnswer({ access: 'org', configured: true });
-  assert.match(ready, /no fixed list/i);
+  assert.match(ready, /almost any website/i);
   assert.match(ready, /Sign in once from Logins in the sidebar/);
   assert.match(ready, /never sees the password/i);
   assert.match(ready, /code or to approve a number/);

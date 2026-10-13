@@ -36,6 +36,7 @@ import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { extractAskSources, isDocumentQuoteSource, tidyQuoteClipTitle, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
+import { COMPUTER_RESUME_EVENT } from '../lib/computer';
 import { AskActionCards } from './ask/AskActionCards';
 import { AskApprovalCard } from './ask/AskApprovalCard';
 import { AskAnswerToolbar } from './ask/AskAnswerToolbar';
@@ -1225,6 +1226,20 @@ export function JobAskPanel({
       phase: owner?.phase ?? target?.phase,
     });
   }
+
+  // A login saved from an in-thread "Add a login" card: send the original request again.
+  const askRef = useRef<typeof ask | null>(null);
+  useEffect(() => {
+    askRef.current = ask;
+  });
+  useEffect(() => {
+    const onResume = (event: Event) => {
+      const text = String((event as CustomEvent<{ text?: string }>).detail?.text ?? '').trim();
+      if (text) void askRef.current?.(text);
+    };
+    window.addEventListener(COMPUTER_RESUME_EVENT, onResume);
+    return () => window.removeEventListener(COMPUTER_RESUME_EVENT, onResume);
+  }, []);
 
   async function ask(
     textRaw: string,
