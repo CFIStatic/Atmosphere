@@ -135,7 +135,7 @@ export function LoginPage() {
 
   if (fieldEmbed && !switchAccount) {
     return (
-      <div className="grid min-h-[100dvh] place-items-center bg-paper-100 text-brand-600">
+      <div className="grid min-h-dvh place-items-center bg-paper-100 text-brand-600">
         <div className="flex flex-col items-center gap-3 px-6 text-center">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
           <p className="text-sm font-medium text-ink-700">Opening your workspace…</p>
@@ -237,7 +237,7 @@ export function LoginPage() {
                         type="button"
                         onClick={continueSignedIn}
                         disabled={membershipLoading}
-                        className="rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-ink-900 shadow-sm transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-ink-900 shadow-xs transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Continue to workspace
                       </button>
@@ -314,7 +314,7 @@ export function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@company.com"
-                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                   </div>
 
@@ -341,7 +341,7 @@ export function LoginPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                        className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                       />
                       <button
                         type="button"
@@ -357,7 +357,7 @@ export function LoginPage() {
                   <button
                     type="submit"
                     disabled={!canSubmit}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-hidden focus:ring-2 focus:ring-brand-200 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting && <SpinnerIcon className="animate-spin" />}
                     {submitting ? 'Signing in…' : 'Sign in'}

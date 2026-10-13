@@ -229,7 +229,7 @@ describe('JobDetailPage', () => {
     const ask = await screen.findByTestId('job-file-ask');
     expect(ask).toHaveAttribute('aria-label', 'Ask this job');
     expect(ask.className).toMatch(/lg:h-full/);
-    expect(ask.className).toMatch(/lg:w-\[var\(--job-file-ask-width\)\]/);
+    expect(ask.className).toMatch(/lg:w-\(--job-file-ask-width\)/);
     expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
     expect(ask).toContainElement(screen.getByTestId('job-ask-panel'));
 

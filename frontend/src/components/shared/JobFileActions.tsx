@@ -155,7 +155,7 @@ export function JobFileActions({
               <button
                 type="submit"
                 disabled={busy}
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:opacity-60"
               >
                 {busy ? <SpinnerIcon className="animate-spin" width={14} /> : null}
                 {mode === 'rename' ? 'Save name' : 'Create copy'}

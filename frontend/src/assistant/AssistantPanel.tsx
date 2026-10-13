@@ -99,7 +99,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
     >
       <header className="flex h-topbar shrink-0 items-center justify-between gap-2 border-b border-line/10 px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-gradient-to-br from-brand-400 to-brand-700">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-linear-to-br from-brand-400 to-brand-700">
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </span>
           <div className="min-w-0">
@@ -325,7 +325,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
               event.preventDefault();
               void attachFiles(files);
             }}
-            className="w-full resize-none rounded-lg border border-line/10 bg-surface py-2 pl-9 pr-10 text-sm text-fg outline-none placeholder:text-fg-4"
+            className="w-full resize-none rounded-lg border border-line/10 bg-surface py-2 pl-9 pr-10 text-sm text-fg outline-hidden placeholder:text-fg-4"
           />
           <Button
             type="submit"

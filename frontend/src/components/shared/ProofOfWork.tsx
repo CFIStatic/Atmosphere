@@ -256,7 +256,7 @@ export function ProofOfWork({
               rows={1}
               jobId={jobId}
               placeholder="Ask the video collection — e.g. when was the subfloor first visible?"
-              className="min-h-[2.25rem] w-full resize-none rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="min-h-9 w-full resize-none rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
             />
             <button
               type="submit"
@@ -357,7 +357,7 @@ function HearMicButton({
         {busy && <SpinnerIcon className="animate-spin" width={11} height={11} />}
         {pending ? 'Hearing the mic…' : status === 'failed' || status === 'skipped' ? 'Hear the mic again' : 'Hear the mic'}
       </button>
-      {note ? <p className="mt-1 max-w-[14rem] text-[10.5px] text-ink-500">{note}</p> : null}
+      {note ? <p className="mt-1 max-w-56 text-[10.5px] text-ink-500">{note}</p> : null}
     </div>
   );
 }
@@ -676,14 +676,14 @@ function VideoCatalog({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by title, date or who filmed"
             aria-label="Search videos"
-            className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-1.5 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+            className="min-w-48 flex-1 rounded-lg glass-field px-3 py-1.5 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
           />
           {filmers.length > 1 ? (
             <select
               value={who}
               onChange={(event) => setWho(event.target.value)}
               aria-label="Filmed by"
-              className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-none"
+              className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-hidden"
             >
               <option value="">Everyone</option>
               {filmers.map((name) => (
@@ -697,7 +697,7 @@ function VideoCatalog({
             value={sort}
             onChange={(event) => setSort(event.target.value as VideoSort)}
             aria-label="Sort videos"
-            className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-none"
+            className="rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-800 outline-hidden"
           >
             {(Object.keys(SORT_LABELS) as VideoSort[]).map((key) => (
               <option key={key} value={key}>
@@ -767,7 +767,7 @@ function VideoCatalog({
                         </svg>
                       </span>
                     )}
-                    <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+                    <span className="absolute bottom-1.5 right-1.5 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
                       {clipClock(video.durationSeconds)}
                     </span>
                   </span>

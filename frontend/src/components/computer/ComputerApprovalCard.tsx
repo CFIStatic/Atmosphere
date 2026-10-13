@@ -241,7 +241,7 @@ function OrderLineRow({
               onChange={(e) => onQty(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
               placeholder="Qty"
               aria-label={`Quantity for ${name}`}
-              className="w-14 rounded-md border border-line bg-paper-0 px-1.5 py-0.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+              className="w-14 rounded-md border border-line bg-paper-0 px-1.5 py-0.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-brand-400 focus:outline-hidden"
               data-testid="order-line-qty-input"
             />
           )}
@@ -362,7 +362,7 @@ function SupplyOrderSummary({
               {line.fields.slice(1).map((f, j) => (
                 <div key={`${f.label}-${j}`} className="grid gap-x-3 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,12rem)]">
                   <span className="text-ink-500">{f.label}</span>
-                  <span className="break-words text-ink-800">{valueWithoutRawUrl(f.value)}</span>
+                  <span className="wrap-break-word text-ink-800">{valueWithoutRawUrl(f.value)}</span>
                   <SourceMark field={f} />
                 </div>
               ))}
@@ -371,7 +371,7 @@ function SupplyOrderSummary({
           {order.other.map((f, i) => (
             <div key={`${f.label}-${i}`} className="grid gap-x-3 px-2.5 py-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,12rem)]">
               <span className="text-ink-500">{f.label}</span>
-              <span className="break-words text-ink-800">{valueWithoutRawUrl(f.value)}</span>
+              <span className="wrap-break-word text-ink-800">{valueWithoutRawUrl(f.value)}</span>
               <SourceMark field={f} />
             </div>
           ))}
@@ -487,7 +487,7 @@ export function ComputerApprovalCard({
               data-testid="computer-approval-field"
             >
               <span className="text-[12px] text-ink-600 sm:text-[13px]">{f.label}</span>
-              <span className="break-words font-medium text-ink-900">{linkify(f.value)}</span>
+              <span className="wrap-break-word font-medium text-ink-900">{linkify(f.value)}</span>
               <span className={`text-[12px] ${f.verified ? 'text-success-600' : 'font-semibold text-danger-600'}`}>
                 {f.verified ? '✓ ' : '⚠ '}
                 {f.source}

@@ -83,7 +83,7 @@ export function CommandBar({ role }: { role: Role }) {
             value={query}
             onValueChange={setQuery}
             placeholder="Ask Atmosphere, or type a page name…"
-            className="h-12 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-4"
+            className="h-12 flex-1 bg-transparent text-sm text-fg outline-hidden placeholder:text-fg-4"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && looksLikeRequest) {
                 e.preventDefault();
@@ -93,7 +93,7 @@ export function CommandBar({ role }: { role: Role }) {
           />
         </div>
 
-        <Command.List className="max-h-[22rem] overflow-y-auto p-2">
+        <Command.List className="max-h-88 overflow-y-auto p-2">
           {looksLikeRequest && routing ? (
             <Command.Group heading={<GroupLabel>Ask Atmosphere</GroupLabel>}>
               <Command.Item value={trimmed} onSelect={() => ask(trimmed)} className={ITEM}>
@@ -150,7 +150,7 @@ export function CommandBar({ role }: { role: Role }) {
 }
 
 const ITEM =
-  'flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm data-[selected=true]:bg-line/[0.06] aria-selected:bg-line/[0.06]';
+  'flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm data-[selected=true]:bg-line/6 aria-selected:bg-line/6';
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (

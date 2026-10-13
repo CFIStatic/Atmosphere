@@ -27,7 +27,7 @@ function InlineNodes({ nodes }: { nodes: AskInline[] }) {
         }
         if (node.kind === 'code') {
           return (
-            <code key={`c-${index}`} className="rounded bg-paper-100 px-1 py-px font-mono text-[0.92em] text-ink-900">
+            <code key={`c-${index}`} className="rounded-sm bg-paper-100 px-1 py-px font-mono text-[0.92em] text-ink-900">
               {node.text}
             </code>
           );

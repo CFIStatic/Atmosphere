@@ -51,7 +51,7 @@ export function MobileNav({
           <button
             type="button"
             aria-label="Close navigation"
-            className="absolute inset-0 bg-scrim/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-scrim/70 backdrop-blur-xs"
             onClick={() => onOpenChange(false)}
           />
           <div className="absolute inset-y-0 left-0 w-[min(17rem,80vw)] animate-slide-in-right">
@@ -111,7 +111,7 @@ function BottomBar({ role, counts }: { role: Role; counts: Counts }) {
             <span className="relative">
               <Icon className="h-5 w-5" />
               {count > 0 && (
-                <span className="absolute -right-1.5 -top-1 min-w-[1rem] rounded-full bg-state-warn px-1 text-center text-[9px] font-bold leading-4 text-on-accent">
+                <span className="absolute -right-1.5 -top-1 min-w-4 rounded-full bg-state-warn px-1 text-center text-[9px] font-bold leading-4 text-on-accent">
                   {count > 9 ? '9+' : count}
                 </span>
               )}

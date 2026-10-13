@@ -35,7 +35,7 @@ export function DashboardSearchBar({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search by job, company, date, address, ID, or hash"
         aria-label={ariaLabel}
-        className="h-[34px] w-full rounded-lg border border-line bg-paper-100 pl-[30px] pr-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-500 focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(var(--brand-200))]"
+        className="h-[34px] w-full rounded-lg border border-line bg-paper-100 pl-[30px] pr-2.5 text-[13px] text-ink-900 outline-hidden placeholder:text-ink-500 focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(var(--brand-200))]"
       />
     </div>
   );

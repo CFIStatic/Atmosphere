@@ -103,7 +103,7 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
       <div className="rounded-xl border border-line bg-paper-50 p-3" data-testid="computer-sms-approval">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Text message</p>
         <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Waiting for approval</p>
-        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-700">
+        <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-ink-700">
           {summary || 'Approve this text before it is sent. Nothing was sent yet.'}
         </p>
         <p className="mt-2 text-xs text-ink-500">Reply Approve in Chat to send, or Cancel to discard.</p>
@@ -254,7 +254,7 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   return (
     <div className="space-y-2.5 rounded-xl border border-line bg-paper-0 p-3" data-testid="computer-task-card">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-        <p className="min-w-0 break-words text-[15px] font-semibold text-ink-900" data-testid="computer-task-title">
+        <p className="min-w-0 wrap-break-word text-[15px] font-semibold text-ink-900" data-testid="computer-task-title">
           {computerCardTitle(task)}
         </p>
         <span
@@ -334,7 +334,7 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
           {fields.map((f, i) => (
             <div key={`${f.label}-${i}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 px-2.5 py-1.5">
               <dt className="text-ink-600">{cleanFieldLabel(f.label)}</dt>
-              <dd className="break-words font-medium text-ink-900">{f.value || '(left blank)'}</dd>
+              <dd className="wrap-break-word font-medium text-ink-900">{f.value || '(left blank)'}</dd>
             </div>
           ))}
         </dl>

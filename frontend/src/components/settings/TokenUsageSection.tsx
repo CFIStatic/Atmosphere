@@ -94,7 +94,7 @@ export function TokenUsageSection() {
                   aria-selected={active}
                   onClick={() => setRange(option.id)}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
-                    active ? 'bg-paper-0 text-ink-900 shadow-sm' : 'text-ink-600 hover:text-ink-900'
+                    active ? 'bg-paper-0 text-ink-900 shadow-xs' : 'text-ink-600 hover:text-ink-900'
                   }`}
                 >
                   {option.label}
@@ -216,7 +216,7 @@ export function TokenUsageSection() {
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-xs">
+            <table className="w-full min-w-xl text-left text-xs">
               <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
                 <tr className="border-b border-line">
                   <th className="py-2 pr-3 font-semibold">Person</th>
@@ -251,7 +251,7 @@ export function TokenUsageSection() {
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left text-xs">
+            <table className="w-full min-w-160 text-left text-xs">
               <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
                 <tr className="border-b border-line">
                   <th className="py-2 pr-3 font-semibold">Job</th>
@@ -279,17 +279,17 @@ export function TokenUsageSection() {
             Nothing metered yet.
           </p>
         ) : (
-          <div className="mt-3 max-h-[32rem] overflow-auto">
+          <div className="mt-3 max-h-128 overflow-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
                 <tr className="border-b border-line">
-                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pr-3 font-semibold backdrop-blur-sm">
+                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pr-3 font-semibold backdrop-blur-xs">
                     Day
                   </th>
-                  <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-sm">
+                  <th className="sticky top-0 z-10 bg-paper-0/95 px-3 py-2 text-right font-semibold backdrop-blur-xs">
                     Calls
                   </th>
-                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pl-3 text-right font-semibold backdrop-blur-sm">
+                  <th className="sticky top-0 z-10 bg-paper-0/95 py-2 pl-3 text-right font-semibold backdrop-blur-xs">
                     Tokens
                   </th>
                 </tr>

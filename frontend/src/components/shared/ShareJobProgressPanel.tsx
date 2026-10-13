@@ -136,13 +136,13 @@ export function ShareJobProgressPanel({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="homeowner@example.com"
-              className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
+              className="mt-1.5 h-10 w-full rounded-lg glass-field px-3 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500/25"
             />
           </label>
           <button
             type="submit"
             disabled={busy || !email.trim()}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
             Send homeowner invite

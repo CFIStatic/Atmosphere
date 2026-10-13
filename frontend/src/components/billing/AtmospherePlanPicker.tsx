@@ -62,9 +62,9 @@ export function AtmospherePlanPicker({
               key={plan.code}
               className={cn(
                 'relative flex h-full cursor-pointer flex-col rounded-xl border-2 p-4 transition',
-                activeInterval === 'year' ? 'min-h-[15.75rem]' : 'min-h-[13.5rem]',
+                activeInterval === 'year' ? 'min-h-63' : 'min-h-54',
                 selected
-                  ? 'border-brand-500 bg-brand-50 shadow-sm'
+                  ? 'border-brand-500 bg-brand-50 shadow-xs'
                   : 'border-line bg-paper-50 hover:border-brand-200',
                 disabled && 'cursor-not-allowed opacity-60',
               )}

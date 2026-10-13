@@ -74,7 +74,7 @@ export function HeaderAccountChip() {
         aria-label={t('nav.accountMenu')}
         className="flex min-h-11 items-center gap-[9px] rounded-xl px-1.5 py-1 text-left transition hover:bg-paper-200"
       >
-        <span className="min-w-0 max-w-[9.5rem] sm:max-w-[12rem]">
+        <span className="min-w-0 max-w-38 sm:max-w-48">
           <span className="block truncate text-[12.5px] leading-tight text-ink-700">{name}</span>
           <span className="mt-px block truncate text-[11.5px] leading-tight text-ink-500">{orgName}</span>
         </span>

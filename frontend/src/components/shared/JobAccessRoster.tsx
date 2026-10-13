@@ -130,7 +130,7 @@ export function JobAccessRoster({
             type="button"
             onClick={() => setInviteOpen(true)}
             data-testid="job-access-invite"
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-paper-0 shadow-sm transition hover:bg-ink-800"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800"
           >
             <PlusIcon width={13} height={13} />
             Invite

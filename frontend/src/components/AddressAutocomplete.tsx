@@ -237,7 +237,7 @@ export function AddressAutocomplete({
             id={listId}
             role="listbox"
             style={{ top: listPos.top, left: listPos.left, width: listPos.width }}
-            className="fixed z-[80] max-h-60 overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
+            className="fixed z-80 max-h-60 overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
           >
             {suggestions.map((s, i) => (
               <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>

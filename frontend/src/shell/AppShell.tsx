@@ -149,7 +149,7 @@ function MobileAssistantLauncher({ role }: { role: Role }) {
         aria-label="Open Atmosphere assistant"
         className={cn(
           'fixed bottom-20 right-4 z-30 grid h-12 w-12 place-items-center rounded-full sm:bottom-6',
-          'bg-gradient-to-br from-brand-500 to-brand-700 shadow-xl shadow-brand-900/50',
+          'bg-linear-to-br from-brand-500 to-brand-700 shadow-xl shadow-brand-900/50',
           'transition hover:scale-105 active:scale-95 xl:hidden',
         )}
       >
@@ -169,7 +169,7 @@ function MobileAssistantLauncher({ role }: { role: Role }) {
           <button
             type="button"
             aria-label="Close assistant"
-            className="absolute inset-0 bg-scrim/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-scrim/70 backdrop-blur-xs"
             onClick={() => setOpen(false)}
           />
           <div className="absolute inset-y-0 right-0 w-[min(24rem,100vw)] animate-slide-in-right">

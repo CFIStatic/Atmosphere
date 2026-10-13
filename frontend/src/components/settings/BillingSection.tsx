@@ -339,7 +339,7 @@ function InvoiceReceiptCard({ invoice }: { invoice: BillingInvoice }) {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[28rem] text-left text-xs">
+        <table className="w-full min-w-md text-left text-xs">
           <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
             <tr className="border-b border-line/60">
               <th className="px-3.5 py-2 font-semibold">Description</th>

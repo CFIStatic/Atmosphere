@@ -233,7 +233,7 @@ export function CampaignBuilderPage() {
       {loadError && <ErrorLine message={loadError} />}
       {actionError && <ErrorLine message={actionError} />}
 
-      <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&>*]:min-w-0">
+      <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] *:min-w-0">
         <div>
           <Section title="1. Audience" note="Empty filters mean everyone">
             <div className="space-y-4 text-[13px]">

@@ -137,11 +137,11 @@ export interface KpiItem {
 const KPI_GRID: Record<number, { grid: string; cell: string }> = {
   6: {
     grid: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
-    cell: 'first:border-l-0 [&:nth-child(2n+1)]:border-l-0 sm:[&:nth-child(2n+1)]:border-l sm:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(3n+1)]:border-l lg:[&:nth-child(6n+1)]:border-l-0',
+    cell: 'first:border-l-0 nth-[2n+1]:border-l-0 sm:nth-[2n+1]:border-l sm:nth-[3n+1]:border-l-0 lg:nth-[3n+1]:border-l lg:nth-[6n+1]:border-l-0',
   },
   4: {
     grid: 'grid-cols-2 lg:grid-cols-4',
-    cell: '[&:nth-child(2n+1)]:border-l-0 lg:[&:nth-child(2n+1)]:border-l lg:[&:nth-child(4n+1)]:border-l-0',
+    cell: 'nth-[2n+1]:border-l-0 lg:nth-[2n+1]:border-l lg:nth-[4n+1]:border-l-0',
   },
   3: { grid: 'grid-cols-3', cell: 'first:border-l-0' },
 };

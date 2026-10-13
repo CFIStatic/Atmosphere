@@ -78,8 +78,8 @@ export function EvidenceLog({
     return (
       <div className="rounded-lg bg-paper-100/70 px-3 py-3" data-status="pending">
         <div className="mb-2 space-y-1.5" aria-hidden="true">
-          <span className="block h-2 w-11/12 rounded bg-paper-200" />
-          <span className="block h-2 w-8/12 rounded bg-paper-200" />
+          <span className="block h-2 w-11/12 rounded-sm bg-paper-200" />
+          <span className="block h-2 w-8/12 rounded-sm bg-paper-200" />
         </div>
         <p className="text-[11px] text-ink-500">Reading this clip.</p>
       </div>

@@ -45,16 +45,16 @@ export function OperationsShell() {
   const railClass = isLibrary
     ? 'fixed inset-0 z-0 h-full w-full'
     : phone
-      ? `fixed inset-y-0 start-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
+      ? `fixed inset-y-0 inset-s-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
           railOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
         }`
-      : 'operations-rail fixed inset-y-0 start-0 z-20 h-full overflow-hidden bg-panel';
+      : 'operations-rail fixed inset-y-0 inset-s-0 z-20 h-full overflow-hidden bg-panel';
 
   return (
     <div
       className={
         phone
-          ? 'operations-chrome relative h-[100dvh] overflow-hidden bg-paper-100'
+          ? 'operations-chrome relative h-dvh overflow-hidden bg-paper-100'
           : 'operations-chrome relative min-h-screen bg-paper-100'
       }
     >

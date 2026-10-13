@@ -165,7 +165,7 @@ export function FirstRunPage() {
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Smith kitchen leak"
                   autoFocus
-                  className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                  className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                 />
                 {error ? (
                   <p role="alert" className="text-sm text-danger-700">
@@ -290,7 +290,7 @@ function FirstRunSteps({ stage }: { stage: 'job' | 'choose' | 'evidence' }) {
 
 function Card({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-line bg-paper-0 p-6 shadow-sm sm:p-7">
+    <section className="rounded-2xl border border-line bg-paper-0 p-6 shadow-xs sm:p-7">
       <h1 className="text-xl font-bold tracking-tight text-ink-900">{title}</h1>
       <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
       {children}
@@ -314,7 +314,7 @@ function Primary({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="w-full rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
+      className="w-full rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 transition hover:bg-brand-500 focus:outline-hidden focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
     >
       {children}
     </button>
@@ -337,7 +337,7 @@ function ChoiceButton({
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className="rounded-xl border border-line bg-paper-0 p-4 text-left transition hover:border-brand-300 hover:bg-brand-50/60 focus:outline-none focus:ring-2 focus:ring-brand-200"
+      className="rounded-xl border border-line bg-paper-0 p-4 text-left transition hover:border-brand-300 hover:bg-brand-50/60 focus:outline-hidden focus:ring-2 focus:ring-brand-200"
     >
       <span className="block text-base font-semibold text-ink-900">{title}</span>
       <span className="mt-1 block text-sm text-ink-600">{detail}</span>
@@ -369,7 +369,7 @@ function ClipCard({
       <div className="flex items-center gap-3 border-b border-line bg-paper-50 p-3">
         <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md bg-ink-900/80">
           {posterUrl ? <img src={posterUrl} alt="" className="h-full w-full object-cover" /> : null}
-          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[11px] font-semibold text-white">
+          <span className="absolute bottom-1 right-1 rounded-sm bg-black/70 px-1 text-[11px] font-semibold text-white">
             {posterClock(durationSeconds)}
           </span>
         </div>
