@@ -333,3 +333,20 @@ test('catalog site with no saved login asks for it without a web search', async 
   assert.match(turn.answer, /computer-task:add-login:/);
   assert.equal(store.tasks.size, 0);
 });
+
+test('Chat knows what a waiting Computer task needs, including the authenticator number', () => {
+  const block = formatComputerResultsForPrompt([
+    {
+      id: 't1',
+      instructions: 'Task: Log in to Outlook and email the update',
+      status: 'needs_you',
+      result: null,
+      error: null,
+      at: '2026-10-13T16:41:00Z',
+      waiting: { reason: 'number_match', message: 'Enter 47 in your authenticator app.', code: '47' },
+    },
+  ]);
+  assert.match(block, /Status: needs_you/);
+  assert.match(block, /Waiting on the person \(number_match\)/);
+  assert.match(block, /Authenticator number on the sign-in page: 47/);
+});

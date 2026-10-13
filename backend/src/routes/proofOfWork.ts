@@ -3903,7 +3903,7 @@ async function runProofAskTurn(input: {
         model: result.model,
         grounded_on: fromJobFile ? groundedOn : [],
         web_sources: sessionDocumentAnswer ? [] : webSources,
-        research_trace: result.research ?? null,
+        research_trace: result.research ?? ('agentTrace' in result ? result.agentTrace : null) ?? null,
         office_only: result.officeOnly === true,
         document_ids: sessionDocuments.map((doc) => doc.id).slice(0, 8),
         asked_by: userId ?? null,

@@ -16,6 +16,8 @@ export type ComputerResultNote = {
   result: string | null;
   error: string | null;
   at: string | null;
+  /** While Computer waits on the person: why, and the authenticator number when the page shows one. */
+  waiting?: { reason: string; message: string; code: string | null } | null;
 };
 
 export type AskComputerContext = {
@@ -48,7 +50,7 @@ export async function loadAskComputerContext(ctx: AskToolContext | null | undefi
           if (!ctx.jobId || !ctx.supabase?.from) return [];
           const { data } = await ctx.supabase
             .from('computer_tasks')
-            .select('id, instructions, status, result_summary, error, created_at, finished_at')
+            .select('id, instructions, status, result_summary, error, created_at, finished_at, waiting_reason:needs_you->>reason, waiting_message:needs_you->>message, waiting_code:needs_you->>code')
             .eq('org_id', ctx.orgId)
             .eq('job_id', ctx.jobId)
             .order('created_at', { ascending: false })
@@ -60,6 +62,14 @@ export async function loadAskComputerContext(ctx: AskToolContext | null | undefi
             result: row.result_summary ? String(row.result_summary) : null,
             error: row.error ? String(row.error) : null,
             at: String(row.finished_at ?? row.created_at ?? '') || null,
+            waiting:
+              row.status === 'needs_you' && row.waiting_reason
+                ? {
+                    reason: String(row.waiting_reason),
+                    message: String(row.waiting_message ?? ''),
+                    code: row.waiting_code ? String(row.waiting_code) : null,
+                  }
+                : null,
           }));
         } catch {
           return [];
@@ -81,7 +91,12 @@ export function formatComputerResultsForPrompt(results: ComputerResultNote[]): s
   if (!rows.length) return '';
   const lines = rows.slice(0, 5).map((row, index) => {
     const outcome = row.result?.trim() || (row.error ? `Error: ${row.error.trim()}` : `Status: ${row.status}`);
-    return `${index + 1}. Request: ${requestLine(row.instructions)}\n   Status: ${row.status}${row.at ? ` (${row.at})` : ''}\n   Result: ${outcome.slice(0, 3000)}`;
+    const waiting = row.waiting
+      ? `\n   Waiting on the person (${row.waiting.reason}): ${row.waiting.message.trim().slice(0, 300)}${
+          row.waiting.code ? `\n   Authenticator number on the sign-in page: ${row.waiting.code}` : ''
+        }`
+      : '';
+    return `${index + 1}. Request: ${requestLine(row.instructions)}\n   Status: ${row.status}${row.at ? ` (${row.at})` : ''}${waiting}\n   Result: ${outcome.slice(0, 3000)}`;
   });
   return [
     'COMPUTER RESULTS ON THIS JOB (browser tasks Computer already ran for this person, newest first; treat as facts the person has seen, and use them for follow-ups like "the second one"):',

@@ -106,6 +106,7 @@ HOW HARD TO THINK
 
 COMPUTER RESULTS
 - A message that starts "Computer finished:" comes from the app, not the person: Computer just finished a task they asked for. Report what it found or did from the Computer results (the numbers, names, what was sent), plainly and briefly, and offer the obvious next step. If it failed or stopped, say why in one sentence and what they can do.
+- When a Computer task is waiting on the person (Status: needs_you), and they ask about it ("what's the code?", "is it stuck?"), tell them exactly what it needs from the Computer results, including the authenticator number when one is listed. Never make a number up.
 
 WRITING
 ${CHAT_VOICE_RULES}

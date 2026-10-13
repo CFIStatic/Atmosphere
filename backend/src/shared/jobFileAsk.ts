@@ -1160,6 +1160,17 @@ export function webBackedWithoutJobCite(
  * The new single-agent Chat: one model with the whole job file and every tool.
  * Null when the model gave nothing, so the classic path still answers.
  */
+/** How one agent reply was made: stored with the answer so bad answers can be traced and fixed. */
+export type AskAgentTrace = {
+  route: 'agent';
+  model: string | null;
+  escalated: boolean;
+  elapsedMs: number;
+  firstWordMs: number | null;
+  tools: string[];
+  computerStarted: boolean;
+};
+
 async function answerWithAgent(
   input: Parameters<typeof answerFromJobFile>[0],
   ctx: { computerAllowed: boolean; computerBlock: string; apiKey: string },
@@ -1167,6 +1178,8 @@ async function answerWithAgent(
   const lookup = input.lookup!;
   const zone = lookup.timeZone || 'America/Chicago';
   const toolResults: AskToolResult[] = [];
+  const startedAt = performance.now();
+  let firstWordAt: number | null = null;
   const toolCtx = input.toolContext
     ? {
         ...input.toolContext,
@@ -1218,7 +1231,10 @@ async function answerWithAgent(
     now: input.now,
     signal: input.signal,
     onToken: (text) => {
-      if (text) input.timing?.markFirstToken();
+      if (text) {
+        input.timing?.markFirstToken();
+        firstWordAt ??= performance.now();
+      }
       input.onToken?.(text);
     },
     onStatus: input.onStatus,
@@ -1250,7 +1266,16 @@ async function answerWithAgent(
   input.timing?.noteModel(ran.model);
   input.timing?.noteRoute('deep', 'agent');
   if (!trim(ran.answer)) return null;
-  const empty = { webHits: [] as AskWebHit[], toolResults, usage: ran.usage, model: ran.model };
+  const agentTrace: AskAgentTrace = {
+    route: 'agent',
+    model: ran.model,
+    escalated: ran.escalated,
+    elapsedMs: Math.round(performance.now() - startedAt),
+    firstWordMs: firstWordAt === null ? null : Math.round(firstWordAt - startedAt),
+    tools: [...new Set([...ran.trace.map((step) => step.tool), ...(ran.computerStarted ? ['start_computer_task'] : [])])],
+    computerStarted: ran.computerStarted,
+  };
+  const empty = { webHits: [] as AskWebHit[], toolResults, usage: ran.usage, model: ran.model, agentTrace };
   if (ran.computerStarted) return { ...empty, answer: ran.answer, groundedOn: 0, agent: true };
   let answer = trimChatFiller(normalizeAskProse(ran.answer), { question: input.question });
   const actions = formatActionsTrailer(toolResults);
@@ -1346,6 +1371,8 @@ export async function answerFromJobFile(input: {
   research?: AskResearchTrace | null;
   /** The new single-agent Chat wrote this reply. */
   agent?: boolean;
+  /** How the agent made this reply (stored with the answer for the weekly Chat review). */
+  agentTrace?: AskAgentTrace | null;
 }> {
   const emit = (text: string) => {
     if (text) input.timing?.markFirstToken();

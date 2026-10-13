@@ -112,6 +112,10 @@ const noGender = never(/\b(?:she|he|her|his|him)\b/i, 'assumes no gender');
 const noFakeSend = never(/\b(?:text|message|email) (?:was|has been) sent\b|\bI(?:'ve| have) sent\b/i, 'never claims it sent');
 const answered: Check = { name: 'answers', ok: (r) => r.answer.trim().length > 0 };
 
+const COMPUTER_WAITING =
+  'COMPUTER RESULTS ON THIS JOB (browser tasks Computer already ran for this person, newest first):\n' +
+  '1. Request: Log in to Outlook and email the job update\n   Status: needs_you\n   Waiting on the person (number_match): Enter 47 in your authenticator app. Computer carries on once you approve.\n   Authenticator number on the sign-in page: 47\n   Result: Status: needs_you';
+
 const CASES: Case[] = [
   { question: 'can you login to restore 365 and tell me what active jobs do we have right now', checks: [used('start_computer_task')] },
   { question: 'can you tell me how many jobs we have going in restore 365', checks: [used('start_computer_task')] },
@@ -134,6 +138,11 @@ const CASES: Case[] = [
   { question: 'is 41% on drywall dry? what should it read before we close it up?', checks: [says(/general|typically|usually|IICRC|dry standard|reference/i, 'gives general guidance'), answered] },
   { question: 'draft a short homeowner update', checks: [says(/⟦artifact⟧/, 'writes a draft'), noGender, { name: 'thinks harder', ok: (r) => r.escalated }] },
   { question: 'text Pat that we will be there at 3 tomorrow to check the readings', checks: [used('send_job_sms'), noFakeSend] },
+  {
+    question: 'in outlook what is the code number it is giving i have to authenticate it',
+    turnContext: COMPUTER_WAITING,
+    checks: [says(/\b47\b/, 'gives the number'), { name: 'does not start Computer again', ok: (r) => !r.computerStarted }],
+  },
   {
     question: 'Computer finished: restore365.net: job counts checked',
     turnContext: COMPUTER_RESULTS,
