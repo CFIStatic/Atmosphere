@@ -57,6 +57,8 @@ export interface ComputerTaskView {
     since: string;
     /** data: URL when the server captured the page at pause time. */
     screenshot?: string | null;
+    /** The number to approve in the authenticator app, read off the sign-in page. */
+    code?: string | null;
   } | null;
   humanControl: boolean;
   youHaveControl: boolean;

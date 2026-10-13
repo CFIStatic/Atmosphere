@@ -175,6 +175,7 @@ export async function autoSignIn(input: {
 
   let filled: Awaited<ReturnType<ComputerDriver['fillSignIn']>>;
   let navigated = false;
+  const hints = signInHintsFor(saved);
   try {
     const currentHost = hostOfUrl(await driver.currentUrl().catch(() => ''));
     const trusted = trustedSites(saved);
@@ -183,7 +184,6 @@ export async function autoSignIn(input: {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
     }
-    const hints = signInHintsFor(saved);
     filled = await driver.fillSignIn({ username, password, companyId }, hints);
     if (filled === 'no_form' && !navigated) {
       await driver.navigate(credential.login_url ?? login.url);
@@ -214,6 +214,10 @@ export async function autoSignIn(input: {
     return { outcome: 'already_signed_in', message: `Already signed in to ${name}.` };
   }
 
+  // Sites like DASH / Restore 365 also want a company ID; without one saved the
+  // sign-in can't work, and it's the missing ID, not the password, to fix.
+  const missingCompanyId = !companyId && Boolean(hints.companyIdSelectors?.length);
+
   let outcome: AutoSignInOutcome;
   let message: string;
   if (signals?.hasCaptcha) {
@@ -225,6 +229,10 @@ export async function autoSignIn(input: {
   } else if (signals?.hasOneTimeCodeField || signals?.mentionsVerificationCode) {
     outcome = 'two_factor';
     message = `The saved password worked. ${name} is asking for a verification code.`;
+  } else if (signals?.hasPasswordField && missingCompanyId) {
+    outcome = 'incomplete';
+    message = `${name} asks for a Company ID, and none is saved with this login. Add it on Logins (Edit ${name}, Company ID) so Computer can sign in on its own.`;
+    await needsAttention(`${name} asks for a Company ID. Add it here so Computer can sign in.`);
   } else if (signals?.hasPasswordField && signals.signInError) {
     // The site said no ("Incorrect password"): the saved login needs updating.
     outcome = 'failed';

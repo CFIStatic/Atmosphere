@@ -83,9 +83,11 @@ function scrollToTop(from?: HTMLElement | null) {
 function PasswordInput({
   value,
   onChange,
+  placeholder,
 }: {
   value: string;
   onChange: (next: string) => void;
+  placeholder?: string;
 }) {
   const [shown, setShown] = useState(false);
   return (
@@ -98,6 +100,7 @@ function PasswordInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           maxLength={512}
+          placeholder={placeholder}
           className={`${inputClass} pr-11`}
           autoComplete="current-password"
           spellCheck={false}
@@ -206,9 +209,9 @@ interface Credentials {
 }
 const EMPTY_CREDS: Credentials = { username: '', password: '', companyId: '', loginUrl: '' };
 
-function credentialOf(c: Credentials, fallbackLoginUrl: string | null) {
+function credentialOf(c: Credentials, fallbackLoginUrl: string | null, keepSavedPassword = false) {
   const username = c.username.trim();
-  if (!username || !c.password) return null;
+  if (!username || (!c.password && !keepSavedPassword)) return null;
   return {
     username,
     password: c.password,
@@ -531,9 +534,9 @@ function ManageLogin({
 
   async function submitEdit(e: FormEvent) {
     e.preventDefault();
-    const credential = credentialOf(creds, null);
+    const credential = credentialOf(creds, null, Boolean(cred));
     if (!credential) {
-      onError('Enter the email and password.');
+      onError(cred ? 'Enter the email.' : 'Enter the email and password.');
       return;
     }
     if (await onSavePassword(credential)) setEditing(false);
@@ -572,6 +575,11 @@ function ManageLogin({
           <p className="truncate text-sm text-ink-600" data-testid="login-credential">
             {who}
           </p>
+          {cred?.companyId ? (
+            <p className="truncate text-sm text-ink-600" data-testid="login-company-id">
+              Company ID: {cred.companyId}
+            </p>
+          ) : null}
         </div>
       </div>
       {attention ? (
@@ -598,6 +606,7 @@ function ManageLogin({
           <PasswordInput
             value={creds.password}
             onChange={(password) => setCreds({ ...creds, password })}
+            placeholder={cred ? 'Leave blank to keep the saved password' : undefined}
           />
           <CompanyIdInput value={creds.companyId} onChange={(companyId) => setCreds({ ...creds, companyId })} />
           <div className="flex flex-wrap items-center gap-2">

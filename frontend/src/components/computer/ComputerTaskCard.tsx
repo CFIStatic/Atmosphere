@@ -177,7 +177,9 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     const key = `${task.id}:${task.needsYou.since}`;
     if (autoOpenedForNeedsYou.current === key) return;
     autoOpenedForNeedsYou.current = key;
-    setLive((prev) => prev ?? 'control');
+    // A number to approve on the phone needs no mouse: just watch (taking control would hold the task).
+    const watchOnly = task.needsYou.reason === 'number_match' && Boolean(task.needsYou.code);
+    setLive((prev) => prev ?? (watchOnly ? 'watch' : 'control'));
     const id = window.requestAnimationFrame(() => {
       const el = promptRef.current;
       if (el && typeof el.scrollIntoView === 'function') {
