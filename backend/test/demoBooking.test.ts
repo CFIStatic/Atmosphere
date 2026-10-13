@@ -122,7 +122,7 @@ function memStore(): DemoBookingStore & { rows: Record<string, unknown>[] } {
   };
 }
 
-test('booking: stores, emails host and guest (stubbed, no .ics), blocks double booking', async () => {
+test('booking: stores, notifies host only (stubbed), no guest email, blocks double booking', async () => {
   const store = memStore();
   const sent: Array<{ to: string; subject: string; attachments?: MailAttachment[] }> = [];
   const send: DemoMailer = async (m) => {
@@ -141,11 +141,11 @@ test('booking: stores, emails host and guest (stubbed, no .ics), blocks double b
   });
   const r = await bookDemo(input, { store, send, ip: '203.0.113.9', now: NOW });
   assert.equal(r.slotStart, slot);
-  assert.equal(r.hostEmailed && r.guestEmailed, true);
+  assert.equal(r.hostEmailed, true);
   assert.equal(store.rows[0]!.client_ip, '203.0.113.9');
   assert.deepEqual(
     sent.map((m) => m.to),
-    ['jack@jettx.ai', 'dana@example.com'],
+    ['jack@jettx.ai'], 'host notice only; guest gets the Google invite',
   );
   for (const m of sent) assert.equal(m.attachments, undefined, 'no .ics attachment');
 
@@ -176,6 +176,6 @@ test('booking: slot is held even when mail fails', async () => {
     company: 'C',
   });
   const r = await bookDemo(input, { store, send, ip: null, now: NOW });
-  assert.equal(r.guestEmailed, false);
+  assert.equal(r.hostEmailed, false);
   assert.equal(store.rows.length, 1);
 });
