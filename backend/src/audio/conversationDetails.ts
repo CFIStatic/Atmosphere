@@ -6,7 +6,7 @@
  * quote and seek time. Deterministic regex is fallback only when no model runs.
  */
 
-import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { completeAskText, videoStageAnthropicModel, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
 import { findVerbatimQuote } from './verbatimTranscript.js';
 import { provenSpeakerLabel } from './audioSource.js';
@@ -891,6 +891,8 @@ export async function analyzeConversation(
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
         mode: 'analysis',
+        meterSource: 'conversation_summary',
+        anthropicModel: videoStageAnthropicModel('VIDEO_SUMMARY_MODEL'),
       });
       if (!completed?.text) continue;
       model = completed.model;
@@ -941,6 +943,8 @@ export async function analyzeConversation(
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
         mode: 'analysis',
+        meterSource: 'conversation_synth',
+        anthropicModel: videoStageAnthropicModel('VIDEO_SUMMARY_MODEL'),
       });
       if (synth?.text) {
         const finalParsed = parseConversationModelJson(synth.text, merged);
