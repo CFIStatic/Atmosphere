@@ -179,24 +179,27 @@ jobs:
     # and cross-organization isolation. The suite deliberately tries to delete
     # history, so it needs a database it is allowed to destroy; that is why this
     # never points at a Supabase project.
-    services:
-      postgres:
-        # Pulled from AWS ECR Public's mirror of the official image, not Docker
-        # Hub: a `services:` container is pulled by the runner before any step,
-        # so it cannot be wrapped in a retry, and Docker Hub throttles
-        # unauthenticated pulls from shared runners (toomanyrequests). The
-        # mirror is the same upstream postgres image with no such limit.
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v5
+      # Use the PostgreSQL 16 that ships preinstalled on the ubuntu-24.04
+      # runner image instead of a `services:` container. Container pulls are
+      # done by the runner before any step (no retry possible) and every
+      # anonymous registry throttles shared runners: Docker Hub returns
+      # toomanyrequests and ECR Public returns "Data limit exceeded". The local
+      # server needs no network at all.
+      - name: Start local Postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16-pgvector || sudo apt-get install -y -qq "postgresql-$(pg_config --version | grep -oE "[0-9]+" | head -1)-pgvector"
+          sudo systemctl start postgresql.service
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 && break
+            sleep 1
+          done
+          pg_isready -h localhost -p 5432
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres';"
+          PGPASSWORD=postgres psql -h localhost -U postgres -tAc 'select version()'
       - name: Agent Memory schema tests
         env:
           PGPASSWORD: postgres
