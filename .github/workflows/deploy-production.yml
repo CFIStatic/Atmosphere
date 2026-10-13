@@ -147,9 +147,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || vars.OPENAI_API_KEY }}
           TRANSCRIPTION_URL: ${{ secrets.TRANSCRIPTION_URL || vars.TRANSCRIPTION_URL }}
           TRANSCRIPTION_API_KEY: ${{ secrets.TRANSCRIPTION_API_KEY || vars.TRANSCRIPTION_API_KEY }}
+          # Chat and Ask. The Railway sync keeps this on Opus.
           ANTHROPIC_MODEL: claude-sonnet-5
-          VERIFICATION_PRIMARY_MODEL: gemini-3.6-flash
-          VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
+          # Video analysis only. Roll back by setting these to
+          # gemini-3.1-pro-preview / claude-opus-5-5.
+          VERIFICATION_PRIMARY_MODEL: gemini-3.5-flash-lite
+          VERIFICATION_ESCALATION_MODEL: claude-haiku-4-5
+          VIDEO_LIGHT_MODEL: claude-haiku-4-5
         working-directory: backend
         run: node scripts/syncGithubEnvToRailway.mjs
 

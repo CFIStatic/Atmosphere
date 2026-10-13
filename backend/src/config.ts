@@ -135,7 +135,10 @@ export const config = {
     // mid-tier job. It gets its own knob rather than borrowing the
     // assistant's flagship, so the expensive leg of the pipeline stays the
     // one that actually looks at frames.
-    synthesisModel: resolveAnthropicModel(process.env.LONG_FORM_SYNTHESIS_MODEL),
+    synthesisModel: resolveAnthropicModel(
+      process.env.LONG_FORM_SYNTHESIS_MODEL,
+      (process.env.VIDEO_LIGHT_MODEL ?? '').trim() || 'claude-haiku-4-5',
+    ),
     // Day-length / overnight recordings. The phone may leave the camera
     // running for a whole shift (and sometimes longer); intake accepts up to
     // this many seconds, then the server sparsely extracts stills rather
@@ -208,6 +211,11 @@ export const config = {
       // for no visible gain. Narration and the day comparison stay on the
       // stronger model — they write records people act on.
       liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5',
+      // Every Claude call in video analysis: scope narration, day-film read,
+      // conversation summary, evidence fusion, speaker roles, long-form
+      // synthesis and the dictation fallback. Chat and Ask stay on `model`.
+      // Roll back by setting VIDEO_LIGHT_MODEL (e.g. claude-opus-5-5).
+      lightModel: (process.env.VIDEO_LIGHT_MODEL ?? '').trim() || 'claude-haiku-4-5',
       // Per-org, per-day ceiling on live observations. At the default cadence
       // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
       // day — genuinely heavy use — while capping the worst case (a camera
