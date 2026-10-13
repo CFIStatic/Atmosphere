@@ -37,7 +37,7 @@ import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { extractAskSources, isDocumentQuoteSource, tidyQuoteClipTitle, type AskSourceChip } from '../lib/askSources';
 import { AskWebResults } from './AskWebResults';
 import { ComputerTaskCard } from './computer/ComputerTaskCard';
-import { COMPUTER_RESUME_EVENT } from '../lib/computer';
+import { COMPUTER_RESUME_EVENT, computerCardTitle, type ComputerTaskView } from '../lib/computer';
 import { AskActionCards } from './ask/AskActionCards';
 import { AskApprovalCard } from './ask/AskApprovalCard';
 import { AskAnswerToolbar } from './ask/AskAnswerToolbar';
@@ -54,7 +54,6 @@ import { loadOrgMentions } from './mentions/useOrgMentions';
 import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 import { isAppShellDocument } from '../lib/appShell';
-import { readChatEngine, writeChatEngine, type ChatEngine } from '../lib/chatEngine';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -144,11 +143,14 @@ function AskQuoteList({
 }
 
 /** A document excerpt has no speaker: only clip quotes carry one. */
+/** The message the app sends when Computer finishes; shown as a small note, not a bubble. */
+const COMPUTER_FINISHED_PREFIX = 'Computer finished:';
+
 /** Questions the answer suggests asking next: one tap sends them. */
 function AskFollowUps({ questions, onPick }: { questions: string[]; onPick: (question: string) => void }) {
   if (!questions.length) return null;
   return (
-    <div className="mt-1.5 flex flex-col items-start gap-1" data-testid="ask-followups">
+    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-followups">
       {questions.slice(0, 3).map((q) => (
         <button
           key={q}
@@ -242,6 +244,7 @@ function AskAnswerFooter({
   onOpenSource,
   children,
   trailing,
+  below,
 }: {
   text: string;
   sources: AskSourceChip[];
@@ -249,6 +252,7 @@ function AskAnswerFooter({
   onOpenSource: (source: AskSourceChip) => void;
   children?: ReactNode;
   trailing?: ReactNode;
+  below?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const actions = answerStepActions(text);
@@ -273,6 +277,7 @@ function AskAnswerFooter({
       {open && count ? (
         <AskStepsSourcesBody sources={sources} webSources={webSources} actions={actions} onOpenSource={onOpenSource} />
       ) : null}
+      {below}
     </div>
   );
 }
@@ -484,6 +489,7 @@ function AskAnswerBody({
   events,
   onSeek,
   onOpenSource,
+  onComputerFinished,
 }: {
   /** For approval cards (they load and decide by job). */
   jobId?: string;
@@ -491,6 +497,8 @@ function AskAnswerBody({
   events: number[];
   onSeek: (atSeconds: number) => void;
   onOpenSource: (source: AskSourceChip) => void;
+  /** Latest answer only: Chat reads a finished Computer task and replies. */
+  onComputerFinished?: (task: ComputerTaskView) => void;
 }) {
   const extracted = extractAskSources(text);
   const { quotes } = extracted;
@@ -520,7 +528,12 @@ function AskAnswerBody({
         ? approvals.map((id) => <AskApprovalCard key={id} jobId={jobId} approvalId={id} />)
         : null}
       {computerTasks.map((action, i) => (
-        <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
+        <ComputerTaskCard
+          key={`${action.path ?? 'computer'}-${i}`}
+          path={action.path}
+          summary={action.label}
+          onFinished={onComputerFinished}
+        />
       ))}
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
     </div>
@@ -798,7 +811,6 @@ export function JobAskPanel({
   const [pins, setPins] = useState<AskPinnedAnswer[]>([]);
   const [editing, setEditing] = useState<{ turnId: string; text: string } | null>(null);
   /** Classic Chat or the new single-agent Chat (beta), chosen per browser. */
-  const [engine, setEngine] = useState<ChatEngine>(() => readChatEngine());
   const [highlightTurnId, setHighlightTurnId] = useState<string | null>(null);
   const threadsRef = useRef<AskThread[]>([]);
   useEffect(() => {
@@ -1502,6 +1514,26 @@ export function JobAskPanel({
     }
   }
 
+  // When a Computer task started from this chat finishes, Chat reads the
+  // result and replies in the same conversation (follow-ups then just work).
+  const reportedComputerTasks = useRef(new Set<string>());
+  const pendingComputerNote = useRef<string | null>(null);
+  function computerFinished(task: ComputerTaskView) {
+    if (reportedComputerTasks.current.has(task.id)) return;
+    reportedComputerTasks.current.add(task.id);
+    const note = `${COMPUTER_FINISHED_PREFIX} ${computerCardTitle(task)}`;
+    if (inFlightRef.current) pendingComputerNote.current = note;
+    else void ask(note);
+  }
+  useEffect(() => {
+    if (inFlight || !pendingComputerNote.current) return;
+    const note = pendingComputerNote.current;
+    pendingComputerNote.current = null;
+    void ask(note);
+    // ask is recreated each render; only the in-flight edge matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inFlight]);
+
   function sendDraft() {
     if (speech.listening) speech.stop();
     speech.reset();
@@ -1589,9 +1621,12 @@ export function JobAskPanel({
               >
                 <div
                   data-ask-bubble={turn.role}
+                  data-app-note={turn.role === 'user' && turn.content.startsWith(COMPUTER_FINISHED_PREFIX) ? '' : undefined}
                   className={
                     turn.role === 'user'
-                      ? 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
+                      ? turn.content.startsWith(COMPUTER_FINISHED_PREFIX)
+                        ? 'max-w-[85%] rounded-full bg-paper-50 px-3 py-1 text-xs text-ink-500'
+                        : 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
                       : ASSISTANT_BUBBLE
                   }
                 >
@@ -1622,6 +1657,7 @@ export function JobAskPanel({
                         .map((event) => event.atSeconds)}
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
                       onOpenSource={openAskSource}
+                      onComputerFinished={turn.id === lastAssistantId ? computerFinished : undefined}
                     />
                     </>
                   ) : editing?.turnId === turn.id ? (
@@ -1688,23 +1724,23 @@ export function JobAskPanel({
                       webSources={turn.webSources}
                       onOpenSource={openAskSource}
                       trailing={
+                        office && turn.id === lastAssistantId && !inFlight && !extractAskSources(turn.content).followUps.length ? (
+                          <AskActionCards
+                            cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
+                            onPick={(card) => {
+                              if (card.mode === 'send') {
+                                void ask(card.prompt);
+                              } else {
+                                setDraft(card.prompt);
+                                inputRef.current?.focus();
+                              }
+                            }}
+                          />
+                        ) : null
+                      }
+                      below={
                         turn.id === lastAssistantId && !inFlight ? (
-                          <>
-                            {office ? (
-                              <AskActionCards
-                                cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
-                                onPick={(card) => {
-                                  if (card.mode === 'send') {
-                                    void ask(card.prompt);
-                                  } else {
-                                    setDraft(card.prompt);
-                                    inputRef.current?.focus();
-                                  }
-                                }}
-                              />
-                            ) : null}
-                            <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
-                          </>
+                          <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
                         ) : null
                       }
                     >
@@ -1954,25 +1990,6 @@ export function JobAskPanel({
             </button>
           )}
         </form>
-        {officeExtras ? (
-          <div className="mt-1.5 flex justify-end">
-            <button
-              type="button"
-              data-testid="ask-engine-toggle"
-              aria-pressed={engine === 'agent'}
-              onClick={() => {
-                const next: ChatEngine = engine === 'agent' ? 'classic' : 'agent';
-                writeChatEngine(next);
-                setEngine(next);
-              }}
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
-                engine === 'agent' ? 'bg-brand-50 text-brand-700 hover:bg-brand-100' : 'text-ink-500 hover:text-ink-900'
-              }`}
-            >
-              {engine === 'agent' ? 'New Chat (beta) is on · switch back' : 'Try the new Chat (beta)'}
-            </button>
-          </div>
-        ) : null}
       </div>
     </section>
   );

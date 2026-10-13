@@ -4323,7 +4323,7 @@ export const api = {
         documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
         supersedesId: opts?.supersedesId ?? undefined,
         timeZone: browserTimeZone(),
-        engine: readChatEngine() === 'agent' ? 'agent' : undefined,
+        engine: readChatEngine() === 'classic' ? 'classic' : undefined,
       }),
     }),
 
@@ -4368,7 +4368,7 @@ export const api = {
           documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
           supersedesId: opts?.supersedesId ?? undefined,
           timeZone: browserTimeZone(),
-          engine: readChatEngine() === 'agent' ? 'agent' : undefined,
+          engine: readChatEngine() === 'classic' ? 'classic' : undefined,
         }),
       });
     } catch (err) {

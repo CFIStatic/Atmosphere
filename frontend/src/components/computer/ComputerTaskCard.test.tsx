@@ -253,6 +253,23 @@ describe('ComputerTaskCard', () => {
     await waitFor(() => expect(computerResume).toHaveBeenCalledWith(ID));
   });
 
+  it('reports finishing once, only for a task it saw running', async () => {
+    computerTask
+      .mockResolvedValueOnce({ task: task({ status: 'running' }) })
+      .mockResolvedValue({ task: task({ status: 'succeeded', result: { title: 'Job counts checked', fields: [], notes: null } }) });
+    const onFinished = vi.fn();
+    render(<ComputerTaskCard path={`computer-task:${ID}`} onFinished={onFinished} />);
+    await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    expect(onFinished.mock.calls[0]![0].status).toBe('succeeded');
+
+    // Reopening a chat whose task already finished does not report it again.
+    const again = vi.fn();
+    computerTask.mockResolvedValue({ task: task({ status: 'succeeded', result: { title: 'Done', fields: [], notes: null } }) });
+    render(<ComputerTaskCard path={`computer-task:${ID}`} onFinished={again} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(again).not.toHaveBeenCalled();
+  });
+
   it('finished task shows the result and no live controls', async () => {
     computerTask.mockResolvedValue({
       task: task({ status: 'succeeded', canWatch: false, resultSummary: 'Saved the draft. Nothing was submitted.' }),
