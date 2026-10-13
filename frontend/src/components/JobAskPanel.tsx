@@ -1,6 +1,7 @@
 import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../lib/appShell';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, Copy, RotateCcw } from 'lucide-react';
+import { Check, Copy, Mic, RotateCcw } from 'lucide-react';
+import { useSpeechRecognition } from '../hooks/useSpeech';
 import { Link } from 'react-router-dom';
 import {
   api,
@@ -143,6 +144,26 @@ function AskQuoteList({
 }
 
 /** A document excerpt has no speaker: only clip quotes carry one. */
+/** Questions the answer suggests asking next: one tap sends them. */
+function AskFollowUps({ questions, onPick }: { questions: string[]; onPick: (question: string) => void }) {
+  if (!questions.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-col items-start gap-1" data-testid="ask-followups">
+      {questions.slice(0, 3).map((q) => (
+        <button
+          key={q}
+          type="button"
+          data-testid="ask-followup"
+          onClick={() => onPick(q)}
+          className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-left text-[13px] text-ink-700 transition hover:border-brand-200 hover:bg-paper-50"
+        >
+          {q}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function quoteAttribution(quote: ReturnType<typeof extractAskSources>['quotes'][number]): string {
   return [
     isDocumentQuoteSource(quote.sourceId) ? '' : quote.speaker,
@@ -735,6 +756,23 @@ export function JobAskPanel({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
+  // Talk instead of type: what is said goes into the box, ready to send.
+  const speech = useSpeechRecognition();
+  const speechBase = useRef('');
+  useEffect(() => {
+    if (!speech.listening && !speech.transcript) return;
+    setDraft([speechBase.current, speech.transcript, speech.interim].filter(Boolean).join(' '));
+  }, [speech.listening, speech.transcript, speech.interim]);
+  function toggleTalk() {
+    if (speech.listening) {
+      speech.stop();
+      return;
+    }
+    speech.reset();
+    speechBase.current = draft.trim();
+    speech.start();
+    inputRef.current?.focus();
+  }
   const [asking, setAsking] = useState(false);
   /** Server-checked preview of the answer being written (replaced by the final). */
   const [livePreview, setLivePreview] = useState('');
@@ -1464,15 +1502,22 @@ export function JobAskPanel({
     }
   }
 
+  function sendDraft() {
+    if (speech.listening) speech.stop();
+    speech.reset();
+    speechBase.current = '';
+    void ask(draft);
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    void ask(draft);
+    sendDraft();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      void ask(draft);
+      sendDraft();
     }
   }
 
@@ -1511,7 +1556,7 @@ export function JobAskPanel({
         ) : turns.length === 0 && !asking ? (
           <div>
             <p className="text-sm text-ink-600">
-              Forgot something? Ask what happened on site or what was said.
+              Ask anything about this job in your own words{speech.supported ? ', or tap the mic and talk' : ''}. You can also tell Chat to do things, like text the homeowner.
             </p>
             {suggestions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -1643,18 +1688,23 @@ export function JobAskPanel({
                       webSources={turn.webSources}
                       onOpenSource={openAskSource}
                       trailing={
-                        office && turn.id === lastAssistantId && !inFlight ? (
-                          <AskActionCards
-                            cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
-                            onPick={(card) => {
-                              if (card.mode === 'send') {
-                                void ask(card.prompt);
-                              } else {
-                                setDraft(card.prompt);
-                                inputRef.current?.focus();
-                              }
-                            }}
-                          />
+                        turn.id === lastAssistantId && !inFlight ? (
+                          <>
+                            {office ? (
+                              <AskActionCards
+                                cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
+                                onPick={(card) => {
+                                  if (card.mode === 'send') {
+                                    void ask(card.prompt);
+                                  } else {
+                                    setDraft(card.prompt);
+                                    inputRef.current?.focus();
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
+                          </>
                         ) : null
                       }
                     >
@@ -1860,10 +1910,27 @@ export function JobAskPanel({
             autoGrow
             rows={1}
             jobId={jobId}
-            placeholder="Ask what you forgot…"
+            placeholder={speech.listening ? 'Listening… talk now' : 'Ask anything or tell Chat what to do…'}
             disabled={asking}
             className="min-h-10 w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
+          {speech.supported && !inFlight ? (
+            <button
+              type="button"
+              data-testid="ask-talk"
+              aria-label={speech.listening ? 'Stop listening' : 'Talk instead of typing'}
+              aria-pressed={speech.listening}
+              title={speech.listening ? 'Stop listening' : 'Talk instead of typing'}
+              onClick={toggleTalk}
+              className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${
+                speech.listening
+                  ? 'animate-pulse border-danger-600 bg-danger-600 text-white'
+                  : 'border-line bg-paper-0 text-ink-600 hover:border-brand-200 hover:text-ink-900'
+              }`}
+            >
+              <Mic size={18} aria-hidden />
+            </button>
+          ) : null}
           {inFlight ? (
             <button
               type="button"
