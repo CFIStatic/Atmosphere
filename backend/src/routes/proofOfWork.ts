@@ -1,3 +1,5 @@
+import { askAgentEnabled } from '../shared/askAgent.js';
+import { anthropicAskApiKey } from '../lib/askModel.js';
 import { visibleAfterEdits } from '../shared/askEdits.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
@@ -3706,7 +3708,22 @@ async function runProofAskTurn(input: {
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;
     }
-    if (mentionPrep?.directAnswer) onToken(mentionPrep.directAnswer);
+    // The agent answers @mention questions itself, including "who did you mean?"
+    // and "they are not on this job", from the note below. Only a job outside the
+    // org, or classic Chat, still gets the canned line.
+    const agentAnswers =
+      askAgentEnabled(input.engine ?? null) && Boolean(String(apiKey ?? '').trim() || anthropicAskApiKey().trim());
+    const mentionShortcut =
+      mentionPrep?.directAnswer && (mentionPrep.final || !agentAnswers) ? mentionPrep.directAnswer : null;
+    if (mentionPrep?.directAnswer && !mentionShortcut) {
+      file.mentionSupplement = [
+        file.mentionSupplement,
+        `About the people named in this question (tell the person this plainly): ${mentionPrep.directAnswer}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    }
+    if (mentionShortcut) onToken(mentionShortcut);
     const clientName = partyRows
       .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
       .filter(Boolean)
@@ -3753,12 +3770,12 @@ async function runProofAskTurn(input: {
     const styleRow = await styleRowPromise;
     const styleSummary = styleRow?.promptSummary ?? null;
 
-    const result = mentionPrep?.directAnswer
+    const result = mentionShortcut
       ? {
-          answer: mentionPrep.directAnswer,
+          answer: mentionShortcut,
           model: null as string | null,
           usage: null,
-          groundedOn: mentionPrep.groundedOn,
+          groundedOn: mentionPrep?.groundedOn ?? 0,
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
           answeredFromLookup: false,
