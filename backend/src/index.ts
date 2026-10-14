@@ -1,4 +1,3 @@
-import './instrument.js';
 import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
