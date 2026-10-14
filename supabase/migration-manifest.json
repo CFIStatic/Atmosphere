@@ -230,7 +230,8 @@
     "20261011230000_computer_login_company_id.sql",
     "20261012190000_demo_bookings.sql",
     "20261012230000_org_invites_phone.sql",
-    "20261013000000_demo_bookings_meet.sql"
+    "20261013000000_demo_bookings_meet.sql",
+    "20261014220000_rate_card_cache_reads_opus_5_5_fable_5_1.sql"
   ],
   "migrations": [
     {
@@ -6952,6 +6953,16 @@
         "column|public.demo_bookings.host_notified_at",
         "column|public.demo_bookings.meet_url"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261014220000_rate_card_cache_reads_opus_5_5_fable_5_1",
+      "file": "20261014220000_rate_card_cache_reads_opus_5_5_fable_5_1.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
