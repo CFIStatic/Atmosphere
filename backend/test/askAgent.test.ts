@@ -273,3 +273,25 @@ test('look_at_clip: the model gets stills as images, only for clips this person 
   assert.doesNotMatch(JSON.stringify(result.trace), /ZmFrZS1qcGVn/);
   assert.match(result.answer, /stained/);
 });
+
+test('other jobs load only when the model searches them, and only for office users', async () => {
+  let loads = 0;
+  const other = { ...catalog().clips[0]!, proofId: '77777777-2222-4333-8444-555555555555', jobId: '88888888-2222-4333-8444-555555555555', jobTitle: 'Lopez Kitchen', title: 'Lopez walkthrough' };
+  const run = (question: string, access: 'org' | 'viewer', tools: Array<{ name: string; input: Record<string, unknown> }>) =>
+    runAskAgent({
+      question,
+      catalog: { ...catalog(), access },
+      loadOrgClips: async () => {
+        loads += 1;
+        return [other];
+      },
+      callModel: scripted(tools.length ? [{ tools }, { text: 'Done.' }] : [{ text: 'Done.' }]),
+    });
+  await run('what is the claim number?', 'org', []);
+  assert.equal(loads, 0);
+  const office = await run('which other jobs had wet drywall?', 'org', [{ name: 'search_other_jobs', input: { query: 'drywall' } }]);
+  assert.equal(loads, 1);
+  assert.match(office.trace[0]!.result.summary, /other jobs/);
+  await run('which other jobs had wet drywall?', 'viewer', [{ name: 'search_other_jobs', input: { query: 'drywall' } }]);
+  assert.equal(loads, 1);
+});

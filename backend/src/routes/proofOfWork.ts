@@ -108,6 +108,7 @@ import {
   askLookupCatalogFromJob,
   asksAboutCrossJob,
   clipFromProofRow,
+  type AskLookupClip,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
   scrubStoredAskText,
@@ -3152,19 +3153,42 @@ async function runProofAskTurn(input: {
       }
     })();
 
-    const otherJobsPromise =
+    // Clips on the company's other jobs: loaded up front when the question names
+    // other jobs, otherwise only if the agent decides to search them.
+    const loadOtherJobClips = async (limit: number): Promise<AskLookupClip[]> => {
+      const { data } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
+        .eq('org_id', orgId)
+        .neq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(limit);
+      const rows = ((data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
+      const titles = new Map<string, string>();
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
+        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
+          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
+        }
+      }
+      return rows
+        .map((row) =>
+          clipFromProofRow(row, {
+            orgId,
+            jobId: String(row.job_id ?? ''),
+            jobTitle: titles.get(String(row.job_id ?? '')) || null,
+          }),
+        )
+        .filter((clip) => clip.proofId && clip.jobId !== jobId);
+    };
+    const otherJobsPromise: Promise<AskLookupClip[] | null> =
       askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted
-        ? supabase
-            .from('job_proofs')
-            .select(
-              'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
-            )
-            .eq('org_id', orgId)
-            .neq('job_id', jobId)
-            .is('deleted_at', null)
-            .order('work_date', { ascending: false })
-            .limit(24)
-        : Promise.resolve({ data: null as Array<Record<string, unknown>> | null });
+        ? loadOtherJobClips(24)
+        : Promise.resolve(null);
 
     // Independent of the job file: start these with it instead of after it.
     const orgAdminEarly = unscopedAdminOrNull();
@@ -3719,26 +3743,7 @@ async function runProofAskTurn(input: {
         clips: memoryClips,
       }),
     });
-    if (askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted) {
-      const rows = ((otherJobsRes?.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
-      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
-      const titles = new Map<string, string>();
-      if (jobIds.length) {
-        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
-        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
-          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
-        }
-      }
-      lookup.orgClips = rows
-        .map((row) =>
-          clipFromProofRow(row, {
-            orgId,
-            jobId: String(row.job_id ?? ''),
-            jobTitle: titles.get(String(row.job_id ?? '')) || null,
-          }),
-        )
-        .filter((clip) => clip.proofId && clip.jobId !== jobId);
-    }
+    if (otherJobsRes) lookup.orgClips = otherJobsRes;
     clock.contextBuildMs = Date.now() - clock.startedAt;
     const priorCount = recentRes.total ?? priorPairs.length;
     const titleAhead =
@@ -3786,6 +3791,7 @@ async function runProofAskTurn(input: {
       timing: clock,
       sessionDocuments,
       lookup,
+      loadOrgClips: askAccess === 'org' ? () => loadOtherJobClips(80) : null,
       webSearch,
       onPreviewReset: () => preview.reset(),
       setPreviewCheck: (check) => preview.setCheck(check),

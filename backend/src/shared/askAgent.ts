@@ -262,6 +262,8 @@ export type AskAgentInput = {
   onPreviewReset?: () => void;
   /** Public web search. Absent: no web tool. */
   webSearch?: ((query: string, includeDomains?: string[]) => Promise<{ hits: AskWebHit[]; answer: string }>) | null;
+  /** Loads clips on the company's other jobs the first time the model searches them (office only). */
+  loadOrgClips?: (() => Promise<AskLookupClip[]>) | null;
   /** Loads a clip's saved stills (privacy ranges already left out). Offers look_at_clip when set. */
   clipStills?: ((clip: AskLookupClip, opts: { atSeconds: number | null; count: number }) => Promise<ClipStillsResult>) | null;
   /** Office actions. Absent for homeowners and subs. */
@@ -443,6 +445,20 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
     }
 
     messages.push({ role: 'assistant', content: turn.blocks as Anthropic.ContentBlockParam[] });
+    if (
+      input.loadOrgClips &&
+      !catalog.orgClips &&
+      catalog.access === 'org' &&
+      calls.some((c) => c.name === 'search_other_jobs' || (c.name === 'get_clip' && !clipsInScope(catalog).some((clip) => clip.proofId === String((c.input as Record<string, unknown>)?.proofId ?? ''))))
+    ) {
+      input.onStatus?.('Checking other jobs…');
+      try {
+        catalog.orgClips = await input.loadOrgClips();
+      } catch (err) {
+        logAskFailure('ask_agent_org_clips_failed', err);
+        catalog.orgClips = [];
+      }
+    }
     const results = await Promise.all(
       calls.filter((c) => c.name !== DEEP_TOOL.name).map(async (c) => {
         const args = (c.input ?? {}) as Record<string, unknown>;

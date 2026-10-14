@@ -1270,6 +1270,7 @@ async function answerWithAgent(
         : null,
     extraChunks: documentChunksForGrounding(documentViews(input.file)),
     clipStills: stillsLoader(),
+    loadOrgClips: input.loadOrgClips ?? null,
     callModel: input.agentCall,
   });
   input.timing?.noteModel(ran.model);
@@ -1321,6 +1322,8 @@ export async function answerFromJobFile(input: {
    * reasoning model instead of one transcript dump.
    */
   lookup?: AskLookupCatalog | null;
+  /** Office Chat: loads clips on the company's other jobs when the agent searches them. */
+  loadOrgClips?: (() => Promise<AskLookupClip[]>) | null;
   /**
    * When set, Ask may run safe in-product tools (web search, job field
    * get/update, punch list, drafts). Updates are office-only.
