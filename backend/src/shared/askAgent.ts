@@ -350,13 +350,13 @@ function historyMessages(history: AskAgentInput['history'], catalog: AskLookupCa
   return out;
 }
 
-export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult> {
-  const { catalog } = input;
-  const zone = input.timeZone || catalog.timeZone || 'America/Chicago';
+/**
+ * What every turn sends ahead of the question: the tool list and the two cached
+ * system blocks. The warm call sends exactly this, so its cache entry is the one
+ * the real first round reads.
+ */
+function agentRequestShape(input: AskAgentInput) {
   const models = agentModels();
-  let model = models.fast;
-  let shaped: ReturnType<typeof anthropicReasoningRequest> | null = null;
-  let escalated = false;
   const baseTools = [
     ...ASK_LOOKUP_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     ...(input.webSearch && isAskWebSearchConfigured() ? [WEB_TOOL] : []),
@@ -365,18 +365,65 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
     ...(input.actions?.tools ?? []),
   ];
   const canEscalate = models.deep !== models.fast;
-  let tools = canEscalate ? [...baseTools, DEEP_TOOL] : baseTools;
-  const actionNames = new Set((input.actions?.tools ?? []).map((t) => t.name));
+  const tools = canEscalate ? [...baseTools, DEEP_TOOL] : baseTools;
   // Cached: the instructions, then the whole job file. Both stay the same for
   // every question on this job; the question and this turn's context follow.
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: ASK_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } },
     {
       type: 'text',
-      text: `JOB FILE\n${agentJobContext(catalog, input.jobFileRecord)}`,
+      text: `JOB FILE\n${agentJobContext(input.catalog, input.jobFileRecord)}`,
       cache_control: { type: 'ephemeral' },
     },
   ];
+  return { models, baseTools, tools, system };
+}
+
+export type AskAgentWarmCall = (request: {
+  model: string;
+  system: Anthropic.TextBlockParam[];
+  tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+}) => Promise<MeasuredUsage | null>;
+
+/** max_tokens 0: the API reads the prompt into the cache and answers nothing. */
+const anthropicWarm: AskAgentWarmCall = async (req) => {
+  const response = await anthropicClientForKey(anthropicAskApiKey()).messages.create({
+    model: req.model,
+    max_tokens: 0,
+    system: req.system,
+    tools: req.tools as Anthropic.Tool[],
+    messages: [{ role: 'user', content: 'warmup' }],
+  } as Anthropic.MessageCreateParamsNonStreaming);
+  return tryExtractUsage(response.usage, response.model ?? null);
+};
+
+/**
+ * Loads this job's instructions and job file into the model's prompt cache
+ * while the person is still typing, so the first answer starts as fast as the
+ * later ones. Same model, tools and system blocks as the first round of
+ * runAskAgent (which sends no thinking settings on that round).
+ */
+export async function warmAskAgent(
+  input: AskAgentInput & { warmCall?: AskAgentWarmCall },
+): Promise<{ model: string; usage: MeasuredUsage | null } | null> {
+  const { models, tools, system } = agentRequestShape(input);
+  const usage = await (input.warmCall ?? anthropicWarm)({ model: models.fast, system, tools }).catch((err: unknown) => {
+    logAskFailure('ask_agent_warm_failed', err);
+    return undefined;
+  });
+  return usage === undefined ? null : { model: models.fast, usage };
+}
+
+export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult> {
+  const { catalog } = input;
+  const zone = input.timeZone || catalog.timeZone || 'America/Chicago';
+  const shape = agentRequestShape(input);
+  const { models, baseTools, system } = shape;
+  let model = models.fast;
+  let shaped: ReturnType<typeof anthropicReasoningRequest> | null = null;
+  let escalated = false;
+  let tools = shape.tools;
+  const actionNames = new Set((input.actions?.tools ?? []).map((t) => t.name));
   const turnContext = (input.turnContext ?? '').trim();
   const userText =
     `${askClockSystemRules(input.now ?? new Date(), zone)}` +

@@ -70,6 +70,7 @@ import {
   proofsPulse,
   decideProofDay,
   askAboutProofs,
+  warmProofAsk,
   proofQuestions,
   listJobAskThreads,
   createJobAskThread,
@@ -1710,6 +1711,7 @@ sharedJobsRouter.post('/shared/:jobId/ask/approvals/:id/deny', denyAskApproval);
 sharedJobsRouter.post('/shared/:jobId/ask/threads', createJobAskThread);
 sharedJobsRouter.patch('/shared/:jobId/ask/threads/:threadId', renameJobAskThread);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
+sharedJobsRouter.post('/shared/:jobId/proof/ask/warm', warmProofAsk);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:proofId/transcript', requeueProofTranscript);

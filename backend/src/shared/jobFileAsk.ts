@@ -28,7 +28,7 @@ import { looksLikeOutsideSiteCommand } from './askComputerCommand.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { formatThreadMemoryForPrompt, isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
-import { askAgentEnabled, runAskAgent } from './askAgent.js';
+import { askAgentEnabled, runAskAgent, warmAskAgent, type AskAgentInput, type AskAgentWarmCall } from './askAgent.js';
 import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import type { AskLookupCatalog, AskLookupClip } from './askLookup.js';
 import { loadClipStills } from './clipStills.js';
@@ -1181,7 +1181,7 @@ export type AskAgentTrace = {
 
 async function answerWithAgent(
   input: Parameters<typeof answerFromJobFile>[0],
-  ctx: { computerAllowed: boolean; computerBlock: string; apiKey: string },
+  ctx: { computerAllowed: boolean; computerBlock: string; apiKey: string; warmOnly?: boolean },
 ): Promise<Awaited<ReturnType<typeof answerFromJobFile>> | null> {
   const lookup = input.lookup!;
   const zone = lookup.timeZone || 'America/Chicago';
@@ -1228,7 +1228,7 @@ async function answerWithAgent(
     return result;
   };
   const search = input.webSearch ?? searchAskWebDetailed;
-  const ran = await runAskAgent({
+  const agentInput: AskAgentInput = {
     question: input.question,
     catalog: lookup,
     jobFileRecord: formatJobFileRecord({ ...input.file, clips: [], mentionSupplement: null }).trim(),
@@ -1272,7 +1272,12 @@ async function answerWithAgent(
     clipStills: stillsLoader(),
     loadOrgClips: input.loadOrgClips ?? null,
     callModel: input.agentCall,
-  });
+  };
+  if (ctx.warmOnly) {
+    const warmed = await warmAskAgent({ ...agentInput, warmCall: input.agentWarmCall });
+    return { answer: '', model: warmed?.model ?? null, groundedOn: 0, usage: warmed?.usage ?? null, webHits: [], toolResults };
+  }
+  const ran = await runAskAgent(agentInput);
   input.timing?.noteModel(ran.model);
   input.timing?.noteRoute('deep', 'agent');
   if (!trim(ran.answer)) return null;
@@ -1361,6 +1366,13 @@ export async function answerFromJobFile(input: {
   engine?: string | null;
   /** Test hook: the agent's model call. */
   agentCall?: Parameters<typeof runAskAgent>[0]['callModel'];
+  /**
+   * Only load this job into the agent's prompt cache (the person is typing).
+   * Nothing is answered; the result's answer is empty.
+   */
+  warmOnly?: boolean;
+  /** Test hook: the warm call. */
+  agentWarmCall?: AskAgentWarmCall;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1428,11 +1440,18 @@ export async function answerFromJobFile(input: {
     askAgentEnabled(input.engine) &&
     (input.agentCall || (apiKey || anthropicAskApiKey()).trim())
   ) {
-    const agent = await answerWithAgent(input, { computerAllowed: computerCtx.allowed, computerBlock, apiKey });
+    const agent = await answerWithAgent(input, {
+      computerAllowed: computerCtx.allowed,
+      computerBlock,
+      apiKey,
+      warmOnly: input.warmOnly,
+    });
     if (agent) return agent;
     // Emergency fallback only: the agent gave no answer, so the classic path answers this turn.
     logAskFailure('ask_agent_fallback', new Error('agent returned no answer'));
   }
+  // Classic Chat has nothing to warm.
+  if (input.warmOnly) return { ...empty, answer: '' };
 
   // "What websites can you log in to?" is about Chat, not the file or an upload.
   if (!siteCommand && looksLikeComputerCapabilityAsk(input.question)) {

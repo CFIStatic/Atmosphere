@@ -1,5 +1,5 @@
 import { askAgentEnabled } from '../shared/askAgent.js';
-import { anthropicAskApiKey } from '../lib/askModel.js';
+import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import { visibleAfterEdits } from '../shared/askEdits.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
@@ -3082,6 +3082,11 @@ async function runProofAskTurn(input: {
   supersedesId?: string | null;
   /** "agent" asks for the new single-agent Chat (honored per ASK_AGENT). */
   engine?: 'agent' | 'classic' | null;
+  /**
+   * The person started typing: load this job into the agent's prompt cache and
+   * stop. No thread is made, nothing is answered or stored.
+   */
+  warmOnly?: boolean;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3118,7 +3123,7 @@ async function runProofAskTurn(input: {
     // One web search per query per turn. A public question ("who's going to
     // win the ball game") starts its search now, while the job file loads.
     const webSearch = createAskWebSearchMemo({ timeZone: input.timeZone ?? 'America/Chicago' });
-    if (isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
+    if (!input.warmOnly && isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
       void webSearch(input.question, { limit: 5, includeDomains: includeDomainsForAsk(input.question) });
     }
     const writeDb = askWriteClient(supabase);
@@ -3130,6 +3135,11 @@ async function runProofAskTurn(input: {
         ? { kind: 'share', shareId: input.shareId }
         : null;
     const threadPromise = (async () => {
+      // The cached part of the prompt is the same for every chat on the job.
+      if (input.warmOnly) {
+        threadId = null;
+        return null;
+      }
       if (!owner) {
         // No principal to check. A caller-supplied thread id is not bound.
         threadId = null;
@@ -3695,7 +3705,7 @@ async function runProofAskTurn(input: {
       ? history
       : (historyWithoutPrivateUploads(history, sessionDocuments) ?? history);
     const mentionPrep =
-      askAccess === 'org'
+      askAccess === 'org' && !input.warmOnly
         ? await prepareMentionAsk(supabase, {
             orgId,
             question: input.question,
@@ -3827,7 +3837,21 @@ async function runProofAskTurn(input: {
       },
       styleSummary,
       engine: input.engine ?? null,
+      warmOnly: input.warmOnly,
     });
+    if (input.warmOnly) {
+      recordMeasuredTokenUsage(supabase, {
+        orgId,
+        requestId: input.requestId,
+        feature: 'ask',
+        source: 'proof_ask_warm',
+        userId: userId ?? undefined,
+        jobId,
+        modelId: result.model,
+        usage: result.usage,
+      });
+      return { answer: '', model: result.model, groundedOn: 0, question: null, threadId: null, webSources: [] };
+    }
     if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
     }
@@ -4194,6 +4218,60 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       engine: input.engine ?? null,
     });
     res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Last warm per person and job. A cache entry lives five minutes; one warm covers it. */
+const askWarmedAt = new Map<string, number>();
+const ASK_WARM_EVERY_MS = 4 * 60_000;
+
+/**
+ * POST /api/operations/shared/:jobId/proof/ask/warm
+ * The person started typing a question. Loads this job into the Chat model's
+ * prompt cache so the first answer starts as quickly as the later ones.
+ * Answers 202 at once; nothing is asked or stored.
+ */
+export async function warmProofAsk(req: Request, res: Response, next: NextFunction) {
+  try {
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
+    const input = z
+      .object({
+        timeZone: z.string().trim().min(1).max(64).optional(),
+        engine: z.enum(['agent', 'classic']).optional(),
+      })
+      .parse(req.body ?? {});
+    const key = `${orgId}:${req.params.jobId}:${userId}`;
+    const last = askWarmedAt.get(key) ?? 0;
+    if (!askAgentEnabled(input.engine ?? null) || Date.now() - last < ASK_WARM_EVERY_MS) {
+      res.status(202).json({ warming: false });
+      return;
+    }
+    const canManage = access === 'org' ? await memberCanPurchaseAi(supabase, orgId, userId) : false;
+    await assertAiFeatureAllowed(unscopedAdminOrNull() ?? supabase, orgId, { canManage });
+    askWarmedAt.set(key, Date.now());
+    if (askWarmedAt.size > 5_000) {
+      for (const [k, at] of askWarmedAt) if (Date.now() - at > ASK_WARM_EVERY_MS) askWarmedAt.delete(k);
+    }
+    res.status(202).json({ warming: true });
+    void runProofAskTurn({
+      supabase,
+      orgId,
+      jobId: req.params.jobId,
+      question: '',
+      userId,
+      timeZone: input.timeZone ?? null,
+      requestId: `ask-warm:${req.params.jobId}:${randomUUID()}`,
+      access: access === 'org' ? 'org' : 'viewer',
+      partyId: viewerPartyId(viewer),
+      engine: input.engine ?? null,
+      warmOnly: true,
+    }).catch((err: unknown) => {
+      askWarmedAt.delete(key);
+      logAskFailure('ask_warm_failed', err);
+    });
   } catch (err) {
     next(err);
   }

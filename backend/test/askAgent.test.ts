@@ -10,7 +10,9 @@ import {
   agentModels,
   askAgentEnabled,
   runAskAgent,
+  warmAskAgent,
   type AskAgentModelCall,
+  type AskAgentWarmCall,
 } from '../src/shared/askAgent.js';
 import { askModelActionTools } from '../src/shared/askTools.js';
 import { answerFromJobFile } from '../src/shared/jobFileAsk.js';
@@ -294,4 +296,76 @@ test('other jobs load only when the model searches them, and only for office use
   assert.match(office.trace[0]!.result.summary, /other jobs/);
   await run('which other jobs had wet drywall?', 'viewer', [{ name: 'search_other_jobs', input: { query: 'drywall' } }]);
   assert.equal(loads, 1);
+});
+
+test('warm: while the person types, the job file goes into the cache with exactly what the first round sends', async () => {
+  const warms: Parameters<AskAgentWarmCall>[0][] = [];
+  const warmCall: AskAgentWarmCall = async (req) => {
+    warms.push(structuredClone(req));
+    return null;
+  };
+  const seen: Parameters<AskAgentModelCall>[0][] = [];
+  const shared = {
+    catalog: catalog(),
+    jobFileRecord: 'Brief note\nLockbox on the side door.',
+    actions: { tools: askModelActionTools('org'), run: async () => ({ ok: true, tool: 'x', summary: '' }) },
+    clipStills: async () => ({ stills: [], onFile: 0, privateSkipped: 0 }),
+  };
+  const warmed = await warmAskAgent({ ...shared, question: '', warmCall });
+  assert.ok(warmed);
+  await runAskAgent({
+    ...shared,
+    question: 'where is the lockbox?',
+    turnContext: 'Thread memory: none',
+    callModel: scripted([{ text: 'On the side door.' }], seen),
+  });
+  assert.equal(warms.length, 1);
+  const first = seen[0]!;
+  assert.equal(warms[0]!.model, first.model);
+  assert.deepEqual(warms[0]!.system, first.system);
+  assert.deepEqual(warms[0]!.tools, first.tools);
+  // The first round sends no thinking settings, so the warm needs none either.
+  assert.equal(first.thinking, undefined);
+  assert.equal(first.outputConfig, undefined);
+});
+
+test('warm through answerFromJobFile answers nothing and never calls the answering model', async () => {
+  const prev = process.env.ASK_AGENT;
+  delete process.env.ASK_AGENT;
+  try {
+    let warmed = 0;
+    const out = await answerFromJobFile({
+      question: '',
+      file: { job: { id: JOB, title: 'Von Mour basement' } },
+      lookup: catalog(),
+      apiKey: 'test-key',
+      warmOnly: true,
+      agentWarmCall: async () => {
+        warmed += 1;
+        return null;
+      },
+      agentCall: async () => {
+        throw new Error('the warm must not answer');
+      },
+    });
+    assert.equal(warmed, 1);
+    assert.equal(out.answer, '');
+    const classic = await answerFromJobFile({
+      question: '',
+      file: { job: { id: JOB, title: 'Von Mour basement' } },
+      lookup: catalog(),
+      apiKey: 'test-key',
+      engine: 'classic',
+      warmOnly: true,
+      agentWarmCall: async () => {
+        warmed += 1;
+        return null;
+      },
+    });
+    assert.equal(classic.answer, '');
+    assert.equal(warmed, 1);
+  } finally {
+    if (prev === undefined) delete process.env.ASK_AGENT;
+    else process.env.ASK_AGENT = prev;
+  }
 });

@@ -24,6 +24,7 @@ const searchAskChats = vi.fn();
 const askApproval = vi.fn();
 const approveAskApproval = vi.fn();
 const denyAskApproval = vi.fn();
+const warmAsk = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -52,10 +53,11 @@ vi.mock('../lib/api', () => ({
     askApproval: (...args: unknown[]) => askApproval(...args),
     approveAskApproval: (...args: unknown[]) => approveAskApproval(...args),
     denyAskApproval: (...args: unknown[]) => denyAskApproval(...args),
+    warmAsk: (...args: unknown[]) => warmAsk(...args),
   },
 }));
 
-import { ASK_MIN_TYPING_MS, JobAskPanel, waitOutAskHold } from './JobAskPanel';
+import { ASK_MIN_TYPING_MS, JobAskPanel, forgetAskWarms, waitOutAskHold } from './JobAskPanel';
 
 const record: SharedJobRecord = {
   job: {
@@ -137,6 +139,9 @@ describe('JobAskPanel', () => {
     askPins.mockResolvedValue({ pins: [] });
     searchAskChats.mockResolvedValue({ results: [] });
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
+    warmAsk.mockReset();
+    warmAsk.mockResolvedValue({ warming: true });
+    forgetAskWarms();
     askThreads.mockResolvedValue({
       threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
       project: { kind: 'job', jobId: 'job-1038' },
@@ -168,6 +173,34 @@ describe('JobAskPanel', () => {
     }, [onSeek, request]);
     return null;
   }
+
+  it('loads the job into Chat once when the person starts typing', async () => {
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
+    expect(warmAsk).not.toHaveBeenCalled();
+    await user.type(box, 'Was the tarp');
+    await user.clear(box);
+    await user.type(box, 'removed?');
+    expect(warmAsk).toHaveBeenCalledTimes(1);
+    expect(warmAsk).toHaveBeenCalledWith('job-1038');
+  });
+
+  it('does not warm a guest share, which asks through its own door', async () => {
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} ask={askAboutProofs} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
+    await user.type(box, 'Was the tarp removed?');
+    expect(warmAsk).not.toHaveBeenCalled();
+  });
 
   it('asks from inside the job profile', async () => {
     const user = userEvent.setup();

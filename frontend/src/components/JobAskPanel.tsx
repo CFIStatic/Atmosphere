@@ -729,6 +729,14 @@ function pinnedAnswerLink(questionId: string): string {
   return url.toString();
 }
 
+const askWarmedAt = new Map<string, number>();
+const ASK_WARM_EVERY_MS = 4 * 60_000;
+
+/** Test hook: forget which jobs were warmed. */
+export function forgetAskWarms(): void {
+  askWarmedAt.clear();
+}
+
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
  *
@@ -786,6 +794,17 @@ export function JobAskPanel({
     speech.start();
     inputRef.current?.focus();
   }
+  // Typing a question: have the server load this job into Chat's cache first,
+  // so the answer starts as fast as a follow-up. At most once per job every
+  // four minutes (the cache keeps it five).
+  const typing = draft.trim().length > 0;
+  useEffect(() => {
+    if (!typing || askFn) return;
+    const last = askWarmedAt.get(jobId) ?? 0;
+    if (Date.now() - last < ASK_WARM_EVERY_MS) return;
+    askWarmedAt.set(jobId, Date.now());
+    void api.warmAsk(jobId).catch(() => askWarmedAt.delete(jobId));
+  }, [typing, jobId, askFn]);
   const [asking, setAsking] = useState(false);
   /** Server-checked preview of the answer being written (replaced by the final). */
   const [livePreview, setLivePreview] = useState('');
