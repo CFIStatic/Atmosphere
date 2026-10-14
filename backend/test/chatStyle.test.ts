@@ -98,11 +98,13 @@ test('every Chat prompt carries the Grok Bot voice rules', () => {
   }
   assert.ok(ASK_PROSE_FORMAT_RULES.includes(CHAT_VOICE_RULES), 'job-file and clip prompts');
   assert.ok(UPLOAD_ANSWER_SYSTEM.includes(CHAT_VOICE_RULES), 'upload prompt');
-  const reasoning = readFileSync(join(here, '../src/shared/askReasoning.ts'), 'utf8');
+  const reasoning = readFileSync(join(here, '../src/shared/askLookupProviders.ts'), 'utf8');
   assert.match(reasoning, /\$\{system\}\\n\\n\$\{CHAT_VOICE_RULES\}/, 'lookup prompts (full and fast)');
   // The old format rules asked for an opener and an invite to go deeper. Gone.
   assert.doesNotMatch(ASK_PROSE_FORMAT_RULES, /short opener paragraph|invite to go deeper/);
-  const jobFile = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const jobFile = ['jobFileAsk.ts', 'jobFileAskRecord.ts', 'jobFileAskWeb.ts', 'jobFileAskUploads.ts']
+    .map((name) => readFileSync(join(here, '../src/shared', name), 'utf8'))
+    .join('\n');
   assert.doesNotMatch(jobFile, /short natural opener|optional invite to go deeper/);
 });
 

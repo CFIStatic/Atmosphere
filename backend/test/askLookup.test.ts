@@ -1092,7 +1092,7 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
   assert.equal(polished, 'An unidentified speaker said it.');
 
   const prompt = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/shared/askReasoning.ts'),
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/shared/askLookupPrompts.ts'),
     'utf8',
   );
   assert.match(prompt, /A homeowner summary is prose/);
