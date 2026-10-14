@@ -57,6 +57,7 @@ import {
   type AskWebHit,
 } from './askWebSearch.js';
 import type { AskActionModelTool } from './askReasoning.js';
+import type { ClipStillsResult } from './clipStills.js';
 
 export type AskEngine = 'agent' | 'classic';
 
@@ -129,6 +130,21 @@ const WEB_TOOL = {
       include_domains: { type: 'array', items: { type: 'string' }, description: 'Optional hostnames.' },
     },
     required: ['query'],
+  },
+};
+
+const LOOK_TOOL = {
+  name: 'look_at_clip',
+  description:
+    'See a clip: returns up to 4 still frames from the video as images, nearest to atSeconds when given, otherwise spread across the clip. Use for anything visual (what a room, ceiling, wall, damage, equipment or work looks like; is something there; colors, materials, condition). Transcripts only say what was heard. Private moments and children are never shown.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      proofId: { type: 'string', description: 'Clip id: the id after the job id in a clip cite (video/<jobId>/<proofId>/…).' },
+      atSeconds: { type: 'number', description: 'Optional second in the clip to look near.' },
+      count: { type: 'number', description: 'How many stills, 1 to 4 (default 3).' },
+    },
+    required: ['proofId'],
   },
 };
 
@@ -246,6 +262,8 @@ export type AskAgentInput = {
   onPreviewReset?: () => void;
   /** Public web search. Absent: no web tool. */
   webSearch?: ((query: string, includeDomains?: string[]) => Promise<{ hits: AskWebHit[]; answer: string }>) | null;
+  /** Loads a clip's saved stills (privacy ranges already left out). Offers look_at_clip when set. */
+  clipStills?: ((clip: AskLookupClip, opts: { atSeconds: number | null; count: number }) => Promise<ClipStillsResult>) | null;
   /** Office actions. Absent for homeowners and subs. */
   actions?: {
     tools: AskActionModelTool[];
@@ -341,6 +359,7 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
     ...ASK_LOOKUP_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     ...(input.webSearch && isAskWebSearchConfigured() ? [WEB_TOOL] : []),
     ...(input.computer ? [COMPUTER_TOOL] : []),
+    ...(input.clipStills ? [LOOK_TOOL] : []),
     ...(input.actions?.tools ?? []),
   ];
   const canEscalate = models.deep !== models.fast;
@@ -429,6 +448,7 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
         const args = (c.input ?? {}) as Record<string, unknown>;
         input.onStatus?.(statusFor(c.name));
         let result: AskLookupResult;
+        let images: Anthropic.ImageBlockParam[] = [];
         try {
           if (c.name === 'web_search' && input.webSearch) {
             const query = String(args.query ?? '').trim();
@@ -441,6 +461,10 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
               summary: outcome.answer ? plainWebModelText(outcome.answer) : `${outcome.hits.length} web result(s).`,
               data: webSearchModelPayload({ answer: outcome.answer, results: outcome.hits }),
             };
+          } else if (c.name === LOOK_TOOL.name && input.clipStills) {
+            const look = await lookAtClip(catalog, args, input.clipStills);
+            images = look.images;
+            result = look.result;
           } else if (actionNames.has(c.name) && input.actions) {
             result = await input.actions.run(c.name, args);
           } else {
@@ -451,10 +475,11 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
           result = { ok: false, tool: c.name, summary: 'That step did not go through.' };
         }
         trace.push({ tool: c.name, input: args, result });
+        const json = JSON.stringify({ ok: result.ok, summary: result.summary, data: result.data ?? null }).slice(0, 12_000);
         return {
           type: 'tool_result' as const,
           tool_use_id: c.id,
-          content: JSON.stringify({ ok: result.ok, summary: result.summary, data: result.data ?? null }).slice(0, 12_000),
+          content: images.length ? [{ type: 'text' as const, text: json }, ...images] : json,
           is_error: !result.ok,
         };
       }),
@@ -494,6 +519,37 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
   return { answer: finished, model: servedBy, usage: mergeMeasuredUsages(usages, servedBy), trace, webHits, computerStarted: false, escalated };
 }
 
+/** look_at_clip: stills from a clip this person can see, as image blocks for the model. */
+async function lookAtClip(
+  catalog: AskLookupCatalog,
+  args: Record<string, unknown>,
+  load: NonNullable<AskAgentInput['clipStills']>,
+): Promise<{ result: AskLookupResult; images: Anthropic.ImageBlockParam[] }> {
+  const id = String(args.proofId ?? '').trim();
+  const clip = clipsInScope(catalog).find((row) => row.proofId === id);
+  if (!clip) return { result: { ok: false, tool: LOOK_TOOL.name, summary: 'That clip is not on this job.' }, images: [] };
+  const at = typeof args.atSeconds === 'number' && Number.isFinite(args.atSeconds) ? args.atSeconds : null;
+  const count = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.round(args.count) : 3;
+  const got = await load(clip, { atSeconds: at, count });
+  const frames = got.stills.map((still) => ({
+    atSeconds: Math.round(still.atSeconds * 10) / 10,
+    cite: askClipCite(clip, still.atSeconds),
+  }));
+  const privateNote = got.privateSkipped ? ` ${got.privateSkipped} private moment(s) were left out.` : '';
+  const summary = got.stills.length
+    ? `Showing ${got.stills.length} still(s) from ${clip.title}.${privateNote}`
+    : got.onFile
+      ? `No stills from ${clip.title} can be shown.${privateNote}`
+      : `No stills are on file for ${clip.title}.`;
+  return {
+    result: { ok: got.stills.length > 0, tool: LOOK_TOOL.name, summary, data: { proofId: clip.proofId, title: clip.title, frames } },
+    images: got.stills.map((still) => ({
+      type: 'image' as const,
+      source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: still.jpeg.toString('base64') },
+    })),
+  };
+}
+
 function statusFor(tool: string): string {
   switch (tool) {
     case 'web_search':
@@ -502,6 +558,8 @@ function statusFor(tool: string): string {
       return 'Searching what was said…';
     case 'get_clip':
       return 'Opening a clip…';
+    case 'look_at_clip':
+      return 'Looking at the video…';
     case 'search_other_jobs':
       return 'Checking other jobs…';
     case 'send_job_sms':

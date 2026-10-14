@@ -30,7 +30,9 @@ import { formatThreadMemoryForPrompt, isLongMemoryQuestion, type LongThreadMemor
 import { formatOrgMemoryForPrompt, type OrgMemoryFact } from './askOrgMemory.js';
 import { askAgentEnabled, runAskAgent } from './askAgent.js';
 import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
-import type { AskLookupCatalog } from './askLookup.js';
+import type { AskLookupCatalog, AskLookupClip } from './askLookup.js';
+import { loadClipStills } from './clipStills.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, CHAT_VOICE_RULES, normalizeAskProse, trimChatFiller } from './askProse.js';
 import { stylePromptAddendum } from './askCommunicationStyle.js';
@@ -1160,6 +1162,12 @@ export function webBackedWithoutJobCite(
  * The new single-agent Chat: one model with the whole job file and every tool.
  * Null when the model gave nothing, so the classic path still answers.
  */
+/** Saved key frames for look_at_clip; off when the server has no storage access. */
+function stillsLoader() {
+  const admin = unscopedAdminOrNull();
+  return admin ? (clip: AskLookupClip, opts: { atSeconds: number | null; count: number }) => loadClipStills(admin, clip, opts) : null;
+}
+
 /** How one agent reply was made: stored with the answer so bad answers can be traced and fixed. */
 export type AskAgentTrace = {
   route: 'agent';
@@ -1261,6 +1269,7 @@ async function answerWithAgent(
             )
         : null,
     extraChunks: documentChunksForGrounding(documentViews(input.file)),
+    clipStills: stillsLoader(),
     callModel: input.agentCall,
   });
   input.timing?.noteModel(ran.model);

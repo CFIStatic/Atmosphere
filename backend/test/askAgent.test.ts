@@ -235,3 +235,41 @@ test('answerFromJobFile uses the agent only when the turn asks for it', async ()
     else process.env.ASK_AGENT = prev;
   }
 });
+
+test('look_at_clip: the model gets stills as images, only for clips this person can see', async () => {
+  const seen: Parameters<AskAgentModelCall>[0][] = [];
+  const asked: Array<{ proofId: string; at: number | null; count: number }> = [];
+  const result = await runAskAgent({
+    question: 'what does the ceiling look like in the walkthrough?',
+    catalog: catalog(),
+    clipStills: async (clip, opts) => {
+      asked.push({ proofId: clip.proofId, at: opts.atSeconds, count: opts.count });
+      return { stills: [{ atSeconds: 12, jpeg: Buffer.from('fake-jpeg') }], onFile: 3, privateSkipped: 1 };
+    },
+    callModel: scripted(
+      [
+        {
+          tools: [
+            { name: 'look_at_clip', input: { proofId: PROOF, atSeconds: 10 } },
+            { name: 'look_at_clip', input: { proofId: '99999999-2222-4333-8444-555555555555' } },
+          ],
+        },
+        { text: 'The ceiling drywall is stained near the laundry wall.' },
+      ],
+      seen,
+    ),
+  });
+  assert.ok(seen[0]!.tools.some((t) => t.name === 'look_at_clip'));
+  // Only the clip on this job was loaded.
+  assert.deepEqual(asked, [{ proofId: PROOF, at: 10, count: 3 }]);
+  const results = seen[1]!.messages.at(-1)!.content as Array<{ content: unknown; is_error?: boolean }>;
+  const looked = results[0]!.content as Array<{ type: string; source?: { data: string } }>;
+  assert.equal(looked[0]!.type, 'text');
+  assert.match(String((looked[0] as { text?: string }).text), /1 private moment/);
+  assert.equal(looked[1]!.type, 'image');
+  assert.equal(looked[1]!.source!.data, Buffer.from('fake-jpeg').toString('base64'));
+  assert.equal(results[1]!.is_error, true);
+  // The trace keeps no image bytes.
+  assert.doesNotMatch(JSON.stringify(result.trace), /ZmFrZS1qcGVn/);
+  assert.match(result.answer, /stained/);
+});
