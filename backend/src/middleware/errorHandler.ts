@@ -3,7 +3,18 @@ import { ZodError } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { captureException } from '../lib/sentry.js';
+
+/**
+ * True only for errors errorHandler answers with a 500. Validation errors,
+ * HttpErrors below 500 and body-parser rejections are expected and not reported.
+ */
+export function shouldReportError(err: unknown): boolean {
+  if (err instanceof ZodError) return false;
+  if (err instanceof HttpError) return err.status >= 500;
+  const bodyErr = err as { type?: string } | null;
+  if (bodyErr && typeof bodyErr.type === 'string' && bodyErr.type.startsWith('entity.')) return false;
+  return true;
+}
 
 /** 404 handler for unmatched routes. */
 export function notFound(_req: Request, res: Response): void {
@@ -55,11 +66,8 @@ export function errorHandler(
     method: req.method,
     err: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
   });
-  void captureException(err, {
-    requestId: req.requestId,
-    path: req.path,
-    method: req.method,
-  });
+  // Reported to Sentry by Sentry.setupExpressErrorHandler (see app.ts),
+  // which runs just before this handler and uses shouldReportError below.
   res.status(500).json({
     error: 'Internal server error',
     code: 'internal_error',

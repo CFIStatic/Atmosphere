@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@sentry/node": "^10.76.2",
     "@supabase/supabase-js": "^2.45.4",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

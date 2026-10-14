@@ -43,10 +43,11 @@ import { computerRouter } from './routes/computer.js';
 import { desktopLiveRouter } from './routes/desktopLive.js';
 import { crmCredentialsRouter } from './routes/crmCredentials.js';
 import { speakerIdentityRouter } from './routes/speakerIdentity.js';
-import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { errorHandler, notFound, shouldReportError } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
 import { forbidden } from './lib/errors.js';
+import { Sentry, sentryEnabled } from './lib/sentry.js';
 import {
   isAtmosphereCustomAppOrigin,
   isAtmosphereCustomFieldCaptureOrigin,
@@ -264,6 +265,10 @@ export function createApp(): Express {
 
   // 404 + error handling (must be last).
   app.use(notFound);
+  // No-op when Sentry is off. Reports only the errors errorHandler turns into a 500.
+  if (sentryEnabled()) {
+    Sentry.setupExpressErrorHandler(app, { shouldHandleError: (err) => shouldReportError(err) });
+  }
   app.use(errorHandler);
 
   return app;
