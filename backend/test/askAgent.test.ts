@@ -10,7 +10,9 @@ import {
   agentModels,
   askAgentEnabled,
   runAskAgent,
+  warmAskAgent,
   type AskAgentModelCall,
+  type AskAgentWarmCall,
 } from '../src/shared/askAgent.js';
 import { askModelActionTools } from '../src/shared/askTools.js';
 import { answerFromJobFile } from '../src/shared/jobFileAsk.js';
@@ -230,6 +232,138 @@ test('answerFromJobFile uses the agent only when the turn asks for it', async ()
     const agent = await answerFromJobFile({ ...base, engine: 'agent' });
     assert.equal(agent.agent, true);
     assert.match(agent.answer, /General guidance/);
+  } finally {
+    if (prev === undefined) delete process.env.ASK_AGENT;
+    else process.env.ASK_AGENT = prev;
+  }
+});
+
+test('look_at_clip: the model gets stills as images, only for clips this person can see', async () => {
+  const seen: Parameters<AskAgentModelCall>[0][] = [];
+  const asked: Array<{ proofId: string; at: number | null; count: number }> = [];
+  const result = await runAskAgent({
+    question: 'what does the ceiling look like in the walkthrough?',
+    catalog: catalog(),
+    clipStills: async (clip, opts) => {
+      asked.push({ proofId: clip.proofId, at: opts.atSeconds, count: opts.count });
+      return { stills: [{ atSeconds: 12, jpeg: Buffer.from('fake-jpeg') }], onFile: 3, privateSkipped: 1 };
+    },
+    callModel: scripted(
+      [
+        {
+          tools: [
+            { name: 'look_at_clip', input: { proofId: PROOF, atSeconds: 10 } },
+            { name: 'look_at_clip', input: { proofId: '99999999-2222-4333-8444-555555555555' } },
+          ],
+        },
+        { text: 'The ceiling drywall is stained near the laundry wall.' },
+      ],
+      seen,
+    ),
+  });
+  assert.ok(seen[0]!.tools.some((t) => t.name === 'look_at_clip'));
+  // Only the clip on this job was loaded.
+  assert.deepEqual(asked, [{ proofId: PROOF, at: 10, count: 3 }]);
+  const results = seen[1]!.messages.at(-1)!.content as Array<{ content: unknown; is_error?: boolean }>;
+  const looked = results[0]!.content as Array<{ type: string; source?: { data: string } }>;
+  assert.equal(looked[0]!.type, 'text');
+  assert.match(String((looked[0] as { text?: string }).text), /1 private moment/);
+  assert.equal(looked[1]!.type, 'image');
+  assert.equal(looked[1]!.source!.data, Buffer.from('fake-jpeg').toString('base64'));
+  assert.equal(results[1]!.is_error, true);
+  // The trace keeps no image bytes.
+  assert.doesNotMatch(JSON.stringify(result.trace), /ZmFrZS1qcGVn/);
+  assert.match(result.answer, /stained/);
+});
+
+test('other jobs load only when the model searches them, and only for office users', async () => {
+  let loads = 0;
+  const other = { ...catalog().clips[0]!, proofId: '77777777-2222-4333-8444-555555555555', jobId: '88888888-2222-4333-8444-555555555555', jobTitle: 'Lopez Kitchen', title: 'Lopez walkthrough' };
+  const run = (question: string, access: 'org' | 'viewer', tools: Array<{ name: string; input: Record<string, unknown> }>) =>
+    runAskAgent({
+      question,
+      catalog: { ...catalog(), access },
+      loadOrgClips: async () => {
+        loads += 1;
+        return [other];
+      },
+      callModel: scripted(tools.length ? [{ tools }, { text: 'Done.' }] : [{ text: 'Done.' }]),
+    });
+  await run('what is the claim number?', 'org', []);
+  assert.equal(loads, 0);
+  const office = await run('which other jobs had wet drywall?', 'org', [{ name: 'search_other_jobs', input: { query: 'drywall' } }]);
+  assert.equal(loads, 1);
+  assert.match(office.trace[0]!.result.summary, /other jobs/);
+  await run('which other jobs had wet drywall?', 'viewer', [{ name: 'search_other_jobs', input: { query: 'drywall' } }]);
+  assert.equal(loads, 1);
+});
+
+test('warm: while the person types, the job file goes into the cache with exactly what the first round sends', async () => {
+  const warms: Parameters<AskAgentWarmCall>[0][] = [];
+  const warmCall: AskAgentWarmCall = async (req) => {
+    warms.push(structuredClone(req));
+    return null;
+  };
+  const seen: Parameters<AskAgentModelCall>[0][] = [];
+  const shared = {
+    catalog: catalog(),
+    jobFileRecord: 'Brief note\nLockbox on the side door.',
+    actions: { tools: askModelActionTools('org'), run: async () => ({ ok: true, tool: 'x', summary: '' }) },
+    clipStills: async () => ({ stills: [], onFile: 0, privateSkipped: 0 }),
+  };
+  const warmed = await warmAskAgent({ ...shared, question: '', warmCall });
+  assert.ok(warmed);
+  await runAskAgent({
+    ...shared,
+    question: 'where is the lockbox?',
+    turnContext: 'Thread memory: none',
+    callModel: scripted([{ text: 'On the side door.' }], seen),
+  });
+  assert.equal(warms.length, 1);
+  const first = seen[0]!;
+  assert.equal(warms[0]!.model, first.model);
+  assert.deepEqual(warms[0]!.system, first.system);
+  assert.deepEqual(warms[0]!.tools, first.tools);
+  // The first round sends no thinking settings, so the warm needs none either.
+  assert.equal(first.thinking, undefined);
+  assert.equal(first.outputConfig, undefined);
+});
+
+test('warm through answerFromJobFile answers nothing and never calls the answering model', async () => {
+  const prev = process.env.ASK_AGENT;
+  delete process.env.ASK_AGENT;
+  try {
+    let warmed = 0;
+    const out = await answerFromJobFile({
+      question: '',
+      file: { job: { id: JOB, title: 'Von Mour basement' } },
+      lookup: catalog(),
+      apiKey: 'test-key',
+      warmOnly: true,
+      agentWarmCall: async () => {
+        warmed += 1;
+        return null;
+      },
+      agentCall: async () => {
+        throw new Error('the warm must not answer');
+      },
+    });
+    assert.equal(warmed, 1);
+    assert.equal(out.answer, '');
+    const classic = await answerFromJobFile({
+      question: '',
+      file: { job: { id: JOB, title: 'Von Mour basement' } },
+      lookup: catalog(),
+      apiKey: 'test-key',
+      engine: 'classic',
+      warmOnly: true,
+      agentWarmCall: async () => {
+        warmed += 1;
+        return null;
+      },
+    });
+    assert.equal(classic.answer, '');
+    assert.equal(warmed, 1);
   } finally {
     if (prev === undefined) delete process.env.ASK_AGENT;
     else process.env.ASK_AGENT = prev;

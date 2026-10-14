@@ -11,7 +11,7 @@
  * Costs well under a dollar. Texts and Computer are stubs: nothing is sent.
  */
 import { appendFileSync } from 'node:fs';
-import { runAskAgent, type AskAgentResult } from '../src/shared/askAgent.js';
+import { runAskAgent, warmAskAgent, type AskAgentInput, type AskAgentResult } from '../src/shared/askAgent.js';
 import { askModelActionTools } from '../src/shared/askTools.js';
 import { isAskWebSearchConfigured, searchAskWebDetailed } from '../src/shared/askWebSearch.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
@@ -112,6 +112,10 @@ const noGender = never(/\b(?:she|he|her|his|him)\b/i, 'assumes no gender');
 const noFakeSend = never(/\b(?:text|message|email) (?:was|has been) sent\b|\bI(?:'ve| have) sent\b/i, 'never claims it sent');
 const answered: Check = { name: 'answers', ok: (r) => r.answer.trim().length > 0 };
 
+const COMPUTER_WAITING =
+  'COMPUTER RESULTS ON THIS JOB (browser tasks Computer already ran for this person, newest first):\n' +
+  '1. Request: Log in to Outlook and email the job update\n   Status: needs_you\n   Waiting on the person (number_match): Enter 47 in your authenticator app. Computer carries on once you approve.\n   Authenticator number on the sign-in page: 47\n   Result: Status: needs_you';
+
 const CASES: Case[] = [
   { question: 'can you login to restore 365 and tell me what active jobs do we have right now', checks: [used('start_computer_task')] },
   { question: 'can you tell me how many jobs we have going in restore 365', checks: [used('start_computer_task')] },
@@ -135,6 +139,11 @@ const CASES: Case[] = [
   { question: 'draft a short homeowner update', checks: [says(/⟦artifact⟧/, 'writes a draft'), noGender, { name: 'thinks harder', ok: (r) => r.escalated }] },
   { question: 'text Pat that we will be there at 3 tomorrow to check the readings', checks: [used('send_job_sms'), noFakeSend] },
   {
+    question: 'in outlook what is the code number it is giving i have to authenticate it',
+    turnContext: COMPUTER_WAITING,
+    checks: [says(/\b47\b/, 'gives the number'), { name: 'does not start Computer again', ok: (r) => !r.computerStarted }],
+  },
+  {
     question: 'Computer finished: restore365.net: job counts checked',
     turnContext: COMPUTER_RESULTS,
     checks: [says(/341/), never(/start_computer_task/)],
@@ -149,6 +158,28 @@ async function main() {
   let passed = 0;
   let total = 0;
   let cost = 0;
+  // The job file as Chat sees it, made unique to this run so the warm below
+  // starts from an empty cache and the first question shows whether it worked.
+  const cold = `${record}\n\nEval run ${Date.now()}`;
+  const agentInput = (jobFileRecord: string, actions: string[]): AskAgentInput => ({
+    question: '',
+    catalog,
+    jobFileRecord,
+    webSearch: (query, includeDomains) => searchAskWebDetailed(query, { limit: 5, includeDomains, timeZone: 'America/Chicago' }),
+    actions: {
+      tools: askModelActionTools('org'),
+      run: async (name, input) => {
+        actions.push(name);
+        return { ok: true, tool: name, summary: `Card ready for ${JSON.stringify(input).slice(0, 120)}. Nothing has been sent; they press Send on the card.` };
+      },
+    },
+    computer: async (args) => `Starting Computer: ${args.instructions}`,
+  });
+  // What the job page does when the person starts typing.
+  const warmed = await warmAskAgent(agentInput(cold, []));
+  if (!warmed) throw new Error('The cache warm call failed.');
+  const warmWrote = (warmed.usage?.calls ?? []).reduce((n, call) => n + call.cacheWrite5mTokens + call.cacheReadTokens, 0);
+  let firstRead = 0;
   for (const c of CASES) {
     if (c.needsWeb && !web) {
       rows.push(`| ${c.question} | skipped (no web search key) | | |`);
@@ -158,23 +189,16 @@ async function main() {
     let first: number | null = null;
     const actions: string[] = [];
     const result = await runAskAgent({
+      ...agentInput(cold, actions),
       question: c.question,
-      catalog,
-      jobFileRecord: record,
       turnContext: c.turnContext ?? null,
       onToken: (t) => {
         if (t && first === null) first = Date.now();
       },
-      webSearch: (query, includeDomains) => searchAskWebDetailed(query, { limit: 5, includeDomains, timeZone: 'America/Chicago' }),
-      actions: {
-        tools: askModelActionTools('org'),
-        run: async (name, input) => {
-          actions.push(name);
-          return { ok: true, tool: name, summary: `Card ready for ${JSON.stringify(input).slice(0, 120)}. Nothing has been sent; they press Send on the card.` };
-        },
-      },
-      computer: async (args) => `Starting Computer: ${args.instructions}`,
     });
+    if (!firstRead) {
+      firstRead = result.usage?.calls?.[0]?.cacheReadTokens ?? 0;
+    }
     const failed = c.checks.filter((check) => !check.ok(result, actions)).map((check) => check.name);
     total += 1;
     if (!failed.length) passed += 1;
@@ -192,8 +216,11 @@ async function main() {
     );
   }
   const rate = total ? passed / total : 0;
+  const warmLine = `Warm while typing: ${warmWrote} tokens cached; the first question read ${firstRead} from the cache.`;
   const summary = [
     `### Chat eval: ${passed}/${total} passed (${Math.round(rate * 100)}%), about $${cost.toFixed(2)}`,
+    '',
+    warmLine,
     '',
     '| Question | Result | Model | Time |',
     '| --- | --- | --- | --- |',
@@ -201,6 +228,10 @@ async function main() {
   ].join('\n');
   console.log(`\n${summary}`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+  if (!warmWrote || firstRead < warmWrote / 2) {
+    console.error(`The warm did not reach the first question. ${warmLine}`);
+    process.exit(1);
+  }
   if (rate < minPass) {
     console.error(`Pass rate ${Math.round(rate * 100)}% is under ${Math.round(minPass * 100)}%.`);
     process.exit(1);

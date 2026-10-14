@@ -1,3 +1,5 @@
+import { askAgentEnabled } from '../shared/askAgent.js';
+import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import { visibleAfterEdits } from '../shared/askEdits.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
@@ -108,6 +110,7 @@ import {
   askLookupCatalogFromJob,
   asksAboutCrossJob,
   clipFromProofRow,
+  type AskLookupClip,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
   scrubStoredAskText,
@@ -3079,6 +3082,11 @@ async function runProofAskTurn(input: {
   supersedesId?: string | null;
   /** "agent" asks for the new single-agent Chat (honored per ASK_AGENT). */
   engine?: 'agent' | 'classic' | null;
+  /**
+   * The person started typing: load this job into the agent's prompt cache and
+   * stop. No thread is made, nothing is answered or stored.
+   */
+  warmOnly?: boolean;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3115,7 +3123,7 @@ async function runProofAskTurn(input: {
     // One web search per query per turn. A public question ("who's going to
     // win the ball game") starts its search now, while the job file loads.
     const webSearch = createAskWebSearchMemo({ timeZone: input.timeZone ?? 'America/Chicago' });
-    if (isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
+    if (!input.warmOnly && isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
       void webSearch(input.question, { limit: 5, includeDomains: includeDomainsForAsk(input.question) });
     }
     const writeDb = askWriteClient(supabase);
@@ -3127,6 +3135,11 @@ async function runProofAskTurn(input: {
         ? { kind: 'share', shareId: input.shareId }
         : null;
     const threadPromise = (async () => {
+      // The cached part of the prompt is the same for every chat on the job.
+      if (input.warmOnly) {
+        threadId = null;
+        return null;
+      }
       if (!owner) {
         // No principal to check. A caller-supplied thread id is not bound.
         threadId = null;
@@ -3152,19 +3165,42 @@ async function runProofAskTurn(input: {
       }
     })();
 
-    const otherJobsPromise =
+    // Clips on the company's other jobs: loaded up front when the question names
+    // other jobs, otherwise only if the agent decides to search them.
+    const loadOtherJobClips = async (limit: number): Promise<AskLookupClip[]> => {
+      const { data } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
+        .eq('org_id', orgId)
+        .neq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(limit);
+      const rows = ((data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
+      const titles = new Map<string, string>();
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
+        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
+          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
+        }
+      }
+      return rows
+        .map((row) =>
+          clipFromProofRow(row, {
+            orgId,
+            jobId: String(row.job_id ?? ''),
+            jobTitle: titles.get(String(row.job_id ?? '')) || null,
+          }),
+        )
+        .filter((clip) => clip.proofId && clip.jobId !== jobId);
+    };
+    const otherJobsPromise: Promise<AskLookupClip[] | null> =
       askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted
-        ? supabase
-            .from('job_proofs')
-            .select(
-              'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
-            )
-            .eq('org_id', orgId)
-            .neq('job_id', jobId)
-            .is('deleted_at', null)
-            .order('work_date', { ascending: false })
-            .limit(24)
-        : Promise.resolve({ data: null as Array<Record<string, unknown>> | null });
+        ? loadOtherJobClips(24)
+        : Promise.resolve(null);
 
     // Independent of the job file: start these with it instead of after it.
     const orgAdminEarly = unscopedAdminOrNull();
@@ -3669,7 +3705,7 @@ async function runProofAskTurn(input: {
       ? history
       : (historyWithoutPrivateUploads(history, sessionDocuments) ?? history);
     const mentionPrep =
-      askAccess === 'org'
+      askAccess === 'org' && !input.warmOnly
         ? await prepareMentionAsk(supabase, {
             orgId,
             question: input.question,
@@ -3682,7 +3718,22 @@ async function runProofAskTurn(input: {
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;
     }
-    if (mentionPrep?.directAnswer) onToken(mentionPrep.directAnswer);
+    // The agent answers @mention questions itself, including "who did you mean?"
+    // and "they are not on this job", from the note below. Only a job outside the
+    // org, or classic Chat, still gets the canned line.
+    const agentAnswers =
+      askAgentEnabled(input.engine ?? null) && Boolean(String(apiKey ?? '').trim() || anthropicAskApiKey().trim());
+    const mentionShortcut =
+      mentionPrep?.directAnswer && (mentionPrep.final || !agentAnswers) ? mentionPrep.directAnswer : null;
+    if (mentionPrep?.directAnswer && !mentionShortcut) {
+      file.mentionSupplement = [
+        file.mentionSupplement,
+        `About the people named in this question (tell the person this plainly): ${mentionPrep.directAnswer}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    }
+    if (mentionShortcut) onToken(mentionShortcut);
     const clientName = partyRows
       .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
       .filter(Boolean)
@@ -3719,26 +3770,7 @@ async function runProofAskTurn(input: {
         clips: memoryClips,
       }),
     });
-    if (askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted) {
-      const rows = ((otherJobsRes?.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
-      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
-      const titles = new Map<string, string>();
-      if (jobIds.length) {
-        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
-        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
-          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
-        }
-      }
-      lookup.orgClips = rows
-        .map((row) =>
-          clipFromProofRow(row, {
-            orgId,
-            jobId: String(row.job_id ?? ''),
-            jobTitle: titles.get(String(row.job_id ?? '')) || null,
-          }),
-        )
-        .filter((clip) => clip.proofId && clip.jobId !== jobId);
-    }
+    if (otherJobsRes) lookup.orgClips = otherJobsRes;
     clock.contextBuildMs = Date.now() - clock.startedAt;
     const priorCount = recentRes.total ?? priorPairs.length;
     const titleAhead =
@@ -3748,12 +3780,12 @@ async function runProofAskTurn(input: {
     const styleRow = await styleRowPromise;
     const styleSummary = styleRow?.promptSummary ?? null;
 
-    const result = mentionPrep?.directAnswer
+    const result = mentionShortcut
       ? {
-          answer: mentionPrep.directAnswer,
+          answer: mentionShortcut,
           model: null as string | null,
           usage: null,
-          groundedOn: mentionPrep.groundedOn,
+          groundedOn: mentionPrep?.groundedOn ?? 0,
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
           answeredFromLookup: false,
@@ -3786,6 +3818,7 @@ async function runProofAskTurn(input: {
       timing: clock,
       sessionDocuments,
       lookup,
+      loadOrgClips: askAccess === 'org' ? () => loadOtherJobClips(80) : null,
       webSearch,
       onPreviewReset: () => preview.reset(),
       setPreviewCheck: (check) => preview.setCheck(check),
@@ -3804,7 +3837,21 @@ async function runProofAskTurn(input: {
       },
       styleSummary,
       engine: input.engine ?? null,
+      warmOnly: input.warmOnly,
     });
+    if (input.warmOnly) {
+      recordMeasuredTokenUsage(supabase, {
+        orgId,
+        requestId: input.requestId,
+        feature: 'ask',
+        source: 'proof_ask_warm',
+        userId: userId ?? undefined,
+        jobId,
+        modelId: result.model,
+        usage: result.usage,
+      });
+      return { answer: '', model: result.model, groundedOn: 0, question: null, threadId: null, webSources: [] };
+    }
     if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
     }
@@ -3903,7 +3950,7 @@ async function runProofAskTurn(input: {
         model: result.model,
         grounded_on: fromJobFile ? groundedOn : [],
         web_sources: sessionDocumentAnswer ? [] : webSources,
-        research_trace: result.research ?? null,
+        research_trace: result.research ?? ('agentTrace' in result ? result.agentTrace : null) ?? null,
         office_only: result.officeOnly === true,
         document_ids: sessionDocuments.map((doc) => doc.id).slice(0, 8),
         asked_by: userId ?? null,
@@ -4171,6 +4218,60 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       engine: input.engine ?? null,
     });
     res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Last warm per person and job. A cache entry lives five minutes; one warm covers it. */
+const askWarmedAt = new Map<string, number>();
+const ASK_WARM_EVERY_MS = 4 * 60_000;
+
+/**
+ * POST /api/operations/shared/:jobId/proof/ask/warm
+ * The person started typing a question. Loads this job into the Chat model's
+ * prompt cache so the first answer starts as quickly as the later ones.
+ * Answers 202 at once; nothing is asked or stored.
+ */
+export async function warmProofAsk(req: Request, res: Response, next: NextFunction) {
+  try {
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
+    const input = z
+      .object({
+        timeZone: z.string().trim().min(1).max(64).optional(),
+        engine: z.enum(['agent', 'classic']).optional(),
+      })
+      .parse(req.body ?? {});
+    const key = `${orgId}:${req.params.jobId}:${userId}`;
+    const last = askWarmedAt.get(key) ?? 0;
+    if (!askAgentEnabled(input.engine ?? null) || Date.now() - last < ASK_WARM_EVERY_MS) {
+      res.status(202).json({ warming: false });
+      return;
+    }
+    const canManage = access === 'org' ? await memberCanPurchaseAi(supabase, orgId, userId) : false;
+    await assertAiFeatureAllowed(unscopedAdminOrNull() ?? supabase, orgId, { canManage });
+    askWarmedAt.set(key, Date.now());
+    if (askWarmedAt.size > 5_000) {
+      for (const [k, at] of askWarmedAt) if (Date.now() - at > ASK_WARM_EVERY_MS) askWarmedAt.delete(k);
+    }
+    res.status(202).json({ warming: true });
+    void runProofAskTurn({
+      supabase,
+      orgId,
+      jobId: req.params.jobId,
+      question: '',
+      userId,
+      timeZone: input.timeZone ?? null,
+      requestId: `ask-warm:${req.params.jobId}:${randomUUID()}`,
+      access: access === 'org' ? 'org' : 'viewer',
+      partyId: viewerPartyId(viewer),
+      engine: input.engine ?? null,
+      warmOnly: true,
+    }).catch((err: unknown) => {
+      askWarmedAt.delete(key);
+      logAskFailure('ask_warm_failed', err);
+    });
   } catch (err) {
     next(err);
   }

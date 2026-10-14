@@ -57,6 +57,7 @@ import {
   type AskWebHit,
 } from './askWebSearch.js';
 import type { AskActionModelTool } from './askReasoning.js';
+import type { ClipStillsResult } from './clipStills.js';
 
 export type AskEngine = 'agent' | 'classic';
 
@@ -106,6 +107,7 @@ HOW HARD TO THINK
 
 COMPUTER RESULTS
 - A message that starts "Computer finished:" comes from the app, not the person: Computer just finished a task they asked for. Report what it found or did from the Computer results (the numbers, names, what was sent), plainly and briefly, and offer the obvious next step. If it failed or stopped, say why in one sentence and what they can do.
+- When a Computer task is waiting on the person (Status: needs_you), and they ask about it ("what's the code?", "is it stuck?"), tell them exactly what it needs from the Computer results, including the authenticator number when one is listed. Never make a number up.
 
 WRITING
 ${CHAT_VOICE_RULES}
@@ -128,6 +130,21 @@ const WEB_TOOL = {
       include_domains: { type: 'array', items: { type: 'string' }, description: 'Optional hostnames.' },
     },
     required: ['query'],
+  },
+};
+
+const LOOK_TOOL = {
+  name: 'look_at_clip',
+  description:
+    'See a clip: returns up to 4 still frames from the video as images, nearest to atSeconds when given, otherwise spread across the clip. Use for anything visual (what a room, ceiling, wall, damage, equipment or work looks like; is something there; colors, materials, condition). Transcripts only say what was heard. Private moments and children are never shown.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      proofId: { type: 'string', description: 'Clip id: the id after the job id in a clip cite (video/<jobId>/<proofId>/…).' },
+      atSeconds: { type: 'number', description: 'Optional second in the clip to look near.' },
+      count: { type: 'number', description: 'How many stills, 1 to 4 (default 3).' },
+    },
+    required: ['proofId'],
   },
 };
 
@@ -245,6 +262,10 @@ export type AskAgentInput = {
   onPreviewReset?: () => void;
   /** Public web search. Absent: no web tool. */
   webSearch?: ((query: string, includeDomains?: string[]) => Promise<{ hits: AskWebHit[]; answer: string }>) | null;
+  /** Loads clips on the company's other jobs the first time the model searches them (office only). */
+  loadOrgClips?: (() => Promise<AskLookupClip[]>) | null;
+  /** Loads a clip's saved stills (privacy ranges already left out). Offers look_at_clip when set. */
+  clipStills?: ((clip: AskLookupClip, opts: { atSeconds: number | null; count: number }) => Promise<ClipStillsResult>) | null;
   /** Office actions. Absent for homeowners and subs. */
   actions?: {
     tools: AskActionModelTool[];
@@ -329,32 +350,80 @@ function historyMessages(history: AskAgentInput['history'], catalog: AskLookupCa
   return out;
 }
 
-export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult> {
-  const { catalog } = input;
-  const zone = input.timeZone || catalog.timeZone || 'America/Chicago';
+/**
+ * What every turn sends ahead of the question: the tool list and the two cached
+ * system blocks. The warm call sends exactly this, so its cache entry is the one
+ * the real first round reads.
+ */
+function agentRequestShape(input: AskAgentInput) {
   const models = agentModels();
-  let model = models.fast;
-  let shaped: ReturnType<typeof anthropicReasoningRequest> | null = null;
-  let escalated = false;
   const baseTools = [
     ...ASK_LOOKUP_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     ...(input.webSearch && isAskWebSearchConfigured() ? [WEB_TOOL] : []),
     ...(input.computer ? [COMPUTER_TOOL] : []),
+    ...(input.clipStills ? [LOOK_TOOL] : []),
     ...(input.actions?.tools ?? []),
   ];
   const canEscalate = models.deep !== models.fast;
-  let tools = canEscalate ? [...baseTools, DEEP_TOOL] : baseTools;
-  const actionNames = new Set((input.actions?.tools ?? []).map((t) => t.name));
+  const tools = canEscalate ? [...baseTools, DEEP_TOOL] : baseTools;
   // Cached: the instructions, then the whole job file. Both stay the same for
   // every question on this job; the question and this turn's context follow.
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: ASK_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } },
     {
       type: 'text',
-      text: `JOB FILE\n${agentJobContext(catalog, input.jobFileRecord)}`,
+      text: `JOB FILE\n${agentJobContext(input.catalog, input.jobFileRecord)}`,
       cache_control: { type: 'ephemeral' },
     },
   ];
+  return { models, baseTools, tools, system };
+}
+
+export type AskAgentWarmCall = (request: {
+  model: string;
+  system: Anthropic.TextBlockParam[];
+  tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+}) => Promise<MeasuredUsage | null>;
+
+/** max_tokens 0: the API reads the prompt into the cache and answers nothing. */
+const anthropicWarm: AskAgentWarmCall = async (req) => {
+  const response = await anthropicClientForKey(anthropicAskApiKey()).messages.create({
+    model: req.model,
+    max_tokens: 0,
+    system: req.system,
+    tools: req.tools as Anthropic.Tool[],
+    messages: [{ role: 'user', content: 'warmup' }],
+  } as Anthropic.MessageCreateParamsNonStreaming);
+  return tryExtractUsage(response.usage, response.model ?? null);
+};
+
+/**
+ * Loads this job's instructions and job file into the model's prompt cache
+ * while the person is still typing, so the first answer starts as fast as the
+ * later ones. Same model, tools and system blocks as the first round of
+ * runAskAgent (which sends no thinking settings on that round).
+ */
+export async function warmAskAgent(
+  input: AskAgentInput & { warmCall?: AskAgentWarmCall },
+): Promise<{ model: string; usage: MeasuredUsage | null } | null> {
+  const { models, tools, system } = agentRequestShape(input);
+  const usage = await (input.warmCall ?? anthropicWarm)({ model: models.fast, system, tools }).catch((err: unknown) => {
+    logAskFailure('ask_agent_warm_failed', err);
+    return undefined;
+  });
+  return usage === undefined ? null : { model: models.fast, usage };
+}
+
+export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult> {
+  const { catalog } = input;
+  const zone = input.timeZone || catalog.timeZone || 'America/Chicago';
+  const shape = agentRequestShape(input);
+  const { models, baseTools, system } = shape;
+  let model = models.fast;
+  let shaped: ReturnType<typeof anthropicReasoningRequest> | null = null;
+  let escalated = false;
+  let tools = shape.tools;
+  const actionNames = new Set((input.actions?.tools ?? []).map((t) => t.name));
   const turnContext = (input.turnContext ?? '').trim();
   const userText =
     `${askClockSystemRules(input.now ?? new Date(), zone)}` +
@@ -423,11 +492,26 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
     }
 
     messages.push({ role: 'assistant', content: turn.blocks as Anthropic.ContentBlockParam[] });
+    if (
+      input.loadOrgClips &&
+      !catalog.orgClips &&
+      catalog.access === 'org' &&
+      calls.some((c) => c.name === 'search_other_jobs' || (c.name === 'get_clip' && !clipsInScope(catalog).some((clip) => clip.proofId === String((c.input as Record<string, unknown>)?.proofId ?? ''))))
+    ) {
+      input.onStatus?.('Checking other jobs…');
+      try {
+        catalog.orgClips = await input.loadOrgClips();
+      } catch (err) {
+        logAskFailure('ask_agent_org_clips_failed', err);
+        catalog.orgClips = [];
+      }
+    }
     const results = await Promise.all(
       calls.filter((c) => c.name !== DEEP_TOOL.name).map(async (c) => {
         const args = (c.input ?? {}) as Record<string, unknown>;
         input.onStatus?.(statusFor(c.name));
         let result: AskLookupResult;
+        let images: Anthropic.ImageBlockParam[] = [];
         try {
           if (c.name === 'web_search' && input.webSearch) {
             const query = String(args.query ?? '').trim();
@@ -440,6 +524,10 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
               summary: outcome.answer ? plainWebModelText(outcome.answer) : `${outcome.hits.length} web result(s).`,
               data: webSearchModelPayload({ answer: outcome.answer, results: outcome.hits }),
             };
+          } else if (c.name === LOOK_TOOL.name && input.clipStills) {
+            const look = await lookAtClip(catalog, args, input.clipStills);
+            images = look.images;
+            result = look.result;
           } else if (actionNames.has(c.name) && input.actions) {
             result = await input.actions.run(c.name, args);
           } else {
@@ -450,10 +538,11 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
           result = { ok: false, tool: c.name, summary: 'That step did not go through.' };
         }
         trace.push({ tool: c.name, input: args, result });
+        const json = JSON.stringify({ ok: result.ok, summary: result.summary, data: result.data ?? null }).slice(0, 12_000);
         return {
           type: 'tool_result' as const,
           tool_use_id: c.id,
-          content: JSON.stringify({ ok: result.ok, summary: result.summary, data: result.data ?? null }).slice(0, 12_000),
+          content: images.length ? [{ type: 'text' as const, text: json }, ...images] : json,
           is_error: !result.ok,
         };
       }),
@@ -493,6 +582,37 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
   return { answer: finished, model: servedBy, usage: mergeMeasuredUsages(usages, servedBy), trace, webHits, computerStarted: false, escalated };
 }
 
+/** look_at_clip: stills from a clip this person can see, as image blocks for the model. */
+async function lookAtClip(
+  catalog: AskLookupCatalog,
+  args: Record<string, unknown>,
+  load: NonNullable<AskAgentInput['clipStills']>,
+): Promise<{ result: AskLookupResult; images: Anthropic.ImageBlockParam[] }> {
+  const id = String(args.proofId ?? '').trim();
+  const clip = clipsInScope(catalog).find((row) => row.proofId === id);
+  if (!clip) return { result: { ok: false, tool: LOOK_TOOL.name, summary: 'That clip is not on this job.' }, images: [] };
+  const at = typeof args.atSeconds === 'number' && Number.isFinite(args.atSeconds) ? args.atSeconds : null;
+  const count = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.round(args.count) : 3;
+  const got = await load(clip, { atSeconds: at, count });
+  const frames = got.stills.map((still) => ({
+    atSeconds: Math.round(still.atSeconds * 10) / 10,
+    cite: askClipCite(clip, still.atSeconds),
+  }));
+  const privateNote = got.privateSkipped ? ` ${got.privateSkipped} private moment(s) were left out.` : '';
+  const summary = got.stills.length
+    ? `Showing ${got.stills.length} still(s) from ${clip.title}.${privateNote}`
+    : got.onFile
+      ? `No stills from ${clip.title} can be shown.${privateNote}`
+      : `No stills are on file for ${clip.title}.`;
+  return {
+    result: { ok: got.stills.length > 0, tool: LOOK_TOOL.name, summary, data: { proofId: clip.proofId, title: clip.title, frames } },
+    images: got.stills.map((still) => ({
+      type: 'image' as const,
+      source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: still.jpeg.toString('base64') },
+    })),
+  };
+}
+
 function statusFor(tool: string): string {
   switch (tool) {
     case 'web_search':
@@ -501,6 +621,8 @@ function statusFor(tool: string): string {
       return 'Searching what was said…';
     case 'get_clip':
       return 'Opening a clip…';
+    case 'look_at_clip':
+      return 'Looking at the video…';
     case 'search_other_jobs':
       return 'Checking other jobs…';
     case 'send_job_sms':

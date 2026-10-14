@@ -4327,6 +4327,16 @@ export const api = {
       }),
     }),
 
+  /** The person started typing: the server loads this job into Chat's cache so the answer starts sooner. */
+  warmAsk: (jobId: string) =>
+    request<{ warming: boolean }>(`/api/operations/shared/${jobId}/proof/ask/warm`, {
+      method: 'POST',
+      body: JSON.stringify({
+        timeZone: browserTimeZone(),
+        engine: readChatEngine() === 'classic' ? 'classic' : undefined,
+      }),
+    }),
+
   /**
    * Stream Ask tokens as NDJSON (`?stream=1`). Falls back is the caller's job —
    * this helper throws ApiError on non-OK responses.

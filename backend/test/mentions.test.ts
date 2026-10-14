@@ -438,6 +438,7 @@ test('two Johns asks which person instead of guessing', async () => {
   });
   assert.equal(prep.mentions.length, 0);
   assert.match(prep.directAnswer ?? '', /Which John did you mean\? John Cyganiak or John Smith\./);
+  assert.ok(!prep.final);
   assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel/);
 });
 
@@ -497,6 +498,7 @@ test('job ask stays on that job, and a person from another job is named as absen
     now: new Date('2026-09-20T00:00:00.000Z'),
   });
   assert.match(foreign.directAnswer ?? '', /isn't in this organization/);
+  assert.equal(foreign.final, true);
   assert.doesNotMatch(foreign.directAnswer ?? '', /Other org|Secret/);
 
   const mixed = await prepareMentionAsk(db as any, {
@@ -971,7 +973,9 @@ test('a configured model gets the dossier, the job file, and the recent turns', 
   assert.ok(videos.indexOf('webcam-style') < videos.indexOf('different crew'));
 
   const here = dirname(fileURLToPath(import.meta.url));
-  const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const jobAsk = ['jobFileAsk.ts', 'jobFileAskRecord.ts']
+    .map((name) => readFileSync(join(here, '../src/shared', name), 'utf8'))
+    .join('\n');
   const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
   assert.match(jobAsk, /assembleMentionModelPrompt/);
   assert.match(jobAsk, /activitySystemAddendum/);

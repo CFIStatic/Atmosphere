@@ -530,7 +530,9 @@ test('a private upload is not model context for a job or public question', () =>
     'what is this about',
     'what companies are involved on this job?',
   ]);
-  const src = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const src = ['jobFileAsk.ts', 'jobFileAskRecord.ts', 'jobFileAskWeb.ts', 'jobFileAskUploads.ts']
+    .map((name) => readFileSync(join(here, '../src/shared', name), 'utf8'))
+    .join('\n');
   assert.doesNotMatch(src, /formatChatUploadsForPrompt/);
   assert.doesNotMatch(src, /Questions about these files are answered from this text only/);
   const authorOnly = historyWithoutPrivateUploads(
