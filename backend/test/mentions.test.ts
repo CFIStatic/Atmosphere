@@ -973,7 +973,9 @@ test('a configured model gets the dossier, the job file, and the recent turns', 
   assert.ok(videos.indexOf('webcam-style') < videos.indexOf('different crew'));
 
   const here = dirname(fileURLToPath(import.meta.url));
-  const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const jobAsk = ['jobFileAsk.ts', 'jobFileAskRecord.ts']
+    .map((name) => readFileSync(join(here, '../src/shared', name), 'utf8'))
+    .join('\n');
   const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
   assert.match(jobAsk, /assembleMentionModelPrompt/);
   assert.match(jobAsk, /activitySystemAddendum/);
