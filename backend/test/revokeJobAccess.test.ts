@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { HttpError } from '../src/lib/errors.js';
-import { parseJobAccessPersonId } from '../src/shared/revokeJobAccess.js';
+import { matchingPartyIds, parseJobAccessPersonId } from '../src/shared/revokeJobAccess.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -45,4 +45,22 @@ test('evidence share revoke drops progress grants', () => {
   assert.match(src, /share_kind === 'progress'/);
   assert.match(src, /job_progress_grants/);
   assert.match(src, /\.delete\(\)/);
+});
+
+test('matchingPartyIds — revokes every live invite for the same crew member', () => {
+  const parties = [
+    { id: 'a', email: 'sam@example.com', phone: null, revoked_at: null },
+    { id: 'b', email: 'SAM@Example.com', phone: null, revoked_at: null },
+    { id: 'c', email: 'sam@example.com', phone: null, revoked_at: '2026-09-01T00:00:00Z' },
+    { id: 'd', email: 'lee@example.com', phone: null, revoked_at: null },
+    { id: 'e', email: null, phone: '+1 312 555 0100', revoked_at: null },
+    { id: 'f', email: null, phone: '(312) 555-0100', revoked_at: null },
+  ];
+  assert.deepEqual(matchingPartyIds(parties[0]!, parties).sort(), ['a', 'b']);
+  assert.deepEqual(matchingPartyIds(parties[4]!, parties).sort(), ['e', 'f']);
+});
+
+test('grant revoke drops every grant for that email on the job', () => {
+  const src = readFileSync(join(root, 'src/shared/revokeJobAccess.ts'), 'utf8');
+  assert.match(src, /recipientEmail: grantEmail/);
 });
