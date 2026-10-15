@@ -21,6 +21,14 @@
   var LIVE_OFFICE_ORIGIN = 'https://platform.atmosphereteam.com';
   var FIELD_CAPTURE_HOST = /^field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
   var FIELD_CAPTURE_CUSTOM = /^(?:www\.)?app\.atmosphereteam\.com$/i;
+  // Staging Field Capture talks to the staging API through its own nginx /api
+  // proxy and opens the staging office, never production.
+  var STAGING_FIELD_CAPTURE_HOST = /^field-capture-staging\.up\.railway\.app$/i;
+  var STAGING_OFFICE_ORIGIN = 'https://platform-staging-c143.up.railway.app';
+
+  function isStagingFieldCaptureHost(hostname) {
+    return STAGING_FIELD_CAPTURE_HOST.test(String(hostname || '').replace(/:\d+$/, ''));
+  }
 
   /**
    * Put the live camera on screen. iPhone Safari / home-screen Field Capture
@@ -789,6 +797,7 @@
       hostname = '';
     }
     if (isAtmosphereSiteHost(hostname)) return '';
+    if (isStagingFieldCaptureHost(hostname)) return '';
     if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN;
     return '';
   }
@@ -845,6 +854,7 @@
     } catch (e) {
       hostname = '';
     }
+    if (isStagingFieldCaptureHost(hostname)) return STAGING_OFFICE_ORIGIN + path;
     if (isStandaloneFieldCaptureHost(hostname) || (hostname && !isOfficeFieldCapturePath())) {
       return LIVE_OFFICE_ORIGIN + path;
     }
