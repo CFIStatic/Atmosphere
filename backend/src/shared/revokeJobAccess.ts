@@ -38,9 +38,16 @@ export function normalizeAccessPhone(phone: string | null | undefined): string {
  * times, so revoking them must revoke every live party row on this job that
  * matches their email (case-insensitive) or phone.
  */
+type PartyIdentityRow = {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  revoked_at?: string | null;
+};
+
 export function matchingPartyIds(
-  target: { id: string; email?: string | null; phone?: string | null },
-  parties: Array<{ id: string; email?: string | null; phone?: string | null; revoked_at?: string | null }>,
+  target: PartyIdentityRow,
+  parties: PartyIdentityRow[],
 ): string[] {
   const email = (target.email ?? '').trim().toLowerCase();
   const phone = normalizeAccessPhone(target.phone);
@@ -178,8 +185,9 @@ export async function revokeJobAccessPerson(input: {
       .eq('job_id', input.jobId)
       .is('revoked_at', null);
     if (siblingsError) throw new HttpError(500, siblingsError.message, 'party_lookup_failed');
-    const ids = matchingPartyIds(party as any, (siblings ?? []) as any[]).filter(
-      (id) => id !== ref.id || !(party as any).revoked_at,
+    const target = party as unknown as PartyIdentityRow;
+    const ids = matchingPartyIds(target, (siblings ?? []) as unknown as PartyIdentityRow[]).filter(
+      (id) => id !== ref.id || !target.revoked_at,
     );
     if (ids.length) {
       const { error } = await input.supabase
@@ -246,7 +254,7 @@ export async function revokeJobAccessPerson(input: {
     grantId: ref.id,
   });
 
-  const grantEmail = ((grant as any).recipient_email as string | null) ?? null;
+  const grantEmail = (grant as { recipient_email?: string | null }).recipient_email ?? null;
   // Same person may hold several grants on this job (shared more than once).
   if (grantEmail) {
     await deleteProgressGrants({
