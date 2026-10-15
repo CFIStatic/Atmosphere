@@ -1085,7 +1085,9 @@ async function fileRecordedProof(party: any, admin: any, body: unknown) {
     detail: `${input.phase} · ${input.workDate}`,
   });
 
-  void vaultFromProof(proof as any).catch((err) => {
+  // PROOF_SELECT does not return org_id; the vault row needs it (NOT NULL).
+  const vaultProof = proof as unknown as Parameters<typeof vaultFromProof>[0];
+  void vaultFromProof({ ...vaultProof, org_id: party.org_id, job_id: vaultProof.job_id ?? party.job_id }).catch((err) => {
     console.warn('[legal] vault proof failed:', err instanceof Error ? err.message : err);
   });
   void applyOpenHoldToProof({

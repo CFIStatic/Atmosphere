@@ -6,6 +6,7 @@
  * the row or asks the driver to delete bytes.
  */
 import { HttpError } from '../lib/errors.js';
+import { adminOrNull } from '../lib/adminClient.js';
 import type { MediaObject } from '../media/types.js';
 import {
   createVaultEntry,
@@ -16,6 +17,28 @@ import {
   persistVault,
 } from './store.js';
 import type { LegalVaultEntry, VaultMediaInput } from './types.js';
+
+export type JobOrgResolver = (jobId: string) => Promise<string | null>;
+
+async function defaultResolveOrgForJob(jobId: string): Promise<string | null> {
+  try {
+    const admin = adminOrNull();
+    if (!admin) return null;
+    const { data } = await admin.from('jobs').select('org_id').eq('id', jobId).maybeSingle();
+    const orgId = (data as { org_id?: unknown } | null)?.org_id;
+    return typeof orgId === 'string' && orgId ? orgId : null;
+  } catch (err) {
+    console.warn('[legal] vault org lookup failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+let resolveOrgForJob: JobOrgResolver = defaultResolveOrgForJob;
+
+/** Test seam. */
+export function setJobOrgResolverForTests(fn: JobOrgResolver | null): void {
+  resolveOrgForJob = fn ?? defaultResolveOrgForJob;
+}
 
 export async function vaultMedia(input: VaultMediaInput): Promise<LegalVaultEntry> {
   const existing = getVaultBySource(input.sourceKind, input.sourceId);
@@ -29,6 +52,16 @@ export async function vaultMedia(input: VaultMediaInput): Promise<LegalVaultEntr
       }
     }
     return existing;
+  }
+  if (!input.orgId) {
+    const resolved = input.jobId ? await resolveOrgForJob(input.jobId) : null;
+    if (!resolved) {
+      console.warn(
+        `[legal] vault skipped: no org for ${input.sourceKind} ${input.sourceId} (job ${input.jobId ?? 'none'})`,
+      );
+      return createVaultEntry(input);
+    }
+    input = { ...input, orgId: resolved };
   }
   const entry = createVaultEntry(input);
   try {
