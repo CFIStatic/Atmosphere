@@ -38,7 +38,6 @@ import {
   clipHasReading,
   shouldKickUnreadClip,
   downloadDecision,
-  matchesLibraryQuery,
   pickPosterFrame,
   presentUnreadClip,
   serializeEvidence,
@@ -47,6 +46,12 @@ import {
   type ClipKick,
 } from '../verifier/library.js';
 import { displayJobFileName } from '../shared/jobFileCopy.js';
+import {
+  clipMatchesSearch,
+  fileNameOfStoragePath,
+  jobMatchesSearch,
+  type SearchJob,
+} from '../verifier/librarySearch.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
@@ -237,6 +242,141 @@ async function propertyAddresses(
     if (parts.length) addrByProperty.set(p.id, parts.join(', '));
   }
   return addrByProperty;
+}
+
+/** Page through every row of a query (PostgREST caps one response). */
+async function fetchAllRows(
+  page: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: { message: string } | null }>,
+  max = 20_000,
+  pageSize = 1000,
+): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; from < max; from += pageSize) {
+    const { data, error } = await page(from, from + pageSize - 1);
+    if (error) throw new HttpError(500, error.message, 'library_failed');
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
+async function chunkedAddresses(client: any, propertyIds: Array<string | null | undefined>): Promise<Map<string, string>> {
+  const ids = [...new Set(propertyIds.filter((id): id is string => Boolean(id)))];
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const part = await propertyAddresses(client, ids.slice(i, i + 200));
+    for (const [k, v] of part) out.set(k, v);
+  }
+  return out;
+}
+
+const SEARCH_PROOF_SELECT =
+  'id, job_id, party_id, content_hash, clip_id, title, custom_title, storage_path, phase, labels, work_date, captured_at, received_at';
+/** Most clips one search returns. The list shows them all; past this, narrow the search. */
+const SEARCH_RESULT_CAP = 500;
+
+/**
+ * Search every clip and job file in the org, not only the newest page the
+ * library loads. Matches on cheap columns first (ids, hash, titles, file
+ * name, dates, and the job's name / number / address / company), then loads
+ * the full rows of the hits only.
+ */
+async function searchOrgLibraryRows(
+  supabase: any,
+  orgId: string,
+  q: string,
+  timeZone: string | undefined,
+): Promise<{ proofRows: any[]; jobRows: any[] }> {
+  const jobRows = await fetchAllRows((from, to) =>
+    supabase
+      .from('crm_jobs')
+      .select('id, title, job_number, created_at, property_id, claim_number')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .range(from, to),
+  );
+  const addr = await chunkedAddresses(supabase, jobRows.map((j) => j.property_id));
+  const partyCompany = new Map<string, { company: string | null; person: string | null }>();
+  const parties = await fetchAllRows((from, to) =>
+    supabase
+      .from('job_parties')
+      .select('id, job_id, company, contact_name')
+      .eq('org_id', orgId)
+      .range(from, to),
+  ).catch(() => [] as any[]);
+  const partyById = new Map<string, any>();
+  for (const p of parties) {
+    if (p.id) partyById.set(p.id, p);
+    if (p.job_id && !partyCompany.has(p.job_id)) {
+      partyCompany.set(p.job_id, { company: p.company ?? null, person: p.contact_name ?? null });
+    }
+  }
+  const jobById = new Map<string, SearchJob>();
+  for (const j of jobRows) {
+    const address = addr.get(j.property_id) ?? null;
+    jobById.set(j.id, {
+      jobId: j.id,
+      jobName: displayJobFileName(j.title, address ?? ''),
+      jobNumber: j.job_number ?? null,
+      address,
+      claimNumber: j.claim_number ?? null,
+      company: partyCompany.get(j.id)?.company ?? null,
+      person: partyCompany.get(j.id)?.person ?? null,
+      createdAt: j.created_at ?? null,
+    });
+  }
+  const proofs = await fetchAllRows((from, to) =>
+    supabase
+      .from('job_proofs')
+      .select(SEARCH_PROOF_SELECT)
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .order('received_at', { ascending: false })
+      .range(from, to),
+  );
+  const hitIds: string[] = [];
+  for (const p of proofs) {
+    if (hitIds.length >= SEARCH_RESULT_CAP) break;
+    const job = jobById.get(p.job_id);
+    const party = p.party_id ? partyById.get(p.party_id) : null;
+    const hit = clipMatchesSearch(
+      q,
+      {
+        id: p.id,
+        jobId: p.job_id,
+        jobName: job?.jobName ?? null,
+        company: party?.company ?? null,
+        person: party?.contact_name ?? null,
+        title: p.title ?? null,
+        customTitle: p.custom_title ?? null,
+        fileName: fileNameOfStoragePath(p.storage_path),
+        phase: p.phase ?? null,
+        labels: Array.isArray(p.labels) ? p.labels : [],
+        clipId: p.clip_id ?? null,
+        hash: p.content_hash ?? null,
+        workDate: p.work_date ?? null,
+        capturedAt: p.captured_at ?? null,
+        uploadedAt: p.received_at ?? null,
+      },
+      job,
+      timeZone,
+    );
+    if (hit) hitIds.push(p.id);
+  }
+  const proofRows: any[] = [];
+  for (let i = 0; i < hitIds.length; i += 200) {
+    const { data, error } = await supabase
+      .from('job_proofs')
+      .select(PORTAL_PROOF_SELECT)
+      .eq('org_id', orgId)
+      .in('id', hitIds.slice(i, i + 200));
+    if (error) throw new HttpError(500, error.message, 'library_failed');
+    proofRows.push(...((data ?? []) as any[]));
+  }
+  proofRows.sort((a, b) => String(b.received_at ?? '').localeCompare(String(a.received_at ?? '')));
+  return { proofRows, jobRows };
 }
 
 /** One kick per clip per process so open + 4s polls do not restart the model. */
@@ -834,9 +974,11 @@ export async function viewerLibraryPayload(
 
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { q, jobId } = z
+    const { q, jobId, tz } = z
       .object({
         q: z.string().max(120).optional(),
+        /** The viewer's IANA timezone, so "Oct 12" means the day the Date column prints. */
+        tz: z.string().max(64).optional(),
         // The job file names every clip already on that job. Apply this before
         // the newest-500 cap so an older file is not dropped once the office
         // has filmed past the org-wide window. Search (`q`) stays in memory.
@@ -875,18 +1017,27 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       return;
     }
     const { supabase, orgId, role } = orgCtx;
-    let proofsQuery = supabase
-      .from('job_proofs')
-      .select(PORTAL_PROOF_SELECT)
-      .eq('org_id', orgId)
-      .is('deleted_at', null);
-    if (jobId) proofsQuery = proofsQuery.eq('job_id', jobId);
-    const { data, error } = await proofsQuery
-      .order('received_at', { ascending: false })
-      .limit(500);
-    if (error) throw new HttpError(500, error.message, 'library_failed');
-
-    const proofRows = (data ?? []) as any[];
+    // A search reaches every job and clip in the org, not only the newest
+    // page the library opens on.
+    const searchQ = !jobId && q?.trim() ? q.trim() : '';
+    const searched = searchQ ? await searchOrgLibraryRows(supabase, orgId, searchQ, tz) : null;
+    let proofRows: any[];
+    if (searched) {
+      proofRows = searched.proofRows;
+    } else {
+      let proofsQuery = supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .is('deleted_at', null);
+      if (jobId) proofsQuery = proofsQuery.eq('job_id', jobId);
+      const { data, error } = await proofsQuery
+        .order('received_at', { ascending: false })
+        .limit(500);
+      if (error) throw new HttpError(500, error.message, 'library_failed');
+      proofRows = (data ?? []) as any[];
+    }
+    const firstPageProofs = proofRows.length;
     // Global Admins also see clips queued for the 30-day purge so they can restore.
     if (isGlobalAdmin(role)) {
       const writer = writerForOrg(orgId, supabase).raw;
@@ -924,31 +1075,34 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       sharedWithMe?: boolean;
     };
     let jobs: LibraryJob[] = [];
-    const { data: jobRows, error: jobsError } = await supabase
-      .from('crm_jobs')
-      .select('id, title, job_number, created_at, property_id, claim_number')
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const { data: jobRows, error: jobsError } = searched
+      ? { data: searched.jobRows, error: null as { message: string } | null }
+      : await supabase
+          .from('crm_jobs')
+          .select('id, title, job_number, created_at, property_id, claim_number')
+          .eq('org_id', orgId)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(200);
+    const firstPageJobs = (jobRows ?? []).length;
     if (jobsError) {
       console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
       const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
       const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
       items = items.filter((item: any) => !tombstoned.has(item.jobId as string));
-      const addrByProperty = await propertyAddresses(
+      const addrByProperty = await chunkedAddresses(
         supabase,
         liveJobRows.map((j) => j.property_id as string | null),
       );
       const partyByJob = new Map<string, { company: string | null; person: string | null }>();
       const jobIds = liveJobRows.map((j) => j.id as string).filter(Boolean);
-      if (jobIds.length) {
+      for (let chunk = 0; chunk < jobIds.length; chunk += 200) {
         const { data: parties, error: partiesError } = await supabase
           .from('job_parties')
           .select('job_id, company, contact_name')
           .eq('org_id', orgId)
-          .in('job_id', jobIds)
+          .in('job_id', jobIds.slice(chunk, chunk + 200))
           .is('revoked_at', null);
         if (partiesError) {
           console.warn('[library] job_parties unavailable:', partiesError.message);
@@ -1017,47 +1171,35 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     }
 
     if (q?.trim()) {
-      // Names, addresses, dates, companies, hashes — whatever a person types
-      // to find a video. Substring, case-blind, in memory: 500 rows is small.
+      // Job name, company, address, clip title, file name, job / clip id,
+      // hash prefix, or a day typed any common way — the same rules as the
+      // list itself (verifier library-search block).
+      const jobByIdForSearch = new Map(jobs.map((job) => [job.jobId, job]));
       items = items.filter((item: any) =>
-        matchesLibraryQuery(
-          q,
-          [
-            item.id,
-            item.jobId,
-            item.jobName,
-            item.jobNumber != null ? `#${item.jobNumber}` : null,
-            item.jobNumber,
-            item.address,
-            item.claimNumber,
-            item.company,
-            item.person,
-            item.hash,
-            item.phase,
-            ...(Array.isArray(item.labels) ? item.labels : []),
-          ],
-          [item.workDate, item.capturedAt, item.uploadedAt],
-        ),
+        clipMatchesSearch(q, item, jobByIdForSearch.get(item.jobId), tz),
       );
       const matchingJobIds = new Set(items.map((item: any) => item.jobId).filter(Boolean));
-      jobs = jobs.filter(
-        (job) =>
-          matchingJobIds.has(job.jobId) ||
-          matchesLibraryQuery(
-            q,
-            [
-              job.jobId,
-              job.jobName,
-              job.jobNumber != null ? `#${job.jobNumber}` : null,
-              job.jobNumber,
-              job.address,
-              job.claimNumber,
-              job.company,
-              job.person,
-            ],
-            [job.createdAt],
-          ),
-      );
+      jobs = jobs.filter((job) => matchingJobIds.has(job.jobId) || jobMatchesSearch(q, job, tz));
+    }
+
+    // Whole-library size, so the list can say "3 of 1,240 clips" and knows
+    // to ask the server when a search may reach past the first page.
+    let totals: { clips: number; jobs: number } | null = null;
+    let truncated = false;
+    if (!jobId && !searched) {
+      truncated = firstPageProofs >= 500 || firstPageJobs >= 200;
+      if (truncated) {
+        const [clipCount, jobCount] = await Promise.all([
+          supabase.from('job_proofs').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('deleted_at', null),
+          supabase.from('crm_jobs').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('deleted_at', null),
+        ]);
+        totals = {
+          clips: Math.max(clipCount?.count ?? 0, items.length),
+          jobs: Math.max(jobCount?.count ?? 0, jobs.length),
+        };
+      } else {
+        totals = { clips: items.length, jobs: jobs.length };
+      }
     }
 
     const lastWorkDateByJob = new Map<string, string>();
@@ -1093,6 +1235,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         unanalysed: items.filter((i: any) => i.analysisState !== 'done').length,
         onHold: items.filter((i: any) => i.legalHold).length,
       },
+      ...(totals ? { totals, truncated } : {}),
     });
   } catch (err) {
     next(err);

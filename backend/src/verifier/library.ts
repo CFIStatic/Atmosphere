@@ -43,6 +43,7 @@ import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle, normalizeCustomClipTitle } from './proofClipTitle.js';
 import { clipIdOfStoragePath } from '../shared/proofStoragePath.js';
+import { fileNameOfStoragePath } from './librarySearch.js';
 import { clipAudioSource, provenSpeakerLabel, readMediaAudio, tagSegmentSources, type MediaAudioReading } from '../audio/audioSource.js';
 import { clipProcessing } from '../shared/clipProcessing.js';
 import { clipProcessingInputOfProof } from '../shared/clipStatusOfProof.js';
@@ -353,6 +354,8 @@ export function serializeEvidence(input: {
     aiTitle: derivedTitle,
     /** Phone/server recording id — unique list fallback when title is empty. */
     clipId,
+    /** Stored file name (last path segment) — searchable from All videos. */
+    fileName: fileNameOfStoragePath(proof.storage_path),
     address: input.address ?? null,
     claimNumber: input.claimNumber ?? null,
     partyId: proof.party_id,
