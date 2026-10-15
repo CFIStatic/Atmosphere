@@ -22,6 +22,42 @@ export function parseJobAccessPersonId(personId: string): JobAccessPersonRef {
   return { kind: m[1].toLowerCase() as JobAccessPersonRef['kind'], id: m[2] };
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** Same normalization as the roster's phone key (digits, US +1 folded). */
+export function normalizeAccessPhone(phone: string | null | undefined): string {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+}
+
+/**
+ * The roster shows each crew member once even if they were invited several
+ * times, so revoking them must revoke every live party row on this job that
+ * matches their email (case-insensitive) or phone.
+ */
+export function matchingPartyIds(
+  target: { id: string; email?: string | null; phone?: string | null },
+  parties: Array<{ id: string; email?: string | null; phone?: string | null; revoked_at?: string | null }>,
+): string[] {
+  const email = (target.email ?? '').trim().toLowerCase();
+  const phone = normalizeAccessPhone(target.phone);
+  const ids = new Set<string>([target.id]);
+  for (const p of parties) {
+    if (p.revoked_at) continue;
+    const pEmail = (p.email ?? '').trim().toLowerCase();
+    if (email) {
+      if (pEmail === email) ids.add(p.id);
+      continue;
+    }
+    // Phone-only invite: match other phone-only rows with the same number.
+    if (phone && !pEmail && normalizeAccessPhone(p.phone) === phone) ids.add(p.id);
+  }
+  return [...ids];
+}
+
 function missingGrantsTable(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;
   const blob = `${error.message ?? ''} ${error.code ?? ''}`;
@@ -78,7 +114,7 @@ async function revokeProgressSharesForEmail(
     .eq('job_id', jobId)
     .eq('share_kind', 'progress')
     .is('revoked_at', null)
-    .ilike('recipient_email', recipient.replace(/[\\%_]/g, (c) => `\\${c}`));
+    .ilike('recipient_email', escapeLike(recipient));
   if (error) throw new HttpError(400, error.message, 'revoke_failed');
 }
 
@@ -100,7 +136,7 @@ async function deleteProgressGrants(input: {
   } else if (input.shareId) {
     q = q.eq('share_id', input.shareId);
   } else if (input.recipientEmail) {
-    q = q.eq('recipient_email', input.recipientEmail.trim().toLowerCase());
+    q = q.ilike('recipient_email', escapeLike(input.recipientEmail.trim().toLowerCase()));
   } else {
     return;
   }
@@ -127,7 +163,7 @@ export async function revokeJobAccessPerson(input: {
   if (ref.kind === 'party') {
     const { data: party, error: lookupError } = await input.supabase
       .from('job_parties')
-      .select('id, job_id, revoked_at')
+      .select('id, job_id, email, phone, revoked_at')
       .eq('org_id', input.orgId)
       .eq('id', ref.id)
       .maybeSingle();
@@ -135,12 +171,23 @@ export async function revokeJobAccessPerson(input: {
     if (!party || (party as any).job_id !== input.jobId) {
       throw new HttpError(404, 'No such Field Capture invite.', 'not_found');
     }
-    if (!(party as any).revoked_at) {
+    const { data: siblings, error: siblingsError } = await input.supabase
+      .from('job_parties')
+      .select('id, email, phone, revoked_at')
+      .eq('org_id', input.orgId)
+      .eq('job_id', input.jobId)
+      .is('revoked_at', null);
+    if (siblingsError) throw new HttpError(500, siblingsError.message, 'party_lookup_failed');
+    const ids = matchingPartyIds(party as any, (siblings ?? []) as any[]).filter(
+      (id) => id !== ref.id || !(party as any).revoked_at,
+    );
+    if (ids.length) {
       const { error } = await input.supabase
         .from('job_parties')
         .update({ revoked_at: new Date().toISOString() })
         .eq('org_id', input.orgId)
-        .eq('id', ref.id);
+        .eq('job_id', input.jobId)
+        .in('id', ids);
       if (error) throw new HttpError(400, error.message, 'revoke_failed');
     }
     return { ok: true, kind: 'party' };
@@ -198,6 +245,17 @@ export async function revokeJobAccessPerson(input: {
     jobId: input.jobId,
     grantId: ref.id,
   });
+
+  const grantEmail = ((grant as any).recipient_email as string | null) ?? null;
+  // Same person may hold several grants on this job (shared more than once).
+  if (grantEmail) {
+    await deleteProgressGrants({
+      admin: input.admin,
+      orgId: input.orgId,
+      jobId: input.jobId,
+      recipientEmail: grantEmail,
+    });
+  }
 
   const shareId = (grant as any).share_id as string | null;
   if (shareId) {

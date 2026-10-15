@@ -255,3 +255,94 @@ test('crew invited by mobile number only shows the number and Last access never'
   assert.equal(people[0].lastAccessedAt, null);
   assert.equal(people[0].role, 'crew');
 });
+
+const share = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  label: 'Homeowner',
+  recipient_email: 'home@example.com',
+  created_by: 'u-office',
+  created_at: '2026-09-01T12:00:00.000Z',
+  expires_at: null,
+  revoked_at: null,
+  last_opened_at: null,
+  open_count: 0,
+  share_kind: 'progress',
+  ...over,
+});
+
+const party = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  company: 'Rivera Electric',
+  trade: 'Electrician',
+  contact_name: 'Sam Rivera',
+  email: null,
+  phone: null,
+  role: 'sub',
+  created_by: 'u-office',
+  created_at: '2026-09-01T12:00:00.000Z',
+  invited_at: null,
+  last_seen_at: null,
+  revoked_at: null,
+  ...over,
+});
+
+test('dedupe — homeowner shared three times shows once (case-insensitive email)', () => {
+  const people = presentJobAccessRoster({
+    shares: [
+      share('s3', { recipient_email: 'Home@Example.com', created_at: '2026-09-05T00:00:00.000Z', created_by: 'u-home' }),
+      share('s2', { created_at: '2026-09-03T00:00:00.000Z', last_opened_at: '2026-09-12T00:00:00.000Z' }),
+      share('s1', { created_at: '2026-09-01T00:00:00.000Z', last_opened_at: '2026-09-02T00:00:00.000Z' }),
+    ],
+    parties: [],
+    grants: [],
+    profiles,
+  });
+  assert.equal(people.length, 1);
+  assert.equal(people[0]?.lastAccessedAt, '2026-09-12T00:00:00.000Z');
+  assert.equal(people[0]?.grantedAt, '2026-09-01T00:00:00.000Z');
+  assert.equal(people[0]?.grantedByName, 'Alex Office');
+});
+
+test('dedupe — account beats invite for the badge and the revoke id', () => {
+  const people = presentJobAccessRoster({
+    shares: [
+      share('s-old', { recipient_email: 'other@example.com', revoked_at: '2026-09-02T00:00:00.000Z' }),
+      share('s-new', { recipient_email: 'other@example.com', created_at: '2026-09-04T00:00:00.000Z' }),
+    ],
+    parties: [],
+    grants: [
+      {
+        id: 'g1',
+        user_id: 'u-home',
+        share_id: 's-old',
+        recipient_email: 'other@example.com',
+        created_at: '2026-09-02T00:00:00.000Z',
+        last_accessed_at: '2026-09-20T00:00:00.000Z',
+      },
+    ],
+    profiles,
+  });
+  assert.equal(people.length, 1);
+  assert.equal(people[0]?.state, 'claimed');
+  assert.equal(people[0]?.lastAccessedAt, '2026-09-20T00:00:00.000Z');
+});
+
+test('dedupe — crew invited twice by email or phone shows once; different people stay', () => {
+  const people = presentJobAccessRoster({
+    shares: [share('s1', { recipient_email: 'sam@example.com' })],
+    parties: [
+      party('p1', { email: 'sam@example.com', last_seen_at: '2026-09-03T00:00:00.000Z' }),
+      party('p2', { email: 'SAM@example.com ', last_seen_at: '2026-09-09T00:00:00.000Z' }),
+      party('p3', { email: null, phone: '+1 (312) 555-0100', contact_name: 'Pat' }),
+      party('p4', { email: null, phone: '312-555-0100', contact_name: 'Pat' }),
+      party('p5', { email: 'lee@example.com', contact_name: 'Lee' }),
+    ],
+    grants: [],
+    profiles,
+  });
+  const crew = people.filter((p) => p.kind === 'field_capture');
+  assert.equal(crew.length, 3);
+  assert.equal(crew.find((p) => p.email === 'sam@example.com')?.lastAccessedAt, '2026-09-09T00:00:00.000Z');
+  // Homeowner + crew with the same email are different roles — both listed.
+  assert.equal(people.filter((p) => p.kind === 'homeowner').length, 1);
+});
