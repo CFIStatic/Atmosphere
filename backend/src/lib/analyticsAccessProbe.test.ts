@@ -76,7 +76,7 @@ describe('staff report actor header', () => {
   it('matches the header private.analytics_actor() reads', () => {
     const sql = readFileSync(
       new URL(
-        '../../../supabase/migrations/20261002193000_internal_analytics_actor.sql',
+        '../../../supabase/migrations_archive/20261002193000_internal_analytics_actor.sql',
         import.meta.url,
       ),
       'utf8',

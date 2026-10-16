@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260828180000_stripe_event_forget.sql',
+  '../supabase/migrations_archive/20260828180000_stripe_event_forget.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

@@ -32,7 +32,7 @@ import { snapshot, psqlLines, owningTable, PsqlError } from './lib/schemaIntrosp
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '../..');
-const MIGRATIONS_DIR = join(repoRoot, 'supabase/migrations');
+const MIGRATIONS_DIR = join(repoRoot, 'supabase/migrations_archive');
 const STUBS = [
   join(repoRoot, 'supabase/tests/00_local_stub.sql'),
   join(repoRoot, 'supabase/tests/00_supabase_platform_stub.sql'),

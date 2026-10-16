@@ -156,8 +156,8 @@ test('a stored summary and note do not keep a redacted secret', () => {
 
 test('ask_job_notes inserts require org membership and a job in that org', () => {
   const name = '20260928143000_ask_job_notes_insert_scope.sql';
-  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations', name), 'utf8');
-  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations', name), 'utf8');
+  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations_archive', name), 'utf8');
+  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations_archive', name), 'utf8');
   assert.equal(backendSql, rootSql);
   assert.match(backendSql, /drop policy if exists ask_job_notes_insert on public\.ask_job_notes/);
   assert.match(backendSql, /create policy ask_job_notes_insert_member_job on public\.ask_job_notes/);
@@ -174,11 +174,11 @@ test('ask_job_notes inserts require org membership and a job in that org', () =>
 
 test('the memory migration does not rewrite custody answers', () => {
   const backendSql = fs.readFileSync(
-    path.join(here, '../supabase/migrations/20260928120000_ask_thread_memory.sql'),
+    path.join(here, '../supabase/migrations_archive/20260928120000_ask_thread_memory.sql'),
     'utf8',
   );
   const rootSql = fs.readFileSync(
-    path.join(here, '../../supabase/migrations/20260928120000_ask_thread_memory.sql'),
+    path.join(here, '../../supabase/migrations_archive/20260928120000_ask_thread_memory.sql'),
     'utf8',
   );
   assert.equal(backendSql, rootSql);

@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260828204500_stripe_cancel_at_period_end.sql',
+  '../supabase/migrations_archive/20260828204500_stripe_cancel_at_period_end.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

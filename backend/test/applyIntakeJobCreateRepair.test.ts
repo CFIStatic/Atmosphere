@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 const here = dirname(fileURLToPath(import.meta.url));
 const script = readFileSync(join(here, '../scripts/applyIntakeJobCreateRepair.mjs'), 'utf8');
 const sql = readFileSync(
-  join(here, '../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql'),
+  join(here, '../supabase/migrations_archive/20260901140000_intake_create_job_without_invitees.sql'),
   'utf8',
 );
 

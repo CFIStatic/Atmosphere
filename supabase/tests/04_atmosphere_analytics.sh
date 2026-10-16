@@ -19,7 +19,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIG="$HERE/../migrations"
+MIG="$HERE/../migrations_archive"
 DB="${ATMOSPHERE_ANALYTICS_TEST_DB:-atmosphere_analytics_test}"
 PSQL=(psql "$@")
 RUN=("${PSQL[@]}" -q -X -v ON_ERROR_STOP=1 -d "$DB")

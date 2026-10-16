@@ -12,8 +12,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DROP_SQL="$HERE/../migrations/20260901010000_drop_crm_audit_triggers.sql"
-INTAKE_SQL="$HERE/../migrations/20260901140000_intake_create_job_without_invitees.sql"
+DROP_SQL="$HERE/../migrations_archive/20260901010000_drop_crm_audit_triggers.sql"
+INTAKE_SQL="$HERE/../migrations_archive/20260901140000_intake_create_job_without_invitees.sql"
 DB="${CRM_AUDIT_DROP_TEST_DB:-crm_audit_drop_test}"
 PSQL=(psql "$@")
 

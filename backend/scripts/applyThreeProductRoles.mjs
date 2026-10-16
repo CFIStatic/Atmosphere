@@ -29,8 +29,8 @@ const files = [
   '20260829213100_three_product_roles_remap.sql',
 ].map((name) => ({
   name,
-  path: join(here, '../supabase/migrations', name),
-  sql: readFileSync(join(here, '../supabase/migrations', name), 'utf8'),
+  path: join(here, '../supabase/migrations_archive', name),
+  sql: readFileSync(join(here, '../supabase/migrations_archive', name), 'utf8'),
 }));
 
 function projectRefFromUrl(url) {

@@ -1,3 +1,9 @@
+-- atmosphere:squashed-baseline
+-- Squashed history: the whole production schema as of 2026-10-15, replacing the
+-- 220 hand-applied migrations now kept in supabase/migrations_archive/ (they
+-- could not replay from scratch). A fresh database is built from this file plus
+-- every migration after it. backend/scripts/migrate.mjs records this file as
+-- already applied (without running it) on a database that already has a ledger.
 -- Atmosphere schema baseline, introspected from production 2026-10-15 (schema only, no data).
 
 set check_function_bodies = off;
@@ -14,7 +20,13 @@ create extension if not exists vector with schema public;
 
 create extension if not exists pg_stat_statements with schema extensions;
 
-create extension if not exists supabase_vault with schema vault;
+-- supabase_vault ships with every Supabase project; guarded so the same file
+-- also replays on a plain Postgres in CI (where the extension is not installed).
+do $ext$ begin
+  if exists (select 1 from pg_available_extensions where name = 'supabase_vault') then
+    create extension if not exists supabase_vault with schema vault;
+  end if;
+end $ext$;
 
 do $t$ begin create type public.member_role as enum ('project_manager','field_technician','accountant','office_manager','sales','global_admin','employee'); exception when duplicate_object then null; end $t$;
 
