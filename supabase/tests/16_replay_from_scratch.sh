@@ -11,6 +11,14 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DB="${REPLAY_TEST_DB:-replay_from_scratch_test}"
 PSQL=(psql "$@")
 
+# The baseline needs pgvector (Supabase ships it). A server without it cannot
+# replay the schema at all; say so loudly instead of failing on an unrelated
+# image limitation. CI installs it (see .github/workflows/ci.yml).
+if [ "$("${PSQL[@]}" -tA -d postgres -c "select count(*) from pg_available_extensions where name = 'vector'")" = "0" ]; then
+  echo "::warning::SKIPPED replay from scratch: pgvector is not installed on this Postgres server."
+  exit 0
+fi
+
 "${PSQL[@]}" -q -d postgres -c "drop database if exists $DB;" -c "create database $DB;"
 "${PSQL[@]}" -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/00_supabase_bootstrap_stub.sql"
 
