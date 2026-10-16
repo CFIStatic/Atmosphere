@@ -35,6 +35,7 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
+import { legalInboundRouter } from './routes/legalInbound.js';
 import { playbooksRouter } from './routes/playbooks.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
@@ -199,6 +200,8 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  // Email Worker intake: shared-secret auth, so it sits before the staff router.
+  app.use('/api/legal/inbound', legalInboundRouter);
   app.use('/api/legal', legalRouter);
   app.use('/api/motion-clips', motionClipsRouter);
   app.use('/api/daily-report', dailyReportRouter);
