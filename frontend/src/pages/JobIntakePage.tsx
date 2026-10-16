@@ -272,7 +272,7 @@ export function JobIntakePage() {
           className={
             phone
               ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pb-1 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
-              : 'contents'
+              : 'space-y-4'
           }
         >
           <div className={cn('rounded-xl glass-card', cardPad)}>
