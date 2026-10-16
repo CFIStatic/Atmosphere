@@ -26,7 +26,7 @@ const { collapseImplied, owningTable } = await import(new URL('schemaIntrospect.
 const manifest = JSON.parse(
   readFileSync(new URL('../../supabase/migration-manifest.json', import.meta.url), 'utf8'),
 );
-const migrationDir = fileURLToPath(new URL('../../supabase/migrations/', import.meta.url));
+const migrationDir = fileURLToPath(new URL('../../supabase/migrations_archive/', import.meta.url));
 
 /* ------------------------------------------------------------- manifest -- */
 

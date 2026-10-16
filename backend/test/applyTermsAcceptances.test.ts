@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 const here = dirname(fileURLToPath(import.meta.url));
 const script = readFileSync(join(here, '../scripts/applyTermsAcceptances.mjs'), 'utf8');
 const sql = readFileSync(
-  join(here, '../supabase/migrations/20260907200000_terms_acceptances_grants.sql'),
+  join(here, '../supabase/migrations_archive/20260907200000_terms_acceptances_grants.sql'),
   'utf8',
 );
 const store = readFileSync(join(here, '../src/legal/termsStore.ts'), 'utf8');

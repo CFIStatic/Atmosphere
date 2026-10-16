@@ -8,11 +8,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const deleteEvidenceSrc = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
 const verifierHtml = readFileSync(join(here, '../../verifier/index.html'), 'utf8');
 const rlsSql = readFileSync(
-  join(here, '../../supabase/migrations/20260902010000_job_proofs_soft_delete_rls.sql'),
+  join(here, '../../supabase/migrations_archive/20260902010000_job_proofs_soft_delete_rls.sql'),
   'utf8',
 );
 const purgeSql = readFileSync(
-  join(here, '../../supabase/migrations/20260911120000_job_proofs_scheduled_purge.sql'),
+  join(here, '../../supabase/migrations_archive/20260911120000_job_proofs_scheduled_purge.sql'),
   'utf8',
 );
 

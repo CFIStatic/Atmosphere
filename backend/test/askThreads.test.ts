@@ -222,7 +222,7 @@ test('listing threads backfills raw titles and does not write custody rows', asy
 
 test('migration defines ask_threads and job_proof_questions.thread_id', () => {
   const sql = readFileSync(
-    join(here, '../../supabase/migrations/20260915010000_ask_threads.sql'),
+    join(here, '../../supabase/migrations_archive/20260915010000_ask_threads.sql'),
     'utf8',
   );
   assert.match(sql, /create table if not exists public\.ask_threads/);

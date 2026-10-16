@@ -150,7 +150,7 @@ test('recordProof keys the live row on the storage object, so a second clip that
 test('a later migration drops the one-visible-phase unique index so a job file can hold many films', async () => {
   const { readFile } = await import('node:fs/promises');
   const sql = await readFile(
-    new URL('../supabase/migrations/20260909192643_job_proofs_many_visible_clips.sql', import.meta.url),
+    new URL('../supabase/migrations_archive/20260909192643_job_proofs_many_visible_clips.sql', import.meta.url),
     'utf8',
   );
   assert.match(sql, /drop index if exists public\.job_proofs_one_visible_phase/);
@@ -172,7 +172,7 @@ test('mintClipId / resolveClipId always yield a searchable recording id', () => 
 test('a later migration adds searchable clip_id on job_proofs', async () => {
   const { readFile } = await import('node:fs/promises');
   const sql = await readFile(
-    new URL('../supabase/migrations/20260909214444_job_proofs_clip_id.sql', import.meta.url),
+    new URL('../supabase/migrations_archive/20260909214444_job_proofs_clip_id.sql', import.meta.url),
     'utf8',
   );
   assert.match(sql, /add column if not exists clip_id text/);

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { loadAiAllowance, settleUsageCost } from '../src/metering/aiBudgetService.js';
 
 const sql = readFileSync(
-  fileURLToPath(new URL('../supabase/migrations/20261002130000_ai_allowance_enforcement.sql', import.meta.url)),
+  fileURLToPath(new URL('../supabase/migrations_archive/20261002130000_ai_allowance_enforcement.sql', import.meta.url)),
   'utf8',
 );
 

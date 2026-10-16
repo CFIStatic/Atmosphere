@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260901183000_restore_crm_audit_log.sql',
+  '../supabase/migrations_archive/20260901183000_restore_crm_audit_log.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

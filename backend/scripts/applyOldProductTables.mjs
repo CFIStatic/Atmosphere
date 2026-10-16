@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260828220000_drop_old_product_tables.sql',
+  '../supabase/migrations_archive/20260828220000_drop_old_product_tables.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

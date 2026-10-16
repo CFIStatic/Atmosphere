@@ -425,7 +425,7 @@ test('contacts and campaign routes are internal-scope only', () => {
 
 test('campaign migration keeps every RPC service_role only and staff-checked', () => {
   const sql = readFileSync(
-    new URL('../../supabase/migrations/20261002211000_atmosphere_analytics_campaigns.sql', import.meta.url),
+    new URL('../../supabase/migrations_archive/20261002211000_atmosphere_analytics_campaigns.sql', import.meta.url),
     'utf8',
   );
   for (const fn of [

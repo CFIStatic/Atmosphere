@@ -14,7 +14,7 @@ import {
 import { recordSubscriptionPriceSpan, syncCreditPackClawback } from '../src/metering/aiBudgetService.js';
 
 const sql = readFileSync(
-  fileURLToPath(new URL('../supabase/migrations/20261002140000_ai_budget_span_and_refund.sql', import.meta.url)),
+  fileURLToPath(new URL('../supabase/migrations_archive/20261002140000_ai_budget_span_and_refund.sql', import.meta.url)),
   'utf8',
 );
 const webhooks = readFileSync(

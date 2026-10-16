@@ -15,8 +15,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION_PM="$HERE/../migrations/20260727181539_project_manager_agent.sql"
-MIGRATION_ORCH="$HERE/../migrations/20260728142600_pm_orchestration.sql"
+MIGRATION_PM="$HERE/../migrations_archive/20260727181539_project_manager_agent.sql"
+MIGRATION_ORCH="$HERE/../migrations_archive/20260728142600_pm_orchestration.sql"
 DB="${PM_AGENT_TEST_DB:-pm_agent_test}"
 PSQL=(psql "$@")
 
@@ -36,7 +36,7 @@ echo "==> Migration (PM orchestration)"
   grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
 
 echo "==> Migration (PM network + adaptive comms)"
-MIGRATION_NET="$HERE/../migrations/20260728150001_pm_network_and_comms.sql"
+MIGRATION_NET="$HERE/../migrations_archive/20260728150001_pm_network_and_comms.sql"
 "${PSQL[@]}" -q -v ON_ERROR_STOP=1 -d "$DB" -f "$MIGRATION_NET" 2>&1 |
   grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
 
@@ -50,6 +50,9 @@ echo "==> Assertions (orchestration)"
 # own throwaway database (it exits non-zero on the first failed check).
 echo "==> Analytics audit corrections (formulas, exclusion, grants)"
 bash "$HERE/11_analytics_audit_corrections.sh" "$@"
+
+echo "==> Replay supabase/migrations from scratch (baseline + later migrations)"
+bash "$HERE/16_replay_from_scratch.sh" "$@"
 
 echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"

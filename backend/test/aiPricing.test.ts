@@ -198,7 +198,7 @@ test('the migration rate card matches the backend rate card for every row it wri
   // A later migration's row replaces an earlier one for the same model (upsert).
   const latest = new Map<string, RegExpMatchArray>();
   for (const file of files) {
-    const sql = readFileSync(path.join(here, '../../supabase/migrations', file), 'utf8');
+    const sql = readFileSync(path.join(here, '../../supabase/migrations_archive', file), 'utf8');
     for (const row of sql.matchAll(rowRe)) latest.set(row[1]!, row);
   }
   const rows = [...latest.values()];

@@ -22,7 +22,7 @@ const proofSrc = readFileSync(
 const migration = readFileSync(
   join(
     dirname(fileURLToPath(import.meta.url)),
-    '../../../supabase/migrations/20260915220000_recording_acknowledgments.sql',
+    '../../../supabase/migrations_archive/20260915220000_recording_acknowledgments.sql',
   ),
   'utf8',
 );

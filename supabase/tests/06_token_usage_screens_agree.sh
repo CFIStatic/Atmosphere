@@ -25,7 +25,7 @@
 set -euo pipefail
 
 DB="${METERING_TEST_DB:-atmosphere_migration_manifest}"
-MIGRATION="$(cd "$(dirname "$0")/../migrations" && pwd)/20261003190100_metering_web_search_and_settle_fix.sql"
+MIGRATION="$(cd "$(dirname "$0")/../migrations_archive" && pwd)/20261003190100_metering_web_search_and_settle_fix.sql"
 PSQL=(psql "$@" -q -X -v ON_ERROR_STOP=1 -v migration="$MIGRATION" -d "$DB")
 
 "${PSQL[@]}" >/dev/null <<'SQL'

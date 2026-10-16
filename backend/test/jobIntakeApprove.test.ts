@@ -87,7 +87,7 @@ test('intake RPC creates a job file without invitees and always attempts the fun
 
 test('latest intake SQL allows an empty invite list', () => {
   const sql = readFileSync(
-    new URL('../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql', import.meta.url),
+    new URL('../supabase/migrations_archive/20260901140000_intake_create_job_without_invitees.sql', import.meta.url),
     'utf8',
   );
   assert.doesNotMatch(sql, /raise exception 'invitees_required'/);

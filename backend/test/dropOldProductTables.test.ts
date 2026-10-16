@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sqlPath = join(here, '../supabase/migrations/20260828220000_drop_old_product_tables.sql');
+const sqlPath = join(here, '../supabase/migrations_archive/20260828220000_drop_old_product_tables.sql');
 const sql = readFileSync(sqlPath, 'utf8');
 
 const dropped = [...sql.matchAll(/drop table if exists (?:public|private)\.([a-z_]+)/gi)].map(
