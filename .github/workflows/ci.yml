@@ -190,8 +190,9 @@ jobs:
       - name: Start local Postgres
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-16-pgvector || sudo apt-get install -y -qq "postgresql-$(pg_config --version | grep -oE "[0-9]+" | head -1)-pgvector"
+          apt_opts=(-qq -o Acquire::Retries=5 -o Acquire::http::Timeout=30)
+          sudo apt-get "${apt_opts[@]}" update
+          sudo apt-get "${apt_opts[@]}" install -y postgresql-16-pgvector || sudo apt-get "${apt_opts[@]}" install -y "postgresql-$(pg_config --version | grep -oE "[0-9]+" | head -1)-pgvector"
           sudo systemctl start postgresql.service
           for i in $(seq 1 30); do
             pg_isready -h localhost -p 5432 && break
@@ -207,6 +208,8 @@ jobs:
       - name: Project Manager schema tests
         env:
           PGPASSWORD: postgres
+          # The replay-from-scratch test must run here, never skip.
+          REQUIRE_REPLAY: '1'
         run: supabase/tests/run.sh -h localhost -p 5432 -U postgres
       - name: CRM audit trigger drop without old-product tables
         env:

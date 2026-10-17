@@ -64,7 +64,7 @@ jobs:
       - name: Smoke the nginx image
         run: |
           set -euo pipefail
-          docker build -f fieldcapture/Dockerfile -t atmosphere-fieldcapture:ci .
+          bash scripts/dockerBuildRetry.sh -f fieldcapture/Dockerfile -t atmosphere-fieldcapture:ci .
           docker run -d --name atmosphere-fieldcapture-ci -e PORT=8080 -p 18082:8080 atmosphere-fieldcapture:ci
           trap 'docker logs atmosphere-fieldcapture-ci || true; docker rm -f atmosphere-fieldcapture-ci >/dev/null 2>&1 || true' EXIT
           for _ in $(seq 1 20); do
