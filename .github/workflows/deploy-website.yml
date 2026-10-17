@@ -177,7 +177,7 @@ jobs:
       - name: Smoke the nginx image
         run: |
           set -euo pipefail
-          docker build -f website/Dockerfile -t atmosphere-website:ci .
+          bash scripts/dockerBuildRetry.sh -f website/Dockerfile -t atmosphere-website:ci .
           docker run -d --name atmosphere-website-ci -e PORT=8080 -p 18080:8080 atmosphere-website:ci
           cleanup() { docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT

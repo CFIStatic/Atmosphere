@@ -15,6 +15,10 @@ PSQL=(psql "$@")
 # replay the schema at all; say so loudly instead of failing on an unrelated
 # image limitation. CI installs it (see .github/workflows/ci.yml).
 if [ "$("${PSQL[@]}" -tA -d postgres -c "select count(*) from pg_available_extensions where name = 'vector'")" = "0" ]; then
+  if [ "${REQUIRE_REPLAY:-0}" = "1" ]; then
+    echo "::error::Replay from scratch cannot run: pgvector is not installed, and REQUIRE_REPLAY=1 forbids skipping."
+    exit 1
+  fi
   echo "::warning::SKIPPED replay from scratch: pgvector is not installed on this Postgres server."
   exit 0
 fi

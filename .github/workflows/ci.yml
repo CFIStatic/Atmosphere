@@ -179,24 +179,46 @@ jobs:
     # and cross-organization isolation. The suite deliberately tries to delete
     # history, so it needs a database it is allowed to destroy; that is why this
     # never points at a Supabase project.
-    services:
-      postgres:
-        # Pulled from AWS ECR Public's mirror of the official image, not Docker
-        # Hub: a `services:` container is pulled by the runner before any step,
-        # so it cannot be wrapped in a retry, and Docker Hub throttles
-        # unauthenticated pulls from shared runners (toomanyrequests). The
-        # mirror is the same upstream postgres image with no such limit.
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v5
+      # Use the PostgreSQL 16 that ships preinstalled on the ubuntu-24.04
+      # runner image instead of a `services:` container. Container pulls are
+      # done by the runner before any step (no retry possible) and every
+      # anonymous registry throttles shared runners: Docker Hub returns
+      # toomanyrequests and ECR Public returns "Data limit exceeded". The local
+      # server needs no network at all.
+      - name: Start local Postgres
+        # Production runs PostgreSQL 17 and the baseline was dumped from it
+        # (it uses PG17-only syntax such as GRANT MAINTAIN), so test on 17.
+        # Installed from the PGDG apt repo (plain apt, retried), never from a
+        # container registry.
+        run: |
+          set -euo pipefail
+          apt_opts=(-qq -o Acquire::Retries=5 -o Acquire::http::Timeout=30)
+          sudo systemctl stop postgresql.service || true
+          # Free port 5432 so the 17 cluster takes it.
+          for c in $(pg_lsclusters -h 2>/dev/null | awk '{print $1"/"$2}'); do
+            sudo pg_dropcluster --stop "${c%/*}" "${c#*/}" || true
+          done
+          if ! grep -rqs apt.postgresql.org /etc/apt/sources.list /etc/apt/sources.list.d/; then
+            sudo apt-get "${apt_opts[@]}" install -y postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          fi
+          sudo apt-get "${apt_opts[@]}" update
+          sudo apt-get "${apt_opts[@]}" install -y postgresql-17 postgresql-17-pgvector
+          pg_lsclusters
+          sudo pg_ctlcluster 17 main start || true
+          sudo systemctl start postgresql.service || true
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 && break
+            sleep 1
+          done
+          pg_isready -h localhost -p 5432
+          sudo -u postgres psql -p 5432 -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres';"
+          server="$(PGPASSWORD=postgres psql -h localhost -U postgres -tAc 'show server_version_num')"
+          echo "server_version_num=$server"
+          test "${server:0:2}" = "17"
+          PGPASSWORD=postgres psql -h localhost -U postgres -tAc "select count(*) from pg_available_extensions where name = 'vector'" | grep -qx 1
       - name: Agent Memory schema tests
         env:
           PGPASSWORD: postgres
@@ -204,6 +226,8 @@ jobs:
       - name: Project Manager schema tests
         env:
           PGPASSWORD: postgres
+          # The replay-from-scratch test must run here, never skip.
+          REQUIRE_REPLAY: '1'
         run: supabase/tests/run.sh -h localhost -p 5432 -U postgres
       - name: CRM audit trigger drop without old-product tables
         env:

@@ -16,7 +16,7 @@ attempts="${DOCKER_BUILD_ATTEMPTS:-4}"
 delay="${DOCKER_BUILD_RETRY_DELAY:-10}"
 
 # Signatures of a transient registry/network failure, not a build error.
-transient='toomanyrequests|rate limit|failed to resolve source metadata|failed to (fetch|authorize) oauth token|auth\.docker\.io|registry-1\.docker\.io|TLS handshake timeout|i/o timeout|Gateway Time-?out|Service Unavailable|error code: 50[0-9]|context deadline exceeded|connection reset|EOF|temporary failure'
+transient='toomanyrequests|Data limit exceeded|rate limit|failed to resolve source metadata|failed to (fetch|authorize) oauth token|auth\.docker\.io|registry-1\.docker\.io|TLS handshake timeout|i/o timeout|Gateway Time-?out|Service Unavailable|error code: 50[0-9]|context deadline exceeded|connection reset|EOF|temporary failure'
 
 rc=0
 for attempt in $(seq 1 "$attempts"); do
