@@ -188,19 +188,37 @@ jobs:
       # toomanyrequests and ECR Public returns "Data limit exceeded". The local
       # server needs no network at all.
       - name: Start local Postgres
+        # Production runs PostgreSQL 17 and the baseline was dumped from it
+        # (it uses PG17-only syntax such as GRANT MAINTAIN), so test on 17.
+        # Installed from the PGDG apt repo (plain apt, retried), never from a
+        # container registry.
         run: |
           set -euo pipefail
           apt_opts=(-qq -o Acquire::Retries=5 -o Acquire::http::Timeout=30)
+          sudo systemctl stop postgresql.service || true
+          # Free port 5432 so the 17 cluster takes it.
+          for c in $(pg_lsclusters -h 2>/dev/null | awk '{print $1"/"$2}'); do
+            sudo pg_dropcluster --stop "${c%/*}" "${c#*/}" || true
+          done
+          if ! grep -rqs apt.postgresql.org /etc/apt/sources.list /etc/apt/sources.list.d/; then
+            sudo apt-get "${apt_opts[@]}" install -y postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          fi
           sudo apt-get "${apt_opts[@]}" update
-          sudo apt-get "${apt_opts[@]}" install -y postgresql-16-pgvector || sudo apt-get "${apt_opts[@]}" install -y "postgresql-$(pg_config --version | grep -oE "[0-9]+" | head -1)-pgvector"
-          sudo systemctl start postgresql.service
+          sudo apt-get "${apt_opts[@]}" install -y postgresql-17 postgresql-17-pgvector
+          pg_lsclusters
+          sudo pg_ctlcluster 17 main start || true
+          sudo systemctl start postgresql.service || true
           for i in $(seq 1 30); do
             pg_isready -h localhost -p 5432 && break
             sleep 1
           done
           pg_isready -h localhost -p 5432
-          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres';"
-          PGPASSWORD=postgres psql -h localhost -U postgres -tAc 'select version()'
+          sudo -u postgres psql -p 5432 -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres';"
+          server="$(PGPASSWORD=postgres psql -h localhost -U postgres -tAc 'show server_version_num')"
+          echo "server_version_num=$server"
+          test "${server:0:2}" = "17"
+          PGPASSWORD=postgres psql -h localhost -U postgres -tAc "select count(*) from pg_available_extensions where name = 'vector'" | grep -qx 1
       - name: Agent Memory schema tests
         env:
           PGPASSWORD: postgres
