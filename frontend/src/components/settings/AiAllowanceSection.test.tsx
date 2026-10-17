@@ -172,4 +172,33 @@ describe('AI credits card: no dollar balances, and no purchases in the app', () 
     expect(container.textContent).not.toMatch(/\$|upgrade|buy credits|stripe|checkout/i);
     expect(container.querySelector('a')).toBeNull();
   });
+
+  it('a complimentary workspace gets free plan switches and no Buy credits buttons', async () => {
+    vi.spyOn(api, 'checkoutAiPlan').mockResolvedValue({
+      checkoutUrl: null,
+      updated: true,
+      complimentary: true,
+      planCode: 'scale',
+      billingInterval: 'month',
+    });
+    const buy = vi.spyOn(api, 'checkoutAiCredits');
+    render(
+      <AiAllowanceSection
+        complimentary
+        currentPlanCode="work_verification"
+        allowance={allowance({
+          state: 'unlimited',
+          canManage: true,
+          packs: [{ code: 'credits_10', label: '$10', cents: 1000, creditNanos: 10_000_000_000, priceConfigured: true }],
+        })}
+        onError={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId('buy-credits-credits_10')).not.toBeInTheDocument();
+    expect(screen.getByTestId('ai-credits-complimentary')).toHaveTextContent(/unlimited/i);
+    fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    await waitFor(() => expect(screen.getByTestId('plan-change-updated')).toHaveTextContent(/No charge/));
+    expect(screen.getByTestId('plan-change-updated')).not.toHaveTextContent(/Stripe/);
+    expect(buy).not.toHaveBeenCalled();
+  });
 });

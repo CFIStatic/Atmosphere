@@ -7,6 +7,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { paymentRequired } from '../lib/errors.js';
 import {
+  billingExemptEmailsFromEnv,
+  isBillingExemptOrg,
+  loadOrgCreatorEmail,
+} from '../lib/billingExempt.js';
+import {
   atmospherePlan,
   EXTRA_FC_SEAT_ANNUAL_CENTS,
   EXTRA_FC_SEAT_MONTHLY_CENTS,
@@ -128,6 +133,30 @@ interface BillingRow {
   atmosphere_plan_code?: string | null;
   extra_fc_seats?: number | null;
   billing_interval?: string | null;
+  stripe_subscription_id?: string | null;
+}
+
+/**
+ * Comped workspaces (`comped` status, a `comp_…` subscription id, or a creator
+ * on BILLING_EXEMPT_EMAILS) have unlimited AI. Every caller gets this, not just
+ * the Settings view, so the gate never pauses AI or spends credits for a comp.
+ */
+async function isComplimentaryAllowanceRow(
+  client: SupabaseClient,
+  orgId: string,
+  row: BillingRow,
+): Promise<boolean> {
+  if (isBillingExemptOrg({ status: row.status, subscriptionId: row.stripe_subscription_id, allowlist: [] })) {
+    return true;
+  }
+  const allowlist = billingExemptEmailsFromEnv();
+  if (allowlist.length === 0) return false;
+  try {
+    const creatorEmail = await loadOrgCreatorEmail(client, orgId);
+    return isBillingExemptOrg({ creatorEmail, allowlist });
+  } catch {
+    return false;
+  }
 }
 
 function monthBounds(now: Date): { start: Date; end: Date } {
@@ -176,14 +205,15 @@ export async function loadAiAllowance(
   const fallback = monthBounds(now);
   const { data: billing } = await client
     .from('org_billing')
-    .select('status, period_start, period_end, atmosphere_plan_code, extra_fc_seats, billing_interval')
+    .select('status, period_start, period_end, atmosphere_plan_code, extra_fc_seats, billing_interval, stripe_subscription_id')
     .eq('org_id', orgId)
     .maybeSingle();
   const row = (billing ?? {}) as BillingRow;
   const periodStart = asDate(row.period_start, fallback.start);
   const periodEnd = asDate(row.period_end, fallback.end);
   const windowStart = new Date(now.getTime() - config.rollingHours * 3_600_000);
-  const unlimited = Boolean(opts?.unlimited) || row.status === 'comped';
+  const unlimited =
+    Boolean(opts?.unlimited) || (await isComplimentaryAllowanceRow(client, orgId, row));
 
   const [spansRes, totalsRes, eventsRes, creditsRes] = await Promise.all([
     client
