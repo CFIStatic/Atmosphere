@@ -140,6 +140,7 @@ export function BillingSection() {
         <AiAllowanceSection
           allowance={allowance}
           currentPlanCode={sub.code}
+          complimentary={complimentary}
           onError={setError}
           onUpdated={refreshAfterPlanChange}
         />

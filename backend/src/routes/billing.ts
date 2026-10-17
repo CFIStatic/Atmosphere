@@ -21,6 +21,7 @@ import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/st
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { billedUsageRateClause } from '../lib/usageDisplayRates.js';
 import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import { assertNotComplimentaryPurchase, loadOrgBillingExempt } from '../lib/complimentaryBilling.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
@@ -257,6 +258,10 @@ billingRouter.post('/checkout/subscription', rejectPurchasesInAppShell, async (r
 
     const { planCode, billingInterval, seats } = setPlanSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
+    assertNotComplimentaryPurchase(
+      await loadOrgBillingExempt(supabase, req.orgId!, req.user!.email),
+      'subscription',
+    );
 
     const { data: plan, error: planError } = await supabase
       .from('billing_plans')

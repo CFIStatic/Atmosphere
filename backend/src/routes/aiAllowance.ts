@@ -25,6 +25,11 @@ import {
 } from '../lib/stripe.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import {
+  applyComplimentaryPlanChange,
+  assertNotComplimentaryPurchase,
+  loadOrgBillingExempt,
+} from '../lib/complimentaryBilling.js';
 import { aiBudgetConfig, creditPackByCode, creditPackPriceId } from '../metering/aiBudgetConfig.js';
 import { canPurchaseAiCredits, creditNanosForPaymentCents } from '../metering/aiBudget.js';
 import { loadAiAllowance, publicAllowance } from '../metering/aiBudgetService.js';
@@ -86,6 +91,10 @@ aiAllowanceRouter.post('/credits/checkout', rejectPurchasesInAppShell, async (re
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can buy AI credits.', 'billing_forbidden');
     }
+    assertNotComplimentaryPurchase(
+      await loadOrgBillingExempt(createUserClient(req.accessToken!), req.orgId!, req.user!.email),
+      'credits',
+    );
     if (config.billing.paymentProvider !== 'stripe') {
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
     }
@@ -142,12 +151,24 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can change the plan.', 'billing_forbidden');
     }
-    if (config.billing.paymentProvider !== 'stripe') {
-      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
-    }
     const body = planSchema.parse(req.body ?? {});
     const plan = atmospherePlan(parseAtmospherePlanCode(body.planCode));
     const supabase = createUserClient(req.accessToken!);
+    // Comped workspace: switch the plan in the database. No Checkout, no charge.
+    if (await loadOrgBillingExempt(supabase, req.orgId!, req.user!.email)) {
+      await applyComplimentaryPlanChange(supabase, req.orgId!, plan.code);
+      res.status(200).json({
+        checkoutUrl: null,
+        updated: true,
+        complimentary: true,
+        planCode: plan.code,
+        billingInterval: normalizeAtmosphereBillingInterval(body.billingInterval),
+      });
+      return;
+    }
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
     const { data: billing } = await supabase
       .from('org_billing')
       .select('stripe_subscription_id')
@@ -258,6 +279,12 @@ aiAllowanceRouter.put('/auto-recharge', rejectPurchasesInAppShell, async (req: R
   try {
     const canManage = await callerCanManage(req);
     const body = autoRechargeSchema.parse(req.body ?? {});
+    if (body.enabled) {
+      assertNotComplimentaryPurchase(
+        await loadOrgBillingExempt(createUserClient(req.accessToken!), req.orgId!, req.user!.email),
+        'auto_recharge',
+      );
+    }
     const admin = unscopedAdminOrNull();
     if (!admin && canManage) {
       throw badRequest('Auto-recharge is not available on this server.', 'auto_recharge_unavailable');

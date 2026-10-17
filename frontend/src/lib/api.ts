@@ -5272,7 +5272,13 @@ export const api = {
     }),
 
   checkoutAiPlan: (planCode: string, billingInterval: 'month' | 'year' = 'month') =>
-    request<{ checkoutUrl: string | null; updated?: boolean; planCode: string; billingInterval: string }>(
+    request<{
+      checkoutUrl: string | null;
+      updated?: boolean;
+      complimentary?: boolean;
+      planCode: string;
+      billingInterval: string;
+    }>(
       '/api/billing/ai-allowance/plan/checkout',
       {
         method: 'POST',
