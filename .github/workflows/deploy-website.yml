@@ -35,6 +35,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Railway CLI calls target the production environment by ID. The
+# environment is named "Production"; a project token rejects the lowercase
+# name ("Environment \"production\" not found"), and an ID never drifts.
+env:
+  RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID || '519e5cb5-26e1-44a8-91e1-f36412b5cc08' }}
+
 jobs:
   pages-enabled:
     name: Check Pages
@@ -126,7 +132,7 @@ jobs:
       - name: Require Railway token
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Add RAILWAY_TOKEN to the GitHub environment Keys."
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Atmosphere project → Settings → Tokens, Production environment)."
             exit 1
           fi
 
@@ -138,11 +144,11 @@ jobs:
         run: bash scripts/installRailwayCli.sh
 
       - name: Link Railway project
-        run: railway link --project "$RAILWAY_PROJECT_ID" --environment production || railway link --project "$RAILWAY_PROJECT_ID" || true
+        run: railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" || railway link --project "$RAILWAY_PROJECT_ID" || true
 
       - name: Point the website service at nginx, not the API
         env:
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           set -euo pipefail
           # Do not railway add here — the Hobby plan is at its service cap.
@@ -187,7 +193,7 @@ jobs:
 
       - name: Deploy corporate site
         env:
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           RAILWAY_UP_ATTEMPTS: '8'
         run: |
           cp website/railway.toml railway.toml

@@ -48,6 +48,9 @@ test('pickEnvironment matches the environment by name, case-insensitively', () =
   assert.equal(pickEnvironment(data, 'production')?.id, 'env-prod');
   assert.equal(pickEnvironment(data, 'staging')?.id, 'env-staging');
   assert.equal(pickEnvironment(data, 'nope'), null);
+  // CI passes the environment ID; it must match by id, too.
+  assert.equal(pickEnvironment(data, 'env-prod')?.id, 'env-prod');
+  assert.equal(pickEnvironment(data, 'ENV-STAGING')?.id, 'env-staging');
 });
 
 test('pickEnvironment survives an empty or malformed environment list', () => {

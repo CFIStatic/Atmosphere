@@ -29,6 +29,12 @@ concurrency:
   group: repair-field-capture
   cancel-in-progress: false
 
+# Railway CLI calls target the production environment by ID. The
+# environment is named "Production"; a project token rejects the lowercase
+# name ("Environment \"production\" not found"), and an ID never drifts.
+env:
+  RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID || '519e5cb5-26e1-44a8-91e1-f36412b5cc08' }}
+
 jobs:
   repair:
     name: Repair Field Capture config
@@ -49,14 +55,14 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           set -uo pipefail
           if [ -z "$RAILWAY_TOKEN" ]; then
             echo "No RAILWAY_TOKEN; skipping the Field Capture config repair."
             exit 0
           fi
-          railway link --project "$RAILWAY_PROJECT_ID" --environment production || true
+          railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" || true
           chmod +x fieldcapture/scripts/apply-railway-config.sh
           fieldcapture/scripts/apply-railway-config.sh || \
             echo "warn: could not repair Field Capture config; see docs/production.md."
@@ -87,7 +93,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           RAILWAY_UP_ATTEMPTS: '3'
         run: |
           set -uo pipefail

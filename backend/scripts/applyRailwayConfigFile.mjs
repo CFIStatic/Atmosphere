@@ -158,7 +158,11 @@ export function pickEnvironment(data, wanted) {
   const edges = data?.environments?.edges || [];
   const nodes = edges.map((edge) => edge?.node).filter((node) => node?.id);
   const want = String(wanted || '').toLowerCase();
-  return nodes.find((node) => String(node.name || '').toLowerCase() === want) || null;
+  return (
+    nodes.find((node) => String(node.id || '').toLowerCase() === want) ||
+    nodes.find((node) => String(node.name || '').toLowerCase() === want) ||
+    null
+  );
 }
 
 function resolveService(name) {
@@ -179,7 +183,7 @@ async function main() {
   const configPath = (process.argv[3] || '').trim().replace(/^\/+/, '');
   const token = process.env.RAILWAY_TOKEN;
   const project = process.env.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae';
-  const environment = process.env.RAILWAY_ENVIRONMENT || 'production';
+  const environment = process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_ENVIRONMENT || '519e5cb5-26e1-44a8-91e1-f36412b5cc08';
 
   if (!serviceArg || !configPath) {
     console.error('usage: applyRailwayConfigFile.mjs <service name or id> <path/to/railway.toml>');
