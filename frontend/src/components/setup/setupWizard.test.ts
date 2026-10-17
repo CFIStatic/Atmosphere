@@ -19,15 +19,15 @@ describe('setupWizardCopy', () => {
   it('uses Global Admin create-company copy', () => {
     const copy = setupWizardCopy('create');
     expect(copy.heading).toBe('Create your company');
-    expect(copy.steps.map((s) => s.title)).toEqual(['Account & workspace', 'Set up billing']);
+    expect(copy.steps.map((s) => s.title)).toEqual(['Account', 'Plan', 'Invite team']);
     expect(copy.lede).toMatch(/Global Admin/i);
     expect(copy.lede).toMatch(/plan/i);
     expect(copy.lede).toMatch(/invite your team/i);
     expect(copy.lede).not.toMatch(/first job|first evidence|sample evidence/i);
     expect(copy.steps[0]?.detail).toMatch(/login and company name/i);
     expect(copy.steps[1]?.detail).toMatch(/plan/i);
-    expect(copy.steps[1]?.detail).toMatch(/invite your team/i);
     expect(copy.steps[1]?.detail).not.toMatch(/first evidence/i);
+    expect(copy.steps[2]?.detail).toMatch(/optional/i);
     expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
     expect(copy.steps[0]?.detail).not.toMatch(/company type/i);
     expect(copy.steps[0]?.detail).toMatch(/Global Admin/i);
@@ -55,6 +55,13 @@ describe('setupWizardCopy', () => {
 });
 
 describe('initialSetupStep', () => {
+  it('opens the post-payment invite screen from ?step=invite only with a workspace', () => {
+    expect(initialSetupStep({ user: true, membership: true, stepParam: 'invite' })).toBe(3);
+    expect(initialSetupStep({ user: false, membership: false, stepParam: 'invite' })).toBe(1);
+    // Old numeric 3 still means billing.
+    expect(initialSetupStep({ user: true, membership: true, stepParam: '3' })).toBe(2);
+  });
+
   it('starts at the combined account and workspace form', () => {
     expect(initialSetupStep({ user: false, membership: false, stepParam: null })).toBe(1);
     expect(initialSetupStep({ user: true, membership: false, stepParam: null })).toBe(1);
@@ -125,6 +132,6 @@ describe('setupWizardCopy in the iPhone/Android app shell', () => {
   });
 
   it('keeps the browser copy unchanged', () => {
-    expect(setupWizardCopy('create').steps[1]?.title).toBe('Set up billing');
+    expect(setupWizardCopy('create').steps.map((s) => s.title)).toEqual(['Account', 'Plan', 'Invite team']);
   });
 });

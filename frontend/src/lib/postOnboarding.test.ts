@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { postOnboardingHref } from './postOnboarding';
+import { offersInviteStep, postOnboardingHref } from './postOnboarding';
 
 const desktop = { hostname: 'platform.atmosphereteam.com', phone: false, embedded: false };
 
@@ -28,5 +28,13 @@ describe('postOnboardingHref', () => {
 
   it('leaves navigation alone inside the Field Capture iframe', () => {
     expect(postOnboardingHref('/verifier-library', { ...desktop, phone: true, embedded: true })).toBe('/verifier-library');
+  });
+});
+
+describe('offersInviteStep', () => {
+  it('is for computers only', () => {
+    expect(offersInviteStep(desktop)).toBe(true);
+    expect(offersInviteStep({ ...desktop, phone: true })).toBe(false);
+    expect(offersInviteStep({ ...desktop, embedded: true })).toBe(false);
   });
 });

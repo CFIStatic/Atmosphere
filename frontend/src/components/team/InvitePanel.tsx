@@ -32,7 +32,7 @@ const ago = (iso: string) => {
   return `${days}d ago`;
 };
 
-export function InvitePanel() {
+export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
   const t = useT();
   const { membership } = useAuth();
   const actionsLocked = useProductActionsLocked();
@@ -128,6 +128,7 @@ export function InvitePanel() {
       setPhone('');
       setServiceRole('');
       setServiceRoleCustom('');
+      onInvited?.();
       await load();
     } catch (err) {
       if (!inApp && err instanceof ApiError && err.checkoutUrl) {

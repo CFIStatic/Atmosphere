@@ -152,7 +152,7 @@ export function SetupBillingStep({
         title="Billing ready"
         subtitle={
           status.complete
-            ? 'Your payment method is on file. Next: your dashboard.'
+            ? 'Your payment method is on file.'
             : 'Your organization handles billing separately.'
         }
       >
@@ -229,7 +229,7 @@ export function SetupBillingStep({
   }
 
   return (
-    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then invite your team.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan and add a payment method. You can invite your team next.">
       {error && (
         <div
           role="alert"

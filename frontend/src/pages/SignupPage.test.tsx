@@ -28,6 +28,9 @@ const apiMocks = vi.hoisted(() => ({
   updateProfile: vi.fn(),
   createOrg: vi.fn(),
   joinOrg: vi.fn(),
+  orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
+  createOrgInvite: vi.fn(),
+  getBillingWorkspace: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -78,6 +81,10 @@ describe('SignupPage', () => {
     apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
+    apiMocks.orgInvites.mockReset().mockResolvedValue({ invites: [] });
+    apiMocks.createOrgInvite.mockReset().mockResolvedValue({ emailed: true });
+    apiMocks.getBillingWorkspace.mockReset().mockResolvedValue({});
+    window.innerWidth = 1280;
   });
 
   it('puts account and company name on the first step — no company type', () => {
@@ -96,8 +103,9 @@ describe('SignupPage', () => {
       'https://atmosphereteam.com/terms',
     );
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite team' })).toBeInTheDocument();
     expect(screen.queryByText('Your workspace')).toBeNull();
     expect(screen.queryByText('Create your account')).toBeNull();
     expect(screen.queryByText('Invite teammates')).toBeNull();
@@ -124,7 +132,11 @@ describe('SignupPage', () => {
     const user = userEvent.setup();
     renderSignup();
 
-    await user.click(screen.getByRole('button', { name: 'Set up billing' }));
+    // Invite team opens only after payment.
+    await user.click(screen.getByRole('button', { name: 'Invite team' }));
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Plan' }));
     expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
@@ -137,7 +149,7 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
+    await user.click(screen.getByRole('button', { name: 'Account' }));
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Company name')).toBeInTheDocument();
@@ -354,9 +366,10 @@ describe('SignupPage', () => {
       metadata: {},
     };
     authState.membership = null;
-    authState.refreshMembership
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ org: { id: 'org-1', name: 'Meridian Services' } });
+    authState.refreshMembership.mockResolvedValueOnce(null).mockImplementation(async () => {
+      authState.membership = { role: 'global_admin', org: { id: 'org-1', name: 'Meridian Services' } };
+      return authState.membership;
+    });
     apiMocks.createOrg.mockResolvedValue({
       org: { id: 'org-1', name: 'Meridian Services', joinCode: '8F3A9C2B' },
     });
@@ -367,6 +380,10 @@ describe('SignupPage', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
+    // Comped / exempt on a computer: the optional invite screen, then the Dashboard.
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    expect(queueRedirect).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalled();
     });
@@ -433,6 +450,81 @@ describe('SignupPage', () => {
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
     });
+  });
+
+  const signedInAdmin = () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'owner@example.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { role: 'global_admin', org: { id: 'org-1', name: 'Example Co' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+  };
+
+  it('after a paid Stripe return on a computer, shows the optional company invite step; Skip goes to the Dashboard', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    expect(screen.getByTestId('setup-invite-panel')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite team' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByRole('button', { name: 'Continue to dashboard' })).toBeNull();
+    expect(queueRedirect).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+    expect(apiMocks.createOrgInvite).not.toHaveBeenCalled();
+  });
+
+  it('sends a company-level invite with no job, then Continue to dashboard', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=invite');
+
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Email'), 'crew@example.com');
+    await user.click(screen.getByRole('button', { name: 'Invite' }));
+
+    await waitFor(() =>
+      expect(apiMocks.createOrgInvite).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'crew@example.com', role: 'employee' }),
+      ),
+    );
+    await user.click(await screen.findByRole('button', { name: 'Continue to dashboard' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+  });
+
+  it('keeps a deep link through the invite step', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fsettings%3Fsection%3Dteam');
+
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
+  });
+
+  it('does not open the invite step before the plan is paid', async () => {
+    signedInAdmin();
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    renderSignup('/signup?step=invite');
+
+    expect(await screen.findByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Invite your team' })).toBeNull();
+  });
+
+  it('phones skip the invite step after payment', async () => {
+    window.innerWidth = 390;
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    await waitFor(() => expect(queueRedirect).toHaveBeenCalledWith('/verifier-library'));
+    expect(screen.queryByRole('heading', { name: 'Invite your team' })).toBeNull();
   });
 
   it('never shows plan or billing UI on a homeowner invitee signup', () => {

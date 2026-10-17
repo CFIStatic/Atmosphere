@@ -55,6 +55,11 @@ export function postOnboardingHref(path: string, env: PostOnboardingEnv = curren
   return `${PLATFORM_WEB_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+/** The optional Invite team screen is for computers only; phones go straight to Field Capture. */
+export function offersInviteStep(env: PostOnboardingEnv = currentPostOnboardingEnv()): boolean {
+  return !env.phone && !env.embedded;
+}
+
 export function isAbsoluteHref(href: string): boolean {
   return /^https?:\/\//i.test(href);
 }
