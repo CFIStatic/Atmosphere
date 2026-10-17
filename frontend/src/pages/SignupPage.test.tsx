@@ -381,9 +381,9 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     // Comped / exempt on a computer: the optional invite screen, then the Dashboard.
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
     expect(queueRedirect).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalled();
     });
@@ -470,13 +470,13 @@ describe('SignupPage', () => {
     signedInAdmin();
     renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
 
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
     expect(screen.getByTestId('setup-invite-panel')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Invite team' })).toHaveAttribute('aria-current', 'step');
     expect(screen.queryByRole('button', { name: 'Continue to dashboard' })).toBeNull();
     expect(queueRedirect).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     expect(apiMocks.createOrgInvite).not.toHaveBeenCalled();
   });
@@ -486,7 +486,7 @@ describe('SignupPage', () => {
     signedInAdmin();
     renderSignup('/signup?step=invite');
 
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
     await user.type(screen.getByLabelText('Email'), 'crew@example.com');
     await user.click(screen.getByRole('button', { name: 'Invite' }));
 
@@ -504,8 +504,8 @@ describe('SignupPage', () => {
     signedInAdmin();
     renderSignup('/signup?step=2&checkout=success&next=%2Fsettings%3Fsection%3Dteam');
 
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
   });
 

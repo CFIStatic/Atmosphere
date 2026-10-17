@@ -159,6 +159,8 @@ export function SignupPage() {
           setStep(needsBilling ? 2 : 3);
           return;
         }
+        // Already past billing: a late answer for the Stripe return URL must not pull the page back.
+        if (step === 3 && !needsBilling) return;
         // Paid checkout returns still need the billing step so SetupBillingStep
         // can auto-enter — do not wait for an incomplete payment.
         if (
