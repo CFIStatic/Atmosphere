@@ -10,7 +10,7 @@
  * writing the resolved literal removes that whole failure mode — the service
  * is matched by the same alias table `railway variable set --service` uses.
  *
- * Usage: RAILWAY_PROJECT_ID=… RAILWAY_ENVIRONMENT=production \
+ * Usage: RAILWAY_PROJECT_ID=… RAILWAY_ENVIRONMENT=519e5cb5-26e1-44a8-91e1-f36412b5cc08 \
  *        node scripts/resolveApiUpstream.mjs <backend-service-id>
  *
  * Prints nothing and exits 1 when the lookup fails, so callers can fall back
@@ -38,7 +38,7 @@ function readVariables(service) {
     '--service',
     service,
     '--environment',
-    process.env.RAILWAY_ENVIRONMENT || 'production',
+    process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_ENVIRONMENT || '519e5cb5-26e1-44a8-91e1-f36412b5cc08',
     '--json',
   ];
   if (process.env.RAILWAY_PROJECT_ID) args.push('--project', process.env.RAILWAY_PROJECT_ID);
