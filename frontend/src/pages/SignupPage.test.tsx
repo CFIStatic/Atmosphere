@@ -51,7 +51,6 @@ vi.mock('../hooks/usePendingAuthRedirect', () => ({
 }));
 
 import { api } from '../lib/api';
-import { jobFilePath } from '../lib/jobFileAsk';
 import { SignupPage } from './SignupPage';
 
 function renderSignup(initialEntry = '/signup') {
@@ -253,7 +252,7 @@ describe('SignupPage', () => {
     });
   });
 
-  it('sends a new unpaid workspace to its first job and first evidence before plan and card', async () => {
+  it('sends a new unpaid workspace straight from Account to plan and invites, no first job needed', async () => {
     const user = userEvent.setup();
     localStorage.clear();
     authState.user = {
@@ -284,38 +283,11 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByRole('heading', { name: 'Welcome page' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull();
-  });
-
-  it('goes to plan and card once the first evidence has been seen', async () => {
-    const user = userEvent.setup();
-    localStorage.clear();
-    localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', evidenceSeen: true }));
-    authState.user = {
-      id: 'user-1',
-      email: 'owner@acme.com',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      lastSignInAt: '2026-08-20T00:00:00.000Z',
-      emailConfirmed: true,
-      metadata: {},
-    };
-    authState.membership = null;
-    authState.refreshMembership
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({ org: { id: 'org-1', name: 'Acme Restoration' } });
-    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
-    vi.mocked(api.createOrg).mockResolvedValue({
-      org: { id: 'org-1', name: 'Acme Restoration', joinCode: '8F3A9C2B' },
-    });
-
-    renderSignup('/signup');
-    fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
     await waitFor(() => expect(api.createOrg).toHaveBeenCalled());
     expect(await screen.findByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
-    localStorage.clear();
+    expect(screen.queryByRole('heading', { name: 'Welcome page' })).toBeNull();
+    expect(screen.queryByText(/first job/i)).toBeNull();
+    expect(screen.queryByText(/first evidence/i)).toBeNull();
   });
 
   it('does not ask for company type when joining an existing workspace', async () => {
@@ -400,11 +372,11 @@ describe('SignupPage', () => {
     });
     expect(apiMocks.createOrg).toHaveBeenCalled();
     const destination = String(queueRedirect.mock.calls[0]?.[0] ?? '');
-    expect(destination).toBe('/intake');
+    expect(destination).toBe('/verifier-library');
     expect(destination).not.toMatch(/[?&]tour=/);
   });
 
-  it('sends a paid Stripe return to Start a job, not the empty dashboard', async () => {
+  it('sends a paid Stripe return to the Dashboard, not Start a job', async () => {
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -419,20 +391,12 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
 
     await waitFor(() => {
-      expect(queueRedirect).toHaveBeenCalledWith('/intake');
+      expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     });
   });
 
-  it('returns a paid checkout to the job filed before payment', async () => {
-    localStorage.setItem(
-      'atmosphere.firstRun.org-1',
-      JSON.stringify({
-        jobId: 'job-1',
-        jobTitle: 'Smith kitchen leak',
-        jobNumber: 1,
-        evidenceSeen: true,
-      }),
-    );
+  it('sends a Stripe return that started from Start a job, or an old first-run job, to the Dashboard', async () => {
+    localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith', jobNumber: 1 }));
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -444,14 +408,31 @@ describe('SignupPage', () => {
     authState.membership = { org: { id: 'org-1', name: 'Acme' } };
     apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
 
-    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+    renderSignup('/signup?step=2&checkout=success&next=%2Fintake');
 
     await waitFor(() => {
-      expect(queueRedirect).toHaveBeenCalledWith(
-        jobFilePath('job-1', { title: 'Smith kitchen leak', number: 1 }),
-      );
+      expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     });
     localStorage.clear();
+  });
+
+  it('keeps a specific deep link on a paid Stripe return', async () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success&next=%2Fsettings%3Fsection%3Dteam');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
+    });
   });
 
   it('never shows plan or billing UI on a homeowner invitee signup', () => {

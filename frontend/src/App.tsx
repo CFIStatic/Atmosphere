@@ -21,7 +21,8 @@ import { getBillingOnboardingShared } from './lib/billingOnboardingShared';
 import { LoginPage } from './pages/LoginPage';
 import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
 import { isInAppShell } from './lib/appShell';
-import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
+import { billingStepHref, unpaidWorkspaceTarget } from './lib/firstRun';
+import { safeAuthRedirect } from './lib/authRedirect';
 import { isUnpaidEvaluationLocation, sharedJobInsteadOfSetup } from './lib/unpaidEvaluation';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -42,7 +43,6 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
 const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
-const FirstRunPage = lazy(() => import('./pages/FirstRunPage').then((m) => ({ default: m.FirstRunPage })));
 const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
 const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
 const PlatformHomePage = lazy(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
@@ -255,11 +255,16 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
-    // First evidence before plan and card: an unpaid workspace that has not
-    // seen any yet goes to the welcome page; after that, to billing.
-    return <Navigate to={unpaidWorkspaceTarget(readFirstRun(membership?.org?.id), returnPath)} replace />;
+    // Unpaid workspace: straight to plan and card.
+    return <Navigate to={unpaidWorkspaceTarget(returnPath)} replace />;
   }
   return <>{children}</>;
+}
+
+/** The old /welcome steps (first job, first evidence) are gone; continue at plan and invites. */
+function LegacyWelcomeRedirect() {
+  const [params] = useSearchParams();
+  return <Navigate to={billingStepHref(safeAuthRedirect(params.get('next')))} replace />;
 }
 
 function BillingSettingsRedirect() {
@@ -393,15 +398,8 @@ export default function App() {
 
           {/* iPhone/Android app: sign-up and plans happen on atmosphereteam.com, never in the app. */}
           <Route path="/signup" element={isInAppShell() ? <AppShellSignupBlockedPage /> : <SignupPage />} />
-          {/* First run, value before payment: first job and first evidence, then plan. */}
-          <Route
-            path="/welcome"
-            element={
-              <ProtectedRoute>
-                <FirstRunPage />
-              </ProtectedRoute>
-            }
-          />
+          {/* Retired first-job / first-evidence page: old links go to plan and invites. */}
+          <Route path="/welcome" element={<LegacyWelcomeRedirect />} />
 
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with

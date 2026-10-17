@@ -2,16 +2,12 @@ import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { HomeownerEmailSignIn } from '../components/HomeownerEmailSignIn';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
-import {
-  captureAfterSignup,
-  firstRunDestination,
-  FIRST_RUN_WELCOME,
-  readFirstRun,
-} from '../lib/firstRun';
+import { captureAfterSignup, FIRST_RUN_HOME, firstRunDestination } from '../lib/firstRun';
+import { isAbsoluteHref, postOnboardingHref } from '../lib/postOnboarding';
 import { homeownerAfterSignup } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -50,19 +46,14 @@ export function SignupPage() {
   // iPhone/Android app: no plan picker or prices (App Store 3.1.1).
   const inApp = isInAppShell();
   const queueRedirect = usePendingAuthRedirect();
-  const navigate = useNavigate();
   const platformHome = PLATFORM_HOME[getPlatform()];
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
     (location.state as { from?: string } | null)?.from,
     platformHome,
   );
-  /** After billing, open the job filed before payment, or Start a job. */
-  const afterSetupTo = firstRunDestination(
-    redirectTo,
-    platformHome,
-    readFirstRun(membership?.org?.id),
-  );
+  /** After billing (or a comped setup), the Dashboard, unless a specific deep link was asked for. */
+  const afterSetupTo = firstRunDestination(redirectTo, platformHome);
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
@@ -216,7 +207,13 @@ export function SignupPage() {
   const formValid = accountValid && workspaceValid && termsValid;
 
   function enterApp() {
-    queueRedirect(afterSetupTo);
+    // Computers land on the office Platform; phones on Field Capture. Same session.
+    const href = postOnboardingHref(afterSetupTo);
+    if (isAbsoluteHref(href)) {
+      window.location.assign(href);
+      return;
+    }
+    queueRedirect(href);
   }
 
   async function continueAfterWorkspace() {
@@ -224,13 +221,7 @@ export function SignupPage() {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
       if (needsBilling) {
-        // Value before payment: first job and first evidence, then plan and card.
-        const org = (await refreshMembership())?.org ?? membership?.org ?? null;
-        if (!readFirstRun(org?.id).evidenceSeen) {
-          // The session is already set by now (signup or existing login).
-          navigate(FIRST_RUN_WELCOME, { replace: true });
-          return;
-        }
+        // Account, then plan and invites. No first job is needed first.
         goToStep(2);
         return;
       }
@@ -406,7 +397,9 @@ export function SignupPage() {
                 ? 'Invited email + password. Free — no plan or payment.'
                 : mode === 'join'
                   ? 'Use the invite from your Global Admin — create the account with the invited email.'
-                  : 'You are creating this company as Global Admin. Next you name your first job and see your first evidence. Plan and card come after that.'
+                  : inApp
+                    ? 'You are creating this company as Global Admin. Next: invite your team.'
+                    : 'You are creating this company as Global Admin. Next: pick a plan and invite your team.'
           }
         >
           {accountNotice && (
@@ -575,7 +568,7 @@ export function SignupPage() {
         <SetupBillingStep
           redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
-          nextLabel="Open your job and invite your team"
+          nextLabel={afterSetupTo === FIRST_RUN_HOME ? 'Go to your dashboard' : 'Continue'}
           onComplete={enterApp}
         />
       )}

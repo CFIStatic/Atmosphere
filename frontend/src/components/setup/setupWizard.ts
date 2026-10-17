@@ -20,12 +20,12 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Account & workspace',
-    detail: 'Your login and company name — you become Global Admin. Next: your first job and first evidence.',
+    detail: 'Your login and company name — you become Global Admin.',
   },
   {
     step: 2 as const,
     title: 'Set up billing',
-    detail: 'After your first evidence (a clip from Field Capture, or the sample): pick a plan and add a card, then invite your team.',
+    detail: 'Pick a plan and add a card, then invite your team.',
   },
 ] as const;
 
@@ -93,13 +93,13 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
     // iPhone/Android app: no purchase wording. Plans are handled on the website.
     return {
       heading: 'Create your company',
-      lede: 'You are the Global Admin. Create the workspace, name your first job, then record it in Field Capture or see sample evidence.',
+      lede: 'You are the Global Admin. Create the workspace, then invite your team.',
       steps: APP_SHELL_SETUP_WIZARD_STEPS,
     };
   }
   return {
     heading: 'Create your company',
-    lede: 'You are the Global Admin. Create the workspace, name your first job, then record it in Field Capture or see sample evidence. Plan and card come after that.',
+    lede: 'You are the Global Admin. Create the workspace, pick a plan, then invite your team.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
