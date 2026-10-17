@@ -13,7 +13,8 @@ set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 service="${RAILWAY_SERVICE:-Atmosphere APIs}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
-environment="${RAILWAY_ENVIRONMENT:-production}"
+# Railway environment ID ("Production"); a name must match case exactly.
+environment="${RAILWAY_ENVIRONMENT_ID:-${RAILWAY_ENVIRONMENT:-519e5cb5-26e1-44a8-91e1-f36412b5cc08}}"
 max_attempts="${RAILWAY_UP_ATTEMPTS:-8}"
 wait_secs="${RAILWAY_UP_TIMEOUT:-900}"
 # Stamp retries only — watch-path skip after GitHub Autodeploy already shipped
