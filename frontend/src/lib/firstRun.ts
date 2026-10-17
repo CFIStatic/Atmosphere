@@ -1,39 +1,40 @@
 /**
- * Sold first-run path, value before payment: create the account → name the
- * first job → record it in Field Capture (field) or see sample evidence
- * (office) → only then plan and card → invites from the job file.
- * Keep helpers here so signup, the welcome page, and the billing gate agree.
+ * First-run path: create the account → plan and card → the Dashboard.
+ * Keep helpers here so signup and the billing gate agree.
  */
 
-import { jobFilePath } from './jobFileAsk';
+import { DASHBOARD_HOME } from './platforms';
 
-/** Where Global Admins land after billing — Start a job, not an empty dashboard. */
-export const FIRST_RUN_HOME = '/intake';
+/** Where Global Admins land after billing (or a comped setup): the Dashboard. */
+export const FIRST_RUN_HOME = DASHBOARD_HOME;
 
 /** Public Field Capture web host (same login as Platform). */
 export const FIELD_CAPTURE_WEB_ORIGIN = 'https://app.atmosphereteam.com';
 
+/**
+ * Retired first-job / first-evidence page. Old links and bookmarks redirect
+ * to plan and card; it counts as a generic landing for checkout returns.
+ */
+export const LEGACY_FIRST_RUN_WELCOME = '/welcome';
+
+/** Homes that are not a specific deep link: they all resolve to the Dashboard. */
 const GENERIC_POST_AUTH = new Set([
   '/',
   '/verifier-library',
   '/jobs',
   '/onboarding',
   '/signup',
+  '/intake',
+  '/field',
+  LEGACY_FIRST_RUN_WELCOME,
 ]);
 
 /**
- * After workspace + billing, open the job already filed on the welcome page.
- * A generic office home used to mean "no job yet" and went to Start a job.
- * A specific deep link (this job file, a settings section) still wins.
+ * After workspace + billing, open the Dashboard. A specific deep link (a job
+ * file, a settings section) still wins.
  */
-export function firstRunDestination(
-  requested: string | null | undefined,
-  platformHome: string,
-  state?: FirstRunState | null,
-): string {
+export function firstRunDestination(requested: string | null | undefined, platformHome: string): string {
   const next = (requested ?? '').trim();
-  const filed = filedFirstJobHref(state);
-  if (filed && replacesWithFiledJob(next, platformHome)) return filed;
   if (!isGenericPostAuth(next, platformHome)) return next;
   return FIRST_RUN_HOME;
 }
@@ -74,86 +75,22 @@ export function fieldCaptureInviteOpenUrl(token: string, email?: string | null):
   return `${FIELD_CAPTURE_WEB_ORIGIN}/?${params.toString()}`;
 }
 
-/** Value-first page between the account step and plan/card. */
-export const FIRST_RUN_WELCOME = '/welcome';
-
-export type FirstRunPath = 'field' | 'office';
-
-export interface FirstRunState {
-  jobId?: string;
-  jobTitle?: string;
-  jobNumber?: number | null;
-  path?: FirstRunPath;
-  /** First evidence was on screen: the creator's own first clip, or the labeled sample. */
-  evidenceSeen?: boolean;
-}
-
-const FIRST_RUN_KEY = 'atmosphere.firstRun.';
-
-/** This browser's first-run progress for one org. A UI hint only; billing is enforced server-side by the gate. */
-export function readFirstRun(orgId: string | null | undefined): FirstRunState {
-  if (!orgId) return {};
-  try {
-    const raw = localStorage.getItem(FIRST_RUN_KEY + orgId);
-    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-    return parsed && typeof parsed === 'object' ? (parsed as FirstRunState) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function writeFirstRun(orgId: string | null | undefined, patch: FirstRunState): FirstRunState {
-  const next = { ...readFirstRun(orgId), ...patch };
-  if (!orgId) return next;
-  try {
-    localStorage.setItem(FIRST_RUN_KEY + orgId, JSON.stringify(next));
-  } catch {
-    /* private mode: the page still works for this visit */
-  }
-  return next;
-}
-
 /** Billing step URL. Stripe checkout returns to ?step=2 as before. */
 export function billingStepHref(next: string | null | undefined): string {
   const target = (next ?? '').trim();
   return target ? `/signup?step=2&next=${encodeURIComponent(target)}` : '/signup?step=2';
 }
 
-/**
- * Where an unpaid workspace goes when it opens the office: the welcome page
- * until the first evidence has been seen, then plan and card. Checkout returns
- * to the job already filed — a generic home would open Start a job again.
- */
-export function unpaidWorkspaceTarget(state: FirstRunState, returnPath: string): string {
-  if (!state.evidenceSeen) {
-    return `${FIRST_RUN_WELCOME}?next=${encodeURIComponent(returnPath)}`;
-  }
-  // Checkout returns to the first job, not Start a job, when the blocked page
-  // was only a generic landing (dashboard, jobs list, Start a job itself).
-  const filed = filedFirstJobHref(state);
-  const next = filed && replacesWithFiledJob(returnPath) ? filed : returnPath;
-  return billingStepHref(next);
+/** Where an unpaid workspace goes when it opens the office: plan and card. */
+export function unpaidWorkspaceTarget(returnPath: string): string {
+  return billingStepHref(returnPath);
 }
 
-/** Dashboard, signup, and other homes that are not a job file or settings link. */
+/** Dashboard, Start a job, signup, and other homes that are not a job file or settings link. */
 function isGenericPostAuth(path: string, platformHome?: string): boolean {
   const next = path.trim();
   if (!next) return true;
   if (platformHome && next === platformHome) return true;
   const pathOnly = next.split(/[?#]/)[0] ?? next;
   return GENERIC_POST_AUTH.has(pathOnly) || pathOnly.startsWith('/signup');
-}
-
-/** Generic homes, plus Start a job and the welcome page once a job is filed. */
-function replacesWithFiledJob(path: string, platformHome?: string): boolean {
-  if (isGenericPostAuth(path, platformHome)) return true;
-  const pathOnly = path.trim().split(/[?#]/)[0] ?? path;
-  return pathOnly === FIRST_RUN_HOME || pathOnly === FIRST_RUN_WELCOME;
-}
-
-/** Job file created on the welcome page, when this browser still has it. */
-function filedFirstJobHref(state: FirstRunState | null | undefined): string | null {
-  const jobId = state?.jobId?.trim();
-  if (!jobId) return null;
-  return jobFilePath(jobId, { title: state?.jobTitle, number: state?.jobNumber ?? null });
 }
