@@ -36,6 +36,7 @@ PAGES = [
     ('signup', 'signup.html'),
     ('investors', 'investors.html'),
     ('privacy', 'privacy.html'),
+    ('legal', 'legal.html'),
     ('terms', 'terms.html'),
 ]
 ROUTE_OF = {fname: route for route, fname in PAGES}

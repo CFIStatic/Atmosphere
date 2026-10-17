@@ -22,6 +22,7 @@ import {
   signedVaultUrl,
 } from '../legal/index.js';
 import { LEGAL_HOLD_KINDS, LEGAL_SUBJECT_TYPES } from '../legal/types.js';
+import { listLegalRequests } from '../legal/inbound.js';
 
 export const legalRouter = Router();
 
@@ -60,6 +61,16 @@ const activityQuerySchema = z.object({
   resourceId: z.string().trim().max(128).optional(),
   q: z.string().trim().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
+
+/** GET /api/legal/requests — emails received at legal@atmosphereteam.com, newest first. */
+legalRouter.get('/requests', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const requests = await listLegalRequests();
+    res.json({ requests, counts: { new: requests.filter((r) => r.status === 'new').length } });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /** GET /api/legal/holds */
