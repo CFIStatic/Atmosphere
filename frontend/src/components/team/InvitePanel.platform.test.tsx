@@ -79,6 +79,18 @@ describe('InvitePanel: Platform seats', () => {
     expect(form).not.toContainElement(screen.getByTestId('field-capture-seat-blurb'));
   });
 
+  it('has no Title select and never sends a title from the invite form', async () => {
+    render(<InvitePanel />);
+    expect(screen.queryByText('Title (optional)')).toBeNull();
+    expect(screen.queryByTitle('Service title for Analysis labels')).toBeNull();
+    await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
+    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'office@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
+    const sent = createOrgInvite.mock.calls.at(-1)?.[0] ?? {};
+    expect(sent).not.toHaveProperty('serviceRole');
+    expect(sent).not.toHaveProperty('serviceRoleCustom');
+  });
+
   it('lists Platform invites as Platform', async () => {
     render(<InvitePanel />);
     expect(await screen.findByText(/^Platform · asked/)).toBeInTheDocument();

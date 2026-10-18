@@ -5,7 +5,6 @@ import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
 import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
-import type { ServiceRoleSlug } from '../../lib/serviceRole';
 import { APP_SHELL_SEATS_NOTE, isInAppShell } from '../../lib/appShell';
 import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
 import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
@@ -73,8 +72,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
   const phoneE164 = normalizePhoneE164(phone);
   const usingPhone = phoneEnabled && byPhone && seatType !== 'platform';
   const [role, setRole] = useState<MemberRole>('employee');
-  const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
-  const [serviceRoleCustom, setServiceRoleCustom] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -147,8 +144,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         ...(usingPhone ? { phone: phoneE164 ?? phone } : { email }),
         role: platformSeat ? 'global_admin' : role,
         ...(platformSeat ? { seatType: 'platform' as const } : {}),
-        serviceRole: serviceRole || undefined,
-        serviceRoleCustom: serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
       });
       setOutcome(
         usingPhone
@@ -161,8 +156,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       );
       setEmail('');
       setPhone('');
-      setServiceRole('');
-      setServiceRoleCustom('');
       onInvited?.();
       await load();
     } catch (err) {
@@ -239,7 +232,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             value={phone}
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             placeholder="(555) 123-4567"
-            className="w-full min-w-56 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="w-full min-w-40 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         ) : (
           <input
@@ -250,7 +243,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="their@email.com"
-            className="w-full min-w-56 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="w-full min-w-40 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         )}
         <div
@@ -299,34 +292,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           ))}
         </select>
         )}
-        <select
-          value={serviceRole}
-          onChange={(e) => setServiceRole((e.target.value || '') as ServiceRoleSlug | '')}
-          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
-          title="Service title for Analysis labels"
-        >
-          <option value="">Title (optional)</option>
-          <option value="adjuster">Adjuster</option>
-          <option value="estimator">Estimator</option>
-          <option value="project_manager">Project Manager</option>
-          <option value="electrician">Electrician</option>
-          <option value="plumber">Plumber</option>
-          <option value="roofer">Roofer</option>
-          <option value="technician">Technician</option>
-          <option value="crew">Crew</option>
-          <option value="inspector">Inspector</option>
-          <option value="other">Other</option>
-        </select>
-        {serviceRole === 'other' ? (
-          <input
-            type="text"
-            maxLength={60}
-            value={serviceRoleCustom}
-            onChange={(e) => setServiceRoleCustom(e.target.value)}
-            placeholder="Custom title"
-            className="min-w-32 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
-          />
-        ) : null}
         <button
           type="submit"
           disabled={busy || (usingPhone ? !phoneE164 : !email.trim())}
