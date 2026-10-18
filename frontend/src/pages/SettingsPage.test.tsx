@@ -211,7 +211,7 @@ describe('Settings organization', () => {
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 
-  it('labels a Platform-only seat "Platform" in the member list', async () => {
+  it('labels a Platform seat "Platform" in the member list', async () => {
     apiMocks.getMembers.mockResolvedValue({
       members: [
         ...LINKED_ACCOUNTS,
@@ -423,7 +423,7 @@ describe('Settings Billing and Usage: the account owner only', () => {
 
   for (const [label, memberRole] of [
     ['another Global Admin', 'global_admin'],
-    ['a Platform-only seat', 'global_admin'],
+    ['a Platform seat', 'global_admin'],
     ['an employee', 'employee'],
     ['a subcontractor', 'employee'],
   ] as const) {

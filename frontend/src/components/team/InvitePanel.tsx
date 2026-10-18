@@ -13,7 +13,7 @@ import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/pho
 /**
  * Adding somebody to the team.
  *
- * Org invites create Employee (or Global Admin) seats, or a Platform-only
+ * Org invites create Employee (or Global Admin) seats, or a Platform
  * seat ($75/mo): Global Admin access on the Platform, no Field Capture, no
  * Billing and Usage. Invited workers on one job are invited from the job file
  * via a job-share token — not here.
@@ -22,17 +22,23 @@ import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/pho
 export const PLATFORM_SEAT_PRICE_LABEL = '$75/mo';
 export const SEAT_TYPE_LABELS: Record<SeatType, string> = {
   field_capture: 'Field Capture',
-  platform: `Platform only, ${PLATFORM_SEAT_PRICE_LABEL}`,
+  platform: 'Platform',
 };
 /** iPhone/Android app: no prices (App Store 3.1.1). */
 const SEAT_TYPE_LABELS_IN_APP: Record<SeatType, string> = {
   field_capture: 'Field Capture',
-  platform: 'Platform only',
+  platform: 'Platform',
 };
 export const FIELD_CAPTURE_SEAT_BLURB =
   'Films jobs in Field Capture and works on the Platform. Uses a Field Capture seat.';
 export const PLATFORM_SEAT_BLURB =
   'Sees everything on the Platform like a Global Admin, except Billing and Usage. No Field Capture.';
+/** Explanation under the invite row; the price only outside the phone app (App Store 3.1.1). */
+export function platformSeatExplanation(inApp: boolean): string {
+  return inApp
+    ? `Platform: ${PLATFORM_SEAT_BLURB}`
+    : `Platform: ${PLATFORM_SEAT_PRICE_LABEL}. ${PLATFORM_SEAT_BLURB}`;
+}
 
 const ROLES: OrgProductRole[] = ['employee', 'global_admin'];
 
@@ -265,7 +271,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
                 role="radio"
                 aria-checked={on}
                 data-testid={`invite-seat-${key}`}
-                title={key === 'platform' ? PLATFORM_SEAT_BLURB : FIELD_CAPTURE_SEAT_BLURB}
+                title={key === 'platform' ? platformSeatExplanation(inApp) : FIELD_CAPTURE_SEAT_BLURB}
                 onClick={() => {
                   setSeatType(key);
                   setError(null);
@@ -334,7 +340,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         className="mt-1.5 text-[11px] text-ink-500"
         data-testid={platformSeat ? 'platform-seat-blurb' : 'field-capture-seat-blurb'}
       >
-        {platformSeat ? PLATFORM_SEAT_BLURB : FIELD_CAPTURE_SEAT_BLURB}
+        {platformSeat ? platformSeatExplanation(inApp) : FIELD_CAPTURE_SEAT_BLURB}
       </p>
       <p className="mt-1.5 text-[11px] text-ink-400">
         {t('settings.invites.rolesHint')}

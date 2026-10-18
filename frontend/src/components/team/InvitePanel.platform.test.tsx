@@ -27,7 +27,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
 
 import { InvitePanel } from './InvitePanel';
 
-describe('InvitePanel: Platform-only seats', () => {
+describe('InvitePanel: Platform seats', () => {
   beforeEach(() => {
     createOrgInvite.mockReset().mockResolvedValue({
       invite: { id: 'inv-9', email: 'office@example.com', role: 'global_admin', seatType: 'platform', status: 'pending' },
@@ -46,17 +46,19 @@ describe('InvitePanel: Platform-only seats', () => {
     });
   });
 
-  it('offers Field Capture vs Platform only ($75/mo) and shows the count in use', async () => {
+  it('offers exactly "Field Capture" and "Platform" and shows the count in use', async () => {
     render(<InvitePanel />);
     expect(screen.getByRole('radio', { name: 'Field Capture' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'Platform only, $75/mo' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Platform' })).toBeInTheDocument();
     expect(await screen.findByText(/Platform seats: 1 of 2 in use/)).toBeInTheDocument();
   });
 
   it('a Platform invite sends seatType platform as a Global Admin, with no role picker', async () => {
     render(<InvitePanel />);
-    await userEvent.click(screen.getByRole('radio', { name: 'Platform only, $75/mo' }));
-    expect(screen.getByTestId('platform-seat-blurb')).toHaveTextContent(/except Billing and Usage/);
+    await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
+    expect(screen.getByTestId('platform-seat-blurb')).toHaveTextContent(
+      'Platform: $75/mo. Sees everything on the Platform like a Global Admin, except Billing and Usage. No Field Capture.',
+    );
     expect(screen.queryByDisplayValue('Employee')).toBeNull();
     await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'office@example.com');
     await userEvent.click(screen.getByRole('button', { name: /invite/i }));
@@ -89,7 +91,7 @@ describe('InvitePanel: Platform-only seats', () => {
       platformSeats: { used: 0, allowed: 0, remaining: 0, available: false },
     });
     render(<InvitePanel />);
-    await userEvent.click(screen.getByRole('radio', { name: 'Platform only, $75/mo' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
     expect(await screen.findByTestId('platform-seat-unavailable')).toHaveTextContent("Platform seats aren't available yet.");
   });
 });

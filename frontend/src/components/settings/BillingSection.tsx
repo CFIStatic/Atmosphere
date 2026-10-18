@@ -221,7 +221,7 @@ export function BillingSection() {
         </dl>
         <p className="mt-2 text-xs text-ink-500" data-testid="billing-platform-seats-note">
           Platform seats see everything on the Platform like a Global Admin, except Billing and Usage, and
-          cannot use Field Capture. Add one by inviting someone as "Platform only" in Team.
+          cannot use Field Capture. Add one by inviting someone as "Platform" in Team.
         </p>
 
         {sub.cancelAtPeriodEnd ? (

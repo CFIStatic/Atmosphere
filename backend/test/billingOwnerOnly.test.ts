@@ -116,7 +116,7 @@ test('the owner can open every Billing and Usage endpoint', async () => {
 
 for (const [label, user] of [
   ['another Global Admin', OTHER_ADMIN],
-  ['a Platform-only seat', PLATFORM_SEAT],
+  ['a Platform seat', PLATFORM_SEAT],
   ['an employee', MEMBER],
   ['a homeowner', HOMEOWNER],
   ['a subcontractor', SUB],
