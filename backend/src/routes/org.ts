@@ -25,7 +25,7 @@ import { ensurePlatformSeatForInvite, isPlatformSeatLimitDbError, parseSeatType 
 import { GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, isOrgOwnerRow, loadOrgOwnerId } from '../middleware/requireOrgOwner.js';
 import { isAppShellRequest } from '../lib/appShell.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
-import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
+import { joinOrgAsInvitee, requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
 import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
 
@@ -352,7 +352,7 @@ orgRouter.post('/join', async (req: Request, res: Response, next: NextFunction) 
       email: req.user?.email,
       phone: req.user?.phone,
     });
-    const { data, error } = await supabase.rpc('join_org', {
+    const { data, error } = await joinOrgAsInvitee(supabase, req.user!.id, {
       p_code: invite.joinCode,
       p_role: invite.role,
       p_work_type: workType,

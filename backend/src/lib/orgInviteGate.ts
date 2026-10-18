@@ -1,4 +1,5 @@
-import { adminForOrg, unscopedAdmin } from './scopedAdmin.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { adminForOrg, unscopedAdmin, unscopedAdminOrNull } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 import { toOrgProductRole, type OrgProductRole } from './productRoles.js';
 import { authPhoneToE164 } from '../auth/phoneAuth.js';
@@ -90,4 +91,22 @@ export async function requirePendingOrgInvite(input: {
     serviceRoleCustom: (invite as { service_role_custom?: string | null }).service_role_custom ?? null,
     joinCode,
   };
+}
+
+/**
+ * Join the invited user to the invite's workspace.
+ *
+ * join_org is server-only (a user token holding a join code could otherwise
+ * join any workspace without an invite), so the server calls join_org_as,
+ * which runs join_org as this user. Keyless local runs and tests fall back to
+ * the caller's own client.
+ */
+export async function joinOrgAsInvitee(
+  userClient: SupabaseClient,
+  userId: string,
+  params: { p_code: string; p_role: string; p_work_type: string },
+) {
+  const admin = unscopedAdminOrNull();
+  if (admin) return admin.rpc('join_org_as', { p_actor: userId, ...params });
+  return userClient.rpc('join_org', params);
 }

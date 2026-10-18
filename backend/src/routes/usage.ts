@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { createUserClient } from '../lib/supabase.js';
+import { requireAdmin } from '../lib/scopedAdmin.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { requireOrgOwner } from '../middleware/requireOrgOwner.js';
@@ -112,9 +113,11 @@ usageRouter.post('/record', meterLimiter, async (req: Request, res: Response, ne
     }
 
     const input = recordUsageSchema.parse(req.body);
-    const supabase = createUserClient(req.accessToken!);
+    // record_usage is server-only; the *_as wrapper keeps its membership check.
+    const admin = requireAdmin();
 
-    const { data, error } = await supabase.rpc('record_usage', {
+    const { data, error } = await admin.rpc('record_usage_as', {
+      p_actor: req.user!.id,
       ...usageParams(req.orgId!, input),
       p_request_id: input.requestId,
       p_feature: input.feature ?? null,

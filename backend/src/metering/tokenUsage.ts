@@ -522,11 +522,47 @@ export async function withVideoUsageActor(
 }
 
 /** Record one token-usage event. Idempotent on requestId. Never throws to the caller of the async variant. */
+/**
+ * The user id inside a user-token client's bearer JWT, or null (service role,
+ * anon, mocks). Attribution only: the token was already verified by
+ * requireAuth before any client was built from it.
+ */
+export function bearerSubject(client: SupabaseClient): string | null {
+  try {
+    const raw = (client as unknown as { rest?: { headers?: unknown }; headers?: unknown });
+    const pick = (h: unknown): string | null => {
+      if (!h) return null;
+      if (typeof (h as Headers).get === 'function') return (h as Headers).get('Authorization');
+      const rec = h as Record<string, string | undefined>;
+      return rec.Authorization ?? rec.authorization ?? null;
+    };
+    const auth = pick(raw.rest?.headers) ?? pick(raw.headers);
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+    const payload = token?.split('.')[1];
+    if (!payload) return null;
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      sub?: unknown;
+      role?: unknown;
+    };
+    if (claims.role !== 'authenticated' || typeof claims.sub !== 'string') return null;
+    return /^[0-9a-f-]{36}$/i.test(claims.sub) ? claims.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordTokenUsage(
   client: SupabaseClient,
   input: TokenUsageInput,
 ): Promise<{ eventId: string; duplicate: boolean } | null> {
-  const params = toRpcParams(await withVideoUsageActor(client, input));
+  // record_token_usage is server-only (a user token could otherwise write
+  // usage rows into its org's ledger). Write with the service role and keep
+  // the old attribution: a user-token caller with no explicit userId is the
+  // person the row belongs to.
+  const writer = unscopedAdminOrNull() ?? client;
+  const attributed =
+    input.userId || writer === client ? input : { ...input, userId: bearerSubject(client) ?? input.userId };
+  const params = toRpcParams(await withVideoUsageActor(client, attributed));
   const tokenTotal = tokenCount(input);
   if (tokenTotal > 0 && params.p_cost_nanos <= 0) {
     // Health check: tokens were spent but nothing was priced. This is an
@@ -539,7 +575,7 @@ export async function recordTokenUsage(
       totalTokens: tokenTotal,
     });
   }
-  const { data, error } = await client.rpc('record_token_usage', params);
+  const { data, error } = await writer.rpc('record_token_usage', params);
   if (error) throw error;
   const row = data as { eventId?: string; duplicate?: boolean } | null;
   if (!row?.eventId) return null;

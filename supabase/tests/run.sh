@@ -57,6 +57,9 @@ bash "$HERE/16_replay_from_scratch.sh" "$@"
 echo "==> Platform-only seats and owner-only billing (baseline + later migrations)"
 bash "$HERE/17_platform_seats.sh" "$@"
 
+echo "==> Direct writes with a user token: membership, billing, limits (baseline + later migrations)"
+bash "$HERE/18_direct_write_lockdown.sh" "$@"
+
 echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"
 echo "    refusing the operation. Orchestration section 3 (event update) and 4"

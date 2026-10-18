@@ -2,7 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { createUserClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { FIELD_APP_CREATE_ONBOARDING, FIELD_APP_ONBOARDING } from '../lib/validation.js';
-import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
+import { joinOrgAsInvitee, requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { HttpError } from '../lib/errors.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 
@@ -131,7 +131,7 @@ export async function linkFieldOffice(
     email: user.email,
     phone: (user as { phone?: string | null }).phone,
   });
-  const { data, error } = await supabase.rpc('join_org', {
+  const { data, error } = await joinOrgAsInvitee(supabase, user.id, {
     p_code: invite.joinCode,
     p_role: invite.role,
     p_work_type: FIELD_APP_ONBOARDING.workType,
