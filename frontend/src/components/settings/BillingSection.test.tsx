@@ -179,6 +179,30 @@ describe('BillingSection', () => {
     expect(screen.getByText(/added automatically when you invite/i)).toBeInTheDocument();
   });
 
+  it('shows the owner a Platform seats line ($75/mo each, monthly total)', async () => {
+    getBillingWorkspace.mockResolvedValue({
+      ...paid,
+      platformSeats: { allowed: 2, used: 2, remaining: 0, priceCents: 7500, available: true },
+    });
+    renderBilling();
+    const line = await screen.findByTestId('billing-platform-seats');
+    expect(line).toHaveTextContent('2 of 2 used');
+    expect(line).toHaveTextContent('$75/mo each');
+    expect(line).toHaveTextContent('$150/mo');
+    expect(screen.getByTestId('billing-platform-seats-note')).toHaveTextContent(/except Billing and Usage/);
+  });
+
+  it('comped workspace: Platform seats are free', async () => {
+    getBillingWorkspace.mockResolvedValue({
+      ...paid,
+      billingExempt: true,
+      subscription: { ...paid.subscription, status: 'comped', hasStripeSubscription: false },
+      platformSeats: { allowed: 1, used: 1, remaining: 0, priceCents: 7500, available: true },
+    });
+    renderBilling();
+    expect(await screen.findByTestId('billing-platform-seats')).toHaveTextContent('free on this workspace');
+  });
+
   it('shows the Scale plan name and 10 included seats', async () => {
     getBillingWorkspace.mockResolvedValue({
       ...paid,

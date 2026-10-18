@@ -4,6 +4,7 @@ import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { requireOrgOwner } from '../middleware/requireOrgOwner.js';
 import { config } from '../config.js';
 import { forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
@@ -14,7 +15,7 @@ export const usageRouter = Router();
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-usageRouter.use(requireAuth, requireOrg);
+usageRouter.use(requireAuth, requireOrg, requireOrgOwner);
 
 /**
  * Metering is the hot path — one call per model request. The cap is generous

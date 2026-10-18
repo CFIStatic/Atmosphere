@@ -143,7 +143,7 @@ export const ES: MessageCatalog = {
     'Solo tú (administrador global) puedes crear cuentas de espacio para otros. Abren el correo de invitación y crean un acceso con esa dirección. Para un subcontratista en un solo trabajo, invítalo desde el archivo del trabajo.',
   'settings.invites.button': 'Invitar',
   'settings.invites.rolesHint':
-    'El administrador global gestiona la facturación. Los empleados pueden hacer el resto.',
+    'Los Global Admin y los puestos Platform ven todo excepto Facturación y Uso, que solo ve el propietario de la cuenta. Los empleados graban en Field Capture.',
 
   'theme.light': 'Claro',
   'theme.dark': 'Oscuro',

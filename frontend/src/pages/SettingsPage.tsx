@@ -8,7 +8,8 @@ import {
 } from 'react';
 import { useNavigate, useOutletContext, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { canManageBilling, isGlobalAdmin } from '../domain/productRoles';
+import { isGlobalAdmin } from '../domain/productRoles';
+import { useIsOrgOwner } from '../lib/billingOwner';
 import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -71,9 +72,11 @@ export function SettingsPage() {
   useFeatureTimer('settings');
   const t = useT();
   const { membership, user } = useAuth();
-  const showBilling = canManageBilling(membership?.role);
   // Invited homeowners (no org): their profile and sign-out, nothing else.
   const { homeowner } = useHomeownerPortal();
+  // Billing and Usage: the account owner (who created the organization) only.
+  const isOwner = useIsOrgOwner(Boolean(membership?.org?.id) && !homeowner);
+  const showBilling = isOwner === true && !homeowner;
   const ALL_SECTIONS: SettingsSection[] = [
     { id: 'profile', label: t('settings.section.profile'), blurb: t('settings.section.profileBlurb'), icon: UserIcon },
     { id: 'security', label: t('settings.section.security'), blurb: t('settings.section.securityBlurb'), icon: ShieldIcon },
@@ -114,8 +117,11 @@ export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('section');
   const requested: SectionId = isSectionId(raw) ? raw : 'profile';
-  const active: SectionId =
-    requested === 'billing' && !showBilling
+  // A billing link waits for the owner check instead of bouncing to Profile.
+  const billingPending = requested === 'billing' && isOwner === null && !homeowner && Boolean(membership?.org?.id);
+  const active: SectionId = billingPending
+    ? 'billing'
+    : requested === 'billing' && !showBilling
       ? 'profile'
       : SECTIONS.some((s) => s.id === requested)
         ? requested
@@ -194,6 +200,11 @@ export function SettingsPage() {
             </>
           )}
           {active === 'billing' && showBilling && <BillingSection />}
+          {active === 'billing' && billingPending && (
+            <div className="flex justify-center py-16" data-testid="settings-billing-pending">
+              <SpinnerIcon className="animate-spin text-ink-400" width={18} height={18} />
+            </div>
+          )}
           {active === 'support' && <SupportSection />}
           {SHOW_SETTINGS_CONNECT && active === 'connect' && <CrmConnectPanel embedded />}
         </div>
@@ -919,8 +930,12 @@ function LinkedAccountsCard() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
-                    {ROLE_LABELS[member.role] ?? member.role}
+                  <span
+                    data-testid="member-seat-label"
+                    title={member.seatType === 'platform' ? 'Platform seat: Global Admin access, no Field Capture, no Billing and Usage.' : undefined}
+                    className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
+                  >
+                    {member.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[member.role] ?? member.role)}
                   </span>
                   {showRemove && (
                     <button

@@ -36,7 +36,10 @@ export function isFieldCaptureSeat(input: {
   role?: string | null;
   email?: string | null;
   usageIntents?: readonly string[] | null;
+  /** 'platform' is never a Field Capture seat (and never gets a chest mount). */
+  seatType?: string | null;
 }): boolean {
+  if (input.seatType === 'platform') return false;
   if (hasFieldCaptureInbox(input.email)) return true;
   if (isFieldCaptureSeatRole(input.role)) return true;
   return Boolean(input.usageIntents?.includes('field_work'));
@@ -112,21 +115,30 @@ export async function countFieldCaptureSeats(
   supabase: SupabaseClient,
   orgId: string,
 ): Promise<number> {
-  const [{ data: members }, { data: invites }] = await Promise.all([
-    supabase
-      .from('org_members')
-      .select('user_id, role, usage_intents, profiles(email)')
-      .eq('org_id', orgId),
-    supabase
-      .from('org_invites')
-      .select('email, role, status')
-      .eq('org_id', orgId)
-      .eq('status', 'pending'),
+  const selectMembers = (cols: string) =>
+    supabase.from('org_members').select(cols).eq('org_id', orgId);
+  const selectInvites = (cols: string) =>
+    supabase.from('org_invites').select(cols).eq('org_id', orgId).eq('status', 'pending');
+  const [membersResult, invitesResult] = await Promise.all([
+    selectMembers('user_id, role, usage_intents, seat_type, profiles(email)'),
+    selectInvites('email, role, status, seat_type'),
   ]);
+  let members = membersResult.data;
+  let invites = invitesResult.data;
+  const membersError = membersResult.error;
+  const invitesError = invitesResult.error;
+  // Before the Platform seat migration is applied: same count as before.
+  if (membersError && /seat_type/i.test(membersError.message)) {
+    ({ data: members } = await selectMembers('user_id, role, usage_intents, profiles(email)'));
+  }
+  if (invitesError && /seat_type/i.test(invitesError.message)) {
+    ({ data: invites } = await selectInvites('email, role, status'));
+  }
 
-  const memberRows = (members ?? []) as Array<{
+  const memberRows = (members ?? []) as unknown as Array<{
     role?: string;
     usage_intents?: string[] | null;
+    seat_type?: string | null;
     profiles?: { email?: string | null } | Array<{ email?: string | null }> | null;
   }>;
   const memberEmails = new Set(
@@ -135,15 +147,22 @@ export async function countFieldCaptureSeats(
 
   let used = 0;
   for (const row of memberRows) {
-    if (isFieldCaptureSeat({ role: row.role, email: profileEmail(row), usageIntents: row.usage_intents })) {
+    if (
+      isFieldCaptureSeat({
+        role: row.role,
+        email: profileEmail(row),
+        usageIntents: row.usage_intents,
+        seatType: row.seat_type,
+      })
+    ) {
       used += 1;
     }
   }
 
-  for (const invite of (invites ?? []) as Array<{ email?: string; role?: string }>) {
+  for (const invite of (invites ?? []) as unknown as Array<{ email?: string; role?: string; seat_type?: string | null }>) {
     const email = invite.email?.trim().toLowerCase() ?? '';
     if (email && memberEmails.has(email)) continue;
-    if (isFieldCaptureSeat({ role: invite.role, email })) used += 1;
+    if (isFieldCaptureSeat({ role: invite.role, email, seatType: invite.seat_type })) used += 1;
   }
 
   return used;

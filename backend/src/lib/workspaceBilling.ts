@@ -3,6 +3,8 @@ import { config } from '../config.js';
 import { getCustomerMeteringSummary } from '../metering/periodAggregation.js';
 import type { CustomerMeteringSummary } from '../metering/types.js';
 import { loadFieldCaptureSeatUsage, type FieldCaptureSeatUsage } from './fieldCaptureSeats.js';
+import { loadPlatformSeatUsage, type PlatformSeatUsage } from './platformSeats.js';
+import { PLATFORM_SEAT_MONTHLY_CENTS } from './stripeCatalog.js';
 import { createAdminClient } from './supabase.js';
 import {
   EXTRA_FC_SEAT_MONTHLY_CENTS,
@@ -44,6 +46,8 @@ export interface WorkspaceBilling {
   subscription: WorkspaceSubscription;
   usage: CustomerMeteringSummary | null;
   fieldCaptureSeats: FieldCaptureSeatUsage & { extraSeatPriceCents: number };
+  /** Platform-only seats ($75/mo): Global Admin access, no Field Capture, no Billing. */
+  platformSeats: PlatformSeatUsage;
 }
 
 const DEFAULT_PLAN: WorkspacePlan = {
@@ -227,6 +231,19 @@ export async function loadWorkspaceBilling(
     console.warn('[billing] Field Capture seat usage unavailable:', (err as Error).message);
   }
 
+  let platformSeats: PlatformSeatUsage = {
+    allowed: 0,
+    used: 0,
+    remaining: 0,
+    priceCents: PLATFORM_SEAT_MONTHLY_CENTS,
+    available: billingExempt,
+  };
+  try {
+    platformSeats = await loadPlatformSeatUsage(supabase, orgId, { actingUserEmail: email });
+  } catch (err) {
+    console.warn('[billing] Platform seat usage unavailable:', (err as Error).message);
+  }
+
   return {
     paymentProvider,
     canManage: Boolean((overview as { can_manage?: boolean } | null)?.can_manage),
@@ -247,6 +264,7 @@ export async function loadWorkspaceBilling(
     },
     usage,
     fieldCaptureSeats,
+    platformSeats,
   };
 }
 

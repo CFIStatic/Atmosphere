@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { captureAfterSignup, FIRST_RUN_HOME, firstRunDestination } from '../lib/firstRun';
-import { isAbsoluteHref, offersInviteStep, postOnboardingHref } from '../lib/postOnboarding';
+import { currentPostOnboardingEnv, isAbsoluteHref, offersInviteStep, postOnboardingHref } from '../lib/postOnboarding';
 import { resetBillingOnboardingShared } from '../lib/billingOnboardingShared';
 import { isGlobalAdmin } from '../domain/productRoles';
 import { homeownerAfterSignup } from '../lib/homeownerHub';
@@ -226,9 +226,14 @@ export function SignupPage() {
   const termsValid = creatingNewAccount ? termsAcknowledged : true;
   const formValid = accountValid && workspaceValid && termsValid;
 
+  /** Where setup ends for this person. A Platform-only seat never lands in Field Capture. */
+  function setupEnv() {
+    return { ...currentPostOnboardingEnv(), platformSeat: membership?.seatType === 'platform' };
+  }
+
   /** Leave setup: computers to the Dashboard (or deep link), phones to Field Capture. Same session. */
   function leaveSetup() {
-    const href = postOnboardingHref(afterSetupTo);
+    const href = postOnboardingHref(afterSetupTo, setupEnv());
     if (isAbsoluteHref(href)) {
       window.location.assign(href);
       return;
@@ -238,7 +243,7 @@ export function SignupPage() {
 
   /** Paid or comped. Computers get the optional invite screen first; phones go straight on. */
   function enterApp() {
-    if (isAbsoluteHref(postOnboardingHref(afterSetupTo)) || !offersInviteStep()) {
+    if (isAbsoluteHref(postOnboardingHref(afterSetupTo, setupEnv())) || !offersInviteStep()) {
       leaveSetup();
       return;
     }

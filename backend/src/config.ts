@@ -356,6 +356,13 @@ export const config = {
     scaleAnnualPriceId: process.env.STRIPE_SCALE_ANNUAL_PRICE_ID ?? '',
     extraSeatAnnualPriceId: process.env.STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID ?? '',
     /**
+     * Platform-only seat $75/mo (monthly only). Empty falls back to
+     * LIVE_PLATFORM_SEAT_PRICE_ID in stripeCatalog.ts; when both are empty,
+     * paid Platform seats are refused ("Platform seats aren't available yet")
+     * and only comped workspaces can add them.
+     */
+    platformSeatPriceId: process.env.STRIPE_PLATFORM_SEAT_PRICE_ID ?? '',
+    /**
      * Signup Checkout return base (step 2 + checkout query params appended).
      * Always the office host — never Field Capture — so cancel and success
      * keep the platform session. STRIPE_ONBOARDING_RETURN_URL still wins

@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { createAdminClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { requireOrgOwner } from '../middleware/requireOrgOwner.js';
 import { billingError } from '../lib/billing.js';
 import { HttpError, forbidden } from '../lib/errors.js';
 import {
@@ -18,7 +19,7 @@ import { z } from 'zod';
 
 export const meteringRouter = Router();
 
-meteringRouter.use(requireAuth, requireOrg);
+meteringRouter.use(requireAuth, requireOrg, requireOrgOwner);
 
 const recordEventSchema = z.object({
   idempotencyKey: z.string().min(1).max(256),

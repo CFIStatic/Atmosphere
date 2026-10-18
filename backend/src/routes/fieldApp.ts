@@ -4,6 +4,7 @@ import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
 import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { rejectPlatformSeatInFieldCapture } from '../middleware/rejectPlatformSeat.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { adminForPartyToken, unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
 import { ackDisplayName, acknowledgeShareRevision } from '../shared/acknowledgeShareRevision.js';
@@ -177,6 +178,8 @@ const limiter = rateLimit({
   message: { error: 'Too many Field Capture requests. Try again later.', code: 'rate_limited' },
 });
 fieldAppRouter.use(limiter);
+// Platform-only seats work on platform.atmosphereteam.com, never in Field Capture.
+fieldAppRouter.use(rejectPlatformSeatInFieldCapture);
 
 const FIELD_PARTY_COMPANY = 'Field Capture';
 

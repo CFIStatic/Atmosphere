@@ -22,6 +22,7 @@ import { visibleJobFiles } from '../lib/jobFileCopy';
 import { subscribeLibraryChanged } from '../lib/libraryChanged';
 import { buildCrewBoard, type CrewBoardRow } from '../lib/workerBoard';
 import { usePhoneShell } from '../lib/usePhoneShell';
+import { useAuth } from '../context/AuthContext';
 import { cn } from '../design';
 import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '../components/icons';
 
@@ -345,12 +346,31 @@ function ActionList({
   stage: PipelineStage | null;
   compact: boolean;
 }) {
+  const platformSeat = useAuth().membership?.seatType === 'platform';
   if (!loaded) {
     return (
       <div className="space-y-2 px-3 py-3 sm:px-5 sm:py-4">
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
+      </div>
+    );
+  }
+
+  if (model.openCount === 0 && platformSeat) {
+    // Platform-only seat: no Field Capture, so no "open Field Capture" steps.
+    return (
+      <div className="px-3 py-8 text-center sm:px-5 sm:py-10" data-testid="platform-seat-first-job">
+        <p className="text-sm font-medium text-ink-800">No open jobs yet</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">
+          Start a job here. Your crew's Field Capture videos land back on this dashboard.
+        </p>
+        <Link
+          to="/intake"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500"
+        >
+          Start a job
+        </Link>
       </div>
     );
   }

@@ -21,6 +21,8 @@ import { HttpError } from '../lib/errors.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 import { ensureFieldCaptureSeatForInvite } from '../lib/fieldCaptureInviteSeats.js';
+import { ensurePlatformSeatForInvite, isPlatformSeatLimitDbError, parseSeatType } from '../lib/platformSeats.js';
+import { isOrgOwnerRow, loadOrgOwnerId } from '../middleware/requireOrgOwner.js';
 import { isAppShellRequest } from '../lib/appShell.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
@@ -50,6 +52,7 @@ function serializeMembership(m: any) {
   const org = Array.isArray(m.orgs) ? m.orgs[0] : m.orgs;
   return {
     role: m.role,
+    seatType: parseSeatType(m.seat_type),
     workType: m.work_type,
     usageIntents: Array.isArray(m.usage_intents) ? m.usage_intents : [],
     status: m.status,
@@ -77,6 +80,7 @@ function serializeMember(row: any) {
     handle: typeof p?.handle === 'string' ? p.handle : null,
     avatarUrl,
     role: row.role,
+    seatType: parseSeatType(row.seat_type),
     workType: row.work_type,
     usageIntents: Array.isArray(row.usage_intents) ? row.usage_intents : [],
     status: row.status,
@@ -84,7 +88,7 @@ function serializeMember(row: any) {
 }
 
 const MEMBERSHIP_SELECT =
-  'role, work_type, usage_intents, status, orgs(id, name, join_code, contractor_type)';
+  'role, seat_type, work_type, usage_intents, status, orgs(id, name, join_code, contractor_type)';
 
 /** Pre-questionnaire columns — used if the new migration is not applied yet. */
 const MEMBERSHIP_SELECT_LEGACY =
@@ -92,7 +96,7 @@ const MEMBERSHIP_SELECT_LEGACY =
 
 function isMissingColumnError(message: string | undefined): boolean {
   if (!message) return false;
-  return /usage_intents|contractor_type|column .* does not exist/i.test(message);
+  return /usage_intents|contractor_type|seat_type|column .* does not exist/i.test(message);
 }
 
 function isOrgMemberPrivilegeError(message: string | undefined): boolean {
@@ -428,11 +432,11 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
-      .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
+      .select('user_id, role, seat_type, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
 
-    if (result.error && /handle/i.test(result.error.message)) {
+    if (result.error && /handle|seat_type/i.test(result.error.message)) {
       result = await supabase
         .from('org_members')
         .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url)')
@@ -588,7 +592,7 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
     const [{ data: inviteRows }, { data: memberRows }] = await Promise.all([
       supabase
         .from('org_invites')
-        .select('id, email, phone, role, note, status, created_at, joined_at, revoked_at, invited_by, service_role, service_role_custom')
+        .select('id, email, phone, role, seat_type, note, status, created_at, joined_at, revoked_at, invited_by, service_role, service_role_custom')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(200),
@@ -617,6 +621,7 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
         email: invite.email ?? null,
         phone: invite.phone ?? null,
         role: invite.role,
+        seatType: parseSeatType(invite.seat_type),
         note: invite.note,
         status: invite.status,
         serviceRole: invite.service_role ?? null,
@@ -636,6 +641,8 @@ const createInviteSchema = z.object({
   /** Crew without email: invite by mobile number (E.164, US default). */
   phone: z.string().trim().max(40).optional(),
   role: z.enum(MEMBER_ROLES).optional(),
+  /** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing. */
+  seatType: z.enum(['field_capture', 'platform']).optional(),
   note: z.string().trim().max(500).optional(),
   serviceRole: z.enum(SERVICE_ROLE_SLUGS).optional(),
   serviceRoleCustom: z
@@ -679,14 +686,25 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     if (phone && !email && !phoneAuthEnabled()) {
       throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
     }
-    const seat = toOrgProductRole(input.role ?? 'employee');
+    const seatType = parseSeatType(input.seatType);
+    // A Platform seat is a Global Admin without Field Capture or Billing.
+    const seat = seatType === 'platform' ? 'global_admin' : toOrgProductRole(input.role ?? 'employee');
 
-    if (seat === 'employee') {
+    if (seatType === 'platform') {
+      await ensurePlatformSeatForInvite(supabase, orgId, {
+        actingUserEmail: req.user!.email,
+        customerEmail: req.user!.email,
+        orgName: name,
+        fromAppShell: isAppShellRequest(req),
+        actorIsOwner: isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, orgId) }, req.user!.id),
+      });
+    } else if (seat === 'employee') {
       await ensureFieldCaptureSeatForInvite(supabase, orgId, {
         actingUserEmail: req.user!.email,
         customerEmail: req.user!.email,
         orgName: name,
         fromAppShell: isAppShellRequest(req),
+        actorIsOwner: isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, orgId) }, req.user!.id),
       });
     }
 
@@ -701,12 +719,13 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         email,
         phone,
         role: seat,
+        ...(seatType === 'platform' ? { seat_type: 'platform' } : {}),
         note: input.note ?? null,
         invited_by: req.user!.id,
         service_role: serviceNorm.service_role,
         service_role_custom: serviceNorm.service_role_custom,
       })
-      .select('id, email, phone, role, status, created_at, service_role, service_role_custom')
+      .select(`id, email, phone, role, status, created_at, service_role, service_role_custom${seatType === 'platform' ? ', seat_type' : ''}`)
       .single();
     if (error) {
       if (error.code === '23505') {
@@ -714,6 +733,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       }
       if (isFcSeatLimitDbError(error)) {
         throw fcSeatLimitFromDb();
+      }
+      if (isPlatformSeatLimitDbError(error)) {
+        throw new HttpError(402, 'Every Platform seat on this workspace is in use.', 'platform_seat_limit');
       }
       throw new HttpError(400, error.message, 'invite_failed');
     }
@@ -768,7 +790,8 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
         inviteEmailAddress: email,
         origin: publicAppOrigin(),
-        fieldCaptureOrigin: LIVE_FIELD_CAPTURE_ORIGIN,
+        // Platform seats have no Field Capture: do not point them at it.
+        fieldCaptureOrigin: seatType === 'platform' ? null : LIVE_FIELD_CAPTURE_ORIGIN,
         note: input.note ?? null,
       });
       // Atmosphere sends — not the org's connected Gmail/Microsoft.
@@ -790,6 +813,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         email: (invite as any).email ?? null,
         phone: (invite as any).phone ?? null,
         role: (invite as any).role,
+        seatType,
         status: (invite as any).status,
         serviceRole: (invite as any).service_role ?? null,
         serviceRoleCustom: (invite as any).service_role_custom ?? null,

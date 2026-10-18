@@ -127,6 +127,24 @@ export const INCLUDED_FC_SEATS = ATMOSPHERE_SELF_SERVE_PLANS.work_verification.i
 export const WORK_VERIFICATION_MONTHLY_CENTS =
   ATMOSPHERE_SELF_SERVE_PLANS.work_verification.monthlyCents;
 export const EXTRA_FC_SEAT_MONTHLY_CENTS = 12_500;
+
+/**
+ * Platform-only seat: $75/mo per person, unlimited quantity, monthly only.
+ * Global Admin access on platform.atmosphereteam.com, no Field Capture, no
+ * Billing and Usage. An add-on to an existing (paid or comped) workspace.
+ */
+export const PLATFORM_SEAT_PLAN_CODE = 'platform_seat';
+export const PLATFORM_SEAT_MONTHLY_CENTS = 7_500;
+/**
+ * TODO(Jack): live "Platform seat" product and $75/mo recurring price. Empty
+ * until created in the Stripe dashboard; STRIPE_PLATFORM_SEAT_PRICE_ID wins.
+ */
+export const LIVE_PLATFORM_SEAT_PRODUCT_ID = '';
+export const LIVE_PLATFORM_SEAT_PRICE_ID = '';
+
+export function isPlatformSeatPlanCode(value: string | null | undefined): boolean {
+  return value === PLATFORM_SEAT_PLAN_CODE;
+}
 /** $1,250/yr — 10× monthly, same 2-months-free annual offer as the plans. */
 export const EXTRA_FC_SEAT_ANNUAL_CENTS = 125_000;
 
