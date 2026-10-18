@@ -65,6 +65,18 @@ describe('InvitePanel: Platform-only seats', () => {
     );
   });
 
+  it('puts the seat picker in the invite row, right after the email, with the explanation under it', () => {
+    render(<InvitePanel />);
+    const email = screen.getByPlaceholderText('their@email.com');
+    const picker = screen.getByTestId('invite-seat-type');
+    const form = email.closest('form');
+    expect(form).not.toBeNull();
+    expect(form).toContainElement(picker);
+    expect(email.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('field-capture-seat-blurb')).toHaveTextContent(/Field Capture/);
+    expect(form).not.toContainElement(screen.getByTestId('field-capture-seat-blurb'));
+  });
+
   it('lists Platform invites as Platform', async () => {
     render(<InvitePanel />);
     expect(await screen.findByText(/^Platform · asked/)).toBeInTheDocument();

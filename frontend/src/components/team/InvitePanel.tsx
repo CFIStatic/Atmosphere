@@ -29,6 +29,8 @@ const SEAT_TYPE_LABELS_IN_APP: Record<SeatType, string> = {
   field_capture: 'Field Capture',
   platform: 'Platform only',
 };
+export const FIELD_CAPTURE_SEAT_BLURB =
+  'Films jobs in Field Capture and works on the Platform. Uses a Field Capture seat.';
 export const PLATFORM_SEAT_BLURB =
   'Sees everything on the Platform like a Global Admin, except Billing and Usage. No Field Capture.';
 
@@ -189,41 +191,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         </div>
       ) : null}
 
-      <div
-        role="radiogroup"
-        aria-label="Seat"
-        data-testid="invite-seat-type"
-        className="mt-3 inline-flex items-center gap-1 rounded-lg bg-ink-900/5 p-1 ring-1 ring-inset ring-ink-900/10"
-      >
-        {(['field_capture', 'platform'] as const).map((key) => {
-          const on = seatType === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              data-testid={`invite-seat-${key}`}
-              title={key === 'platform' ? PLATFORM_SEAT_BLURB : 'Films jobs in Field Capture and works on the Platform.'}
-              onClick={() => {
-                setSeatType(key);
-                setError(null);
-              }}
-              className={`h-7 rounded-md px-3 text-xs font-medium transition ${
-                on ? 'bg-ink-900/10 text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
-              }`}
-            >
-              {(inApp ? SEAT_TYPE_LABELS_IN_APP : SEAT_TYPE_LABELS)[key]}
-            </button>
-          );
-        })}
-      </div>
-      {platformSeat ? (
-        <p className="mt-1.5 text-[11px] text-ink-500" data-testid="platform-seat-blurb">
-          {PLATFORM_SEAT_BLURB}
-        </p>
-      ) : null}
-
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
         {phoneEnabled && !platformSeat ? (
           <div
@@ -266,7 +233,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             value={phone}
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             placeholder="(555) 123-4567"
-            className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="w-full min-w-56 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         ) : (
           <input
@@ -277,9 +244,41 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="their@email.com"
-            className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="w-full min-w-56 flex-1 rounded-lg glass-field px-3 py-2 sm:w-auto text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         )}
+        <div
+          role="radiogroup"
+          aria-label="Seat type"
+          data-testid="invite-seat-type"
+          className="flex w-full shrink-0 items-stretch gap-0.5 rounded-lg glass-field p-0.5 sm:w-auto"
+        >
+          <span className="hidden self-center pl-2 pr-1 text-xs text-ink-500 sm:inline" aria-hidden="true">
+            Seat
+          </span>
+          {(['field_capture', 'platform'] as const).map((key) => {
+            const on = seatType === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                data-testid={`invite-seat-${key}`}
+                title={key === 'platform' ? PLATFORM_SEAT_BLURB : FIELD_CAPTURE_SEAT_BLURB}
+                onClick={() => {
+                  setSeatType(key);
+                  setError(null);
+                }}
+                className={`flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition sm:flex-none ${
+                  on ? 'bg-ink-900/10 font-medium text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
+                }`}
+              >
+                {(inApp ? SEAT_TYPE_LABELS_IN_APP : SEAT_TYPE_LABELS)[key]}
+              </button>
+            );
+          })}
+        </div>
         {platformSeat ? null : (
         <select
           value={role}
@@ -331,6 +330,12 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           {t('settings.invites.button')}
         </button>
       </form>
+      <p
+        className="mt-1.5 text-[11px] text-ink-500"
+        data-testid={platformSeat ? 'platform-seat-blurb' : 'field-capture-seat-blurb'}
+      >
+        {platformSeat ? PLATFORM_SEAT_BLURB : FIELD_CAPTURE_SEAT_BLURB}
+      </p>
       <p className="mt-1.5 text-[11px] text-ink-400">
         {t('settings.invites.rolesHint')}
         {seats
