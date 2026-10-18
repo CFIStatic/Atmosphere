@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { rejectPurchasesInAppShell } from '../lib/appShell.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
+import { requireAdmin } from '../lib/scopedAdmin.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { BILLING_OPEN_TO_MEMBERS, requireOrgOwnerExcept } from '../middleware/requireOrgOwner.js';
@@ -132,9 +133,13 @@ billingRouter.post('/plan', async (req: Request, res: Response, next: NextFuncti
     }
 
     const { planCode, billingInterval, seats } = setPlanSchema.parse(req.body);
-    const supabase = createUserClient(req.accessToken!);
+    // set_billing_plan is server-only (a user token could otherwise activate a
+    // paid plan without paying). The *_as wrapper still runs the database's
+    // owner check as the signed-in user.
+    const admin = requireAdmin();
 
-    const { data, error } = await supabase.rpc('set_billing_plan', {
+    const { data, error } = await admin.rpc('set_billing_plan_as', {
+      p_actor: req.user!.id,
       p_org: req.orgId,
       p_plan: planCode,
       p_interval: billingInterval,
@@ -165,11 +170,13 @@ billingRouter.post('/plan', async (req: Request, res: Response, next: NextFuncti
 billingRouter.patch('/settings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = billingSettingsSchema.parse(req.body);
-    const supabase = createUserClient(req.accessToken!);
+    // Server-only RPC; the *_as wrapper keeps the database's owner check.
+    const admin = requireAdmin();
 
     const clearLimit = 'monthlySpendLimitNanos' in input && input.monthlySpendLimitNanos === null;
 
-    const { data, error } = await supabase.rpc('set_billing_settings', {
+    const { data, error } = await admin.rpc('set_billing_settings_as', {
+      p_actor: req.user!.id,
       p_org: req.orgId,
       p_auto_reload_enabled: input.autoReloadEnabled ?? null,
       p_auto_reload_threshold: input.autoReloadThresholdNanos ?? null,

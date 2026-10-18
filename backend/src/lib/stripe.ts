@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { persistExtraFcSeats } from './fieldCaptureSeats.js';
-import { unscopedAdmin } from './scopedAdmin.js';
+import { unscopedAdmin, unscopedAdminOrNull } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 import {
   FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
@@ -163,7 +163,11 @@ export async function ensureCustomer(
   if (found) await backfillCustomerEmail(found, opts.email);
   const customerId = found ?? (await createCustomer(orgId, opts)).id;
 
-  const { error: linkError } = await supabase.rpc('link_stripe_customer', {
+  // link_stripe_customer is server-only: with a user token an owner could
+  // point their workspace at someone else's Stripe customer. The callers have
+  // already checked the caller; tests and keyless local runs pass their own.
+  const linker = unscopedAdminOrNull() ?? supabase;
+  const { error: linkError } = await linker.rpc('link_stripe_customer', {
     p_org: orgId,
     p_customer_id: customerId,
   });
