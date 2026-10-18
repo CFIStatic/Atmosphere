@@ -109,19 +109,21 @@ export async function withVideoUsageScope<T>(
   let orgId = ref.orgId ?? null;
   let jobId = ref.jobId ?? null;
   let partyId = ref.partyId ?? null;
-  if (!orgId) {
-    try {
-      const { data } = await client
-        .from('job_proofs')
-        .select('org_id, job_id, party_id')
-        .eq('id', ref.proofId)
-        .maybeSingle();
+  let durationSeconds: number | null = null;
+  try {
+    const { data } = await client
+      .from('job_proofs')
+      .select('org_id, job_id, party_id, duration_seconds')
+      .eq('id', ref.proofId)
+      .maybeSingle();
+    if (!orgId) {
       orgId = (data?.org_id as string | undefined) ?? null;
       jobId = jobId ?? ((data?.job_id as string | undefined) ?? null);
       partyId = partyId ?? ((data?.party_id as string | undefined) ?? null);
-    } catch {
-      orgId = null;
     }
+    durationSeconds = Number(data?.duration_seconds) || null;
+  } catch {
+    // Duration only scales the call cap; without it the base cap applies.
   }
   if (!orgId) return fn();
   const userId = await resolveUsageActor(client, {
@@ -140,6 +142,8 @@ export async function withVideoUsageScope<T>(
       userId,
       requestId: `video:${ref.proofId}:${randomUUID()}`,
       meterFeature: VIDEO_ANALYSIS_FEATURE,
+      proofId: ref.proofId,
+      durationSeconds,
     },
     fn,
   );

@@ -892,6 +892,7 @@ export async function analyzeConversation(
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
         mode: 'analysis',
+        meterSource: 'conversation_summary',
         anthropicModel: config.technician.assistant.lightModel,
       });
       if (!completed?.text) continue;
@@ -943,6 +944,7 @@ export async function analyzeConversation(
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
         mode: 'analysis',
+        meterSource: 'conversation_synth',
         anthropicModel: config.technician.assistant.lightModel,
       });
       if (synth?.text) {

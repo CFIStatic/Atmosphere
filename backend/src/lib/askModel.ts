@@ -25,6 +25,7 @@ import {
 import { googleVisionApiKey } from './visionProvider.js';
 import { logger } from './logger.js';
 import { meterBackgroundUsage } from '../metering/backgroundUsage.js';
+import { currentAiUsageScope } from '../metering/aiUsageContext.js';
 import { isRetiredAnthropicModel, resolveAnthropicModel } from './anthropicModel.js';
 import {
   anthropicCachedSystem,
@@ -725,6 +726,10 @@ async function completeWithGemini(input: {
  * Flash-Lite + thinking off. Pass `mode: 'analysis'` for heavier offline extractors.
  */
 export async function completeAskText(input: CompleteAskTextInput): Promise<AskModelResult | null> {
+  // Runaway guard: a clip whose background passes keep re-running (retry or
+  // regeneration loops) stops calling paid models after a fixed number of
+  // calls; callers already fall back to their deterministic path on null.
+  if (!takeBackgroundCallSlot()) return null;
   const result = await completeAskTextUnmetered(input);
   // Background video work (summaries, speaker plans, safety checks) runs in a
   // metering scope: record this call there. Ask turns record their own total.
@@ -739,6 +744,72 @@ export async function completeAskText(input: CompleteAskTextInput): Promise<AskM
 }
 
 type CompleteAskTextInput = Parameters<typeof completeAskTextUnmetered>[0];
+
+const DEFAULT_VIDEO_CALLS_BASE = 30;
+const DEFAULT_VIDEO_CALLS_PER_HOUR = 25;
+
+function envNumber(name: string, fallback: number): number {
+  const raw = (process.env[name] ?? '').trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
+ * Max paid background model calls per clip inside a rolling 6h window:
+ * VIDEO_CALLS_BASE (30) + VIDEO_CALLS_PER_HOUR (25) x hours of footage.
+ * A normal 1-2 min clip makes 5-11; the Oct 3-9 runaways made 30-62.
+ * VIDEO_MAX_MODEL_CALLS_PER_CLIP is a flat override; 0 turns the cap off.
+ */
+export function videoMaxModelCallsPerClip(durationSeconds?: number | null): number {
+  const flat = (process.env.VIDEO_MAX_MODEL_CALLS_PER_CLIP ?? '').trim();
+  if (flat) {
+    const n = Number(flat);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  const base = envNumber('VIDEO_CALLS_BASE', DEFAULT_VIDEO_CALLS_BASE);
+  const perHour = envNumber('VIDEO_CALLS_PER_HOUR', DEFAULT_VIDEO_CALLS_PER_HOUR);
+  const hours = Math.max(0, Number(durationSeconds) || 0) / 3600;
+  return Math.ceil(base + perHour * hours);
+}
+
+const CLIP_CALL_WINDOW_MS = 6 * 60 * 60 * 1000;
+/** proofId -> call timestamps. In-process: resets on deploy, which only loosens the cap. */
+const clipCalls = new Map<string, number[]>();
+
+/** Exposed for tests. */
+export function resetBackgroundCallSlots(): void {
+  clipCalls.clear();
+}
+
+function pruneClipCalls(now: number): void {
+  if (clipCalls.size < 500) return;
+  for (const [id, times] of clipCalls) {
+    if (!times.some((t) => now - t < CLIP_CALL_WINDOW_MS)) clipCalls.delete(id);
+  }
+}
+
+/**
+ * True when this call may run. Only metered background video work for a clip
+ * is capped; Ask turns and unscoped calls always may.
+ */
+export function takeBackgroundCallSlot(now = Date.now()): boolean {
+  const scope = currentAiUsageScope();
+  const proofId = scope?.meterFeature ? scope.proofId ?? null : null;
+  if (!proofId) return true;
+  const cap = videoMaxModelCallsPerClip(scope?.durationSeconds ?? null);
+  if (cap === 0) return true;
+  pruneClipCalls(now);
+  const recent = (clipCalls.get(proofId) ?? []).filter((t) => now - t < CLIP_CALL_WINDOW_MS);
+  if (recent.length >= cap) {
+    clipCalls.set(proofId, recent);
+    logger.warn('video_cost_clip_call_cap_reached', { proofId, cap });
+    return false;
+  }
+  recent.push(now);
+  clipCalls.set(proofId, recent);
+  return true;
+}
 
 async function completeAskTextUnmetered(input: {
   /** Ledger source when this runs inside a background metering scope. */
