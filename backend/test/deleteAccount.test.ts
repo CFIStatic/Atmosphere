@@ -161,7 +161,7 @@ test('deleteOwnAccount refuses with 409 last_admin and touches nothing', async (
     assert.equal(err.status, 409);
     assert.equal(err.code, 'last_admin');
     assert.match(err.message, /only admin of Acme Roofing/);
-    assert.match(err.message, /Make someone else an admin first/);
+    assert.match(err.message, /contact Atmosphere support to hand the workspace to someone else/);
     return true;
   });
   assert.ok(!calls.some((c) => c.startsWith('delete') || c.startsWith('scrub') || c.startsWith('soft')));

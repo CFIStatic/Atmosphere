@@ -43,7 +43,7 @@ describe('InvitePanel', () => {
 
   it('does not show a Billing-page Add seat button', async () => {
     render(<InvitePanel />);
-    expect(await screen.findByText(/Field Capture accounts: 3 of 3 in use/)).toBeInTheDocument();
+    expect(await screen.findByText(/3 of 3 Field Capture seats used/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Add a Field Capture seat/i })).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe('InvitePanel in the iPhone app', () => {
         <InvitePanel />
       </MemoryRouter>,
     );
-    await screen.findByText(/Field Capture accounts: 2 of 3 in use/);
+    await screen.findByText(/2 of 3 Field Capture seats used/);
     await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'third@example.com');
     await userEvent.click(screen.getByRole('button', { name: /invite/i }));
     expect(createOrgInvite).toHaveBeenCalledTimes(1);

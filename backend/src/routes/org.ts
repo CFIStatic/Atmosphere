@@ -22,7 +22,7 @@ import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 import { ensureFieldCaptureSeatForInvite } from '../lib/fieldCaptureInviteSeats.js';
 import { ensurePlatformSeatForInvite, isPlatformSeatLimitDbError, parseSeatType } from '../lib/platformSeats.js';
-import { isOrgOwnerRow, loadOrgOwnerId } from '../middleware/requireOrgOwner.js';
+import { GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, isOrgOwnerRow, loadOrgOwnerId } from '../middleware/requireOrgOwner.js';
 import { isAppShellRequest } from '../lib/appShell.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
@@ -247,7 +247,7 @@ orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) =
       throw new HttpError(404, 'You are not linked to an organization yet.', 'not_onboarded');
     }
     if (isGlobalAdmin(role) && !isGlobalAdmin(currentRole)) {
-      throw new HttpError(403, 'Only a Global Admin can assign that seat.', 'insufficient_role');
+      throw new HttpError(403, GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, 'global_admin_owner_only');
     }
 
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
@@ -501,6 +501,9 @@ orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: N
       targetUserId,
       targetRole: target.role,
       adminCountInOrg: members.filter((row) => isGlobalAdmin(row.role)).length,
+      // A Platform seat carries the admin role too, so the admin count alone
+      // would let one remove the owner.
+      targetIsOwner: (await loadOrgOwnerId(req, orgId)) === targetUserId,
     });
     if (!decision.allowed) {
       throw new HttpError(decision.status, decision.message, decision.code);
@@ -689,6 +692,12 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     const seatType = parseSeatType(input.seatType);
     // A Platform seat is a Global Admin without Field Capture or Billing.
     const seat = seatType === 'platform' ? 'global_admin' : toOrgProductRole(input.role ?? 'employee');
+    // One Global Admin per workspace: the account owner who pays. Nobody else is
+    // invited as one (a Platform seat carries the role in the database but is
+    // not a Global Admin: no Billing and Usage, no inviting admins).
+    if (seatType !== 'platform' && isGlobalAdmin(seat)) {
+      throw new HttpError(403, GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, 'global_admin_owner_only');
+    }
 
     if (seatType === 'platform') {
       await ensurePlatformSeatForInvite(supabase, orgId, {

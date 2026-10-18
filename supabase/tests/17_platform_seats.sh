@@ -89,17 +89,34 @@ values ('17000000-0000-4000-8000-0000000000a1', 'test17', 'monthly', 1, 'active'
 on conflict (org_id) do update set status = 'active', platform_seats = 0, stripe_subscription_id = 'comp_test17';
 
 select pg_temp.as_server();
--- A free Global Admin joins through a Global Admin invite (the guard trigger
--- makes anyone else an Employee).
+-- One Global Admin per workspace (the owner): nobody else can be invited as one.
+select pg_temp.expect(pg_temp.raises($s$
+  insert into public.org_invites (org_id, email, role, status, created_at)
+  values ('17000000-0000-4000-8000-0000000000a1', 'nope17@example.com', 'global_admin', 'pending', now())
+$s$, 'global_admin_owner_only'), 'a Global Admin invite is refused');
+select pg_temp.expect(pg_temp.raises($s$
+  insert into public.org_invites (org_id, email, role, status, created_at)
+  values ('17000000-0000-4000-8000-0000000000a1', 'nope17b@example.com', 'office_manager', 'pending', now())
+$s$, 'global_admin_owner_only'), 'a legacy office-manager (admin) invite is refused');
+select pg_temp.expect(pg_temp.raises($s$
+  insert into public.org_invites (org_id, email, role, status, created_at)
+  values ('17000000-0000-4000-8000-0000000000a1', 'nope17c@example.com', 'employee', 'pending', now());
+  update public.org_invites set role = 'global_admin' where email = 'nope17c@example.com'
+$s$, 'global_admin_owner_only'), 'an invite cannot be switched to Global Admin later');
+
+-- Legacy data: an extra Global Admin from before the one-admin rule. Seed the
+-- old invite without triggers so the member can join as one.
+set local session_replication_role = replica;
 insert into public.org_invites (org_id, email, role, status, created_at)
 values ('17000000-0000-4000-8000-0000000000a1', 'admin17@example.com', 'global_admin', 'pending', now());
+set local session_replication_role = origin;
 insert into public.org_members (org_id, user_id, role, work_type, status, created_at, usage_intents) values
   ('17000000-0000-4000-8000-0000000000a1', '17000000-0000-4000-8000-000000000001', 'global_admin', 'mitigation', 'active', now(), '{}'),
   ('17000000-0000-4000-8000-0000000000a1', '17000000-0000-4000-8000-000000000002', 'global_admin', 'mitigation', 'active', now(), '{}');
 
 update public.org_invites set status = 'joined' where email = 'admin17@example.com';
 select pg_temp.expect((select role::text from public.org_members where user_id = '17000000-0000-4000-8000-000000000002') = 'global_admin',
-  'free Global Admins are unchanged');
+  'an existing (legacy) extra Global Admin is left as is');
 select pg_temp.expect((select seat_type from public.org_members where user_id = '17000000-0000-4000-8000-000000000002') = 'field_capture',
   'existing members default to the field_capture seat type');
 select pg_temp.expect(private.field_capture_seats_used('17000000-0000-4000-8000-0000000000a1') = 0, 'Global Admins use no Field Capture seat');
