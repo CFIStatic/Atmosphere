@@ -25,10 +25,21 @@ vi.mock('../../lib/api', async (importOriginal) => {
   };
 });
 
-import { InvitePanel } from './InvitePanel';
+let phoneOn = true;
+vi.mock('../../hooks/usePhoneAuthEnabled', () => ({ usePhoneAuthEnabled: () => phoneOn }));
+
+let inAppShell = false;
+vi.mock('../../lib/appShell', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/appShell')>();
+  return { ...actual, isInAppShell: () => inAppShell };
+});
+
+import { InvitePanel, inviteKindHelp } from './InvitePanel';
 
 describe('InvitePanel: Platform seats', () => {
   beforeEach(() => {
+    phoneOn = true;
+    inAppShell = false;
     createOrgInvite.mockReset().mockResolvedValue({
       invite: { id: 'inv-9', email: 'office@example.com', role: 'global_admin', seatType: 'platform', status: 'pending' },
       emailed: true,
@@ -46,49 +57,88 @@ describe('InvitePanel: Platform seats', () => {
     });
   });
 
-  it('offers exactly "Field Capture" and "Platform" and shows the count in use', async () => {
+  it('offers one control: Field Capture, Global Admin, Platform', () => {
     render(<InvitePanel />);
+    const radios = screen.getAllByRole('radio').filter((r) => r.closest('[data-testid="invite-seat-type"]'));
+    expect(radios.map((r) => r.textContent)).toEqual(['Field Capture', 'Global Admin', 'Platform']);
     expect(screen.getByRole('radio', { name: 'Field Capture' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'Platform' })).toBeInTheDocument();
-    expect(await screen.findByText(/Platform seats: 1 of 2 in use/)).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByText('Seat')).toBeNull();
   });
 
-  it('a Platform invite sends seatType platform as a Global Admin, with no role picker', async () => {
+  it('keeps the same row for every choice: nothing appears or disappears', async () => {
     render(<InvitePanel />);
-    await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
-    expect(screen.getByTestId('platform-seat-blurb')).toHaveTextContent(
-      'Platform: $75/mo. Sees everything on the Platform like a Global Admin, except Billing and Usage. No Field Capture.',
-    );
-    expect(screen.queryByDisplayValue('Employee')).toBeNull();
-    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'office@example.com');
-    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
-    expect(createOrgInvite).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'office@example.com', role: 'global_admin', seatType: 'platform' }),
-    );
+    const row = screen.getByTestId('invite-row');
+    const shape = () =>
+      Array.from(row.querySelectorAll('input, button, [role="radiogroup"]')).map(
+        (el) => el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.tagName,
+      );
+    const first = shape();
+    for (const name of ['Global Admin', 'Platform', 'Field Capture']) {
+      await userEvent.click(screen.getByRole('radio', { name }));
+      expect(shape()).toEqual(first);
+    }
+    expect(screen.getByTestId('invite-via')).toBeInTheDocument();
   });
 
-  it('puts the seat picker in the invite row, right after the email, with the explanation under it', () => {
+  it('has no tooltips on the choices', () => {
+    render(<InvitePanel />);
+    for (const name of ['Field Capture', 'Global Admin', 'Platform']) {
+      expect(screen.getByRole('radio', { name })).not.toHaveAttribute('title');
+    }
+  });
+
+  it('shows exactly one helper line that follows the choice', async () => {
+    render(<InvitePanel />);
+    const help = screen.getByTestId('invite-help');
+    expect(await screen.findByText(/1 of 3 Field Capture seats used/)).toBe(help);
+    expect(help).toHaveTextContent('Films jobs in Field Capture and uses the Platform. 1 of 3 Field Capture seats used.');
+    await userEvent.click(screen.getByRole('radio', { name: 'Global Admin' }));
+    expect(help).toHaveTextContent('Full access except Billing and Usage. Free.');
+    await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
+    expect(help).toHaveTextContent('Full Platform access except Billing and Usage, no Field Capture. $75/mo each. 1 of 2 in use.');
+  });
+
+  it('never says "0 of 0" for Platform seats', () => {
+    expect(
+      inviteKindHelp('platform', { inApp: false, platformSeats: { used: 0, allowed: 0, remaining: 0 } }),
+    ).toBe('Full Platform access except Billing and Usage, no Field Capture. $75/mo each.');
+  });
+
+  it('drops prices in the phone app', () => {
+    expect(inviteKindHelp('platform', { inApp: true, platformSeats: { used: 1, allowed: 2, remaining: 1 } })).toBe(
+      'Full Platform access except Billing and Usage, no Field Capture. 1 of 2 in use.',
+    );
+    expect(inviteKindHelp('global_admin', { inApp: true })).toBe('Full access except Billing and Usage.');
+  });
+
+  it('maps each choice to the same API fields as before', async () => {
     render(<InvitePanel />);
     const email = screen.getByPlaceholderText('their@email.com');
-    const picker = screen.getByTestId('invite-seat-type');
-    const form = email.closest('form');
-    expect(form).not.toBeNull();
-    expect(form).toContainElement(picker);
-    expect(email.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByTestId('field-capture-seat-blurb')).toHaveTextContent(/Field Capture/);
-    expect(form).not.toContainElement(screen.getByTestId('field-capture-seat-blurb'));
+    const send = async (name: string, address: string) => {
+      await userEvent.click(screen.getByRole('radio', { name }));
+      await userEvent.type(email, address);
+      await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
+      return createOrgInvite.mock.calls.at(-1)?.[0];
+    };
+    const fc = await send('Field Capture', 'crew@example.com');
+    expect(fc).toMatchObject({ email: 'crew@example.com', role: 'employee' });
+    expect(fc).not.toHaveProperty('seatType');
+    const ga = await send('Global Admin', 'admin@example.com');
+    expect(ga).toMatchObject({ email: 'admin@example.com', role: 'global_admin' });
+    expect(ga).not.toHaveProperty('seatType');
+    const pl = await send('Platform', 'office@example.com');
+    expect(pl).toMatchObject({ email: 'office@example.com', role: 'global_admin', seatType: 'platform' });
+    expect(pl).not.toHaveProperty('serviceRole');
   });
 
-  it('has no Title select and never sends a title from the invite form', async () => {
+  it('can invite a Platform seat by phone too', async () => {
     render(<InvitePanel />);
-    expect(screen.queryByText('Title (optional)')).toBeNull();
-    expect(screen.queryByTitle('Service title for Analysis labels')).toBeNull();
     await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
-    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'office@example.com');
-    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
-    const sent = createOrgInvite.mock.calls.at(-1)?.[0] ?? {};
-    expect(sent).not.toHaveProperty('serviceRole');
-    expect(sent).not.toHaveProperty('serviceRoleCustom');
+    await userEvent.click(screen.getByTestId('invite-via-phone'));
+    await userEvent.type(screen.getByTestId('invite-phone'), '3125550100');
+    await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
+    expect(createOrgInvite.mock.calls.at(-1)?.[0]).toMatchObject({ phone: '+13125550100', role: 'global_admin', seatType: 'platform' });
   });
 
   it('lists Platform invites as Platform', async () => {

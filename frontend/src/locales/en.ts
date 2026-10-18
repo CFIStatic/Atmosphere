@@ -136,9 +136,8 @@ export const EN = {
   'settings.invites.adminOnly':
     'Only the Global Admin can invite people onto this workspace. Ask them to send an invite for your teammates.',
   'settings.invites.description':
-    'Only you (Global Admin) can create workspace accounts for others. Invite them by email or phone. They sign in with that address or number. For a subcontractor on one job, invite them from the job file instead.',
+    'Invite people by email or phone. To add a subcontractor to one job, invite them from the job file.',
   'settings.invites.button': 'Invite',
-  'settings.invites.rolesHint': 'Global Admins and Platform seats see everything except Billing and Usage, which only the account owner sees. Employees film in Field Capture.',
 
   'theme.light': 'Light',
   'theme.dark': 'Dark',
