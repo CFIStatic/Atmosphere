@@ -201,7 +201,28 @@ export function BillingSection() {
               </span>
             </Row>
           ) : null}
+          <Row label="Platform seats">
+            <span data-testid="billing-platform-seats">
+              {workspace.platformSeats?.used ?? 0} of {workspace.platformSeats?.allowed ?? 0} used
+              <span className="ml-1.5 font-normal text-ink-500">
+                (
+                {complimentary
+                  ? 'free on this workspace'
+                  : inApp
+                    ? 'Global Admin access, no Field Capture'
+                    : `${formatCents(workspace.platformSeats?.priceCents ?? 7_500)}/mo each`}
+                {!inApp && !complimentary && workspace.platformSeats && workspace.platformSeats.allowed > 0
+                  ? ` · ${formatCents((workspace.platformSeats.priceCents ?? 7_500) * workspace.platformSeats.allowed)}/mo`
+                  : ''}
+                )
+              </span>
+            </span>
+          </Row>
         </dl>
+        <p className="mt-2 text-xs text-ink-500" data-testid="billing-platform-seats-note">
+          Platform seats see everything on the Platform like a Global Admin, except Billing and Usage, and
+          cannot use Field Capture. Add one by inviting someone as "Platform only" in Team.
+        </p>
 
         {sub.cancelAtPeriodEnd ? (
           <p className="mt-4 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600">

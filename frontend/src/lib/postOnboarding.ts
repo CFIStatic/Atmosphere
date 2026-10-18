@@ -15,6 +15,8 @@ export interface PostOnboardingEnv {
   phone: boolean;
   /** This console is inside Field Capture's Dashboard iframe. */
   embedded: boolean;
+  /** Platform-only seat: never sent to Field Capture, even from a phone. */
+  platformSeat?: boolean;
 }
 
 /**
@@ -50,7 +52,7 @@ export function postOnboardingHref(path: string, env: PostOnboardingEnv = curren
   if (env.embedded) return path;
   const host = env.hostname.toLowerCase();
   if (!onAtmosphereSite(host)) return path;
-  if (env.phone) return FIELD_CAPTURE_WEB_ORIGIN;
+  if (env.phone && !env.platformSeat) return FIELD_CAPTURE_WEB_ORIGIN;
   if (host === PLATFORM_HOST) return path;
   return `${PLATFORM_WEB_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
 }

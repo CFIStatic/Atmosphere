@@ -930,8 +930,12 @@ function LinkedAccountsCard() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
-                    {ROLE_LABELS[member.role] ?? member.role}
+                  <span
+                    data-testid="member-seat-label"
+                    title={member.seatType === 'platform' ? 'Platform-only seat: Global Admin access, no Field Capture, no Billing and Usage.' : undefined}
+                    className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
+                  >
+                    {member.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[member.role] ?? member.role)}
                   </span>
                   {showRemove && (
                     <button

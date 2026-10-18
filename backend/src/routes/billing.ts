@@ -533,6 +533,15 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
               remaining: workspace.fieldCaptureSeats.remaining,
             }
           : undefined,
+        // Counts only, for the invite form.
+        platformSeats: workspace.platformSeats
+          ? {
+              used: workspace.platformSeats.used,
+              allowed: workspace.platformSeats.allowed,
+              remaining: workspace.platformSeats.remaining,
+              available: workspace.platformSeats.available,
+            }
+          : undefined,
       });
       return;
     }
@@ -556,6 +565,7 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
         includedFcSeats: workspace.subscription.includedFcSeats,
       },
       fieldCaptureSeats: workspace.fieldCaptureSeats,
+      platformSeats: workspace.platformSeats,
     });
   } catch (err) {
     next(err);

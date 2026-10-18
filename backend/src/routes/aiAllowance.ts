@@ -17,7 +17,7 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { planChangeIdempotencyKey, planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
 import {
   ensureCustomer,
-  isExtraSeatLineItem,
+  isSeatAddOnLineItem,
   liveStripeSubscriptionId,
   normalizeAtmosphereBillingInterval,
   stripeClient,
@@ -180,7 +180,7 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
       if (!priceId) {
         throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
       }
-      const planItem = (existing.items?.data ?? []).find((item) => item.id && !isExtraSeatLineItem(item));
+      const planItem = (existing.items?.data ?? []).find((item) => item.id && !isSeatAddOnLineItem(item));
       if (subscriptionItemPriceId(planItem) === priceId) {
         res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
         return;

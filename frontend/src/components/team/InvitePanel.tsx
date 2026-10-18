@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, ROLE_LABELS, type MemberRole, type OrgInvite } from '../../lib/api';
+import { api, ApiError, ROLE_LABELS, type MemberRole, type OrgInvite, type PlatformSeatCounts, type SeatType } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
@@ -13,9 +13,24 @@ import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/pho
 /**
  * Adding somebody to the team.
  *
- * Org invites create Employee (or Global Admin) seats. Invited workers on one
- * job are invited from the job file via a job-share token — not here.
+ * Org invites create Employee (or Global Admin) seats, or a Platform-only
+ * seat ($75/mo): Global Admin access on the Platform, no Field Capture, no
+ * Billing and Usage. Invited workers on one job are invited from the job file
+ * via a job-share token — not here.
  */
+
+export const PLATFORM_SEAT_PRICE_LABEL = '$75/mo';
+export const SEAT_TYPE_LABELS: Record<SeatType, string> = {
+  field_capture: 'Field Capture',
+  platform: `Platform only, ${PLATFORM_SEAT_PRICE_LABEL}`,
+};
+/** iPhone/Android app: no prices (App Store 3.1.1). */
+const SEAT_TYPE_LABELS_IN_APP: Record<SeatType, string> = {
+  field_capture: 'Field Capture',
+  platform: 'Platform only',
+};
+export const PLATFORM_SEAT_BLURB =
+  'Sees everything on the Platform like a Global Admin, except Billing and Usage. No Field Capture.';
 
 const ROLES: OrgProductRole[] = ['employee', 'global_admin'];
 
@@ -41,11 +56,14 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
+  const [seatType, setSeatType] = useState<SeatType>('field_capture');
+  const platformSeat = seatType === 'platform';
+  const [platformSeats, setPlatformSeats] = useState<PlatformSeatCounts | null>(null);
   const phoneEnabled = usePhoneAuthEnabled();
   const [byPhone, setByPhone] = useState(false);
   const [phone, setPhone] = useState('');
   const phoneE164 = normalizePhoneE164(phone);
-  const usingPhone = phoneEnabled && byPhone;
+  const usingPhone = phoneEnabled && byPhone && seatType !== 'platform';
   const [role, setRole] = useState<MemberRole>('employee');
   const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
   const [serviceRoleCustom, setServiceRoleCustom] = useState('');
@@ -77,6 +95,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           allowed: workspace.fieldCaptureSeats.allowed,
         });
       }
+      if (workspace.platformSeats) setPlatformSeats(workspace.platformSeats);
     } catch {
       /* billing is optional on this screen */
     }
@@ -102,7 +121,12 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       setError(planRequiredMessage());
       return;
     }
-    if (inApp && seatsFull && role !== 'global_admin') {
+    if (inApp && platformSeat && platformSeats && platformSeats.remaining <= 0) {
+      setOutcome(null);
+      setError(`Every Platform seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
+      return;
+    }
+    if (inApp && seatsFull && !platformSeat && role !== 'global_admin') {
       setOutcome(null);
       setError(`Every Field Capture seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;
@@ -113,7 +137,8 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
     try {
       const res = await api.createOrgInvite({
         ...(usingPhone ? { phone: phoneE164 ?? phone } : { email }),
-        role,
+        role: platformSeat ? 'global_admin' : role,
+        ...(platformSeat ? { seatType: 'platform' as const } : {}),
         serviceRole: serviceRole || undefined,
         serviceRoleCustom: serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
       });
@@ -164,8 +189,43 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         </div>
       ) : null}
 
+      <div
+        role="radiogroup"
+        aria-label="Seat"
+        data-testid="invite-seat-type"
+        className="mt-3 inline-flex items-center gap-1 rounded-lg bg-ink-900/5 p-1 ring-1 ring-inset ring-ink-900/10"
+      >
+        {(['field_capture', 'platform'] as const).map((key) => {
+          const on = seatType === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-testid={`invite-seat-${key}`}
+              title={key === 'platform' ? PLATFORM_SEAT_BLURB : 'Films jobs in Field Capture and works on the Platform.'}
+              onClick={() => {
+                setSeatType(key);
+                setError(null);
+              }}
+              className={`h-7 rounded-md px-3 text-xs font-medium transition ${
+                on ? 'bg-ink-900/10 text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
+              }`}
+            >
+              {(inApp ? SEAT_TYPE_LABELS_IN_APP : SEAT_TYPE_LABELS)[key]}
+            </button>
+          );
+        })}
+      </div>
+      {platformSeat ? (
+        <p className="mt-1.5 text-[11px] text-ink-500" data-testid="platform-seat-blurb">
+          {PLATFORM_SEAT_BLURB}
+        </p>
+      ) : null}
+
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
-        {phoneEnabled ? (
+        {phoneEnabled && !platformSeat ? (
           <div
             role="radiogroup"
             aria-label="Invite by"
@@ -220,6 +280,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             className="min-w-56 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
         )}
+        {platformSeat ? null : (
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as MemberRole)}
@@ -232,6 +293,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             </option>
           ))}
         </select>
+        )}
         <select
           value={serviceRole}
           onChange={(e) => setServiceRole((e.target.value || '') as ServiceRoleSlug | '')}
@@ -274,6 +336,16 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         {seats
           ? ` Field Capture accounts: ${seats.used} of ${seats.allowed} in use.`
           : ' Work Verification includes 3 Field Capture accounts.'}
+        <span data-testid="platform-seat-count">
+          {platformSeats
+            ? ` Platform seats: ${platformSeats.used} of ${platformSeats.allowed} in use.`
+            : inApp
+              ? ''
+              : ` Platform seats: ${PLATFORM_SEAT_PRICE_LABEL} each.`}
+        </span>
+        {platformSeat && platformSeats && platformSeats.available === false && platformSeats.remaining <= 0 ? (
+          <span data-testid="platform-seat-unavailable"> Platform seats aren't available yet.</span>
+        ) : null}
         {inApp && seatsFull ? (
           <span data-testid="app-shell-seats-note"> {APP_SHELL_SEATS_NOTE}</span>
         ) : null}
@@ -293,7 +365,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
               <span className="min-w-0">
                 <span className="block truncate text-xs font-medium text-ink-800">{inv.email || formatPhone(inv.phone)}</span>
                 <span className="block text-[11px] text-ink-500">
-                  {ROLE_LABELS[inv.role as MemberRole] ?? inv.role}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
+                  {inv.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[inv.role as MemberRole] ?? inv.role)}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">

@@ -211,6 +211,28 @@ describe('Settings organization', () => {
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 
+  it('labels a Platform-only seat "Platform" in the member list', async () => {
+    apiMocks.getMembers.mockResolvedValue({
+      members: [
+        ...LINKED_ACCOUNTS,
+        {
+          userId: 'user-platform',
+          email: 'office@example.com',
+          fullName: 'Office Lead',
+          role: 'global_admin',
+          seatType: 'platform',
+          workType: 'mitigation',
+          usageIntents: [],
+          status: 'active',
+        },
+      ],
+    });
+    renderSettings('/settings?section=organization');
+    await waitFor(() => expect(screen.getByText('Office Lead')).toBeInTheDocument());
+    const labels = screen.getAllByTestId('member-seat-label').map((el) => el.textContent);
+    expect(labels).toContain('Platform');
+  });
+
   it('lets a Global Admin remove someone else, but not themselves', async () => {
     apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
     renderSettings('/settings?section=organization');
@@ -401,6 +423,7 @@ describe('Settings Billing and Usage: the account owner only', () => {
 
   for (const [label, memberRole] of [
     ['another Global Admin', 'global_admin'],
+    ['a Platform-only seat', 'global_admin'],
     ['an employee', 'employee'],
     ['a subcontractor', 'employee'],
   ] as const) {

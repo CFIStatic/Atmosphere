@@ -24,6 +24,8 @@ import {
   isExtraSeatPlanCode,
   parseAtmospherePlanCode,
   type AtmosphereSelfServePlanCode,
+  LIVE_PLATFORM_SEAT_PRICE_ID,
+  isPlatformSeatPlanCode,
 } from './stripeCatalog.js';
 
 export type AtmosphereBillingInterval = 'month' | 'year';
@@ -426,6 +428,17 @@ export function isExtraSeatPriceId(priceId: string | null | undefined): boolean 
   );
 }
 
+/** Platform-only seat price, or null when none is configured yet (fail closed). */
+export function platformSeatPriceId(): string | null {
+  const id = (config.stripe.platformSeatPriceId || LIVE_PLATFORM_SEAT_PRICE_ID || '').trim();
+  return isStripePriceId(id) ? id : null;
+}
+
+export function isPlatformSeatPriceId(priceId: string | null | undefined): boolean {
+  const configured = platformSeatPriceId();
+  return Boolean(priceId && configured && priceId === configured);
+}
+
 export function isWorkVerificationPriceId(priceId: string | null | undefined): boolean {
   return Boolean(
     priceId &&
@@ -490,6 +503,33 @@ export function isExtraSeatLineItem(item: {
   return isExtraSeatPlanCode(price.metadata?.atmosphere_plan_code);
 }
 
+/** Platform-seat line: the configured price id, or metadata `platform_seat`. */
+export function isPlatformSeatLineItem(item: {
+  price?: AtmospherePriceLike | string | null;
+} | null | undefined): boolean {
+  const price = item?.price;
+  if (!price) return false;
+  if (typeof price === 'string') return isPlatformSeatPriceId(price);
+  if (isPlatformSeatPriceId(price.id)) return true;
+  return isPlatformSeatPlanCode(price.metadata?.atmosphere_plan_code);
+}
+
+/** Any per-seat add-on line (extra Field Capture or Platform) — never the plan item. */
+export function isSeatAddOnLineItem(item: {
+  price?: AtmospherePriceLike | string | null;
+} | null | undefined): boolean {
+  return isExtraSeatLineItem(item) || isPlatformSeatLineItem(item);
+}
+
+export function platformSeatQuantityFromSubscription(sub: {
+  items?: { data?: Array<{ price?: AtmospherePriceLike | string | null; quantity?: number | null }> };
+}): number {
+  return (sub.items?.data ?? []).reduce((sum, item) => {
+    if (!isPlatformSeatLineItem(item)) return sum;
+    return sum + Math.max(0, item.quantity ?? 1);
+  }, 0);
+}
+
 /**
  * Plan code from a Stripe price id and, when the price object is expanded,
  * `atmosphere_plan_code` metadata (annual prices are created with that key).
@@ -535,7 +575,7 @@ export function recurringIntervalFromSubscription(sub: {
     if (!recurring) continue;
     const interval: AtmosphereBillingInterval = recurring === 'year' ? 'year' : 'month';
     if (!anyRecurring) anyRecurring = interval;
-    if (!isExtraSeatLineItem(item) && planInterval !== 'month') planInterval = interval;
+    if (!isSeatAddOnLineItem(item) && planInterval !== 'month') planInterval = interval;
   }
   if (planInterval) return planInterval;
   if (anyRecurring) return anyRecurring;

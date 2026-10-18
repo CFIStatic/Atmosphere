@@ -74,8 +74,12 @@ export interface Org {
   contractorType?: ContractorType | null;
 }
 
+/** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing and Usage. */
+export type SeatType = 'field_capture' | 'platform';
+
 export interface Membership {
   role: MemberRole;
+  seatType?: SeatType;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -105,6 +109,7 @@ export interface OrgMember {
   handle?: string | null;
   avatarUrl?: string | null;
   role: MemberRole;
+  seatType?: SeatType;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -1944,6 +1949,7 @@ export interface OrgInvite {
   phone?: string | null;
   /** Advisory — the joiner picks their own role at onboarding. */
   role: MemberRole;
+  seatType?: SeatType;
   note?: string | null;
   status: 'pending' | 'joined' | 'revoked';
   /** Advisory person service title for Analysis labeling. */
@@ -4058,6 +4064,7 @@ export const api = {
     email?: string;
     phone?: string;
     role?: MemberRole;
+    seatType?: SeatType;
     note?: string;
     serviceRole?: string;
     serviceRoleCustom?: string | null;
@@ -6616,6 +6623,17 @@ export interface BillingOnboardingStatus {
     extra?: number;
     extraSeatPriceCents?: number;
   };
+  /** Platform-only seats. Counts for every member; priceCents for the owner. */
+  platformSeats?: PlatformSeatCounts;
+}
+
+export interface PlatformSeatCounts {
+  allowed: number;
+  used: number;
+  remaining: number;
+  /** False until a Platform seat price is set (comped workspaces are always true). */
+  available?: boolean;
+  priceCents?: number;
 }
 
 /** Feature ids as the ledger stores them (`token_usage_events.feature`). */
@@ -6806,6 +6824,7 @@ export interface WorkspaceBilling {
     remaining: number;
     extraSeatPriceCents: number;
   };
+  platformSeats?: PlatformSeatCounts;
 }
 
 export interface SetPlanResult {

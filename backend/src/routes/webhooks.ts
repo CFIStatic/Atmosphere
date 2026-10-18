@@ -2,12 +2,14 @@ import { Router, type Request, type Response } from 'express';
 import type Stripe from 'stripe';
 import { config } from '../config.js';
 import { persistExtraFcSeats } from '../lib/fieldCaptureSeats.js';
+import { persistPlatformSeats } from '../lib/platformSeats.js';
 import {
   adminClient,
   atmospherePlanCodeForPriceId,
   atmospherePlanCodeFromPrice,
   cardDetails,
   extraSeatQuantityFromSubscription,
+  platformSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
   isExtraSeatLineItem,
@@ -435,6 +437,9 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
       planCode: plan.code,
       includedFcSeats: includedFromMeta ?? plan.includedFcSeats,
     });
+    // Platform seats ride on the plan subscription: its Platform line quantity
+    // is the count (0 once the line is removed).
+    await persistPlatformSeats(admin, orgId, platformSeatQuantityFromSubscription(sub));
     await syncMrr();
     return;
   }
@@ -474,6 +479,7 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
   await persistExtraFcSeats(admin, orgId, 0);
+  await persistPlatformSeats(admin, orgId, 0);
   await syncCustomerMrr(admin, stripeClient(), orgId, customerId, sub as any);
 }
 

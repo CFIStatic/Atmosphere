@@ -27,6 +27,7 @@ const OTHER_ADMIN = '0c000000-0000-4000-8000-0000000000b2'; // second Global Adm
 const MEMBER = '0c000000-0000-4000-8000-0000000000b3'; // employee
 const HOMEOWNER = '0c000000-0000-4000-8000-0000000000b4'; // no org membership
 const SUB = '0c000000-0000-4000-8000-0000000000b5'; // subcontractor on a shared job
+const PLATFORM_SEAT = '0c000000-0000-4000-8000-0000000000b6'; // paid Platform-only seat (Global Admin access)
 
 const OWNERS: Record<string, string> = { [ORG]: OWNER, [SUB_ORG]: '0c000000-0000-4000-8000-0000000000b9' };
 /** The org requireOrg would resolve for each caller (homeowner: none). */
@@ -35,6 +36,7 @@ const ORG_OF: Record<string, string | undefined> = {
   [OTHER_ADMIN]: ORG,
   [MEMBER]: ORG,
   [HOMEOWNER]: undefined,
+  [PLATFORM_SEAT]: ORG,
   [SUB]: ORG, // a sub that reaches the GC's org context is still not its owner
 };
 
@@ -114,6 +116,7 @@ test('the owner can open every Billing and Usage endpoint', async () => {
 
 for (const [label, user] of [
   ['another Global Admin', OTHER_ADMIN],
+  ['a Platform-only seat', PLATFORM_SEAT],
   ['an employee', MEMBER],
   ['a homeowner', HOMEOWNER],
   ['a subcontractor', SUB],
@@ -178,7 +181,7 @@ test('the onboarding status gives non-owners no prices, plans or Stripe data', (
   assert.ok(i > s.indexOf("billingRouter.get('/onboarding'"));
   const block = s.slice(s.indexOf('res.json(', i), s.indexOf('return;', i));
   const keys = [...block.matchAll(/^\s{8}(\w+):/gm)].map((m) => m[1]);
-  assert.deepEqual(keys, ['paymentProvider', 'required', 'complete', 'isCreator', 'hasSubscription', 'fieldCaptureSeats']);
+  assert.deepEqual(keys, ['paymentProvider', 'required', 'complete', 'isCreator', 'hasSubscription', 'fieldCaptureSeats', 'platformSeats']);
   assert.doesNotMatch(block, /price|catalog|usage|invoice|customer/i);
 });
 

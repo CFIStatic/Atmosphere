@@ -1324,6 +1324,24 @@
     });
   }
 
+  /* Platform-only seat: a Global Admin login with no Field Capture. The API
+     answers 403 platform_seat_no_field_capture on every Field Capture call. */
+  var PLATFORM_SEAT_MESSAGE =
+    'This is a Platform account. It works on platform.atmosphereteam.com but not in Field Capture. ' +
+    'To film jobs, ask your account owner for a Field Capture seat.';
+
+  function isPlatformSeatBlocked(err) {
+    return Boolean(err && err.code === 'platform_seat_no_field_capture');
+  }
+
+  function failPlatformSeat(err) {
+    var message = (err && err.message) || PLATFORM_SEAT_MESSAGE;
+    signOutEverywhere().then(function () {
+      showLoginError(message);
+      bootBlocked();
+    });
+  }
+
   function failJoinOffice(err) {
     var message = err.message || 'Ask your Global Admin to invite this email.';
     signOutEverywhere().then(function () {
@@ -1600,6 +1618,7 @@
             return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
             if (isTermsRequired(err)) {
               showTermsGate();
               return;
@@ -1697,6 +1716,7 @@
             return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
             if (isTermsRequired(err)) { showTermsGate(); return; }
             if (isNoOrganization(err)) {
               if (TOKEN) return openInviteAfterAccountSignIn();
@@ -1790,6 +1810,7 @@
             return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
             if (isTermsRequired(err)) { showTermsGate(); return; }
             if (isNoOrganization(err)) {
               if (TOKEN) return openInviteAfterAccountSignIn();
@@ -1845,6 +1866,7 @@
             return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
             if (isTermsRequired(err)) {
               showTermsGate();
               return;
@@ -1890,6 +1912,7 @@
             });
           })
           .catch(function (err) {
+            if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
             if (isNoOrganization(err)) {
               if (TOKEN) return openInviteAfterAccountSignIn();
               return joinOfficeByInvite().catch(failJoinOffice);
@@ -1920,6 +1943,7 @@
       ensureTermsThenConnect(function () {
         return bootAccountSession();
       }).catch(function (err) {
+        if (isPlatformSeatBlocked(err)) { failPlatformSeat(err); return; }
         if (isTermsRequired(err)) {
           showTermsGate();
           return;
