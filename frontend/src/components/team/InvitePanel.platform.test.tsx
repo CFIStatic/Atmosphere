@@ -57,10 +57,11 @@ describe('InvitePanel: Platform seats', () => {
     });
   });
 
-  it('offers one control: Field Capture, Global Admin, Platform', () => {
+  it('offers one control with two choices: Field Capture, Platform (no Global Admin)', () => {
     render(<InvitePanel />);
     const radios = screen.getAllByRole('radio').filter((r) => r.closest('[data-testid="invite-seat-type"]'));
-    expect(radios.map((r) => r.textContent)).toEqual(['Field Capture', 'Global Admin', 'Platform']);
+    expect(radios.map((r) => r.textContent)).toEqual(['Field Capture', 'Platform']);
+    expect(screen.queryByRole('radio', { name: 'Global Admin' })).toBeNull();
     expect(screen.getByRole('radio', { name: 'Field Capture' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByText('Seat')).toBeNull();
@@ -74,7 +75,7 @@ describe('InvitePanel: Platform seats', () => {
         (el) => el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.tagName,
       );
     const first = shape();
-    for (const name of ['Global Admin', 'Platform', 'Field Capture']) {
+    for (const name of ['Platform', 'Field Capture']) {
       await userEvent.click(screen.getByRole('radio', { name }));
       expect(shape()).toEqual(first);
     }
@@ -83,7 +84,7 @@ describe('InvitePanel: Platform seats', () => {
 
   it('has no tooltips on the choices', () => {
     render(<InvitePanel />);
-    for (const name of ['Field Capture', 'Global Admin', 'Platform']) {
+    for (const name of ['Field Capture', 'Platform']) {
       expect(screen.getByRole('radio', { name })).not.toHaveAttribute('title');
     }
   });
@@ -93,8 +94,6 @@ describe('InvitePanel: Platform seats', () => {
     const help = screen.getByTestId('invite-help');
     expect(await screen.findByText(/1 of 3 Field Capture seats used/)).toBe(help);
     expect(help).toHaveTextContent('Films jobs in Field Capture and uses the Platform. 1 of 3 Field Capture seats used.');
-    await userEvent.click(screen.getByRole('radio', { name: 'Global Admin' }));
-    expect(help).toHaveTextContent('Full access except Billing and Usage. Free.');
     await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
     expect(help).toHaveTextContent('Full Platform access except Billing and Usage, no Field Capture. $75/mo each. 1 of 2 in use.');
   });
@@ -109,7 +108,6 @@ describe('InvitePanel: Platform seats', () => {
     expect(inviteKindHelp('platform', { inApp: true, platformSeats: { used: 1, allowed: 2, remaining: 1 } })).toBe(
       'Full Platform access except Billing and Usage, no Field Capture. 1 of 2 in use.',
     );
-    expect(inviteKindHelp('global_admin', { inApp: true })).toBe('Full access except Billing and Usage.');
   });
 
   it('maps each choice to the same API fields as before', async () => {
@@ -124,9 +122,6 @@ describe('InvitePanel: Platform seats', () => {
     const fc = await send('Field Capture', 'crew@example.com');
     expect(fc).toMatchObject({ email: 'crew@example.com', role: 'employee' });
     expect(fc).not.toHaveProperty('seatType');
-    const ga = await send('Global Admin', 'admin@example.com');
-    expect(ga).toMatchObject({ email: 'admin@example.com', role: 'global_admin' });
-    expect(ga).not.toHaveProperty('seatType');
     const pl = await send('Platform', 'office@example.com');
     expect(pl).toMatchObject({ email: 'office@example.com', role: 'global_admin', seatType: 'platform' });
     expect(pl).not.toHaveProperty('serviceRole');

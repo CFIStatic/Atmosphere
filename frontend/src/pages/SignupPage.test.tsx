@@ -142,7 +142,7 @@ describe('SignupPage', () => {
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
     expect(screen.getAllByText('Per Month')).toHaveLength(3);
-    expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
+    expect(screen.getAllByText(/the Global Admin \(the account owner\) does not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/Each plan includes an AI usage allowance/)).toBeInTheDocument();
     expect(screen.queryByText(/30-day notice/)).toBeNull();

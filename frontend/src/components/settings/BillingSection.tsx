@@ -248,7 +248,7 @@ export function BillingSection() {
             <p className="text-xs text-ink-500">
               Extra Field Capture accounts ({formatCents(workspace.fieldCaptureSeats?.extraSeatPriceCents ?? 12_500)}/mo) are added automatically when you invite past the{' '}
               {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
-              Seats count Field Capture accounts only — office-only Global Admins do not use a seat
+              Seats count Field Capture accounts only — the Global Admin (the account owner) does not use a seat
               unless they also use Field Capture. Change plans in the billing portal, or contact us for Enterprise.
             </p>
           </div>
@@ -256,7 +256,7 @@ export function BillingSection() {
           <p className="mt-5 text-xs text-ink-500">
             Extra Field Capture accounts are added automatically when you invite someone past the{' '}
             {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
-            Seats count Field Capture accounts only — office-only Global Admins do not use a seat
+            Seats count Field Capture accounts only — the Global Admin (the account owner) does not use a seat
             unless they also use Field Capture.
           </p>
         ) : workspace.canManage ? (

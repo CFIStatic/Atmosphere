@@ -246,3 +246,28 @@ test('the invite route takes the Platform path and stores seat_type', () => {
   assert.match(route, /seat_type: 'platform'/);
   assert.ok(route.indexOf('ensurePlatformSeatForInvite') < route.indexOf(".from('org_invites')"), 'seat before the invite row');
 });
+
+test('one Global Admin per workspace: the invite route refuses admin invites (Platform seats still allowed)', () => {
+  const s = src('routes/org.ts');
+  const route = s.slice(s.indexOf("orgRouter.post('/invites'"), s.indexOf("orgRouter.post('/invites/:id/revoke'"));
+  assert.match(route, /seatType !== 'platform' && isGlobalAdmin\(seat\)/);
+  assert.match(route, /'global_admin_owner_only'/);
+  assert.ok(route.indexOf("'global_admin_owner_only'") < route.indexOf(".from('org_invites')"), 'refused before any row is written');
+});
+
+test('one Global Admin per workspace: nobody promotes themselves through PATCH /api/org/me', () => {
+  const s = src('routes/org.ts');
+  const route = s.slice(s.indexOf("orgRouter.patch('/me'"), s.indexOf("orgRouter.patch('/',"));
+  assert.match(route, /isGlobalAdmin\(role\) && !isGlobalAdmin\(currentRole\)/);
+  assert.match(route, /'global_admin_owner_only'/);
+});
+
+test('one Global Admin per workspace: the database refuses admin invites too', () => {
+  const read = (dir: string) =>
+    readFileSync(new URL(`../../${dir}/20261018210000_global_admin_owner_only.sql`, import.meta.url), 'utf8');
+  const sql = read('supabase/migrations');
+  assert.equal(read('backend/supabase/migrations'), sql, 'mirrored');
+  assert.match(sql, /raise exception 'global_admin_owner_only'/);
+  assert.match(sql, /<> 'platform'/);
+  assert.match(sql, /create trigger org_invites_admin_owner_only/);
+});

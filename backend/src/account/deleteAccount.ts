@@ -94,7 +94,7 @@ export function blockedMessage(blocked: BlockedOrg[]): string {
   const names = blocked.map((b) => b.orgName?.trim() || 'your company').join(', ');
   return (
     `You are the only admin of ${names}, and other people still use it. ` +
-    'Make someone else an admin first (Team settings on the web), then delete your account.'
+    'Remove the other people first, or contact Atmosphere support to hand the workspace to someone else, then delete your account.'
   );
 }
 

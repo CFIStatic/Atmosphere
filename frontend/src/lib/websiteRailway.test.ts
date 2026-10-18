@@ -269,7 +269,7 @@ describe('Railway corporate-website image', () => {
     expect(page).not.toContain('$49.99');
     expect(page).not.toContain('>per month<');
     expect(page).toContain('Homeowners invited to a job file pay nothing');
-    expect(page).toContain('Office-only Global Admins');
+    expect(page).toContain('The Global Admin (the account owner)');
     expect(page).not.toContain('10×');
     expect(page).not.toContain('provider cost');
     expect(page).not.toMatch(/plan-name mono">Enterprise/);

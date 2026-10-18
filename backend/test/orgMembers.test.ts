@@ -85,3 +85,16 @@ test('one Global Admin can remove another when a second remains', () => {
   });
   assert.deepEqual(decision, { allowed: true });
 });
+
+test('nobody removes the account owner, even a Platform seat that carries the admin role', () => {
+  const decision = decideMemberRemoval({
+    callerUserId: 'platform-seat',
+    callerRole: 'global_admin',
+    targetUserId: 'owner',
+    targetRole: 'global_admin',
+    adminCountInOrg: 2,
+    targetIsOwner: true,
+  });
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.allowed === false && decision.code, 'owner_cannot_be_removed');
+});

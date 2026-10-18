@@ -19,6 +19,8 @@ export function decideMemberRemoval(input: {
   targetUserId: string;
   targetRole: string | null | undefined;
   adminCountInOrg: number;
+  /** The account owner (orgs.created_by): the one Global Admin, who pays. */
+  targetIsOwner?: boolean;
 }): MemberRemovalDecision {
   if (!isGlobalAdmin(input.callerRole)) {
     return {
@@ -34,6 +36,14 @@ export function decideMemberRemoval(input: {
       status: 400,
       code: 'cannot_remove_self',
       message: 'You cannot remove your own login here.',
+    };
+  }
+  if (input.targetIsOwner) {
+    return {
+      allowed: false,
+      status: 409,
+      code: 'owner_cannot_be_removed',
+      message: 'That person is the account owner and Global Admin. Nobody can remove them from the workspace.',
     };
   }
   if (isGlobalAdmin(input.targetRole) && input.adminCountInOrg <= 1) {

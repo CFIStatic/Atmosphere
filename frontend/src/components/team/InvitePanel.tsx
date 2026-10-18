@@ -12,7 +12,7 @@ import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/pho
 /**
  * Adding somebody to the team.
  *
- * Org invites create Employee (or Global Admin) seats, or a Platform
+ * Org invites create Employee (Field Capture) seats, or a Platform
  * seat ($75/mo): Global Admin access on the Platform, no Field Capture, no
  * Billing and Usage. Invited workers on one job are invited from the job file
  * via a job-share token — not here.
@@ -21,16 +21,16 @@ import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/pho
 export const PLATFORM_SEAT_PRICE_LABEL = '$75/mo';
 
 /**
- * One control for who the person is. Same API mapping as before:
+ * One control for who the person is. The workspace has one Global Admin, the
+ * account owner who pays; nobody else can be invited as one.
  *   field_capture -> role employee (uses a Field Capture seat)
- *   global_admin  -> role global_admin (free)
- *   platform      -> role global_admin + seatType platform ($75/mo)
+ *   platform      -> role global_admin + seatType platform ($75/mo; the
+ *                    database role behind a Platform seat, not a Global Admin)
  */
-export type InviteKind = 'field_capture' | 'global_admin' | 'platform';
-export const INVITE_KINDS: InviteKind[] = ['field_capture', 'global_admin', 'platform'];
+export type InviteKind = 'field_capture' | 'platform';
+export const INVITE_KINDS: InviteKind[] = ['field_capture', 'platform'];
 export const INVITE_KIND_LABELS: Record<InviteKind, string> = {
   field_capture: 'Field Capture',
-  global_admin: 'Global Admin',
   platform: 'Platform',
 };
 
@@ -49,9 +49,6 @@ export function inviteKindHelp(
     return fieldCaptureSeats
       ? `${base} ${fieldCaptureSeats.used} of ${fieldCaptureSeats.allowed} Field Capture seats used.`
       : base;
-  }
-  if (kind === 'global_admin') {
-    return inApp ? 'Full access except Billing and Usage.' : 'Full access except Billing and Usage. Free.';
   }
   let line = 'Full Platform access except Billing and Usage, no Field Capture.';
   if (!inApp) line += ` ${PLATFORM_SEAT_PRICE_LABEL} each.`;
@@ -92,7 +89,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
   const [email, setEmail] = useState('');
   const [kind, setKind] = useState<InviteKind>('field_capture');
   const platformSeat = kind === 'platform';
-  const role: MemberRole = kind === 'field_capture' ? 'employee' : 'global_admin';
+  const role: MemberRole = platformSeat ? 'global_admin' : 'employee';
   const [platformSeats, setPlatformSeats] = useState<PlatformSeatCounts | null>(null);
   const phoneEnabled = usePhoneAuthEnabled();
   const [byPhone, setByPhone] = useState(false);
@@ -158,7 +155,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       setError(`Every Platform seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;
     }
-    if (inApp && seatsFull && !platformSeat && role !== 'global_admin') {
+    if (inApp && seatsFull && !platformSeat) {
       setOutcome(null);
       setError(`Every Field Capture seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;

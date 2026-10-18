@@ -11,6 +11,10 @@ import { createUserClient } from '../lib/supabase.js';
 export const BILLING_OWNER_ONLY = 'Only the account owner can open Billing and Usage.';
 
 /** True when this user created (owns) the organization. */
+/** One Global Admin per workspace: the account owner who pays. */
+export const GLOBAL_ADMIN_OWNER_ONLY_MESSAGE =
+  'Only the account owner is Global Admin. Invite them as Field Capture or Platform instead.';
+
 export function isOrgOwnerRow(org: { created_by?: string | null } | null | undefined, userId: string | null | undefined): boolean {
   return Boolean(org?.created_by && userId && org.created_by === userId);
 }
