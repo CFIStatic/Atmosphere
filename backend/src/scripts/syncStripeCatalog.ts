@@ -291,7 +291,7 @@ async function main() {
   }
 
   console.log(
-    `\nChest Mount hardware is one-time ${LIVE_CHEST_MOUNT_PRICE_ID} ($49.99).\n` +
+    `\nChest Mount hardware is one-time ${LIVE_CHEST_MOUNT_PRICE_ID} ($99.99).\n` +
       `Payment Link: ${LIVE_CHEST_MOUNT_PAYMENT_LINK}\n`,
   );
 

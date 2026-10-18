@@ -16,7 +16,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATIONS="$HERE/../migrations"
+MIGRATIONS="$HERE/../migrations_archive"
 DB="${AGENT_MEMORY_TEST_DB:-agent_memory_test}"
 PSQL=(psql "$@")
 

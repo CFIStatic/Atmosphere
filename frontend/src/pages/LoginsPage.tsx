@@ -37,7 +37,7 @@ const INTRO_LINE =
   'Save your sign-ins once and Computer uses them for you. Passwords are encrypted and never seen by the AI.';
 
 const inputClass =
-  'mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2.5 text-base text-ink-900 outline-none transition placeholder:text-ink-500 focus:border-brand-600 sm:text-sm';
+  'mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2.5 text-base text-ink-900 outline-hidden transition placeholder:text-ink-500 focus:border-brand-600 sm:text-sm';
 const labelClass = 'block text-xs font-medium text-ink-700';
 const primaryButton =
   'rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50';
@@ -83,9 +83,11 @@ function scrollToTop(from?: HTMLElement | null) {
 function PasswordInput({
   value,
   onChange,
+  placeholder,
 }: {
   value: string;
   onChange: (next: string) => void;
+  placeholder?: string;
 }) {
   const [shown, setShown] = useState(false);
   return (
@@ -98,6 +100,7 @@ function PasswordInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           maxLength={512}
+          placeholder={placeholder}
           className={`${inputClass} pr-11`}
           autoComplete="current-password"
           spellCheck={false}
@@ -143,6 +146,27 @@ function UsernameInput({
   );
 }
 
+/** Optional company / tenant ID some sites (DASH) ask for along with the username and password. */
+function CompanyIdInput({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <label className={labelClass}>
+      Company ID (optional)
+      <input
+        type="text"
+        name="company-id"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={128}
+        className={inputClass}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        data-testid="logins-company-id"
+      />
+    </label>
+  );
+}
+
 /** "More options": a small disclosure for the rarely needed bits. */
 function MoreOptions({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -180,16 +204,18 @@ const cardClass = 'max-w-xl rounded-2xl border border-line bg-paper-0 p-4 sm:p-5
 interface Credentials {
   username: string;
   password: string;
+  companyId: string;
   loginUrl: string;
 }
-const EMPTY_CREDS: Credentials = { username: '', password: '', loginUrl: '' };
+const EMPTY_CREDS: Credentials = { username: '', password: '', companyId: '', loginUrl: '' };
 
-function credentialOf(c: Credentials, fallbackLoginUrl: string | null) {
+function credentialOf(c: Credentials, fallbackLoginUrl: string | null, keepSavedPassword = false) {
   const username = c.username.trim();
-  if (!username || !c.password) return null;
+  if (!username || (!c.password && !keepSavedPassword)) return null;
   return {
     username,
     password: c.password,
+    companyId: c.companyId.trim() || null,
     loginUrl: c.loginUrl.trim() || fallbackLoginUrl,
   } satisfies ComputerCredentialInput;
 }
@@ -270,7 +296,7 @@ function FormSiteHeader({
           <h2 className="min-w-0 truncate text-base font-semibold text-ink-900">{name}</h2>
         ) : (
           <span
-            className="h-4 w-32 animate-pulse rounded bg-paper-50"
+            className="h-4 w-32 animate-pulse rounded-sm bg-paper-50"
             aria-label="Finding the site"
             role="status"
             data-testid="logins-add-site-finding"
@@ -410,6 +436,7 @@ function AddLoginForm({
               value={creds.password}
               onChange={(password) => setCreds({ ...creds, password })}
             />
+            <CompanyIdInput value={creds.companyId} onChange={(companyId) => setCreds({ ...creds, companyId })} />
           </>
         ) : null}
       </div>
@@ -501,15 +528,15 @@ function ManageLogin({
 
   function openEdit() {
     setConfirm(null);
-    setCreds({ username: cred?.username ?? '', password: '', loginUrl: cred?.loginUrl ?? '' });
+    setCreds({ username: cred?.username ?? '', password: '', companyId: cred?.companyId ?? '', loginUrl: cred?.loginUrl ?? '' });
     setEditing(true);
   }
 
   async function submitEdit(e: FormEvent) {
     e.preventDefault();
-    const credential = credentialOf(creds, null);
+    const credential = credentialOf(creds, null, Boolean(cred));
     if (!credential) {
-      onError('Enter the email and password.');
+      onError(cred ? 'Enter the email.' : 'Enter the email and password.');
       return;
     }
     if (await onSavePassword(credential)) setEditing(false);
@@ -548,6 +575,11 @@ function ManageLogin({
           <p className="truncate text-sm text-ink-600" data-testid="login-credential">
             {who}
           </p>
+          {cred?.companyId ? (
+            <p className="truncate text-sm text-ink-600" data-testid="login-company-id">
+              Company ID: {cred.companyId}
+            </p>
+          ) : null}
         </div>
       </div>
       {attention ? (
@@ -574,7 +606,9 @@ function ManageLogin({
           <PasswordInput
             value={creds.password}
             onChange={(password) => setCreds({ ...creds, password })}
+            placeholder={cred ? 'Leave blank to keep the saved password' : undefined}
           />
+          <CompanyIdInput value={creds.companyId} onChange={(companyId) => setCreds({ ...creds, companyId })} />
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" disabled={working !== null} className={primaryButton}>
               {working === `password:${login.id}` ? 'Saving…' : 'Save'}

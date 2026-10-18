@@ -9,11 +9,15 @@ import {
 } from './firstRun';
 
 describe('firstRunDestination', () => {
-  it('sends generic post-auth homes to Start a job', () => {
+  it('sends generic post-auth homes, including Start a job, to the Dashboard', () => {
+    expect(FIRST_RUN_HOME).toBe('/verifier-library');
     expect(firstRunDestination(null, '/verifier-library')).toBe(FIRST_RUN_HOME);
     expect(firstRunDestination('/verifier-library', '/verifier-library')).toBe(FIRST_RUN_HOME);
     expect(firstRunDestination('/jobs', '/verifier-library')).toBe(FIRST_RUN_HOME);
     expect(firstRunDestination('/signup?step=2', '/verifier-library')).toBe(FIRST_RUN_HOME);
+    expect(firstRunDestination('/intake', '/verifier-library')).toBe(FIRST_RUN_HOME);
+    expect(firstRunDestination('/welcome', '/verifier-library')).toBe(FIRST_RUN_HOME);
+    expect(firstRunDestination('/field', '/field')).toBe(FIRST_RUN_HOME);
   });
 
   it('keeps a specific deep link', () => {
@@ -21,22 +25,6 @@ describe('firstRunDestination', () => {
       '/job-progress?job=abc',
     );
     expect(firstRunDestination('/settings?section=billing', '/verifier-library')).toBe(
-      '/settings?section=billing',
-    );
-  });
-
-  it('opens the job already filed when the return path is a generic home', () => {
-    const state = {
-      jobId: 'job-1',
-      jobTitle: 'Smith kitchen leak',
-      jobNumber: 1,
-      evidenceSeen: true as const,
-    };
-    const job = '/job-progress?job=job-1&title=Smith+kitchen+leak&number=1';
-    expect(firstRunDestination('/verifier-library', '/verifier-library', state)).toBe(job);
-    expect(firstRunDestination(null, '/verifier-library', state)).toBe(job);
-    expect(firstRunDestination('/signup?step=2', '/verifier-library', state)).toBe(job);
-    expect(firstRunDestination('/settings?section=billing', '/verifier-library', state)).toBe(
       '/settings?section=billing',
     );
   });

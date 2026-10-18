@@ -15,7 +15,7 @@
 # per push — Disable Autodeploy on that service, or drop the matching
 # `railway up` step here (see docs/production.md).
 #
-# One extra secret in Keys (from Railway → Account → Tokens):
+# One extra secret in Keys (Railway → Atmosphere project → Settings → Tokens, a project token for the Production environment):
 #   RAILWAY_TOKEN
 # Optional:
 #   RAILWAY_PROJECT_ID     (Project settings → General)
@@ -68,6 +68,12 @@ concurrency:
   group: deploy-production
   cancel-in-progress: true
 
+# Railway CLI calls target the production environment by ID. The
+# environment is named "Production"; a project token rejects the lowercase
+# name ("Environment \"production\" not found"), and an ID never drifts.
+env:
+  RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID || '519e5cb5-26e1-44a8-91e1-f36412b5cc08' }}
+
 jobs:
   backend:
     name: Sync Keys → Railway and deploy backend
@@ -107,7 +113,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Atmosphere project → Settings → Tokens, Production environment)."
             exit 1
           fi
 
@@ -147,9 +153,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || vars.OPENAI_API_KEY }}
           TRANSCRIPTION_URL: ${{ secrets.TRANSCRIPTION_URL || vars.TRANSCRIPTION_URL }}
           TRANSCRIPTION_API_KEY: ${{ secrets.TRANSCRIPTION_API_KEY || vars.TRANSCRIPTION_API_KEY }}
+          # Chat and Ask. The Railway sync keeps this on Opus.
           ANTHROPIC_MODEL: claude-sonnet-5
-          VERIFICATION_PRIMARY_MODEL: gemini-3.6-flash
-          VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
+          # Video analysis only. Roll back by setting these to
+          # gemini-3.1-pro-preview / claude-opus-5-5.
+          VERIFICATION_PRIMARY_MODEL: gemini-3.5-flash-lite
+          VERIFICATION_ESCALATION_MODEL: claude-haiku-4-5
+          VIDEO_LIGHT_MODEL: claude-haiku-4-5
         working-directory: backend
         run: node scripts/syncGithubEnvToRailway.mjs
 
@@ -185,7 +195,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
@@ -218,7 +228,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           echo "Deploying Railway service: $RAILWAY_SERVICE from repo root"
           chmod +x backend/scripts/railwayUp.sh
@@ -226,7 +236,7 @@ jobs:
             echo "Resolved '$RAILWAY_SERVICE' to $service_id"
             printf '%s' 'Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH \
               --stdin --skip-deploys --service "$service_id" \
-              --project "$RAILWAY_PROJECT_ID" --environment production || true
+              --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" || true
             export RAILWAY_SERVICE="$service_id"
           fi
           cp backend/railway.toml railway.toml
@@ -252,7 +262,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Atmosphere project → Settings → Tokens, Production environment)."
             exit 1
           fi
 
@@ -263,17 +273,17 @@ jobs:
           RAILWAY_APP_SERVICE: ${{ secrets.RAILWAY_APP_SERVICE || vars.RAILWAY_APP_SERVICE }}
           RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE || vars.RAILWAY_WEB_SERVICE }}
           RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Platform}}"
           echo "Deploying office app to Railway service '$service' in project $project."
-          railway link --project "$project" --environment production --service "$service" \
-            || railway link --project "$project" --environment production \
+          railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" --service "$service" \
+            || railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" \
             || railway link --project "$project" \
             || true
-          railway status --project "$project" --environment production || railway status || true
+          railway status --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" || railway status || true
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"
@@ -321,7 +331,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Atmosphere project → Settings → Tokens, Production environment)."
             exit 1
           fi
 
@@ -330,7 +340,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           RAILWAY_UP_ATTEMPTS: '3'
         run: |
           set -euo pipefail
@@ -342,11 +352,11 @@ jobs:
               service="Field Capture"
               ;;
           esac
-          railway link --project "$project" --environment production --service "$service" \
-            || railway link --project "$project" --environment production \
+          railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" --service "$service" \
+            || railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" \
             || railway link --project "$project" \
             || true
-          railway status --project "$project" --environment production || railway status || true
+          railway status --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" || railway status || true
           chmod +x backend/scripts/railwayUp.sh fieldcapture/scripts/apply-railway-config.sh
           fieldcapture/scripts/apply-railway-config.sh
           if service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"; then
@@ -379,14 +389,14 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_WEBSITE_SERVICE: ${{ secrets.RAILWAY_WEBSITE_SERVICE || vars.RAILWAY_WEBSITE_SERVICE || 'Corporate Website' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           set -uo pipefail
           if [ -z "$RAILWAY_TOKEN" ]; then
             echo "No RAILWAY_TOKEN; skipping the Corporate Website config repair."
             exit 0
           fi
-          railway link --project "$RAILWAY_PROJECT_ID" --environment production || true
+          railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" || true
           chmod +x website/scripts/apply-railway-config.sh
           website/scripts/apply-railway-config.sh || \
             echo "warn: could not repair Corporate Website config; see docs/production.md."
@@ -411,7 +421,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Atmosphere project → Settings → Tokens, Production environment)."
             exit 1
           fi
 
@@ -420,7 +430,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_INTERNAL_SERVICE: ${{ secrets.RAILWAY_INTERNAL_SERVICE || vars.RAILWAY_INTERNAL_SERVICE }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
@@ -430,14 +440,14 @@ jobs:
             Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
           esac
           export RAILWAY_PROJECT_ID="$project"
-          export RAILWAY_ENVIRONMENT=production
-          railway status --project "$project" --environment production || railway status || true
+          export RAILWAY_ENVIRONMENT="$RAILWAY_ENVIRONMENT_ID"
+          railway status --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" || railway status || true
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           export RAILWAY_INTERNAL_SERVICE="$service_id"
           export RAILWAY_SERVICE="$service_id"
-          railway link --project "$project" --environment production --service "$service_id" \
-            || railway link --project "$project" --environment production \
+          railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" --service "$service_id" \
+            || railway link --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID" \
             || railway link --project "$project" \
             || true
           chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
@@ -446,7 +456,7 @@ jobs:
           echo "API_UPSTREAM=$upstream"
           printf '%s' "$upstream" | railway variable set API_UPSTREAM \
             --stdin --skip-deploys --service "$service_id" \
-            --project "$project" --environment production
+            --project "$project" --environment "$RAILWAY_ENVIRONMENT_ID"
           printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> internal/nginx/default.conf.template
           export RAILWAY_UP_STAMP_FILE="$PWD/internal/nginx/default.conf.template"
           export RAILWAY_UP_ATTEMPTS=3

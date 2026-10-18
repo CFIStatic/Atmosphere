@@ -6,12 +6,7 @@ import {
   type LoginCatalog,
   type LoginCatalogEntry,
 } from '../../lib/computer';
-
-/** Public favicon for a site host (Google’s favicon service). Falls back to the monogram on error. */
-export function siteLogoUrl(host: string): string {
-  const clean = host.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(clean)}&sz=128`;
-}
+import { siteLogoSrc } from '../../lib/siteLogos';
 
 function sizeClass(size: 'sm' | 'md' | 'lg'): string {
   if (size === 'lg') return 'h-10 w-10 text-sm';
@@ -24,11 +19,12 @@ export function SiteLogo({
   site,
   size = 'md',
 }: {
-  site: Pick<LoginCatalogEntry, 'logo' | 'name' | 'host'>;
+  site: Pick<LoginCatalogEntry, 'logo' | 'name' | 'host'> & { id?: string };
   size?: 'sm' | 'md' | 'lg';
 }) {
   return (
     <HostLogo
+      src={siteLogoSrc(site.id)}
       host={site.host}
       name={site.name}
       monogram={site.logo}
@@ -37,13 +33,18 @@ export function SiteLogo({
   );
 }
 
-/** Logo by hostname (saved login rows and catalog). Monogram when the image fails. */
+/**
+ * A site's logo: the locally hosted icon when there is one (catalog sites),
+ * otherwise the monogram. Never loads an image from another website.
+ */
 export function HostLogo({
+  src = null,
   host,
   name,
   monogram,
   size = 'md',
 }: {
+  src?: string | null;
   host: string;
   name: string;
   monogram?: { text: string; color: string } | null;
@@ -60,7 +61,7 @@ export function HostLogo({
   const initials = monogram?.text || fromName || host.slice(0, 2).toUpperCase() || '?';
   const color = monogram?.color ?? '#475569';
 
-  if (!failed && host.trim()) {
+  if (!failed && src) {
     return (
       <span
         aria-hidden="true"
@@ -68,11 +69,10 @@ export function HostLogo({
         data-testid="site-logo"
       >
         <img
-          src={siteLogoUrl(host)}
+          src={src}
           alt=""
           className="h-full w-full object-contain p-1"
           loading="lazy"
-          referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
         />
       </span>
@@ -110,7 +110,7 @@ export function SavedCheck() {
 }
 
 const tileClass =
-  'flex min-w-0 items-center gap-2.5 rounded-xl border border-line bg-paper-0 px-3 py-2.5 text-left transition hover:border-brand-600 focus-visible:border-brand-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
+  'flex min-w-0 items-center gap-2.5 rounded-xl border border-line bg-paper-0 px-3 py-2.5 text-left transition hover:border-brand-600 focus-visible:border-brand-600 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line';
 
 const gridClass = 'grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3';
 
@@ -225,7 +225,7 @@ export function LoginCatalogPicker({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search sites"
-          className="w-full rounded-xl border border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 outline-none transition placeholder:text-ink-500 focus:border-brand-600"
+          className="w-full rounded-xl border border-line bg-paper-0 py-3 pl-11 pr-3 text-base text-ink-900 outline-hidden transition placeholder:text-ink-500 focus:border-brand-600"
           autoComplete="off"
           autoFocus
           aria-label="Search sites"

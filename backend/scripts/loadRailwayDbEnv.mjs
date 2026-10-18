@@ -42,7 +42,7 @@ function readStdin() {
 
 function railwayVariablesJson() {
   const project = process.env.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae';
-  const environment = process.env.RAILWAY_ENVIRONMENT || 'production';
+  const environment = process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_ENVIRONMENT || '519e5cb5-26e1-44a8-91e1-f36412b5cc08';
   const service = process.env.RAILWAY_SERVICE || 'Atmosphere APIs';
   const attempts = [
     ['variables', '--json', '--service', service, '--project', project, '--environment', environment],

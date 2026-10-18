@@ -140,6 +140,7 @@ export function BillingSection() {
         <AiAllowanceSection
           allowance={allowance}
           currentPlanCode={sub.code}
+          complimentary={complimentary}
           onError={setError}
           onUpdated={refreshAfterPlanChange}
         />
@@ -200,7 +201,28 @@ export function BillingSection() {
               </span>
             </Row>
           ) : null}
+          <Row label="Platform seats">
+            <span data-testid="billing-platform-seats">
+              {workspace.platformSeats?.used ?? 0} of {workspace.platformSeats?.allowed ?? 0} used
+              <span className="ml-1.5 font-normal text-ink-500">
+                (
+                {complimentary
+                  ? 'free on this workspace'
+                  : inApp
+                    ? 'Global Admin access, no Field Capture'
+                    : `${formatCents(workspace.platformSeats?.priceCents ?? 7_500)}/mo each`}
+                {!inApp && !complimentary && workspace.platformSeats && workspace.platformSeats.allowed > 0
+                  ? ` · ${formatCents((workspace.platformSeats.priceCents ?? 7_500) * workspace.platformSeats.allowed)}/mo`
+                  : ''}
+                )
+              </span>
+            </span>
+          </Row>
         </dl>
+        <p className="mt-2 text-xs text-ink-500" data-testid="billing-platform-seats-note">
+          Platform seats see everything on the Platform like a Global Admin, except Billing and Usage, and
+          cannot use Field Capture. Add one by inviting someone as "Platform" in Team.
+        </p>
 
         {sub.cancelAtPeriodEnd ? (
           <p className="mt-4 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600">
@@ -226,7 +248,7 @@ export function BillingSection() {
             <p className="text-xs text-ink-500">
               Extra Field Capture accounts ({formatCents(workspace.fieldCaptureSeats?.extraSeatPriceCents ?? 12_500)}/mo) are added automatically when you invite past the{' '}
               {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
-              Seats count Field Capture accounts only — office-only Global Admins do not use a seat
+              Seats count Field Capture accounts only — the Global Admin (the account owner) does not use a seat
               unless they also use Field Capture. Change plans in the billing portal, or contact us for Enterprise.
             </p>
           </div>
@@ -234,7 +256,7 @@ export function BillingSection() {
           <p className="mt-5 text-xs text-ink-500">
             Extra Field Capture accounts are added automatically when you invite someone past the{' '}
             {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
-            Seats count Field Capture accounts only — office-only Global Admins do not use a seat
+            Seats count Field Capture accounts only — the Global Admin (the account owner) does not use a seat
             unless they also use Field Capture.
           </p>
         ) : workspace.canManage ? (
@@ -339,7 +361,7 @@ function InvoiceReceiptCard({ invoice }: { invoice: BillingInvoice }) {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[28rem] text-left text-xs">
+        <table className="w-full min-w-md text-left text-xs">
           <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
             <tr className="border-b border-line/60">
               <th className="px-3.5 py-2 font-semibold">Description</th>

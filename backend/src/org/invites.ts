@@ -1,3 +1,4 @@
+import { ATMOSPHERE_EMAIL_LOGO_STYLE, atmosphereWordmarkHtml } from '../lib/brandMark.js';
 /**
  * Invitations: the words, and the bookkeeping.
  *
@@ -101,9 +102,11 @@ export function inviteEmail(input: {
   const fieldCapture = input.fieldCaptureOrigin?.replace(/\/$/, '') || null;
   const html = `<!DOCTYPE html>
 <html lang="en">
+<head><meta charset="utf-8" />${ATMOSPHERE_EMAIL_LOGO_STYLE}</head>
 <body style="margin:0;padding:0;background:#f4f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f1ea;padding:32px 16px;">
     <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;"><tr><td style="padding:0 4px 18px;">${atmosphereWordmarkHtml()}</td></tr></table>
       <table role="presentation" width="100%" style="max-width:560px;background:#fffdf8;border:1px solid #e7e0d4;border-radius:16px;padding:28px 28px 24px;">
         <tr><td>
           <h1 style="margin:0;font-size:22px;line-height:1.3;color:#1c1917;">

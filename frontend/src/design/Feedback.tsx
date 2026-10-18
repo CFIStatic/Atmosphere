@@ -159,7 +159,7 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
   return (
     <kbd
       className={cn(
-        'rounded border border-line/15 bg-line/5 px-1.5 py-0.5 font-sans text-2xs font-medium text-fg-3',
+        'rounded-sm border border-line/15 bg-line/5 px-1.5 py-0.5 font-sans text-2xs font-medium text-fg-3',
         className,
       )}
     >

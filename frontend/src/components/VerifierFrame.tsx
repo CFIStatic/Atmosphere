@@ -86,7 +86,9 @@ export function VerifierFrame({
   const syncFrame = useCallback(() => {
     postToFrame({ atmosphere: 'layout', railOnly, phoneDrawer: phone && railOnly });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
-    postToFrame({ atmosphere: 'viewer', on: homeowner });
+    // Their own workspace never finished checkout: offer the plan, which
+    // turns Start a job, Logins and Settings back on.
+    postToFrame({ atmosphere: 'viewer', on: homeowner, upgrade: homeowner && Boolean(membership) });
     postToFrame({ atmosphere: 'theme', preference: theme });
     postToFrame({
       atmosphere: 'locale',
@@ -94,7 +96,7 @@ export function VerifierFrame({
       chrome: verifierChromeStrings(locale, theme),
     });
     postSession();
-  }, [homeowner, location.pathname, locale, phone, postSession, postToFrame, railOnly, theme]);
+  }, [homeowner, location.pathname, locale, membership, phone, postSession, postToFrame, railOnly, theme]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();

@@ -19,12 +19,20 @@ describe('progress email sign-in', () => {
     assert.equal(normalizeEmail(42), '');
   });
 
-  it('renders a branded email with the link and code, escaped', () => {
-    const mail = progressSignInEmail({ url: 'https://x.test/progress/t?signin=h', code: '123456', orgName: 'Jettx <LLC>' });
-    assert.match(mail.subject, /Jettx <LLC> job file/);
-    assert.match(mail.html, /Open the job file/);
-    assert.match(mail.html, /123456/);
-    assert.match(mail.html, /Jettx &lt;LLC&gt;/);
-    assert.match(mail.text, /No password needed/);
+  it('renders just the code, escaped, with no link', () => {
+    const mail = progressSignInEmail({ url: 'https://x.test/progress/t?signin=h', code: '12345678', orgName: 'Jettx <LLC>' });
+    assert.equal(mail.subject, 'Your Atmosphere sign-in code');
+    assert.match(mail.html, /12345678/);
+    assert.match(mail.text, /12345678/);
+    assert.doesNotMatch(mail.html, /x\.test|<a /);
+    assert.doesNotMatch(mail.text, /x\.test/);
+    assert.match(mail.html, /Expires in 1 hour/);
+  });
+
+  it('falls back to the link when there is no code', () => {
+    const mail = progressSignInEmail({ url: 'https://x.test/progress/t?signin=h&a=1', code: null, orgName: null });
+    assert.equal(mail.subject, 'Your Atmosphere sign-in link');
+    assert.match(mail.html, /href="https:\/\/x\.test\/progress\/t\?signin=h&amp;a=1"/);
+    assert.match(mail.text, /x\.test/);
   });
 });

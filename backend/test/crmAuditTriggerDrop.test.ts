@@ -5,10 +5,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dropPath = join(here, '../supabase/migrations/20260901010000_drop_crm_audit_triggers.sql');
+const dropPath = join(here, '../supabase/migrations_archive/20260901010000_drop_crm_audit_triggers.sql');
 const repairPath = join(
   here,
-  '../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql',
+  '../supabase/migrations_archive/20260901140000_intake_create_job_without_invitees.sql',
 );
 const dropSql = readFileSync(dropPath, 'utf8');
 const repairSql = readFileSync(repairPath, 'utf8');

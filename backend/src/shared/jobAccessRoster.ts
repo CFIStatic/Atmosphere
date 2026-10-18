@@ -27,6 +27,8 @@ export type JobAccessPerson = {
   kind: JobAccessKind;
   name: string | null;
   email: string | null;
+  /** Crew invited by mobile number only. */
+  phone?: string | null;
   accessType: string;
   /** Curated service role slug — stable for speaker-identity. */
   role: string;
@@ -62,6 +64,7 @@ export type RosterPartyRow = {
   trade: string | null;
   contact_name: string | null;
   email: string | null;
+  phone?: string | null;
   role: string | null;
   service_role?: string | null;
   service_role_custom?: string | null;
@@ -250,6 +253,7 @@ export function presentJobAccessRoster(input: {
       party.contact_name?.trim() ||
       party.company?.trim() ||
       email ||
+      party.phone?.trim() ||
       'Crew';
     const label = partyServiceLabel(party);
 
@@ -260,6 +264,7 @@ export function presentJobAccessRoster(input: {
           kind: 'field_capture',
           name,
           email,
+          phone: party.phone ?? null,
           grantedByName: granter.name,
           grantedByEmail: granter.email,
           grantedAt: party.invited_at ?? party.created_at,
@@ -272,12 +277,89 @@ export function presentJobAccessRoster(input: {
     );
   }
 
-  people.sort((a, b) => {
+  const deduped = dedupeJobAccessPeople(people);
+
+  deduped.sort((a, b) => {
     const aT = a.lastAccessedAt ? new Date(a.lastAccessedAt).getTime() : 0;
     const bT = b.lastAccessedAt ? new Date(b.lastAccessedAt).getTime() : 0;
     if (aT !== bT) return bT - aT;
     return (a.name ?? '').localeCompare(b.name ?? '');
   });
 
-  return people;
+  return deduped;
+}
+
+/** Normalize a phone to digits (keep a leading + country code); '' if none. */
+function normPhone(phone: string | null | undefined): string {
+  const raw = (phone ?? '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  // Treat 10-digit US numbers and +1 numbers as the same person.
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+}
+
+/**
+ * Identity key for one roster row: kind + normalized email (case-insensitive),
+ * falling back to normalized phone. Rows with neither stay separate.
+ */
+export function jobAccessPersonKey(person: Pick<JobAccessPerson, 'kind' | 'email' | 'phone' | 'id'>): string {
+  const email = normEmail(person.email);
+  if (email) return `${person.kind}|e:${email}`;
+  const phone = normPhone(person.phone);
+  if (phone) return `${person.kind}|p:${phone}`;
+  return `${person.kind}|id:${person.id}`;
+}
+
+const STATE_RANK: Record<JobAccessPerson['state'], number> = {
+  claimed: 3,
+  live: 2,
+  expired: 1,
+  revoked: 0,
+};
+
+function earlierIso(a: string | null, b: string | null): boolean {
+  if (!a) return false;
+  if (!b) return true;
+  return new Date(a).getTime() < new Date(b).getTime();
+}
+
+/**
+ * One row per person per role. A job shared with the same homeowner (or the
+ * same crew member invited) several times shows once:
+ *   - lastAccessedAt: the most recent across their rows
+ *   - state/badge: the strongest (claimed account > live invite > expired)
+ *     and the row id follows it, so revoke targets the account row
+ *   - grantedBy/grantedAt: whoever granted first (the original invite)
+ * The trash button revokes every grant for that person (see revokeJobAccess).
+ * DB rows are untouched — this is presentation only.
+ */
+export function dedupeJobAccessPeople(people: JobAccessPerson[]): JobAccessPerson[] {
+  const byKey = new Map<string, JobAccessPerson>();
+  const order: string[] = [];
+  for (const person of people) {
+    const key = jobAccessPersonKey(person);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { ...person });
+      order.push(key);
+      continue;
+    }
+    const stronger = STATE_RANK[person.state] > STATE_RANK[prev.state] ? person : prev;
+    const firstGrant = earlierIso(person.grantedAt, prev.grantedAt) ? person : prev;
+    const hasName = (p: JobAccessPerson) => Boolean(p.name && p.name !== p.email);
+    const named = hasName(stronger) ? stronger : hasName(person) ? person : hasName(prev) ? prev : stronger;
+    byKey.set(key, {
+      ...stronger,
+      name: named.name,
+      displayName: named.displayName,
+      email: stronger.email || prev.email || person.email,
+      phone: stronger.phone ?? prev.phone ?? person.phone ?? null,
+      grantedByName: firstGrant.grantedByName ?? prev.grantedByName ?? person.grantedByName,
+      grantedByEmail: firstGrant.grantedByEmail ?? prev.grantedByEmail ?? person.grantedByEmail,
+      grantedAt: firstGrant.grantedAt,
+      lastAccessedAt: laterIso(prev.lastAccessedAt, person.lastAccessedAt),
+    });
+  }
+  return order.map((k) => byKey.get(k) as JobAccessPerson);
 }

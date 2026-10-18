@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260907170000_field_capture_seat_enforce.sql',
+  '../supabase/migrations_archive/20260907170000_field_capture_seat_enforce.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

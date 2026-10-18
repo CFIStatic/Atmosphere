@@ -92,7 +92,7 @@ export function VerbatimTranscript({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search exact words…"
-        className="mt-2.5 w-full rounded-md border border-line bg-paper-50 px-2.5 py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-400"
+        className="mt-2.5 w-full rounded-md border border-line bg-paper-50 px-2.5 py-1.5 text-[12.5px] text-ink-800 outline-hidden focus:border-ink-400"
         data-testid="verbatim-search"
       />
       {!visible.length ? (

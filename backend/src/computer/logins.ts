@@ -70,6 +70,8 @@ export interface CredentialView {
   saved: true;
   /** Only for admins (who can manage saved passwords); null for everyone else. */
   username: string | null;
+  /** Only for admins; null when none is saved (or for everyone else). */
+  companyId: string | null;
   loginUrl: string | null;
   status: 'ok' | 'needs_attention';
   attentionReason: string | null;
@@ -91,6 +93,8 @@ export interface PasswordsState {
 export interface CredentialInput {
   username: string;
   password: string;
+  /** Optional company / tenant / account ID (DASH and similar sites). */
+  companyId?: string | null;
   loginUrl?: string | null;
 }
 
@@ -242,6 +246,7 @@ export async function loginsState(orgId: string, viewerId: string | null, canMan
 /** The page's view of a saved password: never the password; the username for admins only. */
 function credentialView(c: ComputerCredentialRow, who: Map<string, string>, canManage: boolean): CredentialView {
   let username: string | null = null;
+  let companyId: string | null = null;
   let status = c.status;
   let attentionReason = c.attention_reason;
   const readable = canOpenFingerprint(c.key_fingerprint);
@@ -252,6 +257,7 @@ function credentialView(c: ComputerCredentialRow, who: Map<string, string>, canM
   if (canManage && readable) {
     try {
       username = openCredential(c.username_sealed, c.org_id, c.login_id, 'username', c.key_fingerprint);
+      if (c.company_id_sealed) companyId = openCredential(c.company_id_sealed, c.org_id, c.login_id, 'company_id', c.key_fingerprint);
     } catch {
       status = 'needs_attention';
       attentionReason = "This saved login can't be read. Save it again.";
@@ -260,6 +266,7 @@ function credentialView(c: ComputerCredentialRow, who: Map<string, string>, canM
   return {
     saved: true,
     username,
+    companyId,
     loginUrl: c.login_url,
     status,
     attentionReason,
@@ -287,17 +294,19 @@ function loginView(r: ComputerLoginRow, who: Map<string, string>, cred: Computer
 const NOT_ADMIN = 'Only a Global Admin can save, change or delete saved passwords.';
 
 /** Check a username and password from the page. Errors never repeat the values. */
-function cleanCredential(input: CredentialInput): { username: string; password: string; loginUrl: string | null } {
+export function cleanCredential(input: CredentialInput): { username: string; password: string; companyId: string | null; loginUrl: string | null } {
   const username = String(input.username ?? '').trim();
   const password = String(input.password ?? '');
   if (!username || username.length > 256) throw new ComputerServiceError('Enter the username or email (up to 256 characters).', 'bad_request');
   if (!password || password.length > 512) throw new ComputerServiceError('Enter the password (up to 512 characters).', 'bad_request');
+  const companyId = String(input.companyId ?? '').trim() || null;
+  if (companyId && companyId.length > 128) throw new ComputerServiceError('The company ID can be up to 128 characters.', 'bad_request');
   let loginUrl: string | null = null;
   if (input.loginUrl && String(input.loginUrl).trim()) {
     loginUrl = cleanUrl(input.loginUrl);
     if (!loginUrl) throw new ComputerServiceError('The sign-in page address should look like https://example.com/login.', 'bad_request');
   }
-  return { username, password, loginUrl };
+  return { username, password, companyId, loginUrl };
 }
 
 /** Seal and store a username and password for a listed site (replaces any saved one). */
@@ -306,7 +315,7 @@ async function storeCredential(
   orgId: string,
   login: ComputerLoginRow,
   userId: string,
-  creds: { username: string; password: string; loginUrl: string | null },
+  creds: { username: string; password: string; companyId?: string | null; loginUrl: string | null },
   at: string,
 ): Promise<ComputerCredentialRow> {
   const row = await store.putCredential({
@@ -314,6 +323,7 @@ async function storeCredential(
     org_id: orgId,
     username_sealed: sealCredential(creds.username, orgId, login.id, 'username'),
     password_sealed: sealCredential(creds.password, orgId, login.id, 'password'),
+    company_id_sealed: creds.companyId ? sealCredential(creds.companyId, orgId, login.id, 'company_id') : null,
     key_fingerprint: credentialKeyFingerprint(),
     login_url: creds.loginUrl,
     user_id: userId,
@@ -339,9 +349,22 @@ export async function saveCredential(input: {
   assertCanManage(input.canManage);
   const store = computerWorkerDeps()?.store;
   if (!store) throw new ComputerServiceError(NOT_SET_UP_MESSAGE, 'not_set_up');
-  const creds = cleanCredential(input.credential);
   const login = await store.getLogin(input.orgId, input.loginId);
   if (!login) throw new ComputerServiceError('That site is not on your Logins list.', 'not_found');
+  // Editing a saved login with the password left blank keeps the saved password
+  // (so adding a Company ID doesn't mean typing the password again).
+  let credential = input.credential;
+  if (!credential.password) {
+    const prev = await store.getCredential(input.orgId, login.id);
+    if (prev) {
+      try {
+        credential = { ...credential, password: openCredential(prev.password_sealed, prev.org_id, prev.login_id, 'password', prev.key_fingerprint) };
+      } catch {
+        throw new ComputerServiceError('The saved password can no longer be read. Enter the password again.', 'bad_request');
+      }
+    }
+  }
+  const creds = cleanCredential(credential);
   const at = new Date(computerWorkerDeps()!.now()).toISOString();
   const row = await storeCredential(store, input.orgId, login, input.userId, creds, at);
   return loginView(login, await names([login.created_by, login.last_signed_in_by, row.updated_by]), row, true);

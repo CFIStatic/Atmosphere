@@ -24,6 +24,7 @@ const searchAskChats = vi.fn();
 const askApproval = vi.fn();
 const approveAskApproval = vi.fn();
 const denyAskApproval = vi.fn();
+const warmAsk = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -52,10 +53,11 @@ vi.mock('../lib/api', () => ({
     askApproval: (...args: unknown[]) => askApproval(...args),
     approveAskApproval: (...args: unknown[]) => approveAskApproval(...args),
     denyAskApproval: (...args: unknown[]) => denyAskApproval(...args),
+    warmAsk: (...args: unknown[]) => warmAsk(...args),
   },
 }));
 
-import { ASK_MIN_TYPING_MS, JobAskPanel, waitOutAskHold } from './JobAskPanel';
+import { ASK_MIN_TYPING_MS, JobAskPanel, forgetAskWarms, waitOutAskHold } from './JobAskPanel';
 
 const record: SharedJobRecord = {
   job: {
@@ -137,6 +139,9 @@ describe('JobAskPanel', () => {
     askPins.mockResolvedValue({ pins: [] });
     searchAskChats.mockResolvedValue({ results: [] });
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
+    warmAsk.mockReset();
+    warmAsk.mockResolvedValue({ warming: true });
+    forgetAskWarms();
     askThreads.mockResolvedValue({
       threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
       project: { kind: 'job', jobId: 'job-1038' },
@@ -168,6 +173,34 @@ describe('JobAskPanel', () => {
     }, [onSeek, request]);
     return null;
   }
+
+  it('loads the job into Chat once when the person starts typing', async () => {
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
+    expect(warmAsk).not.toHaveBeenCalled();
+    await user.type(box, 'Was the tarp');
+    await user.clear(box);
+    await user.type(box, 'removed?');
+    expect(warmAsk).toHaveBeenCalledTimes(1);
+    expect(warmAsk).toHaveBeenCalledWith('job-1038');
+  });
+
+  it('does not warm a guest share, which asks through its own door', async () => {
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} ask={askAboutProofs} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
+    await user.type(box, 'Was the tarp removed?');
+    expect(warmAsk).not.toHaveBeenCalled();
+  });
 
   it('asks from inside the job profile', async () => {
     const user = userEvent.setup();
@@ -404,7 +437,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </VideoSeekProvider></JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
     const thinking = await screen.findByTestId('ask-status');
@@ -449,7 +482,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </VideoSeekProvider></JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'whos going to win the ball game');
     const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-status')).toHaveTextContent('Searching the web…');
@@ -473,7 +506,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </VideoSeekProvider></JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'who wins tonight');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByText(/guardians are slight favorites/i)).toBeInTheDocument();
@@ -509,7 +542,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </VideoSeekProvider></JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
@@ -566,7 +599,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'what NFL game is Thursday');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     await openAskStepsSources(user);
@@ -612,7 +645,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Any do-nots?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
 
@@ -670,7 +703,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    await user.type(await screen.findByPlaceholderText(/ask what you forgot/i), 'Text Dana that we arrive at 8');
+    await user.type(await screen.findByPlaceholderText(/ask anything or tell chat/i), 'Text Dana that we arrive at 8');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     const card = await screen.findByTestId('ask-approval-card');
     expect(card).toHaveTextContent(/Send a text to Dana/);
@@ -713,7 +746,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    await user.type(await screen.findByPlaceholderText(/ask what you forgot/i), 'What happened to the tarp?');
+    await user.type(await screen.findByPlaceholderText(/ask anything or tell chat/i), 'What happened to the tarp?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     const live = await screen.findByTestId('ask-live-steps');
     const items = live.querySelectorAll('li');
@@ -730,7 +763,7 @@ describe('JobAskPanel', () => {
     expect(summary).toHaveTextContent(/Searching what was said/);
   });
 
-  it('streams text and seeks a moment chip, with no follow-up chips', async () => {
+  it('streams text and seeks a moment chip, and offers the suggested next questions', async () => {
     const job = 'job-1038';
     const proof = 'proof-tarp';
     const cite = `video/${job}/${proof}/north-slope@18`;
@@ -773,7 +806,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'What happened to the tarp?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-answer-body')).toHaveTextContent(/the tarp came off/i);
@@ -787,8 +820,10 @@ describe('JobAskPanel', () => {
     await waitFor(() => {
       expect(seeks.at(-1)).toMatchObject({ atSeconds: 18, proofId: proof });
     });
-    expect(screen.queryByTestId('ask-followups')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /skylights/i })).not.toBeInTheDocument();
+    const followUps = screen.getAllByTestId('ask-followup').map((b) => b.textContent);
+    expect(followUps).toEqual(['What was said about the skylights?', 'What does the job history say?']);
+    // The trailer itself never shows as text in the answer.
+    expect(screen.getByTestId('ask-answer-body')).not.toHaveTextContent(/followups|skylights/i);
   });
 
   it('renders a comparison table and copies the finished note', async () => {
@@ -807,7 +842,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'write a summary for the homeowner');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByRole('heading', { name: /homeowner summary/i })).toBeInTheDocument();
@@ -839,7 +874,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-status')).toHaveTextContent('Thinking');
@@ -877,7 +912,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
@@ -903,7 +938,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     const failure = await screen.findByTestId('ask-error');
@@ -928,7 +963,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-error')).toHaveTextContent(/no answer came back/i);
@@ -945,7 +980,7 @@ describe('JobAskPanel', () => {
         </VideoSeekProvider>
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-error')).toBeInTheDocument();
@@ -996,7 +1031,7 @@ describe('JobAskPanel', () => {
           <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
         </JobFileFocusProvider>,
       );
-      await screen.findByPlaceholderText('Ask what you forgot…');
+      await screen.findByPlaceholderText('Ask anything or tell Chat what to do…');
       await waitFor(() => {
         expect(globalThis.fetch).toHaveBeenCalled();
       });
@@ -1077,7 +1112,7 @@ describe('JobAskPanel', () => {
       expect(screen.queryByText(/Nothing on the document matches/)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Remove The Future.docx' })).toBeInTheDocument();
 
-      const box = screen.getByPlaceholderText('Ask what you forgot…');
+      const box = screen.getByPlaceholderText('Ask anything or tell Chat what to do…');
       await user.type(box, 'what is this about');
       await user.click(screen.getByRole('button', { name: 'Ask this job' }));
 
@@ -1178,7 +1213,7 @@ describe('JobAskPanel', () => {
       );
       expect(await screen.findByTestId('ask-message-attachments')).toHaveTextContent('The Future.docx');
       expect(screen.queryByTestId('ask-composer-attachments')).not.toBeInTheDocument();
-      const box = screen.getByPlaceholderText('Ask what you forgot…');
+      const box = screen.getByPlaceholderText('Ask anything or tell Chat what to do…');
       await user.type(box, 'Who wrote it?');
       await user.click(screen.getByRole('button', { name: 'Ask this job' }));
       await waitFor(() => {
@@ -1206,7 +1241,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText('Ask what you forgot…');
+    const box = await screen.findByPlaceholderText('Ask anything or tell Chat what to do…');
     await user.type(box, 'what does Blox Group do?');
     await user.click(screen.getByRole('button', { name: 'Ask this job' }));
     const quotes = await screen.findAllByTestId('ask-quote');
@@ -1233,7 +1268,7 @@ describe('JobAskPanel', () => {
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
       </JobFileFocusProvider>,
     );
-    const box = await screen.findByPlaceholderText('Ask what you forgot…');
+    const box = await screen.findByPlaceholderText('Ask anything or tell Chat what to do…');
     await user.type(box, '?');
     await user.click(screen.getByRole('button', { name: 'Ask this job' }));
     await waitFor(() => {
@@ -1272,7 +1307,7 @@ describe('JobAskPanel', () => {
     }
 
     async function askOnce(user: ReturnType<typeof userEvent.setup>, text = 'What is left on the kitchen?') {
-      const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+      const box = await screen.findByPlaceholderText(/ask anything or tell chat/i);
       await user.type(box, text);
       await user.click(screen.getByRole('button', { name: /ask this job/i }));
       expect(await screen.findByText(/still outstanding/i)).toBeInTheDocument();
@@ -1355,7 +1390,7 @@ describe('JobAskPanel', () => {
         if (payload.search) seen.push(payload.search);
       });
       renderPanel();
-      await screen.findByPlaceholderText(/ask what you forgot/i);
+      await screen.findByPlaceholderText(/ask anything or tell chat/i);
       publishAskHistoryAction({ type: 'search-threads', jobId: 'job-1038', query: 'tarp' });
       await waitFor(() => expect(seen).toEqual([{ query: 'tarp', results: [expect.objectContaining({ questionId: Q1 })] }]));
       expect(searchAskChats).toHaveBeenCalledWith('job-1038', 'tarp');

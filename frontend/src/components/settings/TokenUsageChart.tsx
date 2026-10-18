@@ -99,7 +99,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
         {series.map((feature) => (
           <li key={feature} className="flex items-center gap-1.5">
             <span
-              className="inline-block h-2 w-2 rounded-sm"
+              className="inline-block h-2 w-2 rounded-xs"
               style={{ background: TOKEN_FEATURE_COLOR[feature] }}
             />
             {TOKEN_FEATURE_LABELS[feature]}

@@ -15,7 +15,7 @@
  *                   and learned like any other, by the customer's choice (2026-10-06), with no
  *                   warning in the Logins UI. Kept so the decision can be revisited.
  *
- * Excluded entirely (EXCLUDED_SITES): Xactimate, XactAnalysis, Restoration Manager and
+ * Excluded entirely (EXCLUDED_SITES): XactAnalysis, Restoration Manager and
  * ClaimXperience, because Verisk's EULA bans AI and automation tools.
  *
  * Quoted clauses for every flagged site, and what was read versus inferred:
@@ -137,6 +137,8 @@ export interface SignInRecipe {
   identityHosts?: string[];
   /** live_page: seen on the live page. blocked_probe: the page blocks automated browsers; steps follow the site's help pages. */
   checked: 'live_page' | 'blocked_probe';
+  /** CSS selectors for a company / tenant ID box on the sign-in form (filled from the saved Company ID). */
+  companyIdSelectors?: string[];
   /** One plain sentence for the person or the model (codes, extra fields). */
   note?: string;
 }
@@ -437,7 +439,7 @@ const RAW_SITES: Array<Omit<CatalogSite, 'signIn'>> = [
     terms: t('no_ban_found', 'Xcelerate’s terms and conditions have no automation clause.', 'https://www.xlrestorationsoftware.com/terms-and-conditions'),
     practice: ['restoration_jobs'],
   },
-  { id: 'nextgear', name: 'DASH by Next Gear Solutions', category: 'restoration', signInUrl: 'https://dash-ngs.net/NextGear/Enterprise/Module/User/Login.aspx', hosts: ['dash-ngs.net', 'www.dash-ngs.net'], aliases: ['dash', 'next gear', 'nextgear', 'next gear solutions', 'nextgen'], twoStep: 'sometimes', sso: false, logo: { text: 'NG', color: '#1D4F91' },
+  { id: 'nextgear', name: 'DASH by Next Gear Solutions', category: 'restoration', signInUrl: 'https://dash-ngs.net/NextGear/Enterprise/Module/User/Login.aspx', hosts: ['dash-ngs.net', 'www.dash-ngs.net', 'restore365.net', 'www.restore365.net'], aliases: ['dash', 'next gear', 'nextgear', 'next gear solutions', 'nextgen', 'restore 365', 'restore365', 'dash restore 365'], twoStep: 'sometimes', sso: false, logo: { text: 'NG', color: '#1D4F91' },
     terms: t('flagged', 'Next Gear (Cotality) bans robots, crawlers, data mining and systematic retrieval from DASH without written permission.', 'https://www.nextgearsolutions.com/legal/'), practice: ['restoration_jobs'] },
   { id: 'matterport', name: 'Matterport', category: 'restoration', signInUrl: 'https://my.matterport.com/', hosts: ['my.matterport.com', 'authn.matterport.com'], aliases: ['matterport'], twoStep: 'sometimes', sso: false, logo: { text: 'M', color: '#1C1C1C' },
     terms: t('flagged', 'Matterport bans AI agents, robots, scrapers and any other automated means to access its website or service.', 'https://matterport.com/terms-of-use'), practice: ['sign_in_check'] },
@@ -626,7 +628,10 @@ export const SIGN_IN_RECIPES: Record<string, SignInRecipe> = {
   accuserve: live('username_first'),
   contractorconnection: { flow: 'one_page', checked: 'blocked_probe', note: 'Contractor Connection blocks automated browsers at times; if it does, Computer hands the sign-in to the person.' },
   symbility: live('one_page'),
-  nextgear: live('one_page'),
+  nextgear: live('one_page', {
+    companyIdSelectors: ['input[id*="CompanyID" i]', 'input[name*="CompanyID" i]', 'input[id*="Company" i]', 'input[name*="Company" i]'],
+    note: 'DASH asks for a company ID along with the username and password; save it as the Company ID.',
+  }),
   matterport: live('one_page', { identityHosts: ['authn.matterport.com'] }),
   greensky: live('one_page', { identityHosts: ['auth.prod.greensky.com'] }),
   hearth: live('one_page'),
@@ -737,13 +742,14 @@ export function signInHostsFor(host: string | null | undefined): string[] {
 
 /** Sites never automated: Verisk's EULA bans AI and automation tools (pending Verisk's permission). */
 export const EXCLUDED_SITES = [
-  { name: 'Xactimate', hosts: ['identity.xactware.com', 'xactimate.com', 'xactware.com'], reason: 'Verisk’s EULA prohibits AI and automation tools.' },
   { name: 'XactAnalysis', hosts: ['www.xactanalysis.com', 'xactanalysis.com'], reason: 'Verisk’s EULA prohibits AI and automation tools.' },
   { name: 'Restoration Manager', hosts: ['rl.restorationmanager.net', 'restorationmanager.net'], reason: 'A Verisk (Xactware) product; signing in accepts Xactware’s license, which prohibits AI and automation tools.' },
   { name: 'ClaimXperience', hosts: ['www.claimxperience.com', 'claimxperience.com'], reason: 'A Verisk product; Verisk’s terms prohibit AI and automation tools.' },
 ];
 
-const EXCLUDED_DOMAINS = ['xactware.com', 'xactimate.com', 'xactanalysis.com', 'claimxperience.com', 'restorationmanager.net', 'verisk.com'];
+// Xactimate (xactimate.com, xactware.com, and the Verisk identity hosts it signs in through) was
+// un-excluded on Oct 12, 2026 at the account owner's direction.
+const EXCLUDED_DOMAINS = ['xactanalysis.com', 'claimxperience.com', 'restorationmanager.net'];
 
 function hostMatches(host: string, candidate: string): boolean {
   const h = host.toLowerCase();

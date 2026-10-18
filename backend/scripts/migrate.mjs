@@ -58,6 +58,10 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '../..');
 const MIGRATIONS_DIR = join(repoRoot, 'supabase/migrations');
+// Migrations squashed into the baseline. Their versions stay in the ledger of
+// databases that applied them, so they are expected there, not orphans.
+const ARCHIVE_DIR = join(repoRoot, 'supabase/migrations_archive');
+const BASELINE_MARKER = '-- atmosphere:squashed-baseline';
 const LEDGER = 'public.atmosphere_migrations';
 
 const argv = process.argv.slice(2);
@@ -287,8 +291,35 @@ async function main() {
     );
   }
 
-  const pending = files.filter((f) => !applied.has(f.version));
-  const orphans = [...applied.keys()].filter((v) => !files.some((f) => f.version === v));
+  let pending = files.filter((f) => !applied.has(f.version));
+
+  // A squashed baseline describes a schema this database already has (it has a
+  // ledger, so it was built by the archived history). Record it, never run it.
+  const baselines = pending.filter((f) => f.sql.startsWith(BASELINE_MARKER));
+  if (baselines.length > 0 && applied.size > 0) {
+    if (MODE === 'apply') {
+      const values = baselines
+        .map((f) => `(${sqlLiteral(f.version)}, ${sqlLiteral(f.checksum)}, true)`)
+        .join(',\n  ');
+      await db.exec(
+        `insert into ${LEDGER} (version, checksum, baselined) values\n  ${values}\n` +
+          `on conflict (version) do nothing;`,
+      );
+      for (const f of baselines) console.log(`migrate: recorded squashed baseline ${f.name} (not run).`);
+    } else {
+      for (const f of baselines) console.log(`migrate: would record squashed baseline ${f.name} (not run).`);
+    }
+    pending = pending.filter((f) => !baselines.includes(f));
+  }
+
+  const archived = new Set(
+    existsSync(ARCHIVE_DIR)
+      ? readdirSync(ARCHIVE_DIR).filter((n) => n.endsWith('.sql')).map((n) => n.replace(/\.sql$/, ''))
+      : [],
+  );
+  const orphans = [...applied.keys()].filter(
+    (v) => !files.some((f) => f.version === v) && !archived.has(v),
+  );
 
   if (orphans.length > 0) {
     console.warn(`migrate: ${orphans.length} migration(s) applied but no longer in the tree:`);

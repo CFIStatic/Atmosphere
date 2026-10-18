@@ -86,6 +86,7 @@ export const EN = {
   'settings.account.emailConfirmed': 'Email confirmed',
   'settings.account.emailConfirmedYes': 'Yes',
   'settings.account.emailConfirmedNo': 'Not yet confirmed',
+  'settings.account.phone': 'Mobile number',
   'settings.account.memberSince': 'Member since',
   'settings.account.lastSignIn': 'Last sign-in',
   'settings.account.emailLocked':
@@ -135,9 +136,8 @@ export const EN = {
   'settings.invites.adminOnly':
     'Only the Global Admin can invite people onto this workspace. Ask them to send an invite for your teammates.',
   'settings.invites.description':
-    'Only you (Global Admin) can create workspace accounts for others. They open the invite email and create a login with that address. For a subcontractor on one job, invite them from the job file instead.',
+    'Invite people by email or phone. To add a subcontractor to one job, invite them from the job file.',
   'settings.invites.button': 'Invite',
-  'settings.invites.rolesHint': 'Global Admin can manage billing. Employees can do everything else.',
 
   'theme.light': 'Light',
   'theme.dark': 'Dark',

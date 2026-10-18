@@ -152,7 +152,7 @@ export function SetupBillingStep({
         title="Billing ready"
         subtitle={
           status.complete
-            ? 'Your payment method is on file — next, create a job and film in Field Capture.'
+            ? 'Your payment method is on file.'
             : 'Your organization handles billing separately.'
         }
       >
@@ -168,7 +168,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-hidden focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -200,7 +200,7 @@ export function SetupBillingStep({
             type="button"
             disabled={checking}
             onClick={() => void checkAgain()}
-            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-hidden focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {checking ? <SpinnerIcon className="animate-spin" width={18} height={18} /> : null}
             Check again
@@ -229,7 +229,7 @@ export function SetupBillingStep({
   }
 
   return (
-    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then invite your team from your job.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan and add a payment method. You can invite your team next.">
       {error && (
         <div
           role="alert"
@@ -265,7 +265,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-hidden focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -274,7 +274,7 @@ export function SetupBillingStep({
             type="button"
             disabled={busy || Boolean(notice?.includes('confirming'))}
             onClick={() => void startCheckout()}
-            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-hidden focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? (
               <>

@@ -21,10 +21,12 @@ import { episodesRouter } from './routes/episodes.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
 import { verificationRouter } from './verification/routes.js';
 import { progressShareRouter } from './routes/progressShare.js';
+import { crewInviteRouter } from './routes/crewInvite.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
+import { demoRouter } from './routes/demo.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { chatDocumentsRouter } from './routes/chatDocuments.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
@@ -33,6 +35,7 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
+import { legalInboundRouter } from './routes/legalInbound.js';
 import { playbooksRouter } from './routes/playbooks.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
@@ -41,10 +44,11 @@ import { computerRouter } from './routes/computer.js';
 import { desktopLiveRouter } from './routes/desktopLive.js';
 import { crmCredentialsRouter } from './routes/crmCredentials.js';
 import { speakerIdentityRouter } from './routes/speakerIdentity.js';
-import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { errorHandler, notFound, shouldReportError } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
 import { forbidden } from './lib/errors.js';
+import { Sentry, sentryEnabled } from './lib/sentry.js';
 import {
   isAtmosphereCustomAppOrigin,
   isAtmosphereCustomFieldCaptureOrigin,
@@ -52,6 +56,8 @@ import {
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
+  isMarketingFormPath,
+  isMarketingSiteOrigin,
 } from './lib/previewOrigins.js';
 
 /**
@@ -104,26 +110,35 @@ export function createApp(): Express {
   // CORS — allow the configured frontend origins with credentials (cookies).
   // In development, also accept Cloudflare quick-tunnel hosts so cloud-agent /
   // shareable preview URLs can sign in without editing FRONTEND_ORIGIN each time.
-  app.use(
-    cors({
-      origin(origin, callback) {
-        // Allow same-origin / server-to-server / curl (no Origin header).
-        if (!origin || isAllowedFrontendOrigin(origin)) {
-          callback(null, true);
-          return;
-        }
-        if (!config.isProduction && isCloudflareQuickTunnelOrigin(origin)) {
-          callback(null, true);
-          return;
-        }
-        // Reject the request (do not callback(null, false) — cors would still
-        // run the handler). Use HttpError so this is a 403, not a 500.
-        callback(forbidden('Origin not allowed', 'cors_origin_denied'));
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    }),
-  );
+  const officeCors = cors({
+    origin(origin, callback) {
+      // Allow same-origin / server-to-server / curl (no Origin header).
+      if (!origin || isAllowedFrontendOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (!config.isProduction && isCloudflareQuickTunnelOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      // Reject the request (do not callback(null, false) — cors would still
+      // run the handler). Use HttpError so this is a 403, not a 500.
+      callback(forbidden('Origin not allowed', 'cors_origin_denied'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+  // The corporate site's public forms (demo booking, contact, careers): its
+  // origin is allowed on those paths only, without credentials.
+  const marketingFormCors = cors({ origin: true, credentials: false, methods: ['GET', 'POST', 'OPTIONS'] });
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && isMarketingSiteOrigin(origin) && isMarketingFormPath(req.path)) {
+      marketingFormCors(req, res, next);
+      return;
+    }
+    officeCors(req, res, next);
+  });
 
   // Stripe signs the exact bytes it sent, so this route must see the raw body.
   // Mounted before any JSON parser — once a parser has consumed the stream the
@@ -185,6 +200,8 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  // Email Worker intake: shared-secret auth, so it sits before the staff router.
+  app.use('/api/legal/inbound', legalInboundRouter);
   app.use('/api/legal', legalRouter);
   app.use('/api/motion-clips', motionClipsRouter);
   app.use('/api/daily-report', dailyReportRouter);
@@ -222,6 +239,7 @@ export function createApp(): Express {
   app.use('/api/verifier-share', evidenceShareRouter);
   // Read-only job progress for homeowners, counsel, banks and adjusters — no login.
   app.use('/api/progress-share', progressShareRouter);
+  app.use('/api/crew-invite', crewInviteRouter);
   // Outside every auth middleware, like the unsubscribe route and for the same
   // reason: the person clicking is a subcontractor who never had an account,
   // and a shared job record that requires signing in is not shared.
@@ -246,9 +264,14 @@ export function createApp(): Express {
   app.use('/api/unsubscribe', unsubscribeRouter);
   app.use('/api/careers', careersRouter);
   app.use('/api/contact', contactRouter);
+  app.use('/api/demo', demoRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
+  // No-op when Sentry is off. Reports only the errors errorHandler turns into a 500.
+  if (sentryEnabled()) {
+    Sentry.setupExpressErrorHandler(app, { shouldHandleError: (err) => shouldReportError(err) });
+  }
   app.use(errorHandler);
 
   return app;

@@ -58,7 +58,7 @@ export function GlassModal({
             data-testid={testId}
             {...(description ? {} : { 'aria-describedby': undefined })}
             className={cn(
-              'glass-dialog pointer-events-auto w-full overflow-hidden rounded-2xl text-ink-900 outline-none',
+              'glass-dialog pointer-events-auto w-full overflow-hidden rounded-2xl text-ink-900 outline-hidden',
               width,
               className,
             )}
@@ -76,7 +76,7 @@ export function GlassModal({
               </div>
               <DialogPrimitive.Close
                 disabled={closeDisabled}
-                className="-mr-2 -mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-500 transition hover:bg-ink-900/10 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:opacity-40"
+                className="-mr-2 -mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-500 transition hover:bg-ink-900/10 hover:text-ink-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400/60 disabled:opacity-40"
                 aria-label="Close"
               >
                 <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />

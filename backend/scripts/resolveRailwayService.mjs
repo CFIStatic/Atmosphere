@@ -4,14 +4,14 @@
  * Names with spaces (Internal Growth Metrics) fail `railway variable set --service`
  * on the CLI we use in CI; UUIDs work.
  *
- * Usage: RAILWAY_PROJECT_ID=… RAILWAY_ENVIRONMENT=production \
+ * Usage: RAILWAY_PROJECT_ID=… RAILWAY_ENVIRONMENT=519e5cb5-26e1-44a8-91e1-f36412b5cc08 \
  *        node resolveRailwayService.mjs "Internal Growth Metrics"
  */
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const project = process.env.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae';
-const environment = process.env.RAILWAY_ENVIRONMENT || 'production';
+const environment = process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_ENVIRONMENT || '519e5cb5-26e1-44a8-91e1-f36412b5cc08';
 
 export const ALIASES = {
   atmosphere: ['atmosphere apis', 'atmosphere'],
@@ -83,6 +83,8 @@ function collectServices(node, out = []) {
   return out;
 }
 
+const lastErrors = [];
+
 function listServices() {
   const attempts = [
     ['service', 'list', '--json', '--project', project, '--environment', environment],
@@ -91,6 +93,10 @@ function listServices() {
   ];
   for (const args of attempts) {
     const result = railway(args);
+    if (result.status !== 0 || result.error) {
+      const why = (result.stderr || result.error?.message || '').trim();
+      lastErrors.push(`railway ${args.slice(0, 2).join(' ')} (exit ${result.status ?? 'n/a'}): ${why || 'no output'}`);
+    }
     const raw = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
     if (!raw) continue;
     try {
@@ -114,7 +120,10 @@ function main() {
 
   const services = listServices();
   if (!services.length) {
-    console.error('resolveRailwayService: could not list Railway services');
+    console.error(
+      `resolveRailwayService: could not list Railway services (project=${project}, environment=${environment})`,
+    );
+    for (const line of lastErrors) console.error(`  ${line}`);
     process.exit(1);
   }
 

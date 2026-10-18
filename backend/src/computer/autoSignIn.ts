@@ -31,6 +31,7 @@ export function signInHintsFor(saved: SavedSignIn): SignInHints {
   const site = catalogSiteForHost(saved.login.host) ?? catalogSiteForHost(loginUrlHost);
   const extra = new Set([...signInHostsFor(saved.login.host), ...signInHostsFor(loginUrlHost)].map((h) => h.toLowerCase()));
   return {
+    ...(site?.signIn?.companyIdSelectors?.length ? { companyIdSelectors: site.signIn.companyIdSelectors } : {}),
     openWith: site?.signIn?.flow === 'open_first' && site.signIn.openWith?.length ? site.signIn.openWith : GENERIC_OPEN_WITH,
     allowHost: (host) => {
       const h = host.toLowerCase();
@@ -142,10 +143,14 @@ export async function autoSignIn(input: {
   // Plaintext lives only in these locals, for this one call.
   let username: string;
   let password: string;
+  let companyId: string | null = null;
   try {
     if (!canOpenFingerprint(credential.key_fingerprint)) throw new Error('key changed');
     username = openCredential(credential.username_sealed, login.org_id, login.id, 'username', credential.key_fingerprint);
     password = openCredential(credential.password_sealed, login.org_id, login.id, 'password', credential.key_fingerprint);
+    if (credential.company_id_sealed) {
+      companyId = openCredential(credential.company_id_sealed, login.org_id, login.id, 'company_id', credential.key_fingerprint);
+    }
   } catch {
     await needsAttention('This password was saved with a different encryption key. An admin needs to save it again.');
     await record('failed');
@@ -160,6 +165,7 @@ export async function autoSignIn(input: {
       login_id: login.id,
       username_sealed: credential.username_sealed,
       password_sealed: credential.password_sealed,
+      company_id_sealed: credential.company_id_sealed ?? null,
       key_fingerprint: credential.key_fingerprint,
     });
     if (resealed) await store.updateCredential(login.org_id, login.id, resealed);
@@ -169,6 +175,7 @@ export async function autoSignIn(input: {
 
   let filled: Awaited<ReturnType<ComputerDriver['fillSignIn']>>;
   let navigated = false;
+  const hints = signInHintsFor(saved);
   try {
     const currentHost = hostOfUrl(await driver.currentUrl().catch(() => ''));
     const trusted = trustedSites(saved);
@@ -177,12 +184,11 @@ export async function autoSignIn(input: {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
     }
-    const hints = signInHintsFor(saved);
-    filled = await driver.fillSignIn({ username, password }, hints);
+    filled = await driver.fillSignIn({ username, password, companyId }, hints);
     if (filled === 'no_form' && !navigated) {
       await driver.navigate(credential.login_url ?? login.url);
       navigated = true;
-      filled = await driver.fillSignIn({ username, password }, hints);
+      filled = await driver.fillSignIn({ username, password, companyId }, hints);
     }
   } catch {
     await record('incomplete');
@@ -208,6 +214,10 @@ export async function autoSignIn(input: {
     return { outcome: 'already_signed_in', message: `Already signed in to ${name}.` };
   }
 
+  // Sites like DASH / Restore 365 also want a company ID; without one saved the
+  // sign-in can't work, and it's the missing ID, not the password, to fix.
+  const missingCompanyId = !companyId && Boolean(hints.companyIdSelectors?.length);
+
   let outcome: AutoSignInOutcome;
   let message: string;
   if (signals?.hasCaptcha) {
@@ -219,6 +229,10 @@ export async function autoSignIn(input: {
   } else if (signals?.hasOneTimeCodeField || signals?.mentionsVerificationCode) {
     outcome = 'two_factor';
     message = `The saved password worked. ${name} is asking for a verification code.`;
+  } else if (signals?.hasPasswordField && missingCompanyId) {
+    outcome = 'incomplete';
+    message = `${name} asks for a Company ID, and none is saved with this login. Add it on Logins (Edit ${name}, Company ID) so Computer can sign in on its own.`;
+    await needsAttention(`${name} asks for a Company ID. Add it here so Computer can sign in.`);
   } else if (signals?.hasPasswordField && signals.signInError) {
     // The site said no ("Incorrect password"): the saved login needs updating.
     outcome = 'failed';

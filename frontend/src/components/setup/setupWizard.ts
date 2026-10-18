@@ -3,7 +3,10 @@ import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../li
 import type { ServiceTrade } from './verifierSetupOptions';
 import { isInAppShell } from '../../lib/appShell';
 
-export type SetupWizardStep = 1 | 2;
+export type SetupWizardStep = 1 | 2 | 3;
+
+/** URL value for the post-payment invite screen (?step=invite). Old numeric 3 still means billing. */
+export const INVITE_STEP_PARAM = 'invite';
 export type OrgSetupIntent = SignupIntent;
 
 export interface SetupWizardCopy {
@@ -19,13 +22,18 @@ export interface SetupWizardCopy {
 export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
-    title: 'Account & workspace',
-    detail: 'Your login and company name — you become Global Admin. Next: your first job and first evidence.',
+    title: 'Account',
+    detail: 'Your login and company name — you become Global Admin.',
   },
   {
     step: 2 as const,
-    title: 'Set up billing',
-    detail: 'After your first evidence (a clip from Field Capture, or the sample): pick a plan and add a card, then invite your team.',
+    title: 'Plan',
+    detail: 'Pick a plan and add a card.',
+  },
+  {
+    step: 3 as const,
+    title: 'Invite team',
+    detail: 'Optional. Invite office staff and crew, or skip for now.',
   },
 ] as const;
 
@@ -93,13 +101,13 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
     // iPhone/Android app: no purchase wording. Plans are handled on the website.
     return {
       heading: 'Create your company',
-      lede: 'You are the Global Admin. Create the workspace, name your first job, then record it in Field Capture or see sample evidence.',
+      lede: 'You are the Global Admin. Create the workspace, then invite your team.',
       steps: APP_SHELL_SETUP_WIZARD_STEPS,
     };
   }
   return {
     heading: 'Create your company',
-    lede: 'You are the Global Admin. Create the workspace, name your first job, then record it in Field Capture or see sample evidence. Plan and card come after that.',
+    lede: 'You are the Global Admin. Create the workspace, pick a plan, then invite your team.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
@@ -124,6 +132,8 @@ export function initialSetupStep(options: {
   inviteeAccount?: boolean;
 }): SetupWizardStep {
   if (options.inviteeAccount) return 1;
+  // Invite screen after payment. Billing is re-checked once the session loads.
+  if (options.stepParam === INVITE_STEP_PARAM) return options.membership ? 3 : 1;
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
   // Stripe always returns to billing. Do this before the membership check —
   // on a full-page return the session is still loading and membership is empty.

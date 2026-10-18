@@ -579,7 +579,7 @@ export function parseAskFollowups(raw: string): string[] {
   for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
     const text = part.replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    out.push(text.endsWith('?') ? text : `${text}?`);
+    out.push(text);
     if (out.length >= 3) break;
   }
   return out;

@@ -12,7 +12,7 @@ import { cn } from './cn';
  * reimplementing on a product people run their business on.
  */
 
-const OVERLAY = 'fixed inset-0 z-50 bg-scrim/70 backdrop-blur-sm data-[state=open]:animate-fade-in';
+const OVERLAY = 'fixed inset-0 z-50 bg-scrim/70 backdrop-blur-xs data-[state=open]:animate-fade-in';
 
 export function Dialog({
   open,
@@ -145,7 +145,7 @@ export function Popover({
           align={align}
           sideOffset={6}
           className={cn(
-            'z-50 min-w-[12rem] rounded-xl border border-line/10 bg-surface p-1.5 shadow-2xl shadow-scrim/60',
+            'z-50 min-w-48 rounded-xl border border-line/10 bg-surface p-1.5 shadow-2xl shadow-scrim/60',
             'data-[state=open]:animate-fade-in',
             className,
           )}

@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { isBillingExemptOrg, loadOrgCreatorEmail } from './billingExempt.js';
-import { paymentRequired } from './errors.js';
+import { forbidden, paymentRequired } from './errors.js';
+
+/** Non-owners cannot buy seats; Billing is the owner's alone. */
+export const FC_SEAT_OWNER_ONLY_MESSAGE =
+  'All Field Capture seats are in use. Ask the account owner to add seats in Billing, then send the invite again.';
 import { APP_SHELL_SEAT_MESSAGE } from './appShell.js';
 import {
   extraSeatsNeeded,
@@ -24,6 +28,7 @@ import {
   type AtmosphereBillingInterval,
 } from './stripe.js';
 import { atmospherePlan } from './stripeCatalog.js';
+import { withChestMounts } from './stripeTax.js';
 import { resolveOnboardingPriceId } from './workspaceBilling.js';
 
 export async function createWorkVerificationExtraSeatCheckout(input: {
@@ -65,12 +70,16 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
       client_reference_id: input.orgId,
       metadata: planMeta,
       subscription_data: { metadata: planMeta },
-      line_items: [
-        { price: input.workVerificationPriceId, quantity: 1 },
-        { price: seatPriceId, quantity: extra },
-      ],
+      // One Chest Mount per extra Field Capture seat; included seats get none.
+      ...withChestMounts(
+        [
+          { price: input.workVerificationPriceId, quantity: 1 },
+          { price: seatPriceId, quantity: extra },
+        ],
+        extra,
+      ),
     },
-    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats', input.orgId, extra, interval) },
+    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats-v2', input.orgId, extra, interval) },
   );
   if (!session.url) {
     throw paymentRequired(
@@ -97,6 +106,12 @@ export async function ensureFieldCaptureSeatForInvite(
      * open Checkout from there; say where seats are managed instead.
      */
     fromAppShell?: boolean;
+    /**
+     * The caller owns the organization (orgs.created_by). Only the owner may
+     * add a paid seat or open Checkout; anyone else is told to ask the owner.
+     * Omitted means owner (older callers).
+     */
+    actorIsOwner?: boolean;
   },
 ): Promise<FieldCaptureSeatUsage> {
   const seats = await loadFieldCaptureSeatUsage(supabase, orgId, {
@@ -124,6 +139,10 @@ export async function ensureFieldCaptureSeatForInvite(
   if (decision.action === 'grant_comped') {
     await persistExtraFcSeats(supabase, orgId, billing.extra + decision.addQuantity);
     return loadFieldCaptureSeatUsage(supabase, orgId, { actingUserEmail: opts.actingUserEmail });
+  }
+
+  if (opts.actorIsOwner === false) {
+    throw forbidden(FC_SEAT_OWNER_ONLY_MESSAGE, 'fc_seat_owner_only');
   }
 
   if (opts.fromAppShell) {

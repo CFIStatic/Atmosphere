@@ -57,7 +57,7 @@ export function ActionProposal({
   return (
     <div
       className={cn(
-        'rounded-xl border bg-surface/60 backdrop-blur',
+        'rounded-xl border bg-surface/60 backdrop-blur-sm',
         risk === 'high' && request.status === 'proposed'
           ? 'border-state-danger/30'
           : 'border-line/10',

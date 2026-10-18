@@ -236,13 +236,13 @@ export function JobFileAskChrome({
             */}
             <TabPanel
               value="file"
-              className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none data-[state=inactive]:hidden"
+              className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-hidden data-[state=inactive]:hidden"
             >
               {children}
             </TabPanel>
             <TabPanel
               value="ask"
-              className="min-h-0 flex-1 flex-col outline-none data-[state=active]:flex data-[state=inactive]:hidden"
+              className="min-h-0 flex-1 flex-col outline-hidden data-[state=active]:flex data-[state=inactive]:hidden"
               aria-label="Ask this job"
               data-testid="job-file-ask"
             >
@@ -253,7 +253,7 @@ export function JobFileAskChrome({
       ) : (
         <>
           <aside
-            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[var(--job-file-ask-width)] lg:border-t-0"
+            className="flex min-h-112 w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-(--job-file-ask-width) lg:border-t-0"
             style={askPaneStyle}
             aria-label="Ask this job"
             data-testid="job-file-ask"
@@ -275,7 +275,7 @@ export function JobFileAskChrome({
             data-testid="job-file-ask-split"
             data-dragging={dragging ? 'true' : undefined}
             tabIndex={0}
-            className={`group relative z-10 hidden w-0 shrink-0 cursor-col-resize touch-none outline-none lg:block ${
+            className={`group relative z-10 hidden w-0 shrink-0 cursor-col-resize touch-none outline-hidden lg:block ${
               dragging ? 'select-none' : ''
             }`}
             onPointerDown={onSplitPointerDown}
@@ -299,7 +299,7 @@ export function JobFileAskChrome({
             <span
               aria-hidden
               data-testid="job-file-ask-split-grip"
-              className={`pointer-events-none absolute left-0 top-1/2 flex h-9 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition ${
+              className={`pointer-events-none absolute left-0 top-1/2 flex h-9 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-xs transition ${
                 dragging
                   ? 'border-brand-400/70 bg-paper-0 text-brand-400'
                   : 'border-line bg-paper-0 text-ink-500 group-hover:border-brand-300/80 group-hover:text-brand-400 group-focus-visible:border-brand-300/80 group-focus-visible:text-brand-400'

@@ -112,7 +112,7 @@ export const READ_SIGNALS = String.raw`() => {
   const numberMatchTalk = /\b(approve|number matching|enter (?:this|the) number|are you trying to sign in|authenticator)\b/i.test(text);
   let approvalNumber = null;
   if (numberMatchTalk) {
-    const big = Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"],[class*="number"],[class*="Number"],[data-testid*="number"]'))
+    const big = Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"],[class*="number"],[class*="Number"],[data-testid*="number"],.displaySign,#idRichContext_DisplaySign'))
       .filter(visible)
       .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim())
       .find((t) => /^\d{2,3}$/.test(t));

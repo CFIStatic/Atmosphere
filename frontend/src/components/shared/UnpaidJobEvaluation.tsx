@@ -17,7 +17,7 @@ export function UnpaidJobEvaluation({ jobId }: { jobId: string }) {
         <div className="flex items-center gap-3 border-b border-line bg-paper-50 p-3">
           <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md bg-ink-900/80">
             <img src={SAMPLE_EVIDENCE.posterUrl} alt="" className="h-full w-full object-cover" />
-            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[11px] font-semibold text-white">
+            <span className="absolute bottom-1 right-1 rounded-sm bg-black/70 px-1 text-[11px] font-semibold text-white">
               {posterClock(SAMPLE_EVIDENCE.durationSeconds)}
             </span>
           </div>

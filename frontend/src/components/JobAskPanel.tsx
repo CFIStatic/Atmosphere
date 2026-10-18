@@ -1,6 +1,15 @@
 import { APP_SHELL_BILLING_NOTE, isInAppShell } from '../lib/appShell';
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, Copy, RotateCcw } from 'lucide-react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
+import { Check, Copy, Mic, RotateCcw } from 'lucide-react';
+import { useSpeechRecognition } from '../hooks/useSpeech';
 import { Link } from 'react-router-dom';
 import {
   api,
@@ -25,19 +34,10 @@ import {
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
-import {
-  analysisEventsFromProofs,
-  eventsForGrounded,
-  seekTargetFromAnswer,
-  splitAnswerCites,
-} from '../lib/askSeek';
-import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
-import { sanitizeSpeakerProse } from '../lib/speakerLabel';
-import { extractAskSources, isDocumentQuoteSource, tidyQuoteClipTitle, type AskSourceChip } from '../lib/askSources';
-import { AskWebResults } from './AskWebResults';
-import { ComputerTaskCard } from './computer/ComputerTaskCard';
+import { analysisEventsFromProofs, eventsForGrounded, seekTargetFromAnswer } from '../lib/askSeek';
+import { extractAskSources, type AskSourceChip } from '../lib/askSources';
+import { COMPUTER_RESUME_EVENT, computerCardTitle, type ComputerTaskView } from '../lib/computer';
 import { AskActionCards } from './ask/AskActionCards';
-import { AskApprovalCard } from './ask/AskApprovalCard';
 import { AskAnswerToolbar } from './ask/AskAnswerToolbar';
 import { AskPinnedAnswers } from './ask/AskPinnedAnswers';
 import { askActionCards } from '../lib/askActionCards';
@@ -49,9 +49,28 @@ import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
-import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, stripLegacyDocumentNote, type AskAttachment } from '../lib/chatDocuments';
+import {
+  CHAT_DOCUMENT_ACCEPT,
+  chipFromDocument,
+  stripLegacyDocumentNote,
+  type AskAttachment,
+} from '../lib/chatDocuments';
 import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 import { isAppShellDocument } from '../lib/appShell';
+import {
+  COMPUTER_FINISHED_PREFIX,
+  AskFollowUps,
+  ANSWER_ICON_BUTTON,
+  AskAnswerFooter,
+  AskAnswerBody,
+  copyableAskText,
+  isAbortError,
+  PaperclipIcon,
+  SendIcon,
+  StopIcon,
+  TypingDots,
+} from './ask/AskAnswerParts';
+import { askStepLabel, askClock, AskWorkSummary, AskLiveSteps, askPhaseLabel } from './ask/AskWorkSteps';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -67,498 +86,6 @@ export async function waitOutAskHold(startedAt: number, holdMs = ASK_MIN_TYPING_
   });
 }
 
-function AskCiteSpans({
-  text,
-  events,
-  onSeek,
-}: {
-  text: string;
-  events: number[];
-  onSeek: (atSeconds: number) => void;
-}) {
-  const parts = splitAnswerCites(text, events);
-  return (
-    <>
-      {parts.map((part, index) =>
-        part.kind === 'cite' && part.atSeconds != null ? (
-          <button
-            key={`${part.atSeconds}-${index}`}
-            type="button"
-            data-testid="ask-cite"
-            data-at={String(part.atSeconds)}
-            onClick={() => onSeek(part.atSeconds!)}
-            className="font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800"
-          >
-            {part.text}
-          </button>
-        ) : (
-          <span key={`t-${index}`}>{part.text}</span>
-        ),
-      )}
-    </>
-  );
-}
-
-
-function AskQuoteList({
-  quotes,
-  onOpen,
-}: {
-  quotes: ReturnType<typeof extractAskSources>['quotes'];
-  onOpen: (source: AskSourceChip) => void;
-}) {
-  if (!quotes.length) return null;
-  return (
-    <div className="mt-1.5 space-y-1" data-testid="ask-quotes">
-      {quotes.map((quote) => (
-        <button
-          key={`${quote.sourceId}-${quote.text}`}
-          type="button"
-          data-testid="ask-quote"
-          data-at={quote.atSeconds == null ? '' : String(quote.atSeconds)}
-          data-proof-id={quote.proofId ?? ''}
-          onClick={() =>
-            onOpen({
-              id: quote.sourceId as AskSourceChip['id'],
-              label: quote.speaker,
-              section: 'videos',
-              proofId: quote.proofId,
-              jobId: quote.jobId,
-              atSeconds: quote.atSeconds ?? undefined,
-            })
-          }
-          title={quoteAttribution(quote)}
-          className="flex w-full items-baseline gap-3 rounded-md border border-line bg-paper-50 px-2.5 py-1 text-left leading-snug"
-        >
-          <span className="min-w-0 flex-1 text-[13px] text-ink-800">“{quote.text}”</span>
-          <span className="max-w-[45%] shrink-0 truncate text-[10.5px] text-ink-500">
-            {quoteAttribution(quote)}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** A document excerpt has no speaker: only clip quotes carry one. */
-function quoteAttribution(quote: ReturnType<typeof extractAskSources>['quotes'][number]): string {
-  return [
-    isDocumentQuoteSource(quote.sourceId) ? '' : quote.speaker,
-    tidyQuoteClipTitle(quote.clipTitle),
-    quote.atSeconds != null ? formatMomentClock(quote.atSeconds) : '',
-  ]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function formatMomentClock(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, '0')}`;
-}
-
-
-function AskStepsSourcesBody({
-  sources,
-  webSources,
-  actions,
-  onOpenSource,
-}: {
-  sources: AskSourceChip[];
-  webSources?: readonly AskWebSource[] | null;
-  actions: ReturnType<typeof extractAskSources>['actions'];
-  onOpenSource: (source: AskSourceChip) => void;
-}) {
-  const webCount = (webSources ?? []).length;
-  return (
-    <div className="mt-1.5 space-y-2 rounded-lg border border-line bg-paper-50 p-2.5" data-testid="ask-steps-sources-body">
-      {actions.length ? (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Steps</p>
-          <ol className="mt-1 list-decimal space-y-0.5 ps-5 text-[12px] text-ink-700">
-            {actions.map((action, i) => (
-              <li key={`${action.tool}-${i}`}>{action.label}</li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-      {sources.length || webCount ? (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Sources</p>
-          <div className="mt-1">
-            <AskSourceChips sources={sources} onOpen={onOpenSource} />
-            <AskWebResults sources={webSources} />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Steps a reply took, minus the ones it already shows as cards (approvals, Computer tasks). */
-function answerStepActions(text: string) {
-  return extractAskSources(text).actions.filter(
-    (a) => a.tool !== 'start_computer_task' && !(a.path ?? '').startsWith('ask-approval:'),
-  );
-}
-
-const ANSWER_ICON_BUTTON =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-paper-100 hover:text-ink-900 disabled:opacity-35';
-
-/**
- * One compact row under an answer: icon actions, a closed-by-default
- * Steps / Sources toggle, and next-step buttons (Make a punch list) on the right.
- * Steps and sources open underneath the row.
- */
-function AskAnswerFooter({
-  text,
-  sources,
-  webSources,
-  onOpenSource,
-  children,
-  trailing,
-}: {
-  text: string;
-  sources: AskSourceChip[];
-  webSources?: readonly AskWebSource[] | null;
-  onOpenSource: (source: AskSourceChip) => void;
-  children?: ReactNode;
-  trailing?: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const actions = answerStepActions(text);
-  const count = sources.length + (webSources ?? []).length + actions.length;
-  return (
-    <div className="mt-1.5" data-testid="ask-answer-footer">
-      <div className="flex flex-wrap items-center gap-0.5">
-        {children}
-        {count ? (
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-ink-500 transition hover:bg-paper-100 hover:text-ink-800"
-            aria-expanded={open}
-            data-testid="ask-steps-sources-toggle"
-          >
-            {open ? 'Hide steps / sources' : `Steps / Sources (${count})`}
-          </button>
-        ) : null}
-        {trailing ? <div className="ms-auto flex flex-wrap items-center gap-1.5">{trailing}</div> : null}
-      </div>
-      {open && count ? (
-        <AskStepsSourcesBody sources={sources} webSources={webSources} actions={actions} onOpenSource={onOpenSource} />
-      ) : null}
-    </div>
-  );
-}
-
-function AskSourceChips({
-  sources,
-  onOpen,
-}: {
-  sources: AskSourceChip[];
-  onOpen: (source: AskSourceChip) => void;
-}) {
-  if (!sources.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-source-chips">
-      {sources.map((source) => (
-        <button
-          key={source.id}
-          type="button"
-          data-testid="ask-source-chip"
-          data-source-id={source.id}
-          onClick={() => onOpen(source)}
-          className="rounded-full border border-line bg-paper-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800"
-        >
-          {source.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function AskInlineNodes({
-  nodes,
-  events,
-  onSeek,
-}: {
-  nodes: AskInline[];
-  events: number[];
-  onSeek: (atSeconds: number) => void;
-}) {
-  return (
-    <>
-      {nodes.map((node, index) => {
-        if (node.kind === 'text') {
-          return <AskCiteSpans key={`t-${index}`} text={node.text} events={events} onSeek={onSeek} />;
-        }
-        if (node.kind === 'link') {
-          return (
-            <a
-              key={`a-${index}`}
-              href={node.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-ink-900 underline decoration-ink-300 underline-offset-2"
-            >
-              {node.text}
-            </a>
-          );
-        }
-        if (node.kind === 'code') {
-          return (
-            <code
-              key={`c-${index}`}
-              className="rounded bg-paper-100 px-1 py-px font-mono text-[0.9em] text-ink-900"
-            >
-              {node.text}
-            </code>
-          );
-        }
-        if (node.kind === 'bold') {
-          return (
-            <strong key={`b-${index}`} className="font-semibold text-ink-900">
-              <AskInlineNodes nodes={node.children} events={events} onSeek={onSeek} />
-            </strong>
-          );
-        }
-        return (
-          <em key={`i-${index}`} className="italic text-ink-700">
-            <AskInlineNodes nodes={node.children} events={events} onSeek={onSeek} />
-          </em>
-        );
-      })}
-    </>
-  );
-}
-
-function AskBlocks({
-  blocks,
-  events,
-  onSeek,
-}: {
-  blocks: AskProseBlock[];
-  events: number[];
-  onSeek: (atSeconds: number) => void;
-}) {
-  return (
-    <>
-      {blocks.map((block, bi) => {
-        if (block.kind === 'heading') {
-          const Tag = block.level === 3 ? 'h3' : 'h2';
-          return (
-            <Tag key={`h-${bi}`} className="text-[15px] font-semibold tracking-tight text-ink-900">
-              <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
-            </Tag>
-          );
-        }
-        if (block.kind === 'code') {
-          return (
-            <pre
-              key={`code-${bi}`}
-              className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-[13px] leading-snug text-ink-900"
-            >
-              {block.text}
-            </pre>
-          );
-        }
-        if (block.kind === 'table') {
-          return (
-            <div key={`tbl-${bi}`} className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-[13px]">
-                <thead>
-                  <tr>
-                    {block.headers.map((cell, ci) => (
-                      <th key={`th-${ci}`} className="border-b border-line px-2 py-1.5 font-semibold text-ink-500">
-                        <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {block.rows.map((row, ri) => (
-                    <tr key={`tr-${ri}`}>
-                      {row.map((cell, ci) => (
-                        <td key={`td-${ri}-${ci}`} className="border-b border-line px-2 py-1.5 text-ink-800">
-                          <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
-        if (block.kind === 'list') {
-          return block.ordered ? (
-            <ol key={`l-${bi}`} className="list-decimal space-y-1.5 pl-5 marker:text-ink-500">
-              {block.items.map((item, ii) => (
-                <li key={`i-${bi}-${ii}`} className="pl-0.5">
-                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <ul key={`l-${bi}`} className="list-disc space-y-1.5 pl-5 marker:text-ink-500">
-              {block.items.map((item, ii) => (
-                <li key={`i-${bi}-${ii}`} className="pl-0.5">
-                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
-                </li>
-              ))}
-            </ul>
-          );
-        }
-        return (
-          <p key={`p-${bi}`} className="whitespace-pre-wrap">
-            <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
-          </p>
-        );
-      })}
-    </>
-  );
-}
-
-function AskArtifact({
-  markdown,
-  events,
-  onSeek,
-}: {
-  markdown: string;
-  events: number[];
-  onSeek: (atSeconds: number) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="rounded-xl border border-line bg-paper-50 px-3 py-2.5" data-testid="ask-artifact">
-      <div className="mb-2 flex justify-end">
-        <button
-          type="button"
-          data-testid="ask-copy"
-          onClick={() => {
-            void navigator.clipboard?.writeText(markdown).then(() => {
-              setCopied(true);
-            });
-          }}
-          className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      <div className="space-y-2">
-        <AskBlocks blocks={parseAskProseBlocks(markdown)} events={events} onSeek={onSeek} />
-      </div>
-    </div>
-  );
-}
-
-function AskAnswerBody({
-  jobId,
-  text,
-  events,
-  onSeek,
-  onOpenSource,
-}: {
-  /** For approval cards (they load and decide by job). */
-  jobId?: string;
-  text: string;
-  events: number[];
-  onSeek: (atSeconds: number) => void;
-  onOpenSource: (source: AskSourceChip) => void;
-}) {
-  const extracted = extractAskSources(text);
-  const { quotes } = extracted;
-  // A proposal waiting on the person (send a text, remove access) renders as an approval card.
-  const approvals = extracted.actions.flatMap((action) => {
-    const m = /^ask-approval:([0-9a-f-]{36})$/i.exec(action.path ?? '');
-    return m ? [m[1]] : [];
-  });
-  const computerTasks = extracted.actions.filter(
-    (action) => action.tool === 'start_computer_task' && !(action.path ?? '').startsWith('ask-approval:'),
-  );
-  const { prose, artifact } = splitAskArtifact(extracted.body);
-  const blocks = parseAskProseBlocks(
-    sanitizeSpeakerProse(prose, {
-      protect: quotes.flatMap((quote) => (quote.clipTitle ? [quote.clipTitle] : [])),
-    }),
-  );
-  return (
-    <div className="space-y-2.5 text-[15px] leading-relaxed text-ink-800" data-testid="ask-answer-body">
-      {blocks.length ? (
-        <AskBlocks blocks={blocks} events={events} onSeek={onSeek} />
-      ) : prose ? (
-        <p className="whitespace-pre-wrap">{prose}</p>
-      ) : null}
-      {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
-      {jobId
-        ? approvals.map((id) => <AskApprovalCard key={id} jobId={jobId} approvalId={id} />)
-        : null}
-      {computerTasks.map((action, i) => (
-        <ComputerTaskCard key={`${action.path ?? 'computer'}-${i}`} path={action.path} summary={action.label} />
-      ))}
-      <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
-    </div>
-  );
-}
-
-function copyableAskText(text: string): string {
-  const extracted = extractAskSources(text);
-  const { prose, artifact } = splitAskArtifact(extracted.body);
-  return [prose.trim(), artifact?.trim()].filter(Boolean).join('\n\n');
-}
-
-function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError';
-}
-
-function PaperclipIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M8 12.5l6.2-6.2a3 3 0 114.2 4.2l-7.4 7.5a4.5 4.5 0 11-6.4-6.4l7.2-7.2"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 19V5M12 5l-6 6M12 5l6 6"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function StopIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <rect x="6" y="6" width="12" height="12" rx="1.5" />
-    </svg>
-  );
-}
-
-function TypingDots() {
-  return (
-    <span className="gpt-typing inline-flex items-center gap-1" aria-hidden>
-      <span />
-      <span />
-      <span />
-    </span>
-  );
-}
 
 const ASSISTANT_BUBBLE =
   'max-w-[85%] rounded-2xl bg-paper-0 px-3.5 py-2 text-sm text-ink-800 shadow-card';
@@ -584,101 +111,6 @@ export type JobAskFn = (
 }>;
 
 /** Status line under the dots while Ask works. Web and Computer say so; the rest say Thinking. */
-/**
- * Steps written for people (server statuses in backend askReasoning / jobFileAsk).
- * Anything else is an internal phase name and is never shown.
- */
-const ASK_STEPS = new Set([
-  'Looking through clips…',
-  'Searching what was said…',
-  'Opening a clip…',
-  'Checking other jobs…',
-  'Looking up who was on site…',
-  'Reading the job history…',
-  'Searching the web…',
-  'Writing the answer…',
-  'Starting Computer…',
-  'Checking the CRM…',
-  'Updating the job…',
-  'Drafting the text…',
-  'Checking who has access…',
-  'Reading the punch list…',
-  'Finding the moment…',
-  'Drafting…',
-  'Reading the job…',
-]);
-
-/** A server status as a step line, or null when it is not one written for people. */
-function askStepLabel(phase: string | null | undefined): string | null {
-  const value = (phase ?? '').replace(/\s+/g, ' ').trim().replace(/\.{3}$/, '…');
-  return ASK_STEPS.has(value) ? value : null;
-}
-
-/** Wall clock for the "Worked for" summary; read in event handlers only. */
-const askClock = () => Date.now();
-
-function formatWorkTime(ms: number): string {
-  const s = Math.max(1, Math.round(ms / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
-}
-
-/** "Worked for 6s · 2 steps" above an answer; opens to the step list. */
-function AskWorkSummary({ work }: { work: NonNullable<JobFileTurn['work']> }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mb-1.5" data-testid="ask-work-summary">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-[12px] text-ink-500 transition hover:text-ink-800"
-      >
-        <span aria-hidden className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
-        Worked for {formatWorkTime(work.ms)}
-        {work.steps.length > 1 ? ` · ${work.steps.length} steps` : ''}
-      </button>
-      {open ? (
-        <ol className="mt-1 space-y-0.5 border-l border-line pl-3 text-[12px] text-ink-600">
-          {work.steps.map((step, i) => (
-            <li key={`${step}-${i}`} className="flex items-center gap-1.5">
-              <span aria-hidden className="text-success-600">✓</span>
-              {step.replace(/…$/, '')}
-            </li>
-          ))}
-        </ol>
-      ) : null}
-    </div>
-  );
-}
-
-/** While answering: finished steps ticked, the current one spinning. */
-function AskLiveSteps({ steps }: { steps: string[] }) {
-  return (
-    <ol className="space-y-1 text-[13px]" data-testid="ask-live-steps" aria-live="polite">
-      {steps.map((step, i) => {
-        const current = i === steps.length - 1;
-        return (
-          <li key={`${step}-${i}`} className={`flex items-center gap-2 ${current ? 'text-ink-800' : 'text-ink-400'}`}>
-            {current ? (
-              <SpinnerIcon className="animate-spin" width={12} height={12} />
-            ) : (
-              <span aria-hidden className="w-3 text-center text-success-600">✓</span>
-            )}
-            {current ? step : step.replace(/…$/, '')}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function askPhaseLabel(phase: string | null | undefined): string {
-  const value = (phase ?? '').trim();
-  if (/search(?:ing)? the web/i.test(value)) return 'Searching the web…';
-  if (/computer|browser/i.test(value)) return 'Starting Computer…';
-  if (/writing/i.test(value)) return 'Writing…';
-  return 'Thinking';
-}
 
 /** The stored question behind a turn ("<uuid>-q" / "<uuid>-a"), or null for a turn not saved yet. */
 export function storedQuestionId(turnId: string): string | null {
@@ -691,6 +123,14 @@ function pinnedAnswerLink(questionId: string): string {
   const url = new URL(window.location.href);
   url.searchParams.set('askPin', questionId);
   return url.toString();
+}
+
+const askWarmedAt = new Map<string, number>();
+const ASK_WARM_EVERY_MS = 4 * 60_000;
+
+/** Test hook: forget which jobs were warmed. */
+export function forgetAskWarms(): void {
+  askWarmedAt.clear();
 }
 
 /**
@@ -733,6 +173,34 @@ export function JobAskPanel({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
+  // Talk instead of type: what is said goes into the box, ready to send.
+  const speech = useSpeechRecognition();
+  const speechBase = useRef('');
+  useEffect(() => {
+    if (!speech.listening && !speech.transcript) return;
+    setDraft([speechBase.current, speech.transcript, speech.interim].filter(Boolean).join(' '));
+  }, [speech.listening, speech.transcript, speech.interim]);
+  function toggleTalk() {
+    if (speech.listening) {
+      speech.stop();
+      return;
+    }
+    speech.reset();
+    speechBase.current = draft.trim();
+    speech.start();
+    inputRef.current?.focus();
+  }
+  // Typing a question: have the server load this job into Chat's cache first,
+  // so the answer starts as fast as a follow-up. At most once per job every
+  // four minutes (the cache keeps it five).
+  const typing = draft.trim().length > 0;
+  useEffect(() => {
+    if (!typing || askFn) return;
+    const last = askWarmedAt.get(jobId) ?? 0;
+    if (Date.now() - last < ASK_WARM_EVERY_MS) return;
+    askWarmedAt.set(jobId, Date.now());
+    void api.warmAsk(jobId).catch(() => askWarmedAt.delete(jobId));
+  }, [typing, jobId, askFn]);
   const [asking, setAsking] = useState(false);
   /** Server-checked preview of the answer being written (replaced by the final). */
   const [livePreview, setLivePreview] = useState('');
@@ -757,6 +225,7 @@ export function JobAskPanel({
   const feedbackAskedRef = useRef<Set<string>>(new Set());
   const [pins, setPins] = useState<AskPinnedAnswer[]>([]);
   const [editing, setEditing] = useState<{ turnId: string; text: string } | null>(null);
+  /** Classic Chat or the new single-agent Chat (beta), chosen per browser. */
   const [highlightTurnId, setHighlightTurnId] = useState<string | null>(null);
   const threadsRef = useRef<AskThread[]>([]);
   useEffect(() => {
@@ -1226,6 +695,20 @@ export function JobAskPanel({
     });
   }
 
+  // A login saved from an in-thread "Add a login" card: send the original request again.
+  const askRef = useRef<typeof ask | null>(null);
+  useEffect(() => {
+    askRef.current = ask;
+  });
+  useEffect(() => {
+    const onResume = (event: Event) => {
+      const text = String((event as CustomEvent<{ text?: string }>).detail?.text ?? '').trim();
+      if (text) void askRef.current?.(text);
+    };
+    window.addEventListener(COMPUTER_RESUME_EVENT, onResume);
+    return () => window.removeEventListener(COMPUTER_RESUME_EVENT, onResume);
+  }, []);
+
   async function ask(
     textRaw: string,
     attachments?: AskAttachment[] | null,
@@ -1446,15 +929,42 @@ export function JobAskPanel({
     }
   }
 
+  // When a Computer task started from this chat finishes, Chat reads the
+  // result and replies in the same conversation (follow-ups then just work).
+  const reportedComputerTasks = useRef(new Set<string>());
+  const pendingComputerNote = useRef<string | null>(null);
+  function computerFinished(task: ComputerTaskView) {
+    if (reportedComputerTasks.current.has(task.id)) return;
+    reportedComputerTasks.current.add(task.id);
+    const note = `${COMPUTER_FINISHED_PREFIX} ${computerCardTitle(task)}`;
+    if (inFlightRef.current) pendingComputerNote.current = note;
+    else void ask(note);
+  }
+  useEffect(() => {
+    if (inFlight || !pendingComputerNote.current) return;
+    const note = pendingComputerNote.current;
+    pendingComputerNote.current = null;
+    void ask(note);
+    // ask is recreated each render; only the in-flight edge matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inFlight]);
+
+  function sendDraft() {
+    if (speech.listening) speech.stop();
+    speech.reset();
+    speechBase.current = '';
+    void ask(draft);
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    void ask(draft);
+    sendDraft();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      void ask(draft);
+      sendDraft();
     }
   }
 
@@ -1463,7 +973,7 @@ export function JobAskPanel({
       className={
         fill
           ? 'flex h-full min-h-0 flex-1 flex-col bg-paper-50'
-          : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
+          : 'flex min-h-112 flex-col rounded-xl glass-card'
       }
       aria-label="Ask this job"
       data-testid="job-ask-panel"
@@ -1473,8 +983,8 @@ export function JobAskPanel({
         data-ask-scroller=""
         className={
           fill
-            ? 'min-h-0 flex-1 overflow-y-auto px-4 py-3'
-            : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
+            ? 'relative min-h-0 flex-1 overflow-y-auto px-4 py-3'
+            : 'relative max-h-112 flex-1 overflow-y-auto px-5 py-4'
         }
       >
         {office ? (
@@ -1493,7 +1003,7 @@ export function JobAskPanel({
         ) : turns.length === 0 && !asking ? (
           <div>
             <p className="text-sm text-ink-600">
-              Forgot something? Ask what happened on site or what was said.
+              Ask anything about this job in your own words{speech.supported ? ', or tap the mic and talk' : ''}. You can also tell Chat to do things, like text the homeowner.
             </p>
             {suggestions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -1526,9 +1036,12 @@ export function JobAskPanel({
               >
                 <div
                   data-ask-bubble={turn.role}
+                  data-app-note={turn.role === 'user' && turn.content.startsWith(COMPUTER_FINISHED_PREFIX) ? '' : undefined}
                   className={
                     turn.role === 'user'
-                      ? 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
+                      ? turn.content.startsWith(COMPUTER_FINISHED_PREFIX)
+                        ? 'max-w-[85%] rounded-full bg-paper-50 px-3 py-1 text-xs text-ink-500'
+                        : 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
                       : ASSISTANT_BUBBLE
                   }
                 >
@@ -1559,6 +1072,7 @@ export function JobAskPanel({
                         .map((event) => event.atSeconds)}
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
                       onOpenSource={openAskSource}
+                      onComputerFinished={turn.id === lastAssistantId ? computerFinished : undefined}
                     />
                     </>
                   ) : editing?.turnId === turn.id ? (
@@ -1584,7 +1098,7 @@ export function JobAskPanel({
                           }
                         }}
                         rows={Math.min(6, Math.max(2, Math.ceil(editing.text.length / 48)))}
-                        className="w-full min-w-[16rem] resize-none rounded-lg border-0 bg-paper-0 px-2.5 py-1.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                        className="w-full min-w-[16rem] resize-none rounded-lg border-0 bg-paper-0 px-2.5 py-1.5 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
                       />
                       <div className="flex justify-end gap-1.5">
                         <button type="button" onClick={() => setEditing(null)} className="rounded-full px-2.5 py-0.5 text-[11px] font-medium text-paper-0/80 hover:text-paper-0">
@@ -1625,7 +1139,7 @@ export function JobAskPanel({
                       webSources={turn.webSources}
                       onOpenSource={openAskSource}
                       trailing={
-                        office && turn.id === lastAssistantId && !inFlight ? (
+                        office && turn.id === lastAssistantId && !inFlight && !extractAskSources(turn.content).followUps.length ? (
                           <AskActionCards
                             cards={askActionCards({ question: questionBefore(turn.id), answer: turn.content })}
                             onPick={(card) => {
@@ -1637,6 +1151,11 @@ export function JobAskPanel({
                               }
                             }}
                           />
+                        ) : null
+                      }
+                      below={
+                        turn.id === lastAssistantId && !inFlight ? (
+                          <AskFollowUps questions={extractAskSources(turn.content).followUps} onPick={(q) => void ask(q)} />
                         ) : null
                       }
                     >
@@ -1736,7 +1255,7 @@ export function JobAskPanel({
                           </Link>
                         </>
                       ) : (
-                        <p className="text-[11px] text-ink-500">An owner can upgrade the plan or buy credits.</p>
+                        <p className="text-[11px] text-ink-500">The account owner can upgrade the plan or buy credits.</p>
                       )}
                     </div>
                   ) : (
@@ -1842,10 +1361,27 @@ export function JobAskPanel({
             autoGrow
             rows={1}
             jobId={jobId}
-            placeholder="Ask what you forgot…"
+            placeholder={speech.listening ? 'Listening… talk now' : 'Ask anything or tell Chat what to do…'}
             disabled={asking}
-            className="min-h-[2.5rem] w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-h-10 w-full min-w-0 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
+          {speech.supported && !inFlight ? (
+            <button
+              type="button"
+              data-testid="ask-talk"
+              aria-label={speech.listening ? 'Stop listening' : 'Talk instead of typing'}
+              aria-pressed={speech.listening}
+              title={speech.listening ? 'Stop listening' : 'Talk instead of typing'}
+              onClick={toggleTalk}
+              className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${
+                speech.listening
+                  ? 'animate-pulse border-danger-600 bg-danger-600 text-white'
+                  : 'border-line bg-paper-0 text-ink-600 hover:border-brand-200 hover:text-ink-900'
+              }`}
+            >
+              <Mic size={18} aria-hidden />
+            </button>
+          ) : null}
           {inFlight ? (
             <button
               type="button"

@@ -104,11 +104,12 @@ test('a turn that spans two models is priced call by call at each model’s own 
 
 // ── Official rate card ─────────────────────────────────────────────────────
 
-test('rate card matches the official prices verified on 2026-10-05', () => {
+test('rate card matches the official prices verified on 2026-10-14', () => {
   const table = modelPriceTable();
   const at = '2026-10-05T12:00:00Z';
   const expect: Record<string, [number, number, number]> = {
-    'claude-opus-5-5': [4, 20, 0.4],
+    'claude-opus-5-5': [4, 20, 0.2],
+    'claude-fable-5-1': [10, 50, 0.25],
     'claude-sonnet-5-5': [2, 10, 0.2],
     'claude-opus-5': [5, 25, 0.5],
     'claude-sonnet-5': [2, 10, 0.2],
@@ -129,7 +130,7 @@ test('rate card matches the official prices verified on 2026-10-05', () => {
   assert.equal(ratesForModel(table, 'claude-opus-5', at)?.cacheWrite5mPerMTok, 6.25);
   assert.equal(ratesForModel(table, 'claude-opus-5', at)?.cacheWrite1hPerMTok, 10);
   assert.equal(ratesForModel(table, 'claude-sonnet-5-20260801', at)?.inputPerMTok, 2, 'dated snapshot ids resolve');
-  assert.equal(RATE_CARD_VERIFIED_AT, '2026-10-05');
+  assert.equal(RATE_CARD_VERIFIED_AT, '2026-10-14');
   assert.match(PRICE_SOURCES.anthropic, /^https:\/\/platform\.claude\.com\//);
   assert.match(PRICE_SOURCES.google, /^https:\/\/ai\.google\.dev\//);
 });
@@ -191,12 +192,16 @@ test('the migration rate card matches the backend rate card for every row it wri
   const files = [
     '20261003020000_provider_usage_and_rate_card.sql',
     '20261005130000_rate_card_claude_5_5_gemini_3.sql',
+    '20261014220000_rate_card_cache_reads_opus_5_5_fable_5_1.sql',
   ];
   const rowRe = /\(\s*'([a-z0-9.-]+)',\s*'[^']*',\s*'[a-z]+',\s*'(anthropic|google)',\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),[^)]*'(https:[^']+)',\s*'(\d{4}-\d{2}-\d{2})'\)/g;
-  const rows = files.flatMap((file) => {
-    const sql = readFileSync(path.join(here, '../../supabase/migrations', file), 'utf8');
-    return [...sql.matchAll(rowRe)];
-  });
+  // A later migration's row replaces an earlier one for the same model (upsert).
+  const latest = new Map<string, RegExpMatchArray>();
+  for (const file of files) {
+    const sql = readFileSync(path.join(here, '../../supabase/migrations_archive', file), 'utf8');
+    for (const row of sql.matchAll(rowRe)) latest.set(row[1]!, row);
+  }
+  const rows = [...latest.values()];
   assert.ok(rows.length >= 8, `parsed ${rows.length} rate-card rows`);
   const table = modelPriceTable();
   let newestVerified = '';

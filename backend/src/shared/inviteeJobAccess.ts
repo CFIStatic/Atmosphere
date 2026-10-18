@@ -129,3 +129,63 @@ export async function claimInvitedPartiesForUser(
     partyIds: mine.map((party) => party.id),
   };
 }
+
+/**
+ * The live invite on one job for this email — the party a signed-in sub files
+ * their videos under, so the job file still shows them only what they recorded.
+ * Oldest invite first, so every film lands on the same party.
+ */
+export function invitedPartyForJob<
+  T extends {
+    job_id: string;
+    email?: string | null;
+    revoked_at?: string | null;
+    created_at?: string | null;
+  },
+>(parties: T[], jobId: string | null | undefined, email: string | null | undefined): T | null {
+  if (!jobId) return null;
+  const mine = partiesInvitedToEmail(
+    parties.filter((party) => party.job_id === jobId),
+    email,
+  );
+  if (!mine.length) return null;
+  return [...mine].sort((a, b) =>
+    String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
+  )[0];
+}
+
+/**
+ * Jobs that really were shared with this person by another company.
+ *
+ * A job in an org the person belongs to is their own job, never "shared",
+ * even when a job_parties row carries their email (Field Capture adds a
+ * general_contractor row for the filming GC, and a GC can invite their own
+ * email as a sub). A job deleted from its org's library (tombstoned) is
+ * gone for everyone, so it is never listed.
+ */
+export function sharedJobsOnly<J extends { id: string; org_id: string }>(
+  jobs: J[],
+  memberOrgIds: Iterable<string>,
+  tombstonedByOrg: Map<string, Set<string>>,
+): J[] {
+  const mine = new Set(memberOrgIds);
+  return jobs.filter((j) => !mine.has(j.org_id) && !tombstonedByOrg.get(j.org_id)?.has(j.id));
+}
+
+/**
+ * Field Capture Today for someone with their own workspace: their jobs first,
+ * then jobs other contractors shared with them. A job already on their own
+ * list is never repeated.
+ */
+export function mergeSharedTodayJobs<A extends { id: string }, B extends { id: string }>(
+  own: A[],
+  shared: B[],
+): Array<A | B> {
+  const seen = new Set(own.map((job) => job.id));
+  const extra = shared.filter((job) => {
+    if (seen.has(job.id)) return false;
+    seen.add(job.id);
+    return true;
+  });
+  return [...own, ...extra];
+}

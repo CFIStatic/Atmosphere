@@ -24,7 +24,7 @@ export function SetupWizardShell({
 }) {
   const copy = setupWizardCopy(intent);
   const isHomeowner = intent === 'homeowner' || intent === 'capture';
-  const wide = step === 2 && !isHomeowner;
+  const wide = (step === 2 || step === 3) && !isHomeowner;
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
@@ -69,7 +69,7 @@ export function SetupWizardShell({
                         onClick={() => onStepSelect?.(item.step)}
                         className={`flex w-full gap-4 rounded-xl border px-4 py-4 text-left transition ${
                           active
-                            ? 'border-brand-300 bg-brand-50 shadow-sm'
+                            ? 'border-brand-300 bg-brand-50 shadow-xs'
                             : 'border-line bg-paper-0 hover:border-brand-200 hover:bg-brand-50/70'
                         }`}
                       >

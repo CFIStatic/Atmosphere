@@ -645,7 +645,7 @@ test('background work also recharges before it holds for budget', async () => {
 
 test('the migration defaults auto-recharge off and guards claims in the database', () => {
   const sql = readFileSync(
-    fileURLToPath(new URL('../supabase/migrations/20261003160000_ai_credit_auto_recharge.sql', import.meta.url)),
+    fileURLToPath(new URL('../supabase/migrations_archive/20261003160000_ai_credit_auto_recharge.sql', import.meta.url)),
     'utf8',
   );
   assert.match(sql, /enabled\s+boolean not null default false/);

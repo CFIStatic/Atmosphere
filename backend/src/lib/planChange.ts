@@ -1,6 +1,6 @@
 import { badRequest } from './errors.js';
 import {
-  isExtraSeatLineItem,
+  isSeatAddOnLineItem,
   recurringIntervalFromSubscription,
   stripeIdempotencyKey,
   type AtmosphereBillingInterval,
@@ -37,7 +37,7 @@ export function planItemUpdateParams(
   items: PlanSubscriptionItem[],
   nextPriceId: string,
 ): { items: Array<{ id: string; price: string }>; proration_behavior: 'create_prorations' } {
-  const plan = items.find((item) => item.id && !isExtraSeatLineItem(item));
+  const plan = items.find((item) => item.id && !isSeatAddOnLineItem(item));
   if (!plan?.id) {
     throw badRequest('This subscription has no plan item to change.', 'plan_item_missing');
   }

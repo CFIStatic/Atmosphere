@@ -27,6 +27,12 @@ concurrency:
   group: baseline-migrations
   cancel-in-progress: false
 
+# Railway CLI calls target the production environment by ID. The
+# environment is named "Production"; a project token rejects the lowercase
+# name ("Environment \"production\" not found"), and an ID never drifts.
+env:
+  RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID || '519e5cb5-26e1-44a8-91e1-f36412b5cc08' }}
+
 jobs:
   baseline:
     name: Record applied migrations
@@ -70,7 +76,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT: ${{ env.RAILWAY_ENVIRONMENT_ID }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}

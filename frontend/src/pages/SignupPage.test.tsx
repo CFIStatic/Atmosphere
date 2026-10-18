@@ -28,6 +28,9 @@ const apiMocks = vi.hoisted(() => ({
   updateProfile: vi.fn(),
   createOrg: vi.fn(),
   joinOrg: vi.fn(),
+  orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
+  createOrgInvite: vi.fn(),
+  getBillingWorkspace: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -51,7 +54,6 @@ vi.mock('../hooks/usePendingAuthRedirect', () => ({
 }));
 
 import { api } from '../lib/api';
-import { jobFilePath } from '../lib/jobFileAsk';
 import { SignupPage } from './SignupPage';
 
 function renderSignup(initialEntry = '/signup') {
@@ -79,6 +81,10 @@ describe('SignupPage', () => {
     apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
+    apiMocks.orgInvites.mockReset().mockResolvedValue({ invites: [] });
+    apiMocks.createOrgInvite.mockReset().mockResolvedValue({ emailed: true });
+    apiMocks.getBillingWorkspace.mockReset().mockResolvedValue({});
+    window.innerWidth = 1280;
   });
 
   it('puts account and company name on the first step — no company type', () => {
@@ -97,8 +103,9 @@ describe('SignupPage', () => {
       'https://atmosphereteam.com/terms',
     );
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite team' })).toBeInTheDocument();
     expect(screen.queryByText('Your workspace')).toBeNull();
     expect(screen.queryByText('Create your account')).toBeNull();
     expect(screen.queryByText('Invite teammates')).toBeNull();
@@ -125,20 +132,24 @@ describe('SignupPage', () => {
     const user = userEvent.setup();
     renderSignup();
 
-    await user.click(screen.getByRole('button', { name: 'Set up billing' }));
+    // Invite team opens only after payment.
+    await user.click(screen.getByRole('button', { name: 'Invite team' }));
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Plan' }));
     expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
     expect(screen.getAllByText('Per Month')).toHaveLength(3);
-    expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
+    expect(screen.getAllByText(/the Global Admin \(the account owner\) does not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/Each plan includes an AI usage allowance/)).toBeInTheDocument();
     expect(screen.queryByText(/30-day notice/)).toBeNull();
     expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
+    await user.click(screen.getByRole('button', { name: 'Account' }));
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Company name')).toBeInTheDocument();
@@ -253,7 +264,7 @@ describe('SignupPage', () => {
     });
   });
 
-  it('sends a new unpaid workspace to its first job and first evidence before plan and card', async () => {
+  it('sends a new unpaid workspace straight from Account to plan and invites, no first job needed', async () => {
     const user = userEvent.setup();
     localStorage.clear();
     authState.user = {
@@ -284,38 +295,11 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByRole('heading', { name: 'Welcome page' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull();
-  });
-
-  it('goes to plan and card once the first evidence has been seen', async () => {
-    const user = userEvent.setup();
-    localStorage.clear();
-    localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', evidenceSeen: true }));
-    authState.user = {
-      id: 'user-1',
-      email: 'owner@acme.com',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      lastSignInAt: '2026-08-20T00:00:00.000Z',
-      emailConfirmed: true,
-      metadata: {},
-    };
-    authState.membership = null;
-    authState.refreshMembership
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({ org: { id: 'org-1', name: 'Acme Restoration' } });
-    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
-    vi.mocked(api.createOrg).mockResolvedValue({
-      org: { id: 'org-1', name: 'Acme Restoration', joinCode: '8F3A9C2B' },
-    });
-
-    renderSignup('/signup');
-    fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
     await waitFor(() => expect(api.createOrg).toHaveBeenCalled());
     expect(await screen.findByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
-    localStorage.clear();
+    expect(screen.queryByRole('heading', { name: 'Welcome page' })).toBeNull();
+    expect(screen.queryByText(/first job/i)).toBeNull();
+    expect(screen.queryByText(/first evidence/i)).toBeNull();
   });
 
   it('does not ask for company type when joining an existing workspace', async () => {
@@ -382,9 +366,10 @@ describe('SignupPage', () => {
       metadata: {},
     };
     authState.membership = null;
-    authState.refreshMembership
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ org: { id: 'org-1', name: 'Meridian Services' } });
+    authState.refreshMembership.mockResolvedValueOnce(null).mockImplementation(async () => {
+      authState.membership = { role: 'global_admin', org: { id: 'org-1', name: 'Meridian Services' } };
+      return authState.membership;
+    });
     apiMocks.createOrg.mockResolvedValue({
       org: { id: 'org-1', name: 'Meridian Services', joinCode: '8F3A9C2B' },
     });
@@ -395,16 +380,20 @@ describe('SignupPage', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
+    // Comped / exempt on a computer: the optional invite screen, then the Dashboard.
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
+    expect(queueRedirect).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalled();
     });
     expect(apiMocks.createOrg).toHaveBeenCalled();
     const destination = String(queueRedirect.mock.calls[0]?.[0] ?? '');
-    expect(destination).toBe('/intake');
+    expect(destination).toBe('/verifier-library');
     expect(destination).not.toMatch(/[?&]tour=/);
   });
 
-  it('sends a paid Stripe return to Start a job, not the empty dashboard', async () => {
+  it('sends a paid Stripe return to the Dashboard, not Start a job', async () => {
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -419,20 +408,12 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
 
     await waitFor(() => {
-      expect(queueRedirect).toHaveBeenCalledWith('/intake');
+      expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     });
   });
 
-  it('returns a paid checkout to the job filed before payment', async () => {
-    localStorage.setItem(
-      'atmosphere.firstRun.org-1',
-      JSON.stringify({
-        jobId: 'job-1',
-        jobTitle: 'Smith kitchen leak',
-        jobNumber: 1,
-        evidenceSeen: true,
-      }),
-    );
+  it('sends a Stripe return that started from Start a job, or an old first-run job, to the Dashboard', async () => {
+    localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith', jobNumber: 1 }));
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -444,14 +425,106 @@ describe('SignupPage', () => {
     authState.membership = { org: { id: 'org-1', name: 'Acme' } };
     apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
 
-    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+    renderSignup('/signup?step=2&checkout=success&next=%2Fintake');
 
     await waitFor(() => {
-      expect(queueRedirect).toHaveBeenCalledWith(
-        jobFilePath('job-1', { title: 'Smith kitchen leak', number: 1 }),
-      );
+      expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
     });
     localStorage.clear();
+  });
+
+  it('keeps a specific deep link on a paid Stripe return', async () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success&next=%2Fsettings%3Fsection%3Dteam');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
+    });
+  });
+
+  const signedInAdmin = () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'owner@example.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { role: 'global_admin', org: { id: 'org-1', name: 'Example Co' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+  };
+
+  it('after a paid Stripe return on a computer, shows the optional company invite step; Skip goes to the Dashboard', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
+    expect(screen.getByTestId('setup-invite-panel')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite team' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByRole('button', { name: 'Continue to dashboard' })).toBeNull();
+    expect(queueRedirect).not.toHaveBeenCalled();
+
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+    expect(apiMocks.createOrgInvite).not.toHaveBeenCalled();
+  });
+
+  it('sends a company-level invite with no job, then Continue to dashboard', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=invite');
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Email'), 'crew@example.com');
+    await user.click(screen.getByRole('button', { name: 'Invite' }));
+
+    await waitFor(() =>
+      expect(apiMocks.createOrgInvite).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'crew@example.com', role: 'employee' }),
+      ),
+    );
+    await user.click(await screen.findByRole('button', { name: 'Continue to dashboard' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+  });
+
+  it('keeps a deep link through the invite step', async () => {
+    const user = userEvent.setup();
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fsettings%3Fsection%3Dteam');
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invite your team' })).toBeInTheDocument());
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    expect(queueRedirect).toHaveBeenCalledWith('/settings?section=team');
+  });
+
+  it('does not open the invite step before the plan is paid', async () => {
+    signedInAdmin();
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    renderSignup('/signup?step=invite');
+
+    expect(await screen.findByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Invite your team' })).toBeNull();
+  });
+
+  it('phones skip the invite step after payment', async () => {
+    window.innerWidth = 390;
+    signedInAdmin();
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    await waitFor(() => expect(queueRedirect).toHaveBeenCalledWith('/verifier-library'));
+    expect(screen.queryByRole('heading', { name: 'Invite your team' })).toBeNull();
   });
 
   it('never shows plan or billing UI on a homeowner invitee signup', () => {

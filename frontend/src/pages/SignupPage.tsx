@@ -1,14 +1,15 @@
+import { Logo } from '../components/Logo';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { HomeownerEmailSignIn } from '../components/HomeownerEmailSignIn';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
-import {
-  captureAfterSignup,
-  firstRunDestination,
-  FIRST_RUN_WELCOME,
-  readFirstRun,
-} from '../lib/firstRun';
+import { captureAfterSignup, FIRST_RUN_HOME, firstRunDestination } from '../lib/firstRun';
+import { currentPostOnboardingEnv, isAbsoluteHref, offersInviteStep, postOnboardingHref } from '../lib/postOnboarding';
+import { resetBillingOnboardingShared } from '../lib/billingOnboardingShared';
+import { isGlobalAdmin } from '../domain/productRoles';
 import { homeownerAfterSignup } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -22,10 +23,12 @@ import {
 } from '../lib/atmospherePlans';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
+import { SetupInviteStep } from '../components/setup/SetupInviteStep';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
   type SetupWizardStep,
+  INVITE_STEP_PARAM,
 } from '../components/setup/setupWizard';
 import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
@@ -47,19 +50,14 @@ export function SignupPage() {
   // iPhone/Android app: no plan picker or prices (App Store 3.1.1).
   const inApp = isInAppShell();
   const queueRedirect = usePendingAuthRedirect();
-  const navigate = useNavigate();
   const platformHome = PLATFORM_HOME[getPlatform()];
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
     (location.state as { from?: string } | null)?.from,
     platformHome,
   );
-  /** After billing, open the job filed before payment, or Start a job. */
-  const afterSetupTo = firstRunDestination(
-    redirectTo,
-    platformHome,
-    readFirstRun(membership?.org?.id),
-  );
+  /** After billing (or a comped setup), the Dashboard, unless a specific deep link was asked for. */
+  const afterSetupTo = firstRunDestination(redirectTo, platformHome);
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
@@ -82,6 +80,7 @@ export function SignupPage() {
   const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
   const [serviceRoleCustom, setServiceRoleCustom] = useState('');
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
+  const [homeownerEmail, setHomeownerEmail] = useState(() => searchParams.get('homeowner') === '1');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -110,7 +109,9 @@ export function SignupPage() {
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev);
-          params.set('step', String(safe));
+          params.set('step', safe === 3 ? INVITE_STEP_PARAM : String(safe));
+          // Leaving the Stripe return: it would send the page back to billing.
+          if (safe === 3) params.delete('checkout');
           return params;
         },
         { replace: true },
@@ -153,6 +154,13 @@ export function SignupPage() {
         if (cancelled) return;
         const needsBilling = status.required && !status.complete;
         const stepParam = searchParams.get('step');
+        // Invite screen only once paid (or comped).
+        if (stepParam === INVITE_STEP_PARAM) {
+          setStep(needsBilling ? 2 : 3);
+          return;
+        }
+        // Already past billing: a late answer for the Stripe return URL must not pull the page back.
+        if (step === 3 && !needsBilling) return;
         // Paid checkout returns still need the billing step so SetupBillingStep
         // can auto-enter — do not wait for an incomplete payment.
         if (
@@ -171,6 +179,13 @@ export function SignupPage() {
       cancelled = true;
     };
   }, [loading, user, membership, searchParams, checkoutParam, isInviteeIntent, step]);
+
+  // Only a Global Admin invites the company; anyone else leaves setup.
+  const skipInviteStep = step === 3 && Boolean(membership) && !isGlobalAdmin(membership?.role);
+  useEffect(() => {
+    if (skipInviteStep) leaveSetup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipInviteStep]);
 
   if (loading) {
     return (
@@ -211,8 +226,29 @@ export function SignupPage() {
   const termsValid = creatingNewAccount ? termsAcknowledged : true;
   const formValid = accountValid && workspaceValid && termsValid;
 
+  /** Where setup ends for this person. A Platform-only seat never lands in Field Capture. */
+  function setupEnv() {
+    return { ...currentPostOnboardingEnv(), platformSeat: membership?.seatType === 'platform' };
+  }
+
+  /** Leave setup: computers to the Dashboard (or deep link), phones to Field Capture. Same session. */
+  function leaveSetup() {
+    const href = postOnboardingHref(afterSetupTo, setupEnv());
+    if (isAbsoluteHref(href)) {
+      window.location.assign(href);
+      return;
+    }
+    queueRedirect(href);
+  }
+
+  /** Paid or comped. Computers get the optional invite screen first; phones go straight on. */
   function enterApp() {
-    queueRedirect(afterSetupTo);
+    if (isAbsoluteHref(postOnboardingHref(afterSetupTo, setupEnv())) || !offersInviteStep()) {
+      leaveSetup();
+      return;
+    }
+    resetBillingOnboardingShared();
+    goToStep(3);
   }
 
   async function continueAfterWorkspace() {
@@ -220,13 +256,7 @@ export function SignupPage() {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
       if (needsBilling) {
-        // Value before payment: first job and first evidence, then plan and card.
-        const org = (await refreshMembership())?.org ?? membership?.org ?? null;
-        if (!readFirstRun(org?.id).evidenceSeen) {
-          // The session is already set by now (signup or existing login).
-          navigate(FIRST_RUN_WELCOME, { replace: true });
-          return;
-        }
+        // Account, then plan and invites. No first job is needed first.
         goToStep(2);
         return;
       }
@@ -342,11 +372,37 @@ export function SignupPage() {
     }
   }
 
+  // "Homeowner? Sign in with your email": the email-link step on its own, with
+  // no company setup, plan or billing around it.
+  if (homeownerEmail && !user) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper-100">
+        <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
+          <Logo size="lg" />
+          <ThemeToggle />
+        </header>
+        <main className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-md animate-fade-in-up">
+            <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10" data-testid="homeowner-signup">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Homeowner</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Sign in with your email</h1>
+              <p className="mt-1.5 text-sm text-ink-600">See the job your contractor shared with you.</p>
+              <HomeownerEmailSignIn initialEmail={email} onBack={() => setHomeownerEmail(false)} />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <SetupWizardShell
       step={step}
       intent={orgIntent}
-      onStepSelect={goToStep}
+      onStepSelect={(next) => {
+        // Invite team opens only after the plan step finishes.
+        if (next !== 3) goToStep(next);
+      }}
       headerAction={
         user ? (
           <button
@@ -379,7 +435,9 @@ export function SignupPage() {
                 ? 'Invited email + password. Free — no plan or payment.'
                 : mode === 'join'
                   ? 'Use the invite from your Global Admin — create the account with the invited email.'
-                  : 'You are creating this company as Global Admin. Next you name your first job and see your first evidence. Plan and card come after that.'
+                  : inApp
+                    ? 'You are creating this company as Global Admin. Next: invite your team.'
+                    : 'You are creating this company as Global Admin. Next: pick a plan and invite your team.'
           }
         >
           {accountNotice && (
@@ -529,14 +587,33 @@ export function SignupPage() {
               {submitting ? 'Saving…' : isCapture ? 'Create account' : isHomeowner ? 'Save this job' : 'Continue'}
             </PrimaryButton>
           </form>
+          {!user && !isCapture && (
+            <p className="mt-4 text-center text-sm text-ink-600">
+              <button
+                type="button"
+                onClick={() => setHomeownerEmail(true)}
+                className="font-medium text-brand-600 hover:text-brand-700"
+                data-testid="homeowner-email-option"
+              >
+                Homeowner? Sign in with your email
+              </button>
+            </p>
+          )}
         </SetupStepCard>
+      )}
+
+      {step === 3 && !isInviteeAccount && membership && isGlobalAdmin(membership.role) && (
+        <SetupInviteStep
+          continueLabel={afterSetupTo === FIRST_RUN_HOME ? 'Continue to dashboard' : 'Continue'}
+          onDone={leaveSetup}
+        />
       )}
 
       {step === 2 && !isInviteeAccount && membership && (
         <SetupBillingStep
           redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
-          nextLabel="Open your job and invite your team"
+          nextLabel={offersInviteStep() ? 'Continue to invite your team' : 'Continue'}
           onComplete={enterApp}
         />
       )}
@@ -614,7 +691,7 @@ function looksLikeExistingAccount(message: string): boolean {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
 
 function Alert({ children }: { children: ReactNode }) {
   return (
@@ -671,7 +748,7 @@ function PrimaryButton({
       type={type}
       disabled={disabled || loading}
       onClick={onClick}
-      className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
+      className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-hidden focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
     >
       {loading && <SpinnerIcon className="animate-spin" />}
       {children}

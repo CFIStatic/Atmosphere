@@ -401,11 +401,11 @@ describe('SharedDashboardPage job file identity', () => {
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('your-job-files')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Access' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
-  it('hides Who-has-access for grant / homeowner viewers', async () => {
+  it('gives grant / homeowner viewers the same tabs, with Who-has-access read-only', async () => {
+    const user = userEvent.setup();
     authMembership.current = null;
     sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
 
@@ -416,8 +416,13 @@ describe('SharedDashboardPage job file identity', () => {
     );
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
-    expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
+    expect(tabs).toEqual(['Chat', 'Timeline', 'Access', 'Videos', 'Evidence report']);
+
+    await user.click(screen.getByRole('tab', { name: 'Access' }));
+    expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /revoke access/i })).not.toBeInTheDocument();
   });
 
   it('shows Who-has-access for office org members without Similar jobs', async () => {
@@ -597,6 +602,7 @@ describe('SharedDashboardPage job file identity', () => {
 
   it('lets an unpaid office preview the job file, invite panel, and homeowner share', async () => {
     getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    sharedJob.mockResolvedValue({ ...record, access: 'org' });
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
@@ -620,5 +626,20 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByPlaceholderText('their@email.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
-});
 
+  it('shows a job shared with you exactly like the contractor sees it, even if your own workspace is unpaid', async () => {
+    getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    await waitFor(() => expect(getBillingOnboarding).toHaveBeenCalled());
+    expect(screen.queryByTestId('unpaid-job-evaluation')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('upgrade-prompt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kitchen leak walkthrough')).not.toBeInTheDocument();
+  });
+});

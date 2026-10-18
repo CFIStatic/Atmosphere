@@ -7,6 +7,7 @@
  */
 
 import { appShellSafeBillingText, isInAppShell } from './appShell';
+import { readChatEngine } from './chatEngine';
 import type { ComputerOrderSelection } from './supplyOrderApproval';
 import type {
   ComputerLiveLink,
@@ -29,6 +30,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 export interface AuthUser {
   id: string;
   email: string | null;
+  /** E.164 when the account signs in by text message code. */
+  phone?: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   emailConfirmed: boolean;
@@ -71,8 +74,12 @@ export interface Org {
   contractorType?: ContractorType | null;
 }
 
+/** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing and Usage. */
+export type SeatType = 'field_capture' | 'platform';
+
 export interface Membership {
   role: MemberRole;
+  seatType?: SeatType;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -102,6 +109,7 @@ export interface OrgMember {
   handle?: string | null;
   avatarUrl?: string | null;
   role: MemberRole;
+  seatType?: SeatType;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -751,6 +759,8 @@ export interface JobAccessPerson {
   kind: JobAccessKind;
   name: string | null;
   email: string | null;
+  /** Crew invited by mobile number only. */
+  phone?: string | null;
   accessType: string;
   /** Curated service role slug for Analysis. */
   role: string;
@@ -1251,6 +1261,8 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   job?: { id: string; number: number | null; name: string | null };
+  /** Set when this account is on the job as an invited subcontractor (own videos only). */
+  viewerScope?: { role: 'subcontractor'; company: string | null };
   days: ProofDay[];
   videos?: ProofVideoRecord[];
   /** Job-level rooms. The same physical room filmed on different days is one row. */
@@ -1934,9 +1946,12 @@ export interface DuplicatePair {
 
 export interface OrgInvite {
   id: string;
-  email: string;
+  /** Null for crew invited by phone only. */
+  email: string | null;
+  phone?: string | null;
   /** Advisory — the joiner picks their own role at onboarding. */
   role: MemberRole;
+  seatType?: SeatType;
   note?: string | null;
   status: 'pending' | 'joined' | 'revoked';
   /** Advisory person service title for Analysis labeling. */
@@ -3372,6 +3387,35 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
+  /** Whether "Use phone number instead" is offered on this deployment. */
+  phoneAuthConfig: () => request<{ enabled: boolean }>('/api/auth/phone/config', { method: 'GET' }),
+
+  /** Text a 6-digit sign-in code. intent 'signup' may create the account. */
+  phoneAuthStart: (phone: string, intent: 'signin' | 'signup') =>
+    request<{ ok: boolean; phone: string }>('/api/auth/phone/start', {
+      method: 'POST',
+      body: JSON.stringify({ phone, intent }),
+    }),
+
+  phoneAuthVerify: (phone: string, code: string, acceptedTermsVersion?: string) =>
+    request<AuthResponse>('/api/auth/phone/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code, acceptedTermsVersion }),
+    }),
+
+  /** Email a 6-digit sign-in code to an existing account (never creates one). */
+  emailCodeStart: (email: string) =>
+    request<{ ok: boolean; email: string }>('/api/auth/email-code/start', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  emailCodeVerify: (email: string, code: string) =>
+    request<AuthResponse>('/api/auth/email-code/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
+
   me: () => request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/me', { method: 'GET' }),
 
   getTerms: () =>
@@ -3951,11 +3995,21 @@ export const api = {
 
   addJobParty: (
     jobId: string,
-    input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
+    input: {
+      company: string;
+      trade?: string | null;
+      contactName?: string | null;
+      email?: string | null;
+      /** Crew invited by mobile number only (SMS code sign-in). */
+      phone?: string | null;
+      role?: string;
+      serviceRole?: string | null;
+    },
   ) =>
     request<{
       party: JobParty;
       emailed?: boolean;
+      texted?: boolean;
       sharePath?: string | null;
       fieldCapturePath?: string | null;
     }>(`/api/operations/shared/${jobId}/parties`, {
@@ -4009,13 +4063,15 @@ export const api = {
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
   createOrgInvite: (input: {
-    email: string;
+    email?: string;
+    phone?: string;
     role?: MemberRole;
+    seatType?: SeatType;
     note?: string;
     serviceRole?: string;
     serviceRoleCustom?: string | null;
   }) =>
-    request<{ invite: OrgInvite; emailed: boolean }>('/api/org/invites', {
+    request<{ invite: OrgInvite; emailed: boolean; texted?: boolean }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -4276,6 +4332,17 @@ export const api = {
         documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
         supersedesId: opts?.supersedesId ?? undefined,
         timeZone: browserTimeZone(),
+        engine: readChatEngine() === 'classic' ? 'classic' : undefined,
+      }),
+    }),
+
+  /** The person started typing: the server loads this job into Chat's cache so the answer starts sooner. */
+  warmAsk: (jobId: string) =>
+    request<{ warming: boolean }>(`/api/operations/shared/${jobId}/proof/ask/warm`, {
+      method: 'POST',
+      body: JSON.stringify({
+        timeZone: browserTimeZone(),
+        engine: readChatEngine() === 'classic' ? 'classic' : undefined,
       }),
     }),
 
@@ -4320,6 +4387,7 @@ export const api = {
           documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
           supersedesId: opts?.supersedesId ?? undefined,
           timeZone: browserTimeZone(),
+          engine: readChatEngine() === 'classic' ? 'classic' : undefined,
         }),
       });
     } catch (err) {
@@ -4666,6 +4734,24 @@ export const api = {
     );
   },
 
+  crewInviteInfo: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>('/api/crew-invite/info', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  claimCrewInvite: (token: string) =>
+    request<{ ok: boolean; orgId: string; jobId: string; path: string }>('/api/crew-invite/claim', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  progressShareInvite: (token: string) =>
+    request<{ recipientEmail: string | null; orgName: string; jobTitle: string | null }>(
+      progressShareApiPath(token, '/invite'),
+      { method: 'GET' },
+    ),
+
   claimProgressShare: (token: string) =>
     request<{ ok: boolean; orgId: string; jobId: string; path: string }>(
       progressShareApiPath(token, '/claim'),
@@ -4685,6 +4771,19 @@ export const api = {
     request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
       progressShareApiPath(token, '/email-sign-in/verify'),
       { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  /** "Homeowner? Sign in with your email": always { ok: true }, never says whether the email is known. */
+  homeownerEmailSignIn: (email: string) =>
+    request<{ ok: boolean }>('/api/progress-share/email-sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  homeownerVerifyEmailSignIn: (email: string, code: string) =>
+    request<{ ok: boolean; user: AuthUser; orgId: string; jobId: string; path: string }>(
+      '/api/progress-share/email-sign-in/verify',
+      { method: 'POST', body: JSON.stringify({ email, code }) },
     ),
 
   progressShareGrants: () =>
@@ -4924,6 +5023,13 @@ export const api = {
   proofVideoUrl: (proofId: string) =>
     request<{ url: string; expiresInSeconds: number }>(
       `/api/operations/shared/proof/${proofId}/video`,
+      { method: 'GET' },
+    ),
+
+  /** Office copy of the original file — signed as an attachment, logged on custody. */
+  proofDownloadUrl: (proofId: string) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/api/evidence-portal/evidence/${proofId}/download`,
       { method: 'GET' },
     ),
 
@@ -5175,7 +5281,13 @@ export const api = {
     }),
 
   checkoutAiPlan: (planCode: string, billingInterval: 'month' | 'year' = 'month') =>
-    request<{ checkoutUrl: string | null; updated?: boolean; planCode: string; billingInterval: string }>(
+    request<{
+      checkoutUrl: string | null;
+      updated?: boolean;
+      complimentary?: boolean;
+      planCode: string;
+      billingInterval: string;
+    }>(
       '/api/billing/ai-allowance/plan/checkout',
       {
         method: 'POST',
@@ -6495,7 +6607,8 @@ export interface BillingOnboardingStatus {
   plans?: AtmosphereSelfServePlan[];
   /** Customer usage rates from the billing constants. */
   usageRateLabel?: string;
-  plan: {
+  /** Owner only. Other members get the gate fields and seat counts, nothing priced. */
+  plan?: {
     code?: string;
     name: string;
     baseMonthlyFeeCents: number;
@@ -6504,13 +6617,25 @@ export interface BillingOnboardingStatus {
     includedFcSeats?: number;
   };
   fieldCaptureSeats?: {
-    included: number;
-    extra: number;
     allowed: number;
     used: number;
     remaining: number;
-    extraSeatPriceCents: number;
+    /** Owner only. */
+    included?: number;
+    extra?: number;
+    extraSeatPriceCents?: number;
   };
+  /** Platform-only seats. Counts for every member; priceCents for the owner. */
+  platformSeats?: PlatformSeatCounts;
+}
+
+export interface PlatformSeatCounts {
+  allowed: number;
+  used: number;
+  remaining: number;
+  /** False until a Platform seat price is set (comped workspaces are always true). */
+  available?: boolean;
+  priceCents?: number;
 }
 
 /** Feature ids as the ledger stores them (`token_usage_events.feature`). */
@@ -6701,6 +6826,7 @@ export interface WorkspaceBilling {
     remaining: number;
     extraSeatPriceCents: number;
   };
+  platformSeats?: PlatformSeatCounts;
 }
 
 export interface SetPlanResult {

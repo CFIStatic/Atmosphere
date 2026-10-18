@@ -530,7 +530,9 @@ test('a private upload is not model context for a job or public question', () =>
     'what is this about',
     'what companies are involved on this job?',
   ]);
-  const src = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const src = ['jobFileAsk.ts', 'jobFileAskRecord.ts', 'jobFileAskWeb.ts', 'jobFileAskUploads.ts']
+    .map((name) => readFileSync(join(here, '../src/shared', name), 'utf8'))
+    .join('\n');
   assert.doesNotMatch(src, /formatChatUploadsForPrompt/);
   assert.doesNotMatch(src, /Questions about these files are answered from this text only/);
   const authorOnly = historyWithoutPrivateUploads(
@@ -705,7 +707,7 @@ test('short messages are accepted by every Ask route', async () => {
   const { askQuestionText } = await import('../src/shared/askQuestionSchema.js');
   for (const q of ['?', 'ok', 'hi', '  ?  ']) assert.equal(askQuestionText.safeParse(q).success, true, q);
   assert.equal(askQuestionText.safeParse('   ').success, false);
-  for (const route of ['proofOfWork', 'progressShare', 'evidencePortal', 'chatDocuments']) {
+  for (const route of ['proofOfWork', 'evidencePortal', 'chatDocuments']) {
     const src = readFileSync(join(here, `../src/routes/${route}.ts`), 'utf8');
     assert.match(src, /question: askQuestionText/, route);
     assert.doesNotMatch(src, /question: z\.string\(\)\.trim\(\)\.min\(3\)/, route);
@@ -717,7 +719,7 @@ test('short messages are accepted by every Ask route', async () => {
 test('the Computer capability answer matches what Computer does', async () => {
   const { computerCapabilityAnswer, looksLikeComputerCapabilityAsk } = await import('../src/shared/askComputerCapability.js');
   const ready = computerCapabilityAnswer({ access: 'org', configured: true });
-  assert.match(ready, /no fixed list/i);
+  assert.match(ready, /almost any website/i);
   assert.match(ready, /Sign in once from Logins in the sidebar/);
   assert.match(ready, /never sees the password/i);
   assert.match(ready, /code or to approve a number/);

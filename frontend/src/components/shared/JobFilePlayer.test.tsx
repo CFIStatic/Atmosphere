@@ -185,7 +185,7 @@ describe('JobFilePlayer', () => {
     expect(video.muted).toBe(true);
   });
 
-  it('uses region blur without force-mute when child boxes exist', async () => {
+  it('uses region blur-sm without force-mute when child boxes exist', async () => {
     render(
       <JobFilePlayer
         src="https://signed.test/clip.mp4"

@@ -198,7 +198,7 @@ export function PlaybooksLibraryPage() {
           placeholder="Search title or trade"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="min-w-[12rem] flex-1 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800"
+          className="min-w-48 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800"
         />
       </div>
 
@@ -420,7 +420,7 @@ function CreateFromJobPanel({
             We draft the steps from the job’s analyzed clips. You can review it before publishing.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="min-w-[14rem] flex-1 text-xs font-medium text-ink-600">
+            <label className="min-w-56 flex-1 text-xs font-medium text-ink-600">
               <span className="sr-only">Completed job</span>
               <select
                 aria-label="Completed job"

@@ -60,14 +60,14 @@ export function planPickerFootnote(interval: AtmosphereBillingInterval): string 
   if (interval === 'year') {
     return (
       'Extra Field Capture seats are $1,250/yr each. Seats count Field Capture accounts only — ' +
-      'office-only Global Admins do not use a seat. Each plan includes an AI usage allowance. Buy credits if you need more. ' +
+      'the Global Admin (the account owner) does not use a seat. Each plan includes an AI usage allowance. Buy credits if you need more. ' +
       'The yearly prepay covers the plan and seats; the rate is locked for the term. ' +
       'Annual plans are non-refundable and cancel at the end of the term.'
     );
   }
   return (
     'Extra Field Capture seats are $125/mo each. Seats count Field Capture accounts only — ' +
-    'office-only Global Admins do not use a seat. Each plan includes an AI usage allowance. Buy credits if you need more.'
+    'the Global Admin (the account owner) does not use a seat. Each plan includes an AI usage allowance. Buy credits if you need more.'
   );
 }
 

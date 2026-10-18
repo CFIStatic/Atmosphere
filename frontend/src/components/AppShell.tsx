@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { accountContact } from '../lib/phone';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { displayName, nameFromMetadata } from '../lib/display';
@@ -251,9 +252,9 @@ function JumpPalette() {
           }}
           placeholder={t('nav.jumpTo')}
           aria-label={t('nav.jumpToAria')}
-          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
+          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-hidden"
         />
-        <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
+        <kbd className="hidden rounded-sm border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
           ⌘K
         </kbd>
       </div>
@@ -291,7 +292,7 @@ function AccountMenu() {
   const [loggingOut, setLoggingOut] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const name = displayName(profile?.fullName || nameFromMetadata(user?.metadata), user?.email);
+  const name = displayName(profile?.fullName || nameFromMetadata(user?.metadata), user?.email || accountContact(user));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -344,7 +345,7 @@ function AccountMenu() {
         >
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-medium text-ink-900">{name}</p>
-            <p className="truncate text-xs text-ink-500">{user?.email}</p>
+            <p className="truncate text-xs text-ink-500">{accountContact(user)}</p>
             {membership?.org?.name && (
               <p className="mt-1 text-xs text-ink-500">{membership.org.name}</p>
             )}

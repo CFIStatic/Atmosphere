@@ -60,12 +60,13 @@ describe('isJobFilePath', () => {
 });
 
 describe('job-file viewport lock', () => {
-  it('locks the job file to the viewport so Ask can stay pinned on the right', () => {
+  it('locks the job file to the viewport at every desktop width, so only its panels scroll', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
-    expect(shell).toContain('lg:h-screen lg:overflow-hidden');
+    expect(shell).toContain("'operations-main flex h-screen flex-col overflow-hidden'");
+    expect(shell).not.toContain('lg:h-screen lg:overflow-hidden');
     expect(shell).toContain('overflow-hidden');
     expect(shell).toMatch(/isJobFile[\s\S]*phone[\s\S]*overflow-hidden/);
   });
@@ -81,9 +82,9 @@ describe('phone and Field Capture frame', () => {
     expect(shell).toContain("t('nav.open')");
     expect(shell).toContain('operations-main');
     expect(shell).toContain('operations-rail');
-    expect(shell).toContain('h-[100dvh]');
+    expect(shell).toContain('h-dvh');
     expect(shell).toContain('w-[min(280px,86vw)]');
-    expect(shell).toContain('start-0');
+    expect(shell).toContain('inset-s-0');
     expect(shell).toContain('-translate-x-full rtl:translate-x-full');
   });
 });

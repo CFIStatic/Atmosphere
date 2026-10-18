@@ -131,7 +131,7 @@ export function LoginPage() {
                     required
                     value={firstName}
                     onChange={(event) => setFirstName(event.target.value)}
-                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-hidden focus:border-brand-500"
                   />
                 </label>
                 <label className="block text-sm">
@@ -142,7 +142,7 @@ export function LoginPage() {
                     required
                     value={lastName}
                     onChange={(event) => setLastName(event.target.value)}
-                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                    className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-hidden focus:border-brand-500"
                   />
                 </label>
               </div>
@@ -154,7 +154,7 @@ export function LoginPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-hidden focus:border-brand-500"
                 />
               </label>
               {error && <p className="text-sm text-danger-600">{error}</p>}
@@ -188,7 +188,7 @@ export function LoginPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-hidden focus:border-brand-500"
                 />
               </label>
               <label className="block text-sm">
@@ -200,7 +200,7 @@ export function LoginPage() {
                   minLength={8}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                  className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-hidden focus:border-brand-500"
                 />
               </label>
               <p className="text-xs text-ink-500">Same password as Platform (platform.atmosphereteam.com)</p>

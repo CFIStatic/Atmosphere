@@ -1,3 +1,4 @@
+import { accountContact, formatPhone } from '../lib/phone';
 import {
   useEffect,
   useState,
@@ -7,7 +8,8 @@ import {
 } from 'react';
 import { useNavigate, useOutletContext, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { canManageBilling, isGlobalAdmin } from '../domain/productRoles';
+import { isGlobalAdmin } from '../domain/productRoles';
+import { useIsOrgOwner } from '../lib/billingOwner';
 import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -70,9 +72,11 @@ export function SettingsPage() {
   useFeatureTimer('settings');
   const t = useT();
   const { membership, user } = useAuth();
-  const showBilling = canManageBilling(membership?.role);
   // Invited homeowners (no org): their profile and sign-out, nothing else.
   const { homeowner } = useHomeownerPortal();
+  // Billing and Usage: the account owner (who created the organization) only.
+  const isOwner = useIsOrgOwner(Boolean(membership?.org?.id) && !homeowner);
+  const showBilling = isOwner === true && !homeowner;
   const ALL_SECTIONS: SettingsSection[] = [
     { id: 'profile', label: t('settings.section.profile'), blurb: t('settings.section.profileBlurb'), icon: UserIcon },
     { id: 'security', label: t('settings.section.security'), blurb: t('settings.section.securityBlurb'), icon: ShieldIcon },
@@ -102,7 +106,8 @@ export function SettingsPage() {
     },
   ];
   const SECTIONS = ALL_SECTIONS.filter((section) => {
-    if (homeowner) return section.id === 'profile';
+    // No company: the company-only sections (organization, billing, connect) have nothing to show.
+    if (homeowner) return section.id === 'profile' || section.id === 'support';
     if (section.id === 'billing' && !showBilling) return false;
     if (section.id === 'connect' && !SHOW_SETTINGS_CONNECT) return false;
     return true;
@@ -112,8 +117,11 @@ export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('section');
   const requested: SectionId = isSectionId(raw) ? raw : 'profile';
-  const active: SectionId =
-    requested === 'billing' && !showBilling
+  // A billing link waits for the owner check instead of bouncing to Profile.
+  const billingPending = requested === 'billing' && isOwner === null && !homeowner && Boolean(membership?.org?.id);
+  const active: SectionId = billingPending
+    ? 'billing'
+    : requested === 'billing' && !showBilling
       ? 'profile'
       : SECTIONS.some((s) => s.id === requested)
         ? requested
@@ -192,6 +200,11 @@ export function SettingsPage() {
             </>
           )}
           {active === 'billing' && showBilling && <BillingSection />}
+          {active === 'billing' && billingPending && (
+            <div className="flex justify-center py-16" data-testid="settings-billing-pending">
+              <SpinnerIcon className="animate-spin text-ink-400" width={18} height={18} />
+            </div>
+          )}
           {active === 'support' && <SupportSection />}
           {SHOW_SETTINGS_CONNECT && active === 'connect' && <CrmConnectPanel embedded />}
         </div>
@@ -229,7 +242,7 @@ function Card({
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg glass-card px-3.5 py-2.5 text-sm text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:opacity-60';
+  'w-full rounded-lg glass-card px-3.5 py-2.5 text-sm text-ink-900 placeholder-ink-400 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:opacity-60';
 
 function Field({
   label,
@@ -423,11 +436,7 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
     <>
       <Card
         title={t('settings.profile.title')}
-        description={
-          homeowner
-            ? 'Your contractors see this name on the jobs they share with you.'
-            : t('settings.profile.description')
-        }
+        description={t('settings.profile.description')}
       >
         <div className="flex items-center gap-4">
           <label className="relative shrink-0 cursor-pointer">
@@ -459,9 +468,9 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
           </label>
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-ink-900">
-              {displayName(name || profile?.fullName, user?.email)}
+              {displayName(name || profile?.fullName, user?.email || accountContact(user))}
             </p>
-            <p className="truncate text-sm text-ink-500">{user?.email}</p>
+            <p className="truncate text-sm text-ink-500">{accountContact(user)}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="cursor-pointer text-sm font-medium text-brand-700 transition hover:text-brand-800">
                 {profile?.avatarUrl || previewUrl
@@ -534,15 +543,20 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
       {homeowner ? null : <VoiceEnrollmentCard />}
 
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
-        <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
-        <ReadOnlyRow
-          label={t('settings.account.emailConfirmed')}
-          value={
-            user?.emailConfirmed
-              ? t('settings.account.emailConfirmedYes')
-              : t('settings.account.emailConfirmedNo')
-          }
-        />
+        {(user?.email || !user?.phone) && (
+          <>
+            <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
+            <ReadOnlyRow
+              label={t('settings.account.emailConfirmed')}
+              value={
+                user?.emailConfirmed
+                  ? t('settings.account.emailConfirmedYes')
+                  : t('settings.account.emailConfirmedNo')
+              }
+            />
+          </>
+        )}
+        {user?.phone && <ReadOnlyRow label={t('settings.account.phone')} value={formatPhone(user.phone)} />}
         <ReadOnlyRow label={t('settings.account.memberSince')} value={formatDate(user?.createdAt, locale)} />
         <ReadOnlyRow label={t('settings.account.lastSignIn')} value={formatDate(user?.lastSignInAt, locale)} />
         <p className="mt-4 text-xs text-ink-500">{t('settings.account.emailLocked')}</p>
@@ -563,7 +577,6 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
           </div>
         </div>
       </Card>
-      {homeowner ? <SignOutCard /> : null}
     </>
   );
 }
@@ -917,8 +930,12 @@ function LinkedAccountsCard() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
-                    {ROLE_LABELS[member.role] ?? member.role}
+                  <span
+                    data-testid="member-seat-label"
+                    title={member.seatType === 'platform' ? 'Platform seat: Global Admin access, no Field Capture, no Billing and Usage.' : undefined}
+                    className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
+                  >
+                    {member.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[member.role] ?? member.role)}
                   </span>
                   {showRemove && (
                     <button

@@ -1,3 +1,5 @@
+import { askAgentEnabled } from '../shared/askAgent.js';
+import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import { visibleAfterEdits } from '../shared/askEdits.js';
 import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 import { servableSummary } from '../audio/summaryServe.js';
@@ -18,14 +20,20 @@ import {
   PROOF_PLAYBACK_URL_TTL_SECONDS,
 } from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
-import { canPurchaseAiCredits } from '../metering/aiBudget.js';
+import { isOrgOwnerRow } from '../middleware/requireOrgOwner.js';
 import { enterAiUsageScope, runWithAiUsageScope } from '../metering/aiUsageContext.js';
 import { VIDEO_ANALYSIS_FEATURE, withVideoUsageScope } from '../metering/backgroundUsage.js';
 import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../metering/aiBudgetService.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
-import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
-import { homeownerProofPayload } from '../shared/homeownerProofPayload.js';
+import {
+  assertViewerMayOpenProof,
+  resolveOrgOrViewerAccess,
+  resolveProofAccess,
+  viewerPartyId,
+} from '../shared/jobProgressGrants.js';
+import { existingPrivacySafeCopy, privacyBlurWindows } from '../lib/proofPrivacySafe.js';
+import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload, partyProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
   ensureAskThreads,
@@ -102,11 +110,14 @@ import {
   askLookupCatalogFromJob,
   asksAboutCrossJob,
   clipFromProofRow,
+  type AskLookupClip,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
   scrubStoredAskText,
 } from '../shared/askLookup.js';
 import { answerHasJobCitation, applyHonestNotFound } from '../shared/askNotFound.js';
+import { looksLikeComputerTask } from '../shared/askComputerCommand.js';
+import { looksLikeComputerCapabilityAsk } from '../shared/askComputerCapability.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -1075,7 +1086,9 @@ async function fileRecordedProof(party: any, admin: any, body: unknown) {
     detail: `${input.phase} · ${input.workDate}`,
   });
 
-  void vaultFromProof(proof as any).catch((err) => {
+  // PROOF_SELECT does not return org_id; the vault row needs it (NOT NULL).
+  const vaultProof = proof as unknown as Parameters<typeof vaultFromProof>[0];
+  void vaultFromProof({ ...vaultProof, org_id: party.org_id, job_id: vaultProof.job_id ?? party.job_id }).catch((err) => {
     console.warn('[legal] vault proof failed:', err instanceof Error ? err.message : err);
   });
   void applyOpenHoldToProof({
@@ -2851,14 +2864,18 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase, access, role } = (await resolveOrgOrViewerAccess(req, req.params.jobId)) as Awaited<
-      ReturnType<typeof resolveOrgOrViewerAccess>
-    > & { role?: string };
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, supabase, access, role } = viewer;
     const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
-    // Invited homeowners get the videos, not the office's pay/dispute/integrity data.
-    // Org members with the viewer role never see integrity flags either.
-    if (access === 'viewer') res.json(redactIntegrityForViewer(homeownerProofPayload(payload)));
-    else if (role === 'viewer') res.json(redactIntegrityForViewer(payload));
+    // Invited homeowners get the videos, not the office's pay/dispute/integrity
+    // data. An invited subcontractor gets only the videos they recorded. Neither
+    // sees integrity flags, and neither does an org member with the viewer role.
+    const partyId = viewerPartyId(viewer);
+    if (access === 'viewer') {
+      res.json(
+        redactIntegrityForViewer(partyId ? partyProofPayload(payload, partyId) : homeownerProofPayload(payload)),
+      );
+    } else if (role === 'viewer') res.json(redactIntegrityForViewer(payload));
     else res.json(payload);
   } catch (err) {
     next(err);
@@ -2996,6 +3013,7 @@ async function loadChatSessionDocuments(
   return viewsFromChatRows(chatSessionRows(data, jobId));
 }
 
+/** Only the organization's owner (orgs.created_by) may buy AI credits. */
 async function memberCanPurchaseAi(
   supabase: any,
   orgId: string,
@@ -3003,13 +3021,8 @@ async function memberCanPurchaseAi(
 ): Promise<boolean> {
   if (!userId) return false;
   try {
-    const { data } = await supabase
-      .from('org_members')
-      .select('role')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    return canPurchaseAiCredits((data as { role?: string } | null)?.role);
+    const { data } = await supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle();
+    return isOrgOwnerRow(data as { created_by?: string | null } | null, userId);
   } catch {
     return false;
   }
@@ -3087,6 +3100,11 @@ async function runProofAskTurn(input: {
   /** org = office member; viewer = progress-share homeowner. */
   access?: 'org' | 'viewer';
   /**
+   * Invited subcontractor: the answer may only read the videos this party
+   * recorded (and never the job's memory notes, which summarise everyone's).
+   */
+  partyId?: string | null;
+  /**
    * Documents uploaded in this office chat. Ignored for share and homeowner
    * Ask so an unattached or other-job file never enters that answer.
    */
@@ -3097,6 +3115,13 @@ async function runProofAskTurn(input: {
    * (they stay on the record).
    */
   supersedesId?: string | null;
+  /** "agent" asks for the new single-agent Chat (honored per ASK_AGENT). */
+  engine?: 'agent' | 'classic' | null;
+  /**
+   * The person started typing: load this job into the agent's prompt cache and
+   * stop. No thread is made, nothing is answered or stored.
+   */
+  warmOnly?: boolean;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3133,7 +3158,7 @@ async function runProofAskTurn(input: {
     // One web search per query per turn. A public question ("who's going to
     // win the ball game") starts its search now, while the job file loads.
     const webSearch = createAskWebSearchMemo({ timeZone: input.timeZone ?? 'America/Chicago' });
-    if (isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
+    if (!input.warmOnly && isGeneralAsk(input.question) && isAskWebSearchConfigured() && !input.documentIds?.length) {
       void webSearch(input.question, { limit: 5, includeDomains: includeDomainsForAsk(input.question) });
     }
     const writeDb = askWriteClient(supabase);
@@ -3145,6 +3170,11 @@ async function runProofAskTurn(input: {
         ? { kind: 'share', shareId: input.shareId }
         : null;
     const threadPromise = (async () => {
+      // The cached part of the prompt is the same for every chat on the job.
+      if (input.warmOnly) {
+        threadId = null;
+        return null;
+      }
       if (!owner) {
         // No principal to check. A caller-supplied thread id is not bound.
         threadId = null;
@@ -3170,19 +3200,42 @@ async function runProofAskTurn(input: {
       }
     })();
 
-    const otherJobsPromise =
+    // Clips on the company's other jobs: loaded up front when the question names
+    // other jobs, otherwise only if the agent decides to search them.
+    const loadOtherJobClips = async (limit: number): Promise<AskLookupClip[]> => {
+      const { data } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
+        .eq('org_id', orgId)
+        .neq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(limit);
+      const rows = ((data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
+      const titles = new Map<string, string>();
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
+        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
+          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
+        }
+      }
+      return rows
+        .map((row) =>
+          clipFromProofRow(row, {
+            orgId,
+            jobId: String(row.job_id ?? ''),
+            jobTitle: titles.get(String(row.job_id ?? '')) || null,
+          }),
+        )
+        .filter((clip) => clip.proofId && clip.jobId !== jobId);
+    };
+    const otherJobsPromise: Promise<AskLookupClip[] | null> =
       askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted
-        ? supabase
-            .from('job_proofs')
-            .select(
-              'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
-            )
-            .eq('org_id', orgId)
-            .neq('job_id', jobId)
-            .is('deleted_at', null)
-            .order('work_date', { ascending: false })
-            .limit(24)
-        : Promise.resolve({ data: null as Array<Record<string, unknown>> | null });
+        ? loadOtherJobClips(24)
+        : Promise.resolve(null);
 
     // Independent of the job file: start these with it instead of after it.
     const orgAdminEarly = unscopedAdminOrNull();
@@ -3454,6 +3507,14 @@ async function runProofAskTurn(input: {
       }
     }
 
+    if (input.partyId) {
+      // A sub's Chat sees only their own videos: drop every other clip
+      // before anything (clips, tools, memory, lookups) is built from them.
+      const own = loadedProofs.filter((row) => row.party_id === input.partyId);
+      loadedProofs.length = 0;
+      loadedProofs.push(...own);
+    }
+
     const partyRows = (partyRes.data ?? []) as any[];
     const company = new Map(partyRows.map((p) => [p.id, p.company]));
     const clips = collectionClipsFromRows(
@@ -3517,7 +3578,7 @@ async function runProofAskTurn(input: {
           )
         : {};
 
-    const file: JobFileAskContext = {
+    const officeFile: JobFileAskContext = {
       job: jobRow
         ? {
             title: jobRow.title ?? null,
@@ -3576,6 +3637,10 @@ async function runProofAskTurn(input: {
       ],
       clips,
     };
+    // Invited homeowners / share-link viewers: never the office's notes,
+    // tasks, logs, documents or model concerns (homeownerAskJobFile).
+    const file: JobFileAskContext =
+      askAccess === 'viewer' ? homeownerAskJobFile(officeFile) : officeFile;
 
     const propertyId = propertyIdEarly;
     const prop = propRes.data as {
@@ -3594,7 +3659,7 @@ async function runProofAskTurn(input: {
     const profile = profileRes.data as { full_name?: string | null; email?: string | null } | null;
     const authorLabel = profile?.full_name ?? profile?.email ?? null;
 
-    const memoryClips = proofRows.map((row) => {
+    const officeMemoryClips = proofRows.map((row) => {
         const party = partyRows.find((item) => item.id === row.party_id);
         return clipFromProofRow(row, {
           orgId,
@@ -3603,6 +3668,7 @@ async function runProofAskTurn(input: {
           partyCreatedBy: party?.created_by ?? null,
         });
       });
+    const memoryClips = askAccess === 'viewer' ? homeownerAskClips(officeMemoryClips) : officeMemoryClips;
     const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
     const officeOnlyPairIds = new Set(
       (conversationRows as Array<Record<string, unknown>>)
@@ -3674,7 +3740,7 @@ async function runProofAskTurn(input: {
       ? history
       : (historyWithoutPrivateUploads(history, sessionDocuments) ?? history);
     const mentionPrep =
-      askAccess === 'org'
+      askAccess === 'org' && !input.warmOnly
         ? await prepareMentionAsk(supabase, {
             orgId,
             question: input.question,
@@ -3687,7 +3753,22 @@ async function runProofAskTurn(input: {
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;
     }
-    if (mentionPrep?.directAnswer) onToken(mentionPrep.directAnswer);
+    // The agent answers @mention questions itself, including "who did you mean?"
+    // and "they are not on this job", from the note below. Only a job outside the
+    // org, or classic Chat, still gets the canned line.
+    const agentAnswers =
+      askAgentEnabled(input.engine ?? null) && Boolean(String(apiKey ?? '').trim() || anthropicAskApiKey().trim());
+    const mentionShortcut =
+      mentionPrep?.directAnswer && (mentionPrep.final || !agentAnswers) ? mentionPrep.directAnswer : null;
+    if (mentionPrep?.directAnswer && !mentionShortcut) {
+      file.mentionSupplement = [
+        file.mentionSupplement,
+        `About the people named in this question (tell the person this plainly): ${mentionPrep.directAnswer}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    }
+    if (mentionShortcut) onToken(mentionShortcut);
     const clientName = partyRows
       .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
       .filter(Boolean)
@@ -3699,7 +3780,7 @@ async function runProofAskTurn(input: {
       access: askAccess,
       proofs: loadedProofs.filter((row) => !row.deleted_at),
       parties: partyRows,
-      history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
+      history: input.partyId ? [] : ((memoryRes.data ?? []) as Array<Record<string, unknown>>),
       jobTitle: file.job?.title ?? null,
       jobAddress: siteAddress,
       clientName,
@@ -3724,26 +3805,7 @@ async function runProofAskTurn(input: {
         clips: memoryClips,
       }),
     });
-    if (askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted) {
-      const rows = ((otherJobsRes?.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
-      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
-      const titles = new Map<string, string>();
-      if (jobIds.length) {
-        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
-        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
-          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
-        }
-      }
-      lookup.orgClips = rows
-        .map((row) =>
-          clipFromProofRow(row, {
-            orgId,
-            jobId: String(row.job_id ?? ''),
-            jobTitle: titles.get(String(row.job_id ?? '')) || null,
-          }),
-        )
-        .filter((clip) => clip.proofId && clip.jobId !== jobId);
-    }
+    if (otherJobsRes) lookup.orgClips = otherJobsRes;
     clock.contextBuildMs = Date.now() - clock.startedAt;
     const priorCount = recentRes.total ?? priorPairs.length;
     const titleAhead =
@@ -3753,12 +3815,12 @@ async function runProofAskTurn(input: {
     const styleRow = await styleRowPromise;
     const styleSummary = styleRow?.promptSummary ?? null;
 
-    const result = mentionPrep?.directAnswer
+    const result = mentionShortcut
       ? {
-          answer: mentionPrep.directAnswer,
+          answer: mentionShortcut,
           model: null as string | null,
           usage: null,
-          groundedOn: mentionPrep.groundedOn,
+          groundedOn: mentionPrep?.groundedOn ?? 0,
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
           answeredFromLookup: false,
@@ -3791,6 +3853,7 @@ async function runProofAskTurn(input: {
       timing: clock,
       sessionDocuments,
       lookup,
+      loadOrgClips: askAccess === 'org' ? () => loadOtherJobClips(80) : null,
       webSearch,
       onPreviewReset: () => preview.reset(),
       setPreviewCheck: (check) => preview.setCheck(check),
@@ -3808,7 +3871,22 @@ async function runProofAskTurn(input: {
         webSearch,
       },
       styleSummary,
+      engine: input.engine ?? null,
+      warmOnly: input.warmOnly,
     });
+    if (input.warmOnly) {
+      recordMeasuredTokenUsage(supabase, {
+        orgId,
+        requestId: input.requestId,
+        feature: 'ask',
+        source: 'proof_ask_warm',
+        userId: userId ?? undefined,
+        jobId,
+        modelId: result.model,
+        usage: result.usage,
+      });
+      return { answer: '', model: result.model, groundedOn: 0, question: null, threadId: null, webSources: [] };
+    }
     if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
     }
@@ -3838,6 +3916,13 @@ async function runProofAskTurn(input: {
     // Deterministic Not found. lead-in at the HTTP boundary (covers all Ask paths).
     storedAnswer = applyHonestNotFound(storedAnswer, lookup, input.question, {
       noGroundedClaim: !answerHasJobCitation(storedAnswer),
+      // A Computer command or a question about Chat itself is never an evidence miss.
+      nonEvidence:
+        ('agent' in result && result.agent === true) ||
+        (Array.isArray(result.toolResults) &&
+          (result.toolResults as Array<{ tool?: string }>).some((r) => r?.tool === 'start_computer_task')) ||
+        looksLikeComputerTask(input.question) ||
+        looksLikeComputerCapabilityAsk(input.question),
     });
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
@@ -3900,7 +3985,7 @@ async function runProofAskTurn(input: {
         model: result.model,
         grounded_on: fromJobFile ? groundedOn : [],
         web_sources: sessionDocumentAnswer ? [] : webSources,
-        research_trace: result.research ?? null,
+        research_trace: result.research ?? ('agentTrace' in result ? result.agentTrace : null) ?? null,
         office_only: result.officeOnly === true,
         document_ids: sessionDocuments.map((doc) => doc.id).slice(0, 8),
         asked_by: userId ?? null,
@@ -4071,8 +4156,11 @@ async function runProofAskTurn(input: {
  */
 export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    // Org members and claimed progress-share homeowners (grant viewers).
-    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    // Org members, claimed progress-share homeowners (grant viewers), and
+    // invited subcontractors (only their own videos).
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
+    const partyId = viewerPartyId(viewer);
     const input = z
       .object({
         question: askQuestionText,
@@ -4080,6 +4168,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         timeZone: z.string().trim().min(1).max(64).optional(),
         documentIds: z.array(z.string().uuid()).max(8).optional(),
         supersedesId: z.string().uuid().optional().nullable(),
+        engine: z.enum(['agent', 'classic']).optional(),
       })
       .parse(req.body ?? {});
     const canManage =
@@ -4120,8 +4209,10 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           timeZone: input.timeZone ?? null,
           requestId: `ask:${req.params.jobId}:${randomUUID()}`,
           access: access === 'org' ? 'org' : 'viewer',
+          partyId,
           documentIds: access === 'org' ? input.documentIds : undefined,
           supersedesId: input.supersedesId ?? null,
+          engine: input.engine ?? null,
           signal: abort.signal,
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
           // Checked sentences stream as they are written; `done` replaces them.
@@ -4156,10 +4247,66 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       timeZone: input.timeZone ?? null,
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
       access: access === 'org' ? 'org' : 'viewer',
+      partyId,
       documentIds: access === 'org' ? input.documentIds : undefined,
       supersedesId: input.supersedesId ?? null,
+      engine: input.engine ?? null,
     });
     res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Last warm per person and job. A cache entry lives five minutes; one warm covers it. */
+const askWarmedAt = new Map<string, number>();
+const ASK_WARM_EVERY_MS = 4 * 60_000;
+
+/**
+ * POST /api/operations/shared/:jobId/proof/ask/warm
+ * The person started typing a question. Loads this job into the Chat model's
+ * prompt cache so the first answer starts as quickly as the later ones.
+ * Answers 202 at once; nothing is asked or stored.
+ */
+export async function warmProofAsk(req: Request, res: Response, next: NextFunction) {
+  try {
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
+    const input = z
+      .object({
+        timeZone: z.string().trim().min(1).max(64).optional(),
+        engine: z.enum(['agent', 'classic']).optional(),
+      })
+      .parse(req.body ?? {});
+    const key = `${orgId}:${req.params.jobId}:${userId}`;
+    const last = askWarmedAt.get(key) ?? 0;
+    if (!askAgentEnabled(input.engine ?? null) || Date.now() - last < ASK_WARM_EVERY_MS) {
+      res.status(202).json({ warming: false });
+      return;
+    }
+    const canManage = access === 'org' ? await memberCanPurchaseAi(supabase, orgId, userId) : false;
+    await assertAiFeatureAllowed(unscopedAdminOrNull() ?? supabase, orgId, { canManage });
+    askWarmedAt.set(key, Date.now());
+    if (askWarmedAt.size > 5_000) {
+      for (const [k, at] of askWarmedAt) if (Date.now() - at > ASK_WARM_EVERY_MS) askWarmedAt.delete(k);
+    }
+    res.status(202).json({ warming: true });
+    void runProofAskTurn({
+      supabase,
+      orgId,
+      jobId: req.params.jobId,
+      question: '',
+      userId,
+      timeZone: input.timeZone ?? null,
+      requestId: `ask-warm:${req.params.jobId}:${randomUUID()}`,
+      access: access === 'org' ? 'org' : 'viewer',
+      partyId: viewerPartyId(viewer),
+      engine: input.engine ?? null,
+      warmOnly: true,
+    }).catch((err: unknown) => {
+      askWarmedAt.delete(key);
+      logAskFailure('ask_warm_failed', err);
+    });
   } catch (err) {
     next(err);
   }
@@ -4168,9 +4315,30 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 /** GET /api/operations/shared/:jobId/proof/questions */
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
     let ownsThread = false;
+    // An invited subcontractor reads only their own chats: other people's
+    // answers can quote videos the sub may not see.
+    if (viewerPartyId(viewer)) {
+      if (!threadId) {
+        res.json({ questions: [] });
+        return;
+      }
+      try {
+        await getAskThreadForOwner(askWriteClient(supabase), {
+          orgId,
+          jobId: req.params.jobId,
+          threadId,
+          owner: { kind: 'user', userId },
+        });
+      } catch (err) {
+        if (!(err instanceof HttpError && err.status === 404)) throw err;
+        res.json({ questions: [] });
+        return;
+      }
+    }
     if (access === 'org' && threadId) {
       try {
         await getAskThreadForOwner(askWriteClient(supabase), {
@@ -4342,55 +4510,50 @@ export async function getJobLiveSession(req: Request, res: Response, next: NextF
 
 export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
   try {
-    // Resolve after we know the job — proof rows carry job_id.
-    let orgId: string;
-    let userId: string;
-    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
-    // Progress-grant viewers (homeowners, guests) get the guest media rules:
-    // never a removed clip, never a raw original that has privacy redactions.
-    let guest = false;
-    try {
-      const ctx = await requireOrgContext(req);
-      orgId = ctx.orgId;
-      userId = ctx.userId;
-      supabase = ctx.supabase;
-    } catch (err) {
-      // Peek job_id with admin, then verify grant.
-      const adminPeek = unscopedAdminOrNull();
-      if (!adminPeek) throw err;
-      const { data: peek } = await adminPeek
-        .from('job_proofs')
-        .select('job_id, org_id')
-        .eq('id', req.params.proofId)
-        .maybeSingle();
-      if (!peek) throw err;
-      const ctx = await resolveOrgOrViewerAccess(req, (peek as any).job_id);
-      orgId = ctx.orgId;
-      userId = ctx.userId;
-      supabase = ctx.supabase;
-      guest = ctx.access === 'viewer';
-    }
+    // Resolve after we know the job — proof rows carry job_id. Own org, or a
+    // job shared with this person (they may also have a workspace of their own).
+    const viewer = await resolveProofAccess(req, req.params.proofId);
+    const { orgId, userId, supabase, access } = viewer;
+    // Job viewers never get a removed clip. The homeowner plays every clip like
+    // the contractor; a sub never gets a raw original with privacy redactions.
+    const guest = access === 'viewer';
     const { data: proof } = await supabase
       .from('job_proofs')
-      .select('storage_path, job_id, work_date, phase, deleted_at, ai_findings')
+      .select('storage_path, job_id, party_id, work_date, phase, deleted_at, ai_findings')
       .eq('org_id', orgId)
       .eq('id', req.params.proofId)
       .maybeSingle();
     if (!proof || (guest && (proof as any).deleted_at)) throw new HttpError(404, 'No such video.', 'not_found');
-    if (guest) assertGuestMayMintRawMedia((proof as any).ai_findings);
+    // An invited subcontractor plays only what they recorded.
+    assertViewerMayOpenProof(viewer, proof as any);
+    if (viewerPartyId(viewer)) assertGuestMayMintRawMedia((proof as any).ai_findings);
 
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
+    // A clip with a child or a private moment on file plays from its blurred
+    // copy once that exists, so no player can show the original pixels. Until
+    // then the original plays and the player blurs the windows it is sent.
+    const privacyWindows = privacyBlurWindows((proof as any).ai_findings);
+    const safePath = privacyWindows.length
+      ? await existingPrivacySafeCopy({
+          admin,
+          storagePath: (proof as any).storage_path,
+          aiFindings: (proof as any).ai_findings,
+          bucket: PROOF_BUCKET,
+        })
+      : null;
     // WebM from Chrome Field Capture is not playable in Safari. Mint a URL to
     // an H.264 derivative when needed so Platform playback works everywhere.
-    const playable = await createSignedPlayableProofUrl({
-      admin,
-      storagePath: (proof as any).storage_path,
-      expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
-      bucket: PROOF_BUCKET,
-      scheduleBuild: true,
-    });
+    const playable = safePath
+      ? await signedPrivacySafeUrl(admin, safePath)
+      : await createSignedPlayableProofUrl({
+          admin,
+          storagePath: (proof as any).storage_path,
+          expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
+          bucket: PROOF_BUCKET,
+          scheduleBuild: true,
+        });
 
     // Logged here rather than on playback: this is the moment the file becomes
     // watchable, and it is the only moment the server reliably hears about.
@@ -4409,10 +4572,24 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       url: playable.url,
       expiresInSeconds: playable.expiresInSeconds,
       contentType: playable.contentType,
+      // privacySafe: the file itself is blurred. Otherwise a player that does
+      // not read the clip's ranges blurs these windows itself.
+      privacySafe: Boolean(safePath),
+      privacyWindows: safePath ? [] : privacyWindows,
     });
   } catch (err) {
     next(err);
   }
+}
+
+async function signedPrivacySafeUrl(admin: any, safePath: string) {
+  const { data, error } = await admin.storage
+    .from(PROOF_BUCKET)
+    .createSignedUrl(safePath, PROOF_PLAYBACK_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    throw new HttpError(500, error?.message ?? 'Could not mint a signed URL for playback.', 'signed_url_failed');
+  }
+  return { url: data.signedUrl as string, expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS, contentType: 'video/mp4' };
 }
 
 
@@ -5028,11 +5205,21 @@ export async function restoreEvidence(req: Request, res: Response, next: NextFun
  */
 export async function jobProofPackPdf(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = viewer;
+    const partyId = viewerPartyId(viewer);
     const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();
     const workDateFilter = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
 
-    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    const officePayload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    // A homeowner's PDF carries the videos, not pay/dispute/integrity data; a
+    // subcontractor's carries only the videos they recorded.
+    const payload =
+      access === 'viewer'
+        ? partyId
+          ? partyProofPayload(officePayload, partyId)
+          : homeownerProofPayload(officePayload)
+        : officePayload;
 
     const { data: jobRow } = await supabase
       .from('crm_jobs')

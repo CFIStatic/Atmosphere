@@ -21,15 +21,16 @@ import { getBillingOnboardingShared } from './lib/billingOnboardingShared';
 import { LoginPage } from './pages/LoginPage';
 import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
 import { isInAppShell } from './lib/appShell';
-import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
-import { isUnpaidEvaluationLocation } from './lib/unpaidEvaluation';
+import { billingStepHref, unpaidWorkspaceTarget } from './lib/firstRun';
+import { safeAuthRedirect } from './lib/authRedirect';
+import { isUnpaidEvaluationLocation, sharedJobInsteadOfSetup } from './lib/unpaidEvaluation';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DocumentTitle } from './components/DocumentTitle';
 import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
-import { PLATFORM_HOME } from './lib/platforms';
+import { DASHBOARD_HOME, PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { OperationsShell } from './layouts/OperationsShell';
 import { getPlatform } from './lib/usePlatform';
@@ -42,7 +43,6 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
 const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
-const FirstRunPage = lazy(() => import('./pages/FirstRunPage').then((m) => ({ default: m.FirstRunPage })));
 const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
 const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
 const PlatformHomePage = lazy(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
@@ -58,8 +58,11 @@ const LoginsPage = lazy(() => import('./pages/LoginsPage').then((m) => ({ defaul
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
-const JobProgressGuestPage = lazy(() =>
-  import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
+const CrewInviteGate = lazy(() =>
+  import('./pages/CrewInviteGate').then((m) => ({ default: m.CrewInviteGate })),
+);
+const ShareLinkGate = lazy(() =>
+  import('./pages/ShareLinkGate').then((m) => ({ default: m.ShareLinkGate })),
 );
 
 const TERMS_EXEMPT_PREFIXES = [
@@ -69,6 +72,7 @@ const TERMS_EXEMPT_PREFIXES = [
   '/reset-password',
   '/guest',
   '/shared/',
+  '/invite/',
   '/progress',
 ];
 
@@ -177,6 +181,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { membership } = useAuth();
   const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
+  const [sharedJobPath, setSharedJobPath] = useState<string | null>(null);
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
   // Only skip when there is no org membership on a grant-only surface. Org
@@ -198,7 +203,17 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
         }
         const status = await getBillingOnboardingShared(api.getBillingOnboarding);
         if (cancelled) return;
-        setGate(status.required && !status.complete ? 'blocked' : 'ready');
+        if (!status.required || status.complete) {
+          setGate('ready');
+          return;
+        }
+        // Someone a job was shared with (a homeowner who once made an empty
+        // workspace, or an invited contractor) opens that job, not first-run
+        // setup or plans for their own workspace.
+        const shared = await sharedJobInsteadOfSetup(() => api.progressShareGrants());
+        if (cancelled) return;
+        setSharedJobPath(shared);
+        setGate('blocked');
       } catch {
         if (!cancelled) setGate(fieldEmbed || jobProgressViewer ? 'ready' : 'error');
       }
@@ -232,13 +247,24 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   if (gate === 'blocked' && isUnpaidEvaluationLocation(location.pathname, location.search)) {
     return <>{children}</>;
   }
+  if (gate === 'blocked' && sharedJobPath) {
+    // Someone jobs were shared with (no finished contractor account) gets the
+    // same Dashboard as the contractor, listing every job shared with them.
+    if (location.pathname === DASHBOARD_HOME) return <>{children}</>;
+    return <Navigate to={DASHBOARD_HOME} replace />;
+  }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
-    // First evidence before plan and card: an unpaid workspace that has not
-    // seen any yet goes to the welcome page; after that, to billing.
-    return <Navigate to={unpaidWorkspaceTarget(readFirstRun(membership?.org?.id), returnPath)} replace />;
+    // Unpaid workspace: straight to plan and card.
+    return <Navigate to={unpaidWorkspaceTarget(returnPath)} replace />;
   }
   return <>{children}</>;
+}
+
+/** The old /welcome steps (first job, first evidence) are gone; continue at plan and invites. */
+function LegacyWelcomeRedirect() {
+  const [params] = useSearchParams();
+  return <Navigate to={billingStepHref(safeAuthRedirect(params.get('next')))} replace />;
 }
 
 function BillingSettingsRedirect() {
@@ -372,15 +398,8 @@ export default function App() {
 
           {/* iPhone/Android app: sign-up and plans happen on atmosphereteam.com, never in the app. */}
           <Route path="/signup" element={isInAppShell() ? <AppShellSignupBlockedPage /> : <SignupPage />} />
-          {/* First run, value before payment: first job and first evidence, then plan. */}
-          <Route
-            path="/welcome"
-            element={
-              <ProtectedRoute>
-                <FirstRunPage />
-              </ProtectedRoute>
-            }
-          />
+          {/* Retired first-job / first-evidence page: old links go to plan and invites. */}
+          <Route path="/welcome" element={<LegacyWelcomeRedirect />} />
 
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with
@@ -421,12 +440,15 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Read-only job file for homeowners, counsel, banks — no login.
-              /progress = cookied guest session; /progress/:token = emailed link.
-              /progress-view kept as an alias for older links. */}
-          <Route path="/progress-view" element={<JobProgressGuestPage />} />
-          <Route path="/progress" element={<JobProgressGuestPage />} />
-          <Route path="/progress/:token" element={<JobProgressGuestPage />} />
+          {/* Homeowner share links: sign in (same page as contractors), then the
+              job opens in the portal. /progress and /progress-view are older
+              aliases; ?token= is forwarded, otherwise the Dashboard. */}
+          <Route path="/progress-view" element={<LegacyProgressRedirect />} />
+          <Route path="/progress" element={<LegacyProgressRedirect />} />
+          <Route path="/progress/:token" element={<ShareLinkGate />} />
+          {/* Subcontractor invite links (Share > Subcontractor or crew): the
+              same sign-in as contractors, a real account, then the job. */}
+          <Route path="/invite/:token/*" element={<CrewInviteGate />} />
 
           <Route
             path="/onboarding"
@@ -483,4 +505,12 @@ export default function App() {
       </AuthProvider>
     </Router>
   );
+}
+
+/** Older share URLs without a path token: forward ?token=, else the Dashboard. */
+function LegacyProgressRedirect() {
+  const location = useLocation();
+  const token = new URLSearchParams(location.search).get('token')?.trim();
+  if (token) return <Navigate to={`/progress/${encodeURIComponent(token)}`} replace />;
+  return <Navigate to={HOMEOWNER_HUB_PATH} replace />;
 }

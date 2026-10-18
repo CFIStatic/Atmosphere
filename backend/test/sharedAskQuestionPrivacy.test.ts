@@ -185,13 +185,7 @@ test('a coworker with someone else’s thread id gets no office-only rows', asyn
 });
 
 test('share-link ask question listings omit unrelated upload answers', async () => {
-  const shareFn = progressShare.slice(
-    progressShare.indexOf("'/:token/ask/questions'"),
-    progressShare.indexOf("'/:token/ask'"),
-  );
-  assert.match(shareFn, /listSharedProofQuestions\(/);
-  assert.match(shareFn, /access:\s*'share'/);
-  assert.doesNotMatch(shareFn, /questionListingKeepsOfficeOnly/);
+  // The share-link Ask route is retired (#720); listings keep their share scoping.
 
   const client = listingClient(ROWS);
   const open = await listSharedProofQuestions(client, {
@@ -249,7 +243,6 @@ test('viewer and job-wide history queries drop office-only rows', () => {
   assert.match(ask, /excludeOfficeOnlyRows\([\s\S]*askAccess,\s*threadId/);
   assert.match(ask, /publicPairs/);
   assert.match(ask, /historyWithoutPrivateUploads/);
-  assert.match(progressShare, /access:\s*'share'/);
   assert.doesNotMatch(progressShare, /document_ids/);
 });
 

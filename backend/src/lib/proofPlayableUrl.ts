@@ -91,7 +91,7 @@ const inflight = new Map<string, Promise<string>>();
 /** Originals we already proved are faststart MP4 — skip a repeat probe. */
 const webReadyOriginals = new Set<string>();
 
-async function storageHasObject(
+export async function storageHasObject(
   admin: SupabaseClient,
   bucket: string,
   objectPath: string,
@@ -118,7 +118,7 @@ async function readObjectHead(url: string): Promise<Buffer | null> {
   }
 }
 
-const TRANSCODE_ARGS = [
+export const TRANSCODE_ARGS = [
   '-c:v',
   'libx264',
   '-preset',

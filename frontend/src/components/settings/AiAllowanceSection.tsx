@@ -25,11 +25,14 @@ const CREDIT_KIND_LABEL: Record<string, string> = {
 export function AiAllowanceSection({
   allowance,
   currentPlanCode,
+  complimentary = false,
   onError,
   onUpdated,
 }: {
   allowance: AiAllowance;
   currentPlanCode?: string | null;
+  /** Comped workspace: plan changes are free and credits are unlimited, so no Buy buttons. */
+  complimentary?: boolean;
   onError: (message: string) => void;
   /** Reload allowance and the current plan after an in-place change. */
   onUpdated?: () => Promise<void> | void;
@@ -62,7 +65,11 @@ export function AiAllowanceSection({
       if (result.checkoutUrl) window.location.href = result.checkoutUrl;
       else if (result.updated) {
         setConfirmedPlan(result.planCode);
-        setPlanNotice('Plan updated. Stripe prorates the difference on this billing period.');
+        setPlanNotice(
+          result.complimentary || complimentary
+            ? 'Plan updated. No charge, this workspace is complimentary.'
+            : 'Plan updated. Stripe prorates the difference on this billing period.',
+        );
         try {
           await onUpdated?.();
         } catch (refreshErr) {
@@ -127,11 +134,22 @@ export function AiAllowanceSection({
                   onClick={() => void changePlan(plan.code)}
                   className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm font-medium text-ink-800 transition hover:border-brand-300 disabled:opacity-50"
                 >
-                  {busy === plan.code ? 'Opening checkout…' : plan.code === activePlanCode ? plan.name : `Switch to ${plan.name}`}
+                  {busy === plan.code
+                    ? complimentary
+                      ? 'Switching…'
+                      : 'Opening checkout…'
+                    : plan.code === activePlanCode
+                      ? plan.name
+                      : `Switch to ${plan.name}`}
                 </button>
               ))}
             </div>
           </div>
+          {complimentary ? (
+            <p data-testid="ai-credits-complimentary" className="text-sm text-ink-600">
+              AI credits are unlimited on this complimentary workspace. Plan changes are free.
+            </p>
+          ) : (
           <div>
             <h4 className="text-sm font-semibold text-ink-900">Buy credits</h4>
             <p className="mt-1 text-xs text-ink-500">
@@ -152,6 +170,7 @@ export function AiAllowanceSection({
               ))}
             </div>
           </div>
+          )}
         </div>
       ) : (
         <p className="mt-5 text-xs text-ink-500">An owner can change the plan or buy credits.</p>

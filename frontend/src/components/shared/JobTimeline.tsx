@@ -215,7 +215,7 @@ export function JobTimeline({
             aria-label="Person"
             value={person}
             onChange={(event) => setPerson(event.target.value)}
-            className="rounded-lg border border-line bg-paper-200 px-2 py-1 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-500"
+            className="rounded-lg border border-line bg-paper-200 px-2 py-1 text-xs text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-500"
           >
             <option value="all">Everyone</option>
             {people.map((name) => (
@@ -258,7 +258,7 @@ export function JobTimeline({
         >
           {ordered.live.length > 0 ? (
             <div className="rounded-xl border border-brand-500/50 bg-paper-50">
-              <div className="sticky top-0 z-20 flex items-center gap-2 rounded-t-xl bg-paper-50/95 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-brand-500 backdrop-blur">
+              <div className="sticky top-0 z-20 flex items-center gap-2 rounded-t-xl bg-paper-50/95 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-brand-500 backdrop-blur-sm">
                 <span className="h-2 w-2 rounded-full bg-brand-500" aria-hidden />
                 Now
               </div>
@@ -277,7 +277,7 @@ export function JobTimeline({
 
           {days.map((day) => (
             <section key={day.key}>
-              <h3 className="sticky top-0 z-10 border-b border-line bg-paper-100/95 px-1 py-2 text-xs font-semibold uppercase tracking-wide text-ink-500 backdrop-blur">
+              <h3 className="sticky top-0 z-10 border-b border-line bg-paper-100/95 px-1 py-2 text-xs font-semibold uppercase tracking-wide text-ink-500 backdrop-blur-sm">
                 {day.label}
               </h3>
               <ul className="divide-y divide-line">

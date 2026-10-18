@@ -67,7 +67,7 @@ export function LanguagePicker() {
           if (open) close();
           else setOpen(true);
         }}
-        className="flex w-full items-center justify-between gap-3 rounded-lg glass-card px-3.5 py-2.5 text-start text-sm text-ink-900 outline-none transition focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-200"
+        className="flex w-full items-center justify-between gap-3 rounded-lg glass-card px-3.5 py-2.5 text-start text-sm text-ink-900 outline-hidden transition focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-200"
       >
         <span className="min-w-0">
           <span className="block truncate font-medium">{selected.nativeName}</span>
@@ -91,7 +91,7 @@ export function LanguagePicker() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('settings.language.search')}
               aria-label={t('settings.language.search')}
-              className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
+              className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-hidden"
             />
           </div>
           <ul role="listbox" aria-label={t('settings.language.aria')} className="max-h-64 overflow-y-auto py-1">

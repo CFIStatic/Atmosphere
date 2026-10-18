@@ -15,6 +15,7 @@ import {
   planSupplyOrderComputerTask,
 } from './askComputerCommand.js';
 import { looksLikeSupplyOrderAsk, type SupplyCart } from '../computer/supplyOrder.js';
+import { addLoginLead, addLoginPath, outsideSiteTarget, siteFromWebHits } from './askComputerCommand.js';
 
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
 import type { PunchListItem } from './jobPunchList.js';
@@ -61,6 +62,10 @@ export type AskToolContext = {
   address?: string | null;
   /** Per-turn memoized web search (one search per query per turn). */
   webSearch?: AskWebSearchFn;
+  /** Saved Logins (label + host only). Loaded per turn when absent. */
+  savedLogins?: Array<{ label: string; host: string }>;
+  /** Computer tasks already run from this job. Loaded per turn when absent. */
+  computerResults?: Array<{ id: string; instructions: string; status: string; result: string | null; error: string | null; at: string | null }>;
 };
 
 export type AskToolResult = {
@@ -96,6 +101,7 @@ export type AskToolName =
   | 'update_job_fields'
   | 'get_crm_record'
   | 'search_crm'
+  | 'list_company_jobs'
   | 'list_who_has_access'
   | 'get_punch_list'
   | 'find_evidence_moments'
@@ -181,7 +187,7 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
     name: 'get_crm_record',
     description:
       'Pull claim, contact, and job fields from the connected CRM (JobNimbus, AccuLynx, Salesforce, ServiceTitan) plus Atmosphere-native fields for this job. Soft-fails with Atmosphere fields only when no external CRM is connected. Cite CRM as a source when used.',
-    audience: 'both',
+    audience: 'org',
     input_schema: {
       type: 'object',
       properties: {
@@ -189,6 +195,20 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
           type: 'string',
           description: 'Optional focus: claim | contact | job | all (default all).',
         },
+      },
+    },
+  },
+  {
+    name: 'list_company_jobs',
+    description:
+      "List this company's jobs in Atmosphere: title, number, status, loss type, claim number, key dates, dollar amounts, video count and last activity. Use for questions about the business as a whole (which jobs are open, how many started this month, which job has the most videos, what we invoiced). Optional status open | closed | all (default open) and a query that matches title or claim number.",
+    audience: 'org',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', description: 'open (default), closed, or all.' },
+        query: { type: 'string', description: 'Optional words from a job title or a claim number.' },
+        limit: { type: 'number', description: 'Max jobs (default 25, up to 60).' },
       },
     },
   },
@@ -215,7 +235,7 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: 'get_punch_list',
     description: 'Build the open punch / next-steps list from video analysis already on file.',
-    audience: 'both',
+    audience: 'org',
     input_schema: {
       type: 'object',
       properties: {
@@ -336,6 +356,34 @@ export function askToolsForAccess(access: AskAccessRole): ToolDef[] {
     if (t.name === 'web_search' && !isAskWebSearchConfigured()) return false;
     return t.audience === 'both' || access === 'org';
   });
+}
+
+/**
+ * Office actions the job Chat model may call mid-answer, so a command works
+ * however it is phrased. Texts and access removals only propose a card.
+ * Tools that already ran this turn are left out so nothing is proposed twice.
+ */
+export const ASK_MODEL_ACTION_TOOLS: AskToolName[] = [
+  'send_job_sms',
+  'update_job_fields',
+  'propose_revoke_access',
+  'list_who_has_access',
+  'get_punch_list',
+  'get_crm_record',
+  'search_crm',
+  'list_company_jobs',
+];
+
+export function askModelActionTools(access: AskAccessRole, alreadyRan: Iterable<string> = []) {
+  if (access !== 'org') return [];
+  const ran = new Set(alreadyRan);
+  return askToolsForAccess(access)
+    .filter((t) => ASK_MODEL_ACTION_TOOLS.includes(t.name) && !ran.has(t.name))
+    .map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: { type: 'object' as const, ...t.input_schema },
+    }));
 }
 
 export function anthropicToolsForAccess(access: AskAccessRole) {
@@ -514,6 +562,63 @@ export function partitionAskTools(names: AskToolName[]): { sequential: AskToolNa
     else parallel.push(name);
   }
   return { sequential, parallel };
+}
+
+const CLOSED_JOB_STATUSES = ['completed', 'invoiced', 'paid', 'cancelled'];
+
+/** The company's jobs for list_company_jobs, newest activity first, with video counts. */
+async function listCompanyJobs(
+  ctx: AskToolContext,
+  input: Record<string, unknown>,
+): Promise<{ summary: string; rows: Array<Record<string, unknown>> }> {
+  const status = trim(input.status).toLowerCase() || 'open';
+  const limit = Math.max(1, Math.min(60, Number(input.limit) || 25));
+  // Keep only characters that are safe inside a PostgREST or() filter.
+  const query = trim(input.query).replace(/[^\p{L}\p{N} #-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  let q = ctx.supabase
+    .from('crm_jobs')
+    .select(
+      'id, job_number, title, status, loss_type, claim_number, loss_date, scheduled_start, actual_start, actual_end, contract_amount, invoiced_amount, paid_amount, created_at, updated_at',
+    )
+    .eq('org_id', ctx.orgId)
+    .is('deleted_at', null);
+  if (status === 'open') q = q.not('status', 'in', `(${CLOSED_JOB_STATUSES.join(',')})`);
+  else if (status === 'closed') q = q.in('status', CLOSED_JOB_STATUSES);
+  if (query) q = q.or(`title.ilike.%${query}%,claim_number.ilike.%${query}%`);
+  const { data, error } = await q.order('updated_at', { ascending: false }).limit(limit);
+  if (error) throw error;
+  const jobs = (data ?? []) as Array<Record<string, unknown>>;
+  const ids = jobs.map((job) => String(job.id ?? '')).filter(Boolean);
+  const videos = new Map<string, { count: number; last: string | null }>();
+  if (ids.length) {
+    const { data: proofs } = await ctx.supabase
+      .from('job_proofs')
+      .select('job_id, work_date')
+      .eq('org_id', ctx.orgId)
+      .in('job_id', ids)
+      .is('deleted_at', null)
+      .limit(5000);
+    for (const row of (proofs ?? []) as Array<{ job_id?: string; work_date?: string | null }>) {
+      const id = String(row.job_id ?? '');
+      const prev = videos.get(id) ?? { count: 0, last: null };
+      const date = row.work_date ? String(row.work_date) : null;
+      videos.set(id, { count: prev.count + 1, last: date && (!prev.last || date > prev.last) ? date : prev.last });
+    }
+  }
+  const rows = jobs.map((job) => {
+    const id = String(job.id ?? '');
+    return {
+      ...job,
+      openHere: id === ctx.jobId,
+      videoCount: videos.get(id)?.count ?? 0,
+      lastVideoDate: videos.get(id)?.last ?? null,
+    };
+  });
+  const which = status === 'all' ? '' : status === 'closed' ? 'closed ' : 'open ';
+  const summary = rows.length
+    ? `${rows.length}${rows.length === limit ? '+' : ''} ${which}job(s)${query ? ` matching "${query}"` : ''}.`
+    : `No ${which}jobs${query ? ` matching "${query}"` : ''}.`;
+  return { summary, rows };
 }
 
 export async function executeAskTool(
@@ -868,6 +973,15 @@ export async function executeAskTool(
         };
       }
 
+      case 'list_company_jobs': {
+        const jobs = await listCompanyJobs(ctx, input);
+        return {
+          ok: true,
+          tool: name,
+          summary: jobs.summary,
+          data: { jobs: jobs.rows },
+        };
+      }
       case 'list_who_has_access': {
         const people = await loadAccessRoster(ctx);
         const live = people.filter((p) => p.state === 'live' || p.state === 'claimed');
@@ -1147,6 +1261,37 @@ export async function executeAskTool(
               }
             })(),
           ]);
+          // Any website: use the saved Login, else find the site and ask for the login in-thread.
+          const target = outsideSiteTarget(instructions, logins);
+          if (target && target.kind !== 'saved') {
+            let found: { name: string; url: string; host: string } | null = target.kind === 'known' ? target : null;
+            let viaWeb = false;
+            if (target.kind === 'named') {
+              const outcome = await (ctx.webSearch ?? searchAskWebDetailed)(`${target.name} login`, {
+                fetchFn: ctx.fetchFn,
+                limit: 5,
+              }).catch(() => ({ hits: [], answer: '' }));
+              found = siteFromWebHits(target.name, outcome.hits ?? []);
+              viaWeb = Boolean(found);
+            }
+            if (!found) {
+              const name = target.kind === 'named' ? target.name : 'that site';
+              return {
+                ok: false,
+                tool: 'start_computer_task',
+                summary: `I couldn't find the website for ${name}. Send me its web address and I'll take it from there.`,
+                ui: { section: 'computer', path: 'computer-task:need-detail' },
+              };
+            }
+            const prompt = { n: found.name, u: found.url, h: found.host, q: instructions, ...(viaWeb ? { w: 1 as const } : {}) };
+            return {
+              ok: false,
+              tool: name,
+              summary: addLoginLead(prompt),
+              data: { channel: 'add_login', site: found.name, host: found.host, url: found.url, foundWithWebSearch: viaWeb },
+              ui: { section: 'computer', path: addLoginPath(prompt) },
+            };
+          }
           const plan = looksLikeSupplyOrderAsk(instructions)
             ? await planSupplyOrderComputerTask({
                 question: instructions,

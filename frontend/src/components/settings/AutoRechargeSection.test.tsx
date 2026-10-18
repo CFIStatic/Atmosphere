@@ -1,11 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, type AiAutoRecharge } from '../../lib/api';
-import tailwindConfig from '../../../tailwind.config.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { AutoRechargeSection } from './AutoRechargeSection';
 import source from './AutoRechargeSection.tsx?raw';
 
-const colors = tailwindConfig.theme.extend.colors as Record<string, Record<string, string>>;
+// Theme colours are declared in index.css's @theme block (Tailwind v4).
+const themeCss = readFileSync(path.resolve(__dirname, '../../index.css'), 'utf8');
+const themeColors = new Set([...themeCss.matchAll(/--color-([a-z]+-\d+):/g)].map((m) => m[1]));
 
 function settings(partial: Partial<AiAutoRecharge> = {}): AiAutoRecharge {
   return {
@@ -151,7 +154,7 @@ describe('Auto-recharge', () => {
     const { container } = render(<AutoRechargeSection initial={settings({ enabled: true })} />);
     expect(container).not.toHaveTextContent(/allowance|used of|% used/i);
     for (const [, tone, shade] of source.matchAll(/(?:bg|text|border|ring)-(brand|danger|caution|paper|ink)-(\d+)/g)) {
-      expect(colors[tone!]?.[shade!], `${tone}-${shade}`).toBeTruthy();
+      expect(themeColors.has(`${tone}-${shade}`), `${tone}-${shade}`).toBe(true);
     }
   });
 });

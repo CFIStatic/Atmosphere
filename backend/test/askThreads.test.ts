@@ -222,7 +222,7 @@ test('listing threads backfills raw titles and does not write custody rows', asy
 
 test('migration defines ask_threads and job_proof_questions.thread_id', () => {
   const sql = readFileSync(
-    join(here, '../../supabase/migrations/20260915010000_ask_threads.sql'),
+    join(here, '../../supabase/migrations_archive/20260915010000_ask_threads.sql'),
     'utf8',
   );
   assert.match(sql, /create table if not exists public\.ask_threads/);
@@ -318,10 +318,8 @@ test('a thread the caller does not own is not kept for memory', () => {
   assert.match(proof, /loadAskThreadMemory\(writeDb, \{ orgId, jobId, threadId, owner \}\)/);
 });
 
-test('progress-share Ask persists share-scoped threads', () => {
+test('progress-share Ask by token is retired', () => {
   const progress = readFileSync(join(here, '../src/routes/progressShare.ts'), 'utf8');
-  assert.match(progress, /ask\/threads/);
-  assert.match(progress, /ask\/threads\/:threadId/);
-  assert.match(progress, /shareId: share\.id/);
-  assert.match(progress, /kind: 'share'/);
+  assert.match(progress, /all\('\/:token\/ask\/\*', retiredGuestApi\)/);
+  assert.doesNotMatch(progress, /createAskThread|runProofAsk/);
 });

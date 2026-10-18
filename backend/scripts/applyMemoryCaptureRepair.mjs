@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260818193000_memory_capture_never_blocks_jobs.sql',
+  '../supabase/migrations_archive/20260818193000_memory_capture_never_blocks_jobs.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

@@ -3,6 +3,7 @@ import { rejectPurchasesInAppShell } from '../lib/appShell.js';
 import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { BILLING_OPEN_TO_MEMBERS, requireOrgOwnerExcept } from '../middleware/requireOrgOwner.js';
 import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
@@ -17,10 +18,12 @@ import {
   stripeIdempotencyKey,
 } from '../lib/stripe.js';
 import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
+import { checkoutTaxParams } from '../lib/stripeTax.js';
 import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { billedUsageRateClause } from '../lib/usageDisplayRates.js';
 import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import { assertNotComplimentaryPurchase, loadOrgBillingExempt } from '../lib/complimentaryBilling.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
@@ -93,6 +96,9 @@ billingRouter.get('/catalog', async (_req: Request, res: Response, next: NextFun
 
 // Everything past this point acts on the caller's own organization.
 billingRouter.use(requireAuth, requireOrg);
+// Billing and Usage are the owner's alone. Every member's app still reads the
+// onboarding status (paywall gate); it gets no prices or plan details.
+billingRouter.use(requireOrgOwnerExcept(BILLING_OPEN_TO_MEMBERS));
 
 /**
  * GET /api/billing/overview
@@ -257,6 +263,10 @@ billingRouter.post('/checkout/subscription', rejectPurchasesInAppShell, async (r
 
     const { planCode, billingInterval, seats } = setPlanSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
+    assertNotComplimentaryPurchase(
+      await loadOrgBillingExempt(supabase, req.orgId!, req.user!.email),
+      'subscription',
+    );
 
     const { data: plan, error: planError } = await supabase
       .from('billing_plans')
@@ -292,6 +302,7 @@ billingRouter.post('/checkout/subscription', rejectPurchasesInAppShell, async (r
         metadata: { org_id: req.orgId! },
         subscription_data: { metadata: { org_id: req.orgId! } },
         line_items: [{ price: priceId, quantity }],
+        ...checkoutTaxParams(),
       },
       {
         idempotencyKey: stripeIdempotencyKey(
@@ -509,6 +520,33 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
   try {
     const supabase = createUserClient(req.accessToken!);
     const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
+    if (!workspace.isCreator) {
+      // Not the owner: only what the app needs to gate (no prices, plans or Stripe data).
+      res.json({
+        paymentProvider: workspace.paymentProvider,
+        required: workspace.required,
+        complete: workspace.complete,
+        isCreator: false,
+        hasSubscription: workspace.subscription.hasStripeSubscription,
+        fieldCaptureSeats: workspace.fieldCaptureSeats
+          ? {
+              used: workspace.fieldCaptureSeats.used,
+              allowed: workspace.fieldCaptureSeats.allowed,
+              remaining: workspace.fieldCaptureSeats.remaining,
+            }
+          : undefined,
+        // Counts only, for the invite form.
+        platformSeats: workspace.platformSeats
+          ? {
+              used: workspace.platformSeats.used,
+              allowed: workspace.platformSeats.allowed,
+              remaining: workspace.platformSeats.remaining,
+              available: workspace.platformSeats.available,
+            }
+          : undefined,
+      });
+      return;
+    }
     res.json({
       paymentProvider: workspace.paymentProvider,
       required: workspace.required,
@@ -529,6 +567,7 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
         includedFcSeats: workspace.subscription.includedFcSeats,
       },
       fieldCaptureSeats: workspace.fieldCaptureSeats,
+      platformSeats: workspace.platformSeats,
     });
   } catch (err) {
     next(err);
@@ -599,9 +638,11 @@ billingRouter.post('/checkout/onboarding', rejectPurchasesInAppShell, async (req
         client_reference_id: req.orgId,
         metadata: planMeta,
         subscription_data: { metadata: planMeta },
+        // Included seats get no Chest Mount; only extra seats do. Stripe Tax on.
         line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
-      { idempotencyKey: stripeIdempotencyKey('onboarding', req.orgId, priceId, interval) },
+      { idempotencyKey: stripeIdempotencyKey('onboarding-v2', req.orgId, priceId, interval) },
     );
 
     res.status(201).json({ checkoutUrl: session.url });

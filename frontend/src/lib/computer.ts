@@ -57,6 +57,8 @@ export interface ComputerTaskView {
     since: string;
     /** data: URL when the server captured the page at pause time. */
     screenshot?: string | null;
+    /** The number to approve in the authenticator app, read off the sign-in page. */
+    code?: string | null;
   } | null;
   humanControl: boolean;
   youHaveControl: boolean;
@@ -93,6 +95,38 @@ export function computerTaskIsActive(status: ComputerTaskStatus): boolean {
 }
 
 /** Task id from an Ask action path (`computer-task:<uuid>`), or the special states. */
+/** In-thread "add your login" prompt: the site Chat found and the request to continue. */
+export interface AddLoginPrompt {
+  name: string;
+  url: string;
+  host: string;
+  question: string;
+  foundWithWebSearch: boolean;
+}
+
+export function parseAddLoginPrompt(encoded: string): AddLoginPrompt | null {
+  try {
+    const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    const json = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+    const raw = JSON.parse(json) as { n?: unknown; u?: unknown; h?: unknown; q?: unknown; w?: unknown };
+    const url = String(raw.u ?? '');
+    if (!/^https?:\/\//i.test(url)) return null;
+    return {
+      name: String(raw.n ?? '').slice(0, 80) || String(raw.h ?? ''),
+      url,
+      host: String(raw.h ?? ''),
+      question: String(raw.q ?? '').slice(0, 2000),
+      foundWithWebSearch: raw.w === 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Event Chat listens for to send the original request again once a login is saved. */
+export const COMPUTER_RESUME_EVENT = 'atmosphere:computer-resume';
+
 export function computerTaskRef(path: string | null | undefined):
   | { kind: 'task'; id: string }
   | { kind: 'not_set_up' }
@@ -101,8 +135,13 @@ export function computerTaskRef(path: string | null | undefined):
   | { kind: 'materials_list' }
   | { kind: 'sms_approval' }
   | { kind: 'error' }
+  | { kind: 'add_login'; prompt: AddLoginPrompt }
   | null {
   const raw = String(path ?? '').trim();
+  if (raw.startsWith('computer-task:add-login:')) {
+    const prompt = parseAddLoginPrompt(raw.slice('computer-task:add-login:'.length));
+    return prompt ? { kind: 'add_login', prompt } : { kind: 'error' };
+  }
   // Ask offerLogins returns bare `logins` (not computer-task:…).
   if (raw === 'logins') return { kind: 'need_login' };
   if (!raw.startsWith('computer-task:')) return null;
@@ -399,6 +438,8 @@ export interface ComputerSavedCredential {
   saved: true;
   /** Only sent to admins. */
   username: string | null;
+  /** Only sent to admins; null when none is saved. */
+  companyId?: string | null;
   loginUrl: string | null;
   status: 'ok' | 'needs_attention';
   attentionReason: string | null;
@@ -410,6 +451,8 @@ export interface ComputerSavedCredential {
 export interface ComputerCredentialInput {
   username: string;
   password: string;
+  /** Optional company / tenant ID (DASH and similar). */
+  companyId?: string | null;
   loginUrl?: string | null;
 }
 

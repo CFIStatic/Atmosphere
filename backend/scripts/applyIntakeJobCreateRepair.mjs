@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql',
+  '../supabase/migrations_archive/20260901140000_intake_create_job_without_invitees.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

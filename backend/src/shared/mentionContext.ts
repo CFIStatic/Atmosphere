@@ -936,6 +936,8 @@ export interface MentionAskPrep {
   supplement: string;
   /** Set when Ask should skip the model and say this. */
   directAnswer: string | null;
+  /** directAnswer must be said as is, even by the agent (the job is not in this org). */
+  final?: boolean;
   /** Grounded person answer, used when the model is skipped or unavailable. */
   fallbackAnswer: string | null;
   groundedOn: number;
@@ -971,6 +973,7 @@ export async function prepareMentionAsk(
         mentions: [],
         supplement: '',
         directAnswer: missing,
+        final: true,
         fallbackAnswer: missing,
         groundedOn: 0,
         people: [],

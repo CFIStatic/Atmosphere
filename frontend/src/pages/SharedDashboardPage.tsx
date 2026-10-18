@@ -135,6 +135,9 @@ export function SharedDashboardPage() {
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
   const grantViewer = viewerOnly || (!membership && Boolean(requestedJob));
+  /** Known to be this workspace's job (the server says so, or we just made it). */
+  const ownJob =
+    !grantViewer && (record?.access === 'org' || (!record?.access && Boolean(freshRecord || freshFromNav)));
 
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
@@ -356,7 +359,9 @@ export function SharedDashboardPage() {
         </header>
       ) : null}
 
-      {actionsLocked && record ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
+      {/* Plan prompts are about the signed-in person's own workspace. A job
+          shared with them looks exactly like it does to the contractor. */}
+      {actionsLocked && record && ownJob ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
 
       {record && <JobFileTodayStrip jobId={record.job.id} record={record} />}
 
@@ -476,17 +481,17 @@ function JobFileSections({
   onOpenHref?: (href: string) => void;
 }) {
   const tabs = useMemo(() => {
+    // Exactly the contractor's tabs for everyone. The server strips
+    // office-only data from the videos and the evidence report for viewers (#710).
     const next: JobFileSectionTab[] = [
       { id: 'chat', label: 'Chat' },
       { id: 'timeline', label: 'Timeline' },
+      { id: 'access', label: 'Access' },
+      { id: 'videos', label: 'Videos' },
+      { id: 'evidence', label: 'Evidence report' },
     ];
-    if (!grantViewer) next.push({ id: 'access', label: 'Access' });
-    // Invited homeowners watch the videos too (read-only, guest media rules
-    // on the server); the evidence report stays with the contractor.
-    next.push({ id: 'videos', label: 'Videos' });
-    if (!viewerOnly) next.push({ id: 'evidence', label: 'Evidence report' });
     return next;
-  }, [grantViewer, viewerOnly]);
+  }, []);
 
   const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
@@ -520,7 +525,7 @@ function JobFileSections({
           <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
         ) : null}
 
-        {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
+        {active === 'access' ? <JobAccessRoster jobId={record.job.id} readOnly={grantViewer} /> : null}
 
         {active === 'videos' ? (
           <ProofOfWork
@@ -528,10 +533,11 @@ function JobFileSections({
             heading="Videos"
             showCollectionAsk={false}
             readOnly={viewerOnly}
+            allowDownload
           />
         ) : null}
 
-        {active === 'evidence' && !viewerOnly ? <JobFileReport jobId={record.job.id} /> : null}
+        {active === 'evidence' ? <JobFileReport jobId={record.job.id} /> : null}
       </div>
     </div>
   );

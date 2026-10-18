@@ -29,7 +29,8 @@ const blank = (over: Partial<PageSignals> = {}): PageSignals => ({
 test('mfaPauseFromSignals: approve number, visible code, or phone-only', () => {
   assert.deepEqual(mfaPauseFromSignals(blank({ approvalNumber: '47' })), {
     reason: 'number_match',
-    message: 'Approve 47 on your phone, then press Resume.',
+    message: 'Enter 47 in your authenticator app. Computer carries on once you approve.',
+    code: '47',
   });
   assert.deepEqual(mfaPauseFromSignals(blank({ visibleOtpCode: '482913' })), {
     reason: 'two_factor',
@@ -62,7 +63,7 @@ test('number-matching page pauses with Approve N in the Chat card before the mod
   const site = new MockSite({ start: 'number_match' });
   const store = new MemoryComputerStore();
   const provider = new MockComputerProvider({ site });
-  let paused: { reason: string; message: string } | null = null;
+  let paused: { reason: string; message: string; code?: string | null } | null = null;
   const model: ComputerModel = {
     async create(): Promise<ComputerModelResponse> {
       return {
@@ -83,9 +84,9 @@ test('number-matching page pauses with Approve N in the Chat card before the mod
     sleep: async () => {
       const t = [...store.tasks.values()][0];
       if (t?.status === 'needs_you' && !t.resume_requested_at) {
-        paused = { reason: t.needs_you!.reason, message: t.needs_you!.message };
+        paused = { reason: t.needs_you!.reason, message: t.needs_you!.message, code: (await loadTaskView(ORG, t.id, USER)).needsYou?.code };
+        // The person approves on their phone; nobody presses Resume.
         site.completeHumanStep();
-        await resumeTask(ORG, t.id, USER);
       }
     },
     settings: { ...computerSettings(), pollMs: 1, idleTimeoutMs: 2_000 },
@@ -97,10 +98,11 @@ test('number-matching page pauses with Approve N in the Chat card before the mod
     instructions: 'Open the portal and continue.',
   });
   const out = await runComputerTask(task.id);
-  assert.equal(out?.status, 'succeeded');
+  assert.equal(out?.status, 'succeeded', 'carried on by itself once approved');
   assert.ok(paused, 'paused for the person');
   assert.equal(paused!.reason, 'number_match');
-  assert.equal(paused!.message, 'Approve 47 on your phone, then press Resume.');
+  assert.equal(paused!.message, 'Enter 47 in your authenticator app. Computer carries on once you approve.');
+  assert.equal(paused!.code, '47', 'the number is in the Chat card');
   const view = await loadTaskView(ORG, task.id, USER);
   // After resume the card is done; check the audit / that we never invented another number.
   assert.ok(store.audit.some((e) => e.event === 'needs_you' && e.detail.reason === 'number_match'));

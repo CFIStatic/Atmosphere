@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
 const softDeleteRlsSql = readFileSync(
-  resolve(here, '../../../../supabase/migrations/20260902010000_job_proofs_soft_delete_rls.sql'),
+  resolve(here, '../../../../supabase/migrations_archive/20260902010000_job_proofs_soft_delete_rls.sql'),
   'utf8',
 );
 const deleteEvidenceSrc = readFileSync(

@@ -18,7 +18,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION="$HERE/../migrations/20261003160000_ai_credit_auto_recharge.sql"
+MIGRATION="$HERE/../migrations_archive/20261003160000_ai_credit_auto_recharge.sql"
 DB="${AI_AUTO_RECHARGE_TEST_DB:-ai_auto_recharge_test}"
 PSQL=(psql "$@")
 RUN=("${PSQL[@]}" -q -X -v ON_ERROR_STOP=1 -d "$DB")

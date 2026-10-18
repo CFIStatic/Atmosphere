@@ -24,6 +24,7 @@ import type {
   TargetDescriptor,
   TaskFile,
   SignInFill,
+  SignInCredentials,
   SignInHints,
 } from '../types.js';
 
@@ -421,7 +422,7 @@ export class MockDriver implements ComputerDriver {
     return n;
   }
 
-  async fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill> {
+  async fillSignIn(creds: SignInCredentials, hints?: SignInHints): Promise<SignInFill> {
     if (this.site.page !== 'login') return 'no_form';
     const behind = this.site.signInBehind;
     if (behind && !behind.opened) {
@@ -434,6 +435,7 @@ export class MockDriver implements ComputerDriver {
     this.site.actions.push('fill_sign_in');
     this.site.values.email = creds.username;
     this.site.values.password = creds.password;
+    if (creds.companyId) this.site.values.company_id = creds.companyId;
     const button = this.site.elements().find((e) => e.action === 'sign_in');
     if (button) this.site.activate(button);
     return 'submitted';

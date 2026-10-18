@@ -140,7 +140,7 @@ export interface ComputerDriver {
    * form that sits behind a link; hints.allowHost is checked before the
    * password is typed ('other_site' when the page moved somewhere else).
    */
-  fillSignIn(creds: { username: string; password: string }, hints?: SignInHints): Promise<SignInFill>;
+  fillSignIn(creds: SignInCredentials, hints?: SignInHints): Promise<SignInFill>;
   /**
    * Set the form control at a point to a value and read it back: text boxes
    * and text areas (replaced), dropdowns (by option label), checkboxes and
@@ -316,7 +316,16 @@ export interface ApprovalField {
 
 export type SignInFill = 'submitted' | 'username_only' | 'no_form' | 'other_site';
 
+/** A saved login, opened for one sign-in. companyId only when one is saved. */
+export interface SignInCredentials {
+  username: string;
+  password: string;
+  companyId?: string | null;
+}
+
 export interface SignInHints {
+  /** Extra CSS selectors for the site's company / tenant ID box (catalog hint). */
+  companyIdSelectors?: string[];
   /** Link or button text that opens the sign-in form on a landing page. */
   openWith?: string[];
   /** Where the password may be typed. Checked right before typing it. */

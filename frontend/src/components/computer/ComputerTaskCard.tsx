@@ -17,6 +17,7 @@ import { ComputerApprovalCard } from './ComputerApprovalCard';
 import { ComputerLiveView } from './ComputerLiveView';
 import { ComputerNeedsYouCard } from './ComputerNeedsYouCard';
 import { MaterialsListCard } from './MaterialsListCard';
+import { ChatAddLoginCard } from './ChatAddLoginCard';
 import { parseMaterialsSummary } from '../../lib/materialsList';
 
 const POLL_MS = 1500;
@@ -49,12 +50,22 @@ export function ComputerNotSetUpCard() {
  * active (that is the status stream), and shows the approval or Needs-you
  * card when the agent is waiting on the person.
  */
-export function ComputerTaskCard({ path, summary }: { path?: string; summary?: string }) {
+export function ComputerTaskCard({
+  path,
+  summary,
+  onFinished,
+}: {
+  path?: string;
+  summary?: string;
+  /** Called once when a task this view watched running reaches a final state. */
+  onFinished?: (task: ComputerTaskView) => void;
+}) {
   const ref = computerTaskRef(path);
   // Unknown / missing path is not "Computer isn't set up" — that is only the
   // explicit not-set-up sentinel when Browserbase is unconfigured.
   if (!ref) return null;
   if (ref.kind === 'not_set_up') return <ComputerNotSetUpCard />;
+  if (ref.kind === 'add_login') return <ChatAddLoginCard prompt={ref.prompt} />;
   if (ref.kind === 'need_login') {
     return (
       <div data-testid="computer-need-login" className="rounded-xl border border-line bg-paper-50 p-3">
@@ -103,7 +114,7 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
       <div className="rounded-xl border border-line bg-paper-50 p-3" data-testid="computer-sms-approval">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Text message</p>
         <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Waiting for approval</p>
-        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-700">
+        <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-ink-700">
           {summary || 'Approve this text before it is sent. Nothing was sent yet.'}
         </p>
         <p className="mt-2 text-xs text-ink-500">Reply Approve in Chat to send, or Cancel to discard.</p>
@@ -117,10 +128,16 @@ export function ComputerTaskCard({ path, summary }: { path?: string; summary?: s
       </div>
     );
   }
-  return <ComputerTaskLive taskId={ref.id} />;
+  return <ComputerTaskLive taskId={ref.id} onFinished={onFinished} />;
 }
 
-function ComputerTaskLive({ taskId }: { taskId: string }) {
+function ComputerTaskLive({ taskId, onFinished }: { taskId: string; onFinished?: (task: ComputerTaskView) => void }) {
+  const onFinishedRef = useRef(onFinished);
+  useEffect(() => {
+    onFinishedRef.current = onFinished;
+  }, [onFinished]);
+  /** Only a task seen running here reports finishing (reopening an old chat does not). */
+  const sawActive = useRef(false);
   const [task, setTask] = useState<ComputerTaskView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<'watch' | 'control' | null>(null);
@@ -159,6 +176,11 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     const tick = async () => {
       const next = await load();
       if (stopped) return;
+      if (next && computerTaskIsActive(next.status)) sawActive.current = true;
+      else if (next && sawActive.current) {
+        sawActive.current = false;
+        onFinishedRef.current?.(next);
+      }
       if (!next || computerTaskIsActive(next.status)) timer = window.setTimeout(tick, POLL_MS);
     };
     void tick();
@@ -175,7 +197,9 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
     const key = `${task.id}:${task.needsYou.since}`;
     if (autoOpenedForNeedsYou.current === key) return;
     autoOpenedForNeedsYou.current = key;
-    setLive((prev) => prev ?? 'control');
+    // A number to approve on the phone needs no mouse: just watch (taking control would hold the task).
+    const watchOnly = task.needsYou.reason === 'number_match' && Boolean(task.needsYou.code);
+    setLive((prev) => prev ?? (watchOnly ? 'watch' : 'control'));
     const id = window.requestAnimationFrame(() => {
       const el = promptRef.current;
       if (el && typeof el.scrollIntoView === 'function') {
@@ -254,7 +278,7 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
   return (
     <div className="space-y-2.5 rounded-xl border border-line bg-paper-0 p-3" data-testid="computer-task-card">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-        <p className="min-w-0 break-words text-[15px] font-semibold text-ink-900" data-testid="computer-task-title">
+        <p className="min-w-0 wrap-break-word text-[15px] font-semibold text-ink-900" data-testid="computer-task-title">
           {computerCardTitle(task)}
         </p>
         <span
@@ -334,7 +358,7 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
           {fields.map((f, i) => (
             <div key={`${f.label}-${i}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 px-2.5 py-1.5">
               <dt className="text-ink-600">{cleanFieldLabel(f.label)}</dt>
-              <dd className="break-words font-medium text-ink-900">{f.value || '(left blank)'}</dd>
+              <dd className="wrap-break-word font-medium text-ink-900">{f.value || '(left blank)'}</dd>
             </div>
           ))}
         </dl>
@@ -376,14 +400,16 @@ function ComputerTaskLive({ taskId }: { taskId: string }) {
             Stop
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => setShowSteps((v) => !v)}
-          className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
-          aria-expanded={showSteps}
-        >
-          {showSteps ? 'Hide steps' : `Steps (${steps.length})`}
-        </button>
+        {steps.length ? (
+          <button
+            type="button"
+            onClick={() => setShowSteps((v) => !v)}
+            className="rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition hover:text-ink-800"
+            aria-expanded={showSteps}
+          >
+            {showSteps ? 'Hide steps' : `Steps (${steps.length})`}
+          </button>
+        ) : null}
       </div>
 
       {showSteps ? (

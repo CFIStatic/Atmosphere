@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { redactProofDeviceIdentity } from './deviceIdentity.js';
+import { homeownerSafeText, homeownerSafeVideo } from './homeownerSafeSummary.js';
 
 /**
  * What an invited homeowner may see of a job's videos. The office payload
@@ -33,14 +34,21 @@ const VIDEO_DROP = [
 
 export function homeownerProofPayload<T extends Record<string, any>>(payload: T): T {
   const safe: any = redactProofDeviceIdentity(payload as any);
-  const days = ((safe.days ?? []) as any[]).map((day) => {
-    const next: any = { ...day, summary: day.aiSummary ?? '' };
-    for (const key of DAY_DROP) delete next[key];
+  const videos = ((safe.videos ?? []) as any[]).map((video) => {
+    const next: any = homeownerSafeVideo(video);
+    for (const key of VIDEO_DROP) delete next[key];
     return next;
   });
-  const videos = ((safe.videos ?? []) as any[]).map((video) => {
-    const next: any = { ...video };
-    for (const key of VIDEO_DROP) delete next[key];
+  const videoById = new Map(videos.map((v: any) => [v.id, v]));
+  const days = ((safe.days ?? []) as any[]).map((day) => {
+    // Raw analysis never reaches a viewer: the day reads its clips' cleaned
+    // summaries, else its own cleaned text, else a neutral line.
+    const fromClips = ((day.proofIds ?? []) as string[])
+      .map((id) => videoById.get(id)?.aiSummary)
+      .find((t: unknown) => typeof t === 'string' && t);
+    const clean = fromClips ?? homeownerSafeText(day.aiSummary) ?? null;
+    const next: any = { ...day, aiSummary: clean, summary: clean ?? '' };
+    for (const key of DAY_DROP) delete next[key];
     return next;
   });
   return {
@@ -56,6 +64,79 @@ export function homeownerProofPayload<T extends Record<string, any>>(payload: T)
       contradicted: 0,
       disputes: 0,
       punchList: 0,
+    },
+  };
+}
+
+/**
+ * The job file a homeowner's Ask may read. Office notes and messages, task
+ * details, crew, work logs, memory events, uploaded documents (estimates,
+ * contracts) and model "concerns" on clips stay with the contractor. Job
+ * identity, the brief and scope (as the share page already shows them),
+ * invited companies and what the videos show/say remain.
+ */
+export function homeownerAskJobFile<
+  F extends {
+    messages?: unknown[] | null;
+    tasks?: unknown[] | null;
+    crew?: unknown[] | null;
+    workLogs?: unknown[] | null;
+    memory?: unknown[] | null;
+    documents?: unknown[] | null;
+    clips?: Array<Record<string, any>> | null;
+  },
+>(file: F): F {
+  return {
+    ...file,
+    messages: [],
+    tasks: [],
+    crew: [],
+    workLogs: [],
+    memory: [],
+    documents: [],
+    clips: (file.clips ?? []).map((clip) => ({ ...clip, concerns: [] })),
+  };
+}
+
+const FINDINGS_OFFICE_KEYS = ['concerns', 'scopeVerdicts', 'materialChange', 'disputes', 'checks', 'payable'];
+
+/** Model findings a homeowner's Ask may read: what was seen and said, not the office's verdicts. */
+export function homeownerFindings(findings: unknown): unknown {
+  if (!findings || typeof findings !== 'object' || Array.isArray(findings)) return findings;
+  const next: Record<string, unknown> = { ...(findings as Record<string, unknown>) };
+  for (const key of FINDINGS_OFFICE_KEYS) delete next[key];
+  return next;
+}
+
+/** Clip records a homeowner's Ask can quote, without office verdicts in their findings. */
+export function homeownerAskClips<C extends { findings?: unknown }>(clips: C[]): C[] {
+  return clips.map((clip) => ({ ...clip, findings: homeownerFindings(clip.findings) }));
+}
+
+/**
+ * What an invited subcontractor sees of the videos: the homeowner view of the
+ * job, cut down to the videos this party recorded. Rooms are matched across
+ * everyone's clips, so they are left out rather than leak another trade's.
+ */
+export function partyProofPayload<T extends Record<string, any>>(payload: T, partyId: string): T {
+  const safe: any = homeownerProofPayload(payload);
+  const videos = ((safe.videos ?? []) as any[]).filter((video) => video.partyId === partyId);
+  const days = ((safe.days ?? []) as any[]).filter((day) => day.partyId === partyId);
+  const company =
+    [...videos, ...days].map((row: any) => row.company).find((c: unknown) => typeof c === 'string' && c.trim()) ?? null;
+  return {
+    ...safe,
+    // Tells the page why the list is short: this account is on the job as a sub.
+    viewerScope: { role: 'subcontractor', company },
+    videos,
+    days,
+    rooms: [],
+    counts: {
+      ...(safe.counts ?? {}),
+      days: days.length,
+      videos: videos.length,
+      analysing: days.filter((d: any) => d.analysisStatus === 'queued' || d.analysisStatus === 'running').length,
+      awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
     },
   };
 }

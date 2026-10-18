@@ -135,7 +135,10 @@ export const config = {
     // mid-tier job. It gets its own knob rather than borrowing the
     // assistant's flagship, so the expensive leg of the pipeline stays the
     // one that actually looks at frames.
-    synthesisModel: resolveAnthropicModel(process.env.LONG_FORM_SYNTHESIS_MODEL),
+    synthesisModel: resolveAnthropicModel(
+      process.env.LONG_FORM_SYNTHESIS_MODEL,
+      (process.env.VIDEO_LIGHT_MODEL ?? '').trim() || 'claude-haiku-4-5',
+    ),
     // Day-length / overnight recordings. The phone may leave the camera
     // running for a whole shift (and sometimes longer); intake accepts up to
     // this many seconds, then the server sparsely extracts stills rather
@@ -208,6 +211,11 @@ export const config = {
       // for no visible gain. Narration and the day comparison stay on the
       // stronger model — they write records people act on.
       liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5',
+      // Every Claude call in video analysis: scope narration, day-film read,
+      // conversation summary, evidence fusion, speaker roles, long-form
+      // synthesis and the dictation fallback. Chat and Ask stay on `model`.
+      // Roll back by setting VIDEO_LIGHT_MODEL (e.g. claude-opus-5-5).
+      lightModel: (process.env.VIDEO_LIGHT_MODEL ?? '').trim() || 'claude-haiku-4-5',
       // Per-org, per-day ceiling on live observations. At the default cadence
       // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
       // day — genuinely heavy use — while capping the worst case (a camera
@@ -347,6 +355,28 @@ export const config = {
     onboardingAnnualPriceId: process.env.STRIPE_ONBOARDING_ANNUAL_PRICE_ID ?? '',
     scaleAnnualPriceId: process.env.STRIPE_SCALE_ANNUAL_PRICE_ID ?? '',
     extraSeatAnnualPriceId: process.env.STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID ?? '',
+    /**
+     * Platform-only seat $75/mo (monthly only). Empty falls back to
+     * LIVE_PLATFORM_SEAT_PRICE_ID in stripeCatalog.ts; when both are empty,
+     * paid Platform seats are refused ("Platform seats aren't available yet")
+     * and only comped workspaces can add them.
+     */
+    platformSeatPriceId: process.env.STRIPE_PLATFORM_SEAT_PRICE_ID ?? '',
+    /**
+     * Field Capture Chest Mount one-time price ($99.99). One mount ships with
+     * every extra Field Capture seat (beyond the plan's included seats),
+     * bought at signup or added later. Included seats get none. Empty falls back to LIVE_CHEST_MOUNT_PRICE_ID only when the
+     * secret key is a live key, so a test-mode server never sends a live id.
+     */
+    chestMountPriceId: process.env.STRIPE_CHEST_MOUNT_PRICE_ID ?? '',
+    /** `off` stops adding a chest mount per extra Field Capture seat. On by default. */
+    chestMountPerSeat: !/^(off|false|0|no)$/i.test(process.env.STRIPE_CHEST_MOUNT_PER_SEAT ?? ''),
+    /**
+     * Stripe Tax on every Checkout session and subscription change. On by
+     * default; `off` is the kill switch. With no tax registrations Stripe
+     * charges $0 tax, so this is safe before registrations are added.
+     */
+    automaticTax: !/^(off|false|0|no)$/i.test(process.env.STRIPE_AUTOMATIC_TAX ?? ''),
     /**
      * Signup Checkout return base (step 2 + checkout query params appended).
      * Always the office host — never Field Capture — so cancel and success

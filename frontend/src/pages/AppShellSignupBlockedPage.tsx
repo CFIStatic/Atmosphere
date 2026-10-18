@@ -37,7 +37,7 @@ export function AppShellSignupBlockedPage() {
             target="_blank"
             rel="noopener noreferrer"
             data-testid="app-shell-signup-website-link"
-            className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 transition hover:bg-brand-500 focus:outline-hidden focus:ring-2 focus:ring-brand-200"
           >
             Open atmosphereteam.com
           </a>

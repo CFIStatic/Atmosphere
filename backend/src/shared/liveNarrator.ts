@@ -234,8 +234,10 @@ export async function narrateProofVideo(input: {
     : '(no scope recorded)';
 
   const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
-    max_tokens: 900,
+    model: config.technician.assistant.lightModel,
+    // 900 truncated the JSON on longer clips (one entry per frame): the reply
+    // failed to parse, was thrown away, and the clip was read a second time.
+    max_tokens: 4096,
     system: NARRATE_SYSTEM,
     messages: [
       {

@@ -46,6 +46,7 @@ const apiMocks = vi.hoisted(() => ({
   connectCrmCredentials: vi.fn(),
   disconnectCrmCredentials: vi.fn(),
   deleteAccount: vi.fn(),
+  getBillingOnboarding: vi.fn().mockResolvedValue({ isCreator: false, required: false, complete: true, hasSubscription: true, paymentProvider: 'stripe' }),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -61,6 +62,10 @@ vi.mock('../lib/api', () => ({
   ROLE_LABELS: {},
   WORK_TYPE_LABELS: {},
   humanize: (value: string) => value,
+}));
+
+vi.mock('../components/settings/BillingSection', () => ({
+  BillingSection: () => <div data-testid="billing-section">Billing and Usage</div>,
 }));
 
 vi.mock('../hooks/useFeatureTimer', () => ({
@@ -85,6 +90,7 @@ vi.mock('../lib/avatarImage', async () => {
 });
 
 import { setPreference } from '../lib/preferences';
+import { resetBillingOnboardingShared } from '../lib/billingOnboardingShared';
 import { SettingsPage } from './SettingsPage';
 
 function renderSettings(path = '/settings') {
@@ -203,6 +209,28 @@ describe('Settings organization', () => {
     expect(screen.queryByText('Company type')).toBeNull();
     expect(screen.queryByRole('link', { name: 'field-capture-production.up.railway.app' })).toBeNull();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
+  });
+
+  it('labels a Platform seat "Platform" in the member list', async () => {
+    apiMocks.getMembers.mockResolvedValue({
+      members: [
+        ...LINKED_ACCOUNTS,
+        {
+          userId: 'user-platform',
+          email: 'office@example.com',
+          fullName: 'Office Lead',
+          role: 'global_admin',
+          seatType: 'platform',
+          workType: 'mitigation',
+          usageIntents: [],
+          status: 'active',
+        },
+      ],
+    });
+    renderSettings('/settings?section=organization');
+    await waitFor(() => expect(screen.getByText('Office Lead')).toBeInTheDocument());
+    const labels = screen.getAllByTestId('member-seat-label').map((el) => el.textContent);
+    expect(labels).toContain('Platform');
   });
 
   it('lets a Global Admin remove someone else, but not themselves', async () => {
@@ -365,4 +393,57 @@ describe('Settings language', () => {
     expect(screen.getByRole('heading', { name: 'الإعدادات' })).toBeInTheDocument();
   });
 
+});
+
+describe('Settings Billing and Usage: the account owner only', () => {
+  const role = authState.membership.role;
+  beforeEach(() => {
+    resetBillingOnboardingShared();
+    apiMocks.getBillingOnboarding.mockReset();
+  });
+
+  function asCaller(isCreator: boolean, memberRole: string) {
+    authState.membership.role = memberRole;
+    apiMocks.getBillingOnboarding.mockResolvedValue({
+      isCreator,
+      required: false,
+      complete: true,
+      hasSubscription: true,
+      paymentProvider: 'stripe',
+    });
+  }
+
+  it('shows the Billing tab and section to the owner', async () => {
+    asCaller(true, 'global_admin');
+    renderSettings('/settings?section=billing');
+    expect(await screen.findByTestId('billing-section')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Usage and billing/i }).length).toBeGreaterThan(0);
+    authState.membership.role = role;
+  });
+
+  for (const [label, memberRole] of [
+    ['another Global Admin', 'global_admin'],
+    ['a Platform seat', 'global_admin'],
+    ['an employee', 'employee'],
+    ['a subcontractor', 'employee'],
+  ] as const) {
+    it(`hides Billing from ${label}, even on a direct link`, async () => {
+      asCaller(false, memberRole);
+      renderSettings('/settings?section=billing');
+      await waitFor(() => expect(apiMocks.getBillingOnboarding).toHaveBeenCalled());
+      await waitFor(() => expect(screen.queryByTestId('settings-billing-pending')).toBeNull());
+      expect(screen.queryByTestId('billing-section')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Usage and billing/i })).toBeNull();
+      authState.membership.role = role;
+    });
+  }
+
+  it('hides Billing when the owner check fails', async () => {
+    authState.membership.role = 'global_admin';
+    apiMocks.getBillingOnboarding.mockRejectedValue(new Error('403'));
+    renderSettings('/settings?section=billing');
+    await waitFor(() => expect(screen.queryByTestId('settings-billing-pending')).toBeNull());
+    expect(screen.queryByTestId('billing-section')).toBeNull();
+    authState.membership.role = role;
+  });
 });

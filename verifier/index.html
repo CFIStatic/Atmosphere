@@ -648,6 +648,11 @@
     background: var(--stage);
     overflow: hidden;
   }
+  /* A child or a private moment on screen, and the file is not the blurred
+     copy yet: blur the whole frame here. */
+  .preview-stage.is-private video {
+    filter: blur(48px) saturate(0.6);
+  }
   .preview-stage video,
   .preview-stage img,
   .screen-preview .player .frame video,
@@ -2232,9 +2237,13 @@
      only ever returns jobs shared with them; this just hides what they cannot use. */
   body[data-atm-viewer] #nav-start-job,
   body[data-atm-viewer] #nav-logins,
+  body[data-atm-viewer] #nav-settings,
+  body[data-atm-viewer] #menu-settings,
   body[data-atm-viewer] .job-acts,
   body[data-atm-viewer] .clip-rename,
-  body[data-atm-viewer] tr.cliprow .kebab { display: none !important; }
+  tr.is-shared .job-acts,
+  tr.is-shared .clip-rename { display: none !important; }
+  #nav-start-plan[hidden] { display: none !important; }
   .job-from { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted, #6b7280); }
 </style>
 </head>
@@ -2269,6 +2278,12 @@
       <button type="button" class="navitem nav-icon" id="nav-logins">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M16 7l3 3M18 5l2 2"/></svg>
         <span class="label" data-i18n-chrome="logins">Logins</span>
+      </button>
+      <!-- A sub whose own workspace never finished checkout: the way to pay,
+           which turns Start a job, Logins and Settings on. -->
+      <button type="button" class="navitem nav-icon" id="nav-start-plan" hidden>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        <span class="label">Start your plan</span>
       </button>
     </div>
 
@@ -3241,9 +3256,16 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity',
+    groupByJob: true, collapsed: {}, searchCollapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity',
     playStartedAt: null
   };
+
+  /** Whole-library size from the server, and whether the first page left jobs or clips out. */
+  var LIBRARY_TOTALS = { clips: 0, jobs: 0, truncated: false };
+  /** Clips / jobs a server-side search found past the loaded page. Kept across the 10 s refresh while the query stands. */
+  var SEARCH_EXTRA = { jobs: {}, items: {} };
+  var librarySearch = { seq: 0, pending: false };
+  var SEARCH_DEBOUNCE_MS = 150;
 
   var progressRaf = 0;
   var frameRaf = 0;
@@ -3805,9 +3827,39 @@
     return currentPlayhead();
   }
 
+  /** Blur (and mute) the player through a child / private-moment window. */
+  function syncPrivacyBlur(item, vid) {
+    if (!vid || !item) return;
+    var windows = item._privacyWindows || [];
+    var stage = vid.closest ? vid.closest('.preview-stage') : null;
+    var t = Number(vid.currentTime) || 0;
+    var hit = null;
+    for (var i = 0; i < windows.length; i += 1) {
+      // A quarter second early: timeupdate only fires a few times a second.
+      if (t >= Number(windows[i].startSec) - 0.25 && t <= Number(windows[i].endSec)) { hit = windows[i]; break; }
+    }
+    if (stage) stage.classList.toggle('is-private', Boolean(hit));
+    var wantMute = Boolean(hit && hit.mute);
+    // atmHoldMutePref: this mute is not the viewer's choice; do not save it.
+    if (wantMute && !vid.dataset.privacyMuted) {
+      vid.dataset.privacyMuted = vid.muted ? 'was' : '1';
+      if (!vid.muted) {
+        vid.dataset.atmHoldMutePref = '1';
+        vid.muted = true;
+      }
+    } else if (!wantMute && vid.dataset.privacyMuted) {
+      if (vid.dataset.privacyMuted === '1') {
+        vid.dataset.atmHoldMutePref = '1';
+        vid.muted = false;
+      }
+      delete vid.dataset.privacyMuted;
+    }
+  }
+
   function paintLiveProgress() {
     var item = state.open;
     var vid = previewVideo();
+    syncPrivacyBlur(item, vid);
     var duration = clipLength(item, vid);
     var at = playbackSeconds(item, vid);
     if (duration > 0 && at > duration) at = duration;
@@ -4032,109 +4084,176 @@
        and the evidence view tabs carry enough filtering for most work. */
   }
 
-  var MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  var MONTHS_LONG = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  /* library-search:begin
+   * All videos search. Pure (reads JOBS only through the `jobs` argument),
+   * so tests run it on its own. The backend mirrors it in
+   * backend/src/verifier/librarySearch.ts for searches past the loaded page.
+   *
+   * A clip or job file matches when ANY of these hold:
+   * - text: every word typed appears (partial, case- and accent-blind,
+   *   punctuation ignored, so "tiffany&co" finds "Tiffany & Co.") in the
+   *   job name, number, company, person, address, claim, clip title, AI
+   *   title, file name, phase or labels;
+   * - id: the typed id / hash is the start of the clip id, recording
+   *   (clip) id, job id or file hash ("5b1e", "a1b2c3"), dashes ignored;
+   * - date: the query reads as a day ("10/12", "Oct 12", "October 12, 2026",
+   *   "2026-10-12", "12 Oct") or month ("Oct 2026") and the clip was
+   *   filmed / filed / uploaded on it in the viewer's own timezone, the
+   *   same day the Date column prints.
+   */
+  var SEARCH_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
-  /** Every way someone might type a filmed / uploaded day. */
-  function dateSearchPhrases(iso) {
-    if (!iso) return [];
-    var day = String(iso).trim().slice(0, 10);
-    var match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return [String(iso).toLowerCase()];
-    var year = match[1], month = match[2], date = match[3];
-    var monthIndex = Number(month) - 1;
-    var short = MONTHS_SHORT[monthIndex];
-    var long = MONTHS_LONG[monthIndex];
-    if (!short || !long) return [day];
+  function searchNorm(s) {
+    var t = String(s == null ? '' : s).toLowerCase();
+    if (t.normalize) t = t.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+    return t.replace(/&/g, ' & ').replace(/[^a-z0-9&#]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function searchCompact(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+
+  function searchMonth(word) {
+    var w = String(word || '').toLowerCase().replace(/\.$/, '');
+    if (w.length < 3) return 0;
+    for (var i = 0; i < SEARCH_MONTHS.length; i++) {
+      if (SEARCH_MONTHS[i].indexOf(w) === 0) return i + 1;
+    }
+    if (w === 'sept') return 9;
+    return 0;
+  }
+
+  function searchYear(y) {
+    if (y == null || y === '') return null;
+    var n = Number(y);
+    return y.length === 2 ? 2000 + n : n;
+  }
+
+  /** {y, m, d} (y and d may be null) when the whole query reads as a date. */
+  function parseSearchDate(query) {
+    var q = String(query || '').trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+    if (!q) return null;
+    var m, out = null;
+    if ((m = q.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/))) {
+      out = { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+    } else if ((m = q.match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{4}|\d{2}))?$/))) {
+      out = { y: searchYear(m[3]), m: Number(m[1]), d: Number(m[2]) };
+    } else if ((m = q.match(/^([a-z]+)\.? (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/)) && searchMonth(m[1])) {
+      out = { y: searchYear(m[3]), m: searchMonth(m[1]), d: Number(m[2]) };
+    } else if ((m = q.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+)\.?(?: (\d{4}))?$/)) && searchMonth(m[2])) {
+      out = { y: searchYear(m[3]), m: searchMonth(m[2]), d: Number(m[1]) };
+    } else if ((m = q.match(/^([a-z]+)\.? (\d{4})$/)) && searchMonth(m[1])) {
+      out = { y: Number(m[2]), m: searchMonth(m[1]), d: null };
+    } else if ((m = q.match(/^(\d{4})[-/](\d{1,2})$/))) {
+      out = { y: Number(m[1]), m: Number(m[2]), d: null };
+    }
+    if (!out || out.m < 1 || out.m > 12 || (out.d != null && (out.d < 1 || out.d > 31))) return null;
+    return out;
+  }
+
+  /** The local calendar day of a stored value: a bare YYYY-MM-DD is that day; an instant is read in the viewer's timezone. */
+  function searchLocalDay(value) {
+    if (!value) return null;
+    var raw = String(value).trim();
+    var bare = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (bare) return { y: Number(bare[1]), m: Number(bare[2]), d: Number(bare[3]) };
+    var dt = new Date(raw);
+    if (isNaN(dt.getTime())) return null;
+    return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+  }
+
+  function searchDateHit(want, values) {
+    if (!want) return false;
+    for (var i = 0; i < values.length; i++) {
+      var day = searchLocalDay(values[i]);
+      if (!day) continue;
+      if (want.m !== day.m) continue;
+      if (want.d != null && want.d !== day.d) continue;
+      if (want.y != null && want.y !== day.y) continue;
+      return true;
+    }
+    return false;
+  }
+
+  function searchTextHit(query, fields, phraseOnly) {
+    var needle = searchNorm(query);
+    if (!needle) return false;
+    var hay = ' ' + fields.map(searchNorm).filter(Boolean).join(' | ') + ' ';
+    if (hay.indexOf(needle) !== -1) return true;
+    // A date ("10/12") is never split into loose numbers that happen to sit
+    // in an address or job number.
+    if (phraseOnly) return false;
+    var tokens = needle.split(' ');
+    for (var i = 0; i < tokens.length; i++) {
+      if (hay.indexOf(tokens[i]) === -1) return false;
+    }
+    return true;
+  }
+
+  function searchIdHit(query, ids) {
+    var raw = String(query || '').trim();
+    if (/\s/.test(raw)) return false;
+    var want = searchCompact(raw.replace(/^#/, ''));
+    if (want.length < 3) return false;
+    for (var i = 0; i < ids.length; i++) {
+      var id = searchCompact(ids[i]);
+      if (id && id.indexOf(want) === 0) return true;
+    }
+    return false;
+  }
+
+  function searchHit(query, doc) {
+    var q = String(query || '').trim();
+    if (!q) return true;
+    var day = parseSearchDate(q);
+    if (searchTextHit(q, doc.text, Boolean(day))) return true;
+    if (!day && searchIdHit(q, doc.ids)) return true;
+    return searchDateHit(day, doc.dates);
+  }
+
+  function jobSearchText(job) {
+    job = job || {};
     return [
-      day,
-      month + '/' + date + '/' + year,
-      Number(month) + '/' + Number(date) + '/' + year,
-      Number(month) + '/' + Number(date),
-      short + ' ' + Number(date),
-      short + ' ' + Number(date) + ' ' + year,
-      long + ' ' + Number(date),
-      long + ' ' + Number(date) + ' ' + year,
-      year
+      job.name, job.number != null && job.number !== '' ? '#' + job.number : null,
+      job.address, job.claimNumber, job.company, job.person
     ];
   }
 
-  /**
-   * Every whitespace-separated token must appear in the identifiers — job
-   * name, company, date, address, id, hash. A missing job record cannot throw.
-   */
-  function tokenMatchesHay(hay, token) {
-    if (!token) return true;
-    if (hay.indexOf(token) !== -1 && token.length >= 4) return true;
-    var escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)').test(hay);
+  function clipSearchDoc(e, jobs) {
+    var job = (e && e.job && jobs && jobs[e.job]) || {};
+    var labels = Array.isArray(e.labels) ? e.labels : [];
+    return {
+      text: [e.jobName, e.address, e.claimNumber, e.company, e.person, e.title, e.customTitle,
+        e.aiTitle, e.fileName, e.phase].concat(labels, jobSearchText(job)),
+      ids: [e.id, e.clipId, e.hash, e.jobId, e.job],
+      dates: [e.workDate, e.capturedAt, e.uploadedAt]
+    };
   }
 
-  function matchesLibraryQuery(query, fields, dates) {
-    var needle = String(query || '').trim().toLowerCase();
-    if (!needle) return true;
-    var parts = [];
-    (fields || []).forEach(function (field) {
-      if (field == null || field === '' || field === '—') return;
-      parts.push(String(field));
-    });
-    (dates || []).forEach(function (iso) {
-      dateSearchPhrases(iso).forEach(function (p) { parts.push(p); });
-    });
-    var hay = parts.join(' ').toLowerCase();
-    if (hay.indexOf(needle) !== -1) return true;
-    return needle.split(/\s+/).every(function (token) { return tokenMatchesHay(hay, token); });
+  function jobSearchDoc(key, jobs) {
+    var job = (jobs && jobs[key]) || {};
+    return { text: jobSearchText(job), ids: [key], dates: [job.createdAt] };
   }
 
-  function clipSearchFields(e) {
-    var job = (e && e.job && JOBS[e.job]) || {};
-    return [
-      e.id,
-      e.job,
-      e.jobName,
-      job.name,
-      job.number != null ? '#' + job.number : null,
-      job.number,
-      job.address,
-      job.claimNumber,
-      job.company,
-      e.address,
-      e.claimNumber,
-      e.company,
-      e.person,
-      e.hash,
-      e.title,
-      e.phase
-    ].concat(Array.isArray(e.labels) ? e.labels : []);
+  /** Does a clip match on its own fields (or its job's). */
+  function clipMatchesSearch(e, q, jobs) {
+    return searchHit(q, clipSearchDoc(e, jobs));
   }
+
+  /** Does the job file itself match (name, number, company, address, id, created day). */
+  function jobMatchesSearch(key, q, jobs) {
+    return searchHit(q, jobSearchDoc(key, jobs));
+  }
+  /* library-search:end */
 
   function clipMatchesQuery(e, q) {
-    if (!q) return true;
-    return matchesLibraryQuery(q, clipSearchFields(e), [e.workDate, e.capturedAt, e.uploadedAt]);
+    return clipMatchesSearch(e, q, JOBS);
   }
 
   function jobFileMatchesQuery(key, q) {
     if (!q) return true;
-    var job = JOBS[key] || {};
-    var clips = EVIDENCE.filter(function (e) { return e.job === key; });
-    var fields = [
-      key,
-      job.name,
-      job.number != null ? '#' + job.number : null,
-      job.number,
-      job.address,
-      job.claimNumber,
-      job.company,
-      job.person
-    ];
-    clips.forEach(function (e) {
-      clipSearchFields(e).forEach(function (f) { fields.push(f); });
-    });
-    var dates = [job.createdAt];
-    clips.forEach(function (e) {
-      dates.push(e.workDate, e.capturedAt, e.uploadedAt);
-    });
-    return matchesLibraryQuery(q, fields, dates);
+    if (jobMatchesSearch(key, q, JOBS)) return true;
+    return EVIDENCE.some(function (e) { return e.job === key && clipMatchesSearch(e, q, JOBS); });
   }
 
   function visible() {
@@ -4155,30 +4274,172 @@
     return v === 'fail' ? 2 : v === 'unknown' ? 1 : 0;
   }
 
-  function sortValue(item, key) {
-    if (key === 'preview' || key === 'clip') return Number(item.duration) || 0;
-    if (key === 'job' || key === 'video') {
-      var job = JOBS[item.job] || {};
-      return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
+  /* library-sort:begin
+   * All videos sorting. Pure: only clipInstant / clipStatus /
+   * jobRecordingStatus from the page, so tests can run it on its own.
+   *
+   * Rules (same for the contractor Dashboard and the homeowner portal):
+   * - Date sorts on the real instant: capturedAt, else uploadedAt, else the
+   *   filed workDate read as local noon (day boundaries are local time,
+   *   never UTC). Display strings are never compared.
+   * - A job folder sorts by the clip that leads in the chosen direction:
+   *   its newest clip when descending, its oldest clip when ascending.
+   * - Clips inside an expanded job follow the same key and direction.
+   * - A folder with no clips (Waiting for first clip, date "—") has no
+   *   date, status or uploader and always sits at the bottom, in both
+   *   directions. Job name is the one key where it sorts by its name.
+   * - Ties always break by job / clip name A→Z, then id, whatever the
+   *   direction, so the order never shuffles between renders.
+   */
+  var STATUS_RANK = {
+    'Needs attention': 0, 'Summary unavailable': 0,
+    'Recording': 1, 'Uploading': 2, 'Retrying': 3, 'Transcribing': 3,
+    'Analyzing': 3, 'Summary still processing': 3,
+    'Waiting for AI allowance': 4, 'Waiting to process': 4,
+    'Recorded': 5, 'No speech': 6, 'Analyzed': 6
+  };
+
+  function statusRank(text) {
+    var r = STATUS_RANK[text];
+    return r == null ? 7 : r;
+  }
+
+  function clipSortInstant(e) {
+    var t = clipInstant(e || {}, ['capturedAt', 'uploadedAt', 'workDate']);
+    return t ? t : null;
+  }
+
+  function clipSortValue(e, key) {
+    if (key === 'preview' || key === 'clip') {
+      var d = Number(e.duration);
+      return d > 0 ? d : null;
     }
-    if (key === 'status') return isActiveRecording(item) ? 1 : 0;
-    if (key === 'integrity') return integrityRank(item);
-    if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
-    if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
-    return String(item.uploadedAt || '');
+    if (key === 'recorded') return clipSortInstant(e);
+    if (key === 'status') return statusRank(clipStatus(e).text);
+    if (key === 'uploader') {
+      var who = String(e.person || '').trim();
+      return who ? who + ' ' + String(e.company || '') : null;
+    }
+    // Job name: every clip in a folder shares it, so clips fall back to
+    // their own time (newest first) via the tie-break below.
+    if (key === 'job' || key === 'video') return null;
+    return clipSortInstant(e);
+  }
+
+  function jobSortValue(job, clips, key, dir) {
+    if (key === 'job' || key === 'video') return String((job && job.name) || '').trim() || null;
+    if (!clips.length) return null;
+    if (key === 'recorded') {
+      var best = null;
+      clips.forEach(function (e) {
+        var t = clipSortInstant(e);
+        if (t == null) return;
+        if (best == null || (dir === 'asc' ? t < best : t > best)) best = t;
+      });
+      return best;
+    }
+    if (key === 'status') return statusRank(jobRecordingStatus(clips).text);
+    if (key === 'preview' || key === 'clip') {
+      var total = 0;
+      clips.forEach(function (e) { total += Number(e.duration) || 0; });
+      return total || null;
+    }
+    if (key === 'uploader') {
+      var latest = null;
+      var lt = -Infinity;
+      clips.forEach(function (e) {
+        var t = clipSortInstant(e) || 0;
+        if (t >= lt) { lt = t; latest = e; }
+      });
+      return latest ? clipSortValue(latest, 'uploader') : null;
+    }
+    return null;
+  }
+
+  function compareSortValues(av, bv, dir) {
+    var aNone = av == null || av === '';
+    var bNone = bv == null || bv === '';
+    if (aNone || bNone) return aNone === bNone ? 0 : (aNone ? 1 : -1);
+    var cmp;
+    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+    else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? cmp : -cmp;
+  }
+
+  function nameCompare(a, b) {
+    return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function clipLabelForSort(e) {
+    return e.title || e.name || e.phase || '';
+  }
+
+  /** Clips — inside a folder, or the flat list. */
+  function compareClips(a, b, key, dir) {
+    var cmp = compareSortValues(clipSortValue(a, key), clipSortValue(b, key), dir);
+    if (cmp) return cmp;
+    if (key !== 'recorded') {
+      // Same status / uploader / job: newest first, then oldest-first in asc.
+      cmp = compareSortValues(clipSortInstant(a), clipSortInstant(b), key === 'job' || key === 'video' ? dir : 'desc');
+      if (cmp) return cmp;
+    }
+    cmp = nameCompare(a.jobName, b.jobName) || nameCompare(clipLabelForSort(a), clipLabelForSort(b));
+    if (cmp) return cmp;
+    return nameCompare(a.id, b.id);
+  }
+
+  /**
+   * Folder order. jobs: { key: { name } }, groups: { key: clips[] }.
+   * Returns the keys sorted; does not touch the inputs.
+   */
+  function sortJobKeys(keys, jobs, groups, key, dir) {
+    var rows = keys.map(function (k, i) {
+      var clips = groups[k] || [];
+      var job = jobs[k] || { name: (clips[0] && clips[0].jobName) || '' };
+      return { k: k, i: i, name: job.name || '', empty: !clips.length, v: jobSortValue(job, clips, key, dir) };
+    });
+    rows.sort(function (a, b) {
+      if (key !== 'job' && key !== 'video' && a.empty !== b.empty) return a.empty ? 1 : -1;
+      var cmp = compareSortValues(a.v, b.v, dir);
+      if (cmp) return cmp;
+      cmp = nameCompare(a.name, b.name);
+      if (cmp) return cmp;
+      cmp = nameCompare(a.k, b.k);
+      return cmp || a.i - b.i;
+    });
+    return rows.map(function (r) { return r.k; });
+  }
+
+  function defaultSortDir(key) {
+    return (key === 'job' || key === 'video' || key === 'uploader' || key === 'status') ? 'asc' : 'desc';
+  }
+  /* library-sort:end */
+
+  var SORT_STORE_KEY = 'atm.allVideos.sort';
+  var SORT_KEYS = { preview: 1, job: 1, status: 1, recorded: 1, uploader: 1 };
+
+  function loadSortChoice() {
+    try {
+      var raw = window.sessionStorage && window.sessionStorage.getItem(SORT_STORE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && SORT_KEYS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) {
+        state.sortKey = saved.key;
+        state.sortDir = saved.dir;
+      }
+    } catch (_) { /* private mode / bad JSON: keep the default */ }
+  }
+
+  function saveSortChoice() {
+    try {
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem(SORT_STORE_KEY, JSON.stringify({ key: state.sortKey, dir: state.sortDir }));
+      }
+    } catch (_) { /* ignore */ }
   }
 
   function compareEvidence(a, b) {
-    var key = state.sortKey || 'recorded';
-    var dir = state.sortDir === 'asc' ? 1 : -1;
-    var av = sortValue(a, key);
-    var bv = sortValue(b, key);
-    var cmp = 0;
-    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
-    else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
-    if (cmp) return cmp * dir;
-    // Stable tie-break: newest upload first.
-    return String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || ''));
+    return compareClips(a, b, state.sortKey || 'recorded', state.sortDir === 'asc' ? 'asc' : 'desc');
   }
 
   function syncSortHeaders() {
@@ -4206,9 +4467,10 @@
       state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       state.sortKey = key;
-      // Dates / ranks start newest / highest first; names start A→Z.
-      state.sortDir = (key === 'job' || key === 'uploader') ? 'asc' : 'desc';
+      // Date and length start newest / longest first; names and status A→Z.
+      state.sortDir = defaultSortDir(key);
     }
+    saveSortChoice();
     syncSortHeaders();
     render();
   }
@@ -4417,7 +4679,7 @@
     var clipDay = dayLabel(e.capturedAt || e.uploadedAt || e.workDate);
     var sub = storedTitleSubtitle(e, phase, underJob);
     return '' +
-      '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
+      '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + (e.sharedWithMe ? ' is-shared' : '') + '" tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="clip-title-row">' +
@@ -4458,6 +4720,16 @@
     items.forEach(function (e) {
       var t = clipInstant(e, keys);
       if (t >= bestT) { bestT = t; best = e; }
+    });
+    return best;
+  }
+
+  function earliestClip(items) {
+    var best = null;
+    var bestT = Infinity;
+    items.forEach(function (e) {
+      var t = clipInstant(e, ['capturedAt', 'uploadedAt', 'workDate']);
+      if (t && t < bestT) { bestT = t; best = e; }
     });
     return best;
   }
@@ -4562,6 +4834,14 @@
     if (key === 'meridian') return 'job-1041';
     if (key === 'camden') return 'job-1044';
     return key;
+  }
+
+  var PRICING_URL = 'https://atmosphereteam.com/pricing';
+
+  /** Unpaid workspace of its own: show the way to pay. */
+  function setUpgrade(on) {
+    var btn = document.getElementById('nav-start-plan');
+    if (btn) btn.hidden = !on;
   }
 
   var VIEWER = false;
@@ -4791,7 +5071,11 @@
        the Recorded column still come from the clips the job really has. */
     var jobClips = items.length ? items : EVIDENCE.filter(function (e) { return e.job === key; });
     var status = jobRecordingStatus(jobClips);
-    var latestRecorded = latestClip(jobClips, ['capturedAt', 'workDate', 'uploadedAt']);
+    /* The folder's Date shows the clip it is sorted by: newest normally,
+       oldest while Date is sorted ascending. */
+    var latestRecorded = (state.sortKey === 'recorded' && state.sortDir === 'asc')
+      ? earliestClip(jobClips)
+      : latestClip(jobClips, ['capturedAt', 'workDate', 'uploadedAt']);
     var latestUpload = latestClip(jobClips, ['uploadedAt', 'capturedAt']);
     /* No clip, nothing in the Recorded column — job creation is not a recording. */
     var recordedDay = '—';
@@ -4807,7 +5091,10 @@
       : '—';
     var nameInner = esc(job.name);
     // Homeowners see who shared the job with them.
-    if (VIEWER && job.company) nameInner += '<span class="job-from">' + esc(job.company) + '</span>';
+    // On a contractor's own Dashboard, another company's job is marked as shared.
+    if ((VIEWER || job.sharedWithMe) && job.company) {
+      nameInner += '<span class="job-from">' + (job.sharedWithMe ? 'Shared by ' : '') + esc(job.company) + '</span>';
+    }
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
@@ -4832,7 +5119,7 @@
         metaBits.join('') +
       '</div>';
     return '' +
-      '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
+      '<tr class="jobrow' + (job.sharedWithMe ? ' is-shared' : '') + '" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
         '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
@@ -4842,6 +5129,22 @@
         '<td class="when job-when">' + whenCell(daySrc, recordedInstant) + '</td>' +
         '<td class="when uploader job-who"><span class="cellrow"><span>' + uploader + '</span>' + acts + '</span></td>' +
       '</tr>';
+  }
+
+  /**
+   * "3 of 41 clips · 1 of 12 job files". The totals are the whole library
+   * (every job and clip the account has), not just the page loaded.
+   */
+  function resultCountText(clipCount, jobCount, withJobs) {
+    var q = state.q.trim();
+    var totalClips = Math.max(LIBRARY_TOTALS.clips || 0, EVIDENCE.length);
+    var totalJobs = Math.max(LIBRARY_TOTALS.jobs || 0, Object.keys(JOBS).length);
+    var clipsText = clipCount + ' of ' + totalClips + ' clip' + (totalClips === 1 ? '' : 's');
+    if (!withJobs) return clipsText;
+    var jobsText = q
+      ? jobCount + ' of ' + totalJobs + ' job file' + (totalJobs === 1 ? '' : 's')
+      : jobCount + ' job file' + (jobCount === 1 ? '' : 's');
+    return clipsText + ' · ' + jobsText + (q && librarySearch.pending ? ' · searching all jobs…' : '');
   }
 
   function render() {
@@ -4869,6 +5172,12 @@
         } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'Waiting for first clip';
           if (emptyBody) emptyBody.textContent = 'This job is open. The first clip shows up here when Field Capture files it.';
+        } else if (q && librarySearch.pending) {
+          if (emptyTitle) emptyTitle.textContent = 'Searching all jobs…';
+          if (emptyBody) emptyBody.textContent = 'Looking past the videos already on screen.';
+        } else if (q) {
+          if (emptyTitle) emptyTitle.textContent = 'No videos match \u201c' + q + '\u201d';
+          if (emptyBody) emptyBody.textContent = 'Search covers job name, company, date, address, clip title, file name, job or clip ID, and file hash. Try fewer words or clear the search.';
         } else {
           if (emptyTitle) emptyTitle.textContent = 'No matches';
           if (emptyBody) emptyBody.textContent = 'Try clearing search or picking another view.';
@@ -4880,9 +5189,9 @@
     syncSortHeaders();
 
     if (!hasRows) {
-      $('#resultcount').textContent = EVIDENCE.length
-        ? '0 of ' + EVIDENCE.length + ' clips'
-        : '0 clips';
+      $('#resultcount').textContent = q
+        ? resultCountText(0, 0, true)
+        : (EVIDENCE.length ? '0 of ' + EVIDENCE.length + ' clips' : '0 clips');
       rowsEl.innerHTML = '';
       return;
     }
@@ -4905,20 +5214,19 @@
           return (groups[k] || []).length > 0 || (q && jobFileMatchesQuery(k, q));
         });
       }
-      if (!jobFileKeys.length) {
-        order.sort(function (ka, kb) {
-          return compareEvidence(groups[ka][0], groups[kb][0]);
-        });
-      }
-      $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips · ' +
-        order.length + ' job file' + (order.length === 1 ? '' : 's');
+      // Folders always follow the column sort — they used to keep the
+      // order jobs were loaded in whenever any job file existed.
+      order = sortJobKeys(order, JOBS, groups, state.sortKey || 'recorded', state.sortDir === 'asc' ? 'asc' : 'desc');
+      $('#resultcount').textContent = resultCountText(list.length, order.length, true);
       rowsEl.innerHTML = order.map(function (k) {
-        var collapsed = !!state.collapsed[k];
+        // While searching, a job file opens on the clips that matched — a
+        // folder the person collapsed earlier must not hide the hit.
+        var collapsed = q ? !!state.searchCollapsed[k] : !!state.collapsed[k];
         var clips = collapsed ? '' : (groups[k] || []).map(function (e) { return clipRow(e, true); }).join('');
         return jobRow(k, groups[k] || [], collapsed) + clips;
       }).join('');
     } else {
-      $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
+      $('#resultcount').textContent = resultCountText(list.length, 0, false);
       rowsEl.innerHTML = list.map(clipRow).join('');
     }
 
@@ -4953,7 +5261,8 @@
 
     Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow'), function (tr) {
       function flip() {
-        state.collapsed[tr.dataset.job] = !state.collapsed[tr.dataset.job];
+        var bag = state.q.trim() ? state.searchCollapsed : state.collapsed;
+        bag[tr.dataset.job] = !bag[tr.dataset.job];
         render();
       }
       tr.addEventListener('click', function (ev) {
@@ -5016,6 +5325,10 @@
     var pending = !!(clip && clip.pendingDeletion);
     var restoreBtn = document.getElementById('rowmenu-restore');
     if (restoreBtn) restoreBtn.hidden = !(ORG_MODE && isSessionGlobalAdmin() && pending);
+    // A shared clip is the contractor's record: watch, Save and Export like
+    // they do; renaming it or issuing shares stays with the contractor.
+    var guestClip = VIEWER || !!(clip && clip.sharedWithMe);
+    menuEl.querySelectorAll('[data-act="rename"], [data-act="share"]').forEach(function (b) { b.hidden = guestClip; });
     menuEl.hidden = false;
     var r = btn.getBoundingClientRect();
     var mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
@@ -6028,6 +6341,12 @@
     vid.controls = false;
     vid.disablePictureInPicture = true;
     applyVolumePrefs(vid);
+    syncPrivacyBlur(item, vid);
+    ['loadeddata', 'seeking', 'seeked', 'timeupdate', 'play'].forEach(function (ev) {
+      vid.addEventListener(ev, function () {
+        if (vid.isConnected) syncPrivacyBlur(item, vid);
+      });
+    });
     syncClipCaptions(item);
     if (vid.dataset) vid.dataset.playingSoon = hold ? '' : '1';
     if (hold && vid.dataset) delete vid.dataset.playingSoon;
@@ -6319,8 +6638,7 @@
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
-    // Homeowners watch clips on the job page (guest media rules apply there).
-    if (VIEWER) { openJobRecord(item.job); return; }
+    // Shared clips open in the same player and panel as the contractor's.
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
@@ -6376,7 +6694,9 @@
     // Skip when the preview element is already fetching this URL — a second
     // <video> downloads the file twice and stalls the first Play.
     if (item._videoUrl && (!item.poster || String(item.poster).indexOf('data:') === 0)) {
-      if (!previewVideo()) {
+      // Never grab a still from the original of a clip with a child or a
+      // private moment in it.
+      if (!previewVideo() && !(item._privacyWindows && item._privacyWindows.length)) {
         captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
           if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
         });
@@ -9283,7 +9603,10 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
-    if (d && d.atmosphere === 'viewer') setViewer(d.on);
+    if (d && d.atmosphere === 'viewer') {
+      setViewer(d.on);
+      setUpgrade(d.upgrade);
+    }
     if (d && d.atmosphere === 'layout') {
       setRailOnly(!!d.railOnly);
       setPhoneDrawer(!!d.phoneDrawer);
@@ -9370,6 +9693,14 @@
     if (navLogins) {
       navLogins.addEventListener('click', function () { goShell('/logins'); });
     }
+    var navStartPlan = document.getElementById('nav-start-plan');
+    if (navStartPlan) {
+      // Plans live on the corporate site's pricing page (a new tab; the
+      // phone app hands it to the browser).
+      navStartPlan.addEventListener('click', function () {
+        window.open(PRICING_URL, '_blank', 'noopener');
+      });
+    }
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {
       navSettings.addEventListener('click', function () {
@@ -9385,8 +9716,28 @@
     b.addEventListener('click', function () { setTab(b.dataset.tab); });
   });
 
-  $('#q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
+  /* Search waits for a pause in typing (150 ms) instead of repainting the
+     whole library on every keystroke; Enter / clearing apply at once. */
+  var searchTimer = null;
+  function applySearch(value) {
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    if (value === state.q) return;
+    state.q = value;
+    state.searchCollapsed = {};
+    render();
+    searchWholeLibrary(value);
+  }
+  $('#q').addEventListener('input', function (e) {
+    var value = e.target.value;
+    if (searchTimer) clearTimeout(searchTimer);
+    if (!value.trim()) { applySearch(value); return; }
+    searchTimer = setTimeout(function () { applySearch(value); }, SEARCH_DEBOUNCE_MS);
+  });
+  $('#q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') applySearch(e.target.value);
+  });
 
+  loadSortChoice();
   var colheads = document.getElementById('colheads');
   if (colheads) {
     colheads.addEventListener('click', function (ev) {
@@ -9467,6 +9818,8 @@
   var muteBtn = document.getElementById('d-mute');
   if (muteBtn) muteBtn.addEventListener('click', function () {
     var vid = previewVideo();
+    // Sound stays off through a private window; it comes back after it.
+    if (vid && vid.dataset.privacyMuted) return;
     var prefs = readVideoPrefs();
     var nextMuted = !(vid ? vid.muted : prefs.muted);
     if (vid) {
@@ -9485,6 +9838,10 @@
   if (volumeSlider) volumeSlider.addEventListener('input', function () {
     var next = Math.max(0, Math.min(1, Number(volumeSlider.value) || 0));
     var vid = previewVideo();
+    if (vid && vid.dataset.privacyMuted) {
+      vid.volume = next;
+      return;
+    }
     if (vid) {
       vid.volume = next;
       vid.muted = next === 0;
@@ -9562,6 +9919,8 @@
     return {
       _remote: true,
       id: raw.id,
+      // A job another company shared with you (homeowner or sub invite).
+      sharedWithMe: Boolean(raw.sharedWithMe),
       job: jobKey || 'shared',
       jobId: raw.jobId || (jobKey && jobKey !== 'shared' ? jobKey : null),
       jobName: raw.jobName,
@@ -9574,6 +9933,7 @@
       customTitle: raw.customTitle || null,
       aiTitle: raw.aiTitle || null,
       clipId: raw.clipId || null,
+      fileName: raw.fileName || null,
       workDate: raw.workDate,
       capturedAt: raw.capturedAt,
       uploadedAt: raw.uploadedAt,
@@ -9834,6 +10194,10 @@
           return { at: f.atSeconds, src: f.url };
         });
         item._videoUrl = video && video.url ? video.url : null;
+        // Windows to blur on this side when the file is not the blurred copy.
+        item._privacyWindows = video && !video.privacySafe && Array.isArray(video.privacyWindows)
+          ? video.privacyWindows
+          : [];
         if (video && video.url) {
           var videoTtl = Number(video.expiresInSeconds);
           if (!isFinite(videoTtl) || videoTtl <= 0) videoTtl = 3600;
@@ -9952,6 +10316,73 @@
     return prev;
   }
 
+  function jobFromPayload(j) {
+    return {
+      key: j.jobId,
+      name: j.jobName || 'Job',
+      number: j.jobNumber != null ? j.jobNumber : null,
+      address: j.address || '',
+      claimNumber: j.claimNumber || '',
+      company: j.company || '',
+      person: j.person || '',
+      createdAt: j.createdAt || j.uploadedAt || '',
+      captureStatus: j.captureStatus || '',
+      sharedWithMe: Boolean(j.sharedWithMe)
+    };
+  }
+
+  /** Fold a server search's hits into the library without dropping anything already loaded. */
+  function mergeSearchResults(payload) {
+    (payload.jobs || []).forEach(function (j) {
+      if (!j || !j.jobId) return;
+      SEARCH_EXTRA.jobs[j.jobId] = j;
+      if (!JOBS[j.jobId]) JOBS[j.jobId] = jobFromPayload(j);
+    });
+    var have = {};
+    EVIDENCE.forEach(function (e) { have[e.id] = true; });
+    (payload.items || []).forEach(function (raw) {
+      if (!raw || !raw.id) return;
+      SEARCH_EXTRA.items[raw.id] = raw;
+      if (raw.jobId && !JOBS[raw.jobId]) JOBS[raw.jobId] = jobFromPayload(raw);
+      if (have[raw.id]) return;
+      have[raw.id] = true;
+      EVIDENCE.push(mapRemoteItem(raw, raw.jobId));
+    });
+  }
+
+  /**
+   * The first page holds the newest 500 clips and 200 jobs. When the account
+   * has more, the same query also runs on the server across every job and
+   * clip, and the hits join the list.
+   */
+  function searchWholeLibrary(value) {
+    var q = String(value || '').trim();
+    librarySearch.seq += 1;
+    var seq = librarySearch.seq;
+    if (!q) SEARCH_EXTRA = { jobs: {}, items: {} };
+    if (!q || !ORG_MODE || SHARE_TOKEN || !LIBRARY_TOTALS.truncated) {
+      if (librarySearch.pending) { librarySearch.pending = false; render(); }
+      return;
+    }
+    librarySearch.pending = true;
+    render();
+    var tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { tz = ''; }
+    apiFetch('/api/evidence-portal/library?q=' + encodeURIComponent(q) + (tz ? '&tz=' + encodeURIComponent(tz) : ''))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (payload) {
+        if (seq !== librarySearch.seq) return;
+        librarySearch.pending = false;
+        if (payload) mergeSearchResults(payload);
+        render();
+      })
+      .catch(function () {
+        if (seq !== librarySearch.seq) return;
+        librarySearch.pending = false;
+        render();
+      });
+  }
+
   function applyOrgLibrary(payload) {
     ORG_MODE = true;
     if (payload && payload.viewer) setViewer(true);
@@ -9967,7 +10398,8 @@
         company: j.company || '',
         person: j.person || '',
         createdAt: j.createdAt || '',
-        captureStatus: j.captureStatus || ''
+        captureStatus: j.captureStatus || '',
+        sharedWithMe: Boolean(j.sharedWithMe)
       };
     });
     (payload.items || []).forEach(function (raw) {
@@ -9991,6 +10423,23 @@
     EVIDENCE = (payload.items || []).map(function (raw) {
       return keepClientMedia(prevById[raw.id], mapRemoteItem(raw, raw.jobId));
     });
+    var totals = (payload && payload.totals) || {};
+    LIBRARY_TOTALS = {
+      clips: Number(totals.clips) || 0,
+      jobs: Number(totals.jobs) || 0,
+      truncated: Boolean(payload && payload.truncated)
+    };
+    // A refresh replaces the first page; hits a search found further back stay.
+    if (state.q.trim()) {
+      var keep = SEARCH_EXTRA;
+      SEARCH_EXTRA = { jobs: {}, items: {} };
+      mergeSearchResults({
+        jobs: Object.keys(keep.jobs).map(function (k) { return keep.jobs[k]; }),
+        items: Object.keys(keep.items).map(function (k) { return keep.items[k]; })
+      });
+    } else {
+      SEARCH_EXTRA = { jobs: {}, items: {} };
+    }
     if (state.open) {
       var live = null;
       for (var i = 0; i < EVIDENCE.length; i++) {

@@ -8,7 +8,6 @@ import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofA
 import { startProofPurgeSweep, stopProofPurgeSweep } from './shared/proofPurgeSweep.js';
 import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
 import { assertProductionReady } from './lib/productionGuards.js';
-import { initSentry } from './lib/sentry.js';
 import { startVerificationLeaseSweep, stopVerificationLeaseSweep } from './verification/reclaim.js';
 import { startDailyJobReportSweep, stopDailyJobReportSweep } from './dailyReport/index.js';
 import { computerConfigured } from './computer/providers/index.js';
@@ -28,7 +27,6 @@ try {
   throw err;
 }
 
-initSentry();
 
 const workerRole = resolveWorkerRole();
 const runSoldPathWorkers = shouldRunSoldPathWorkers(workerRole);

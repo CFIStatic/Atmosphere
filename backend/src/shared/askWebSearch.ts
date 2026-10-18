@@ -831,7 +831,7 @@ async function searchTavily(
 export function geminiWebSearchModel(): string {
   const forced = trim(process.env.ASK_WEB_SEARCH_MODEL);
   if (forced) return forced;
-  return 'gemini-2.5-flash';
+  return 'gemini-3.8-flash';
 }
 
 function geminiWebSearchBaseUrl(): string {

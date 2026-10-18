@@ -26,7 +26,8 @@ if [ -z "$service" ]; then
 fi
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-environment="${RAILWAY_ENVIRONMENT:-production}"
+# Railway environment ID ("Production"); a name must match case exactly.
+environment="${RAILWAY_ENVIRONMENT_ID:-${RAILWAY_ENVIRONMENT:-519e5cb5-26e1-44a8-91e1-f36412b5cc08}}"
 upstream="$(tr -d '\n' <"$root/api.upstream")"
 
 warn() {

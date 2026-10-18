@@ -5,19 +5,19 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dropTriggersSql = readFileSync(
-  resolve(here, '../../../../supabase/migrations/20260901010000_drop_crm_audit_triggers.sql'),
+  resolve(here, '../../../../supabase/migrations_archive/20260901010000_drop_crm_audit_triggers.sql'),
   'utf8',
 );
 const dropOldProductSql = readFileSync(
-  resolve(here, '../../../../supabase/migrations/20260828220000_drop_old_product_tables.sql'),
+  resolve(here, '../../../../supabase/migrations_archive/20260828220000_drop_old_product_tables.sql'),
   'utf8',
 );
 const repairSql = readFileSync(
-  resolve(here, '../../../../supabase/migrations/20260901160000_repair_crm_audit_for_job_delete.sql'),
+  resolve(here, '../../../../supabase/migrations_archive/20260901160000_repair_crm_audit_for_job_delete.sql'),
   'utf8',
 );
 const restoreSql = readFileSync(
-  resolve(here, '../../../../supabase/migrations/20260901183000_restore_crm_audit_log.sql'),
+  resolve(here, '../../../../supabase/migrations_archive/20260901183000_restore_crm_audit_log.sql'),
   'utf8',
 );
 

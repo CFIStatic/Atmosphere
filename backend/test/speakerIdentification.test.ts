@@ -600,8 +600,8 @@ test('an answer checks only clips it changes and skips a soft-deleted clip', asy
 test('speaker tables are not writable by the browser and matching is service role only', () => {
   const name = '20260929203000_speaker_identification.sql';
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations', name), 'utf8');
-  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations', name), 'utf8');
+  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations_archive', name), 'utf8');
+  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations_archive', name), 'utf8');
   assert.equal(backendSql, rootSql);
   const tables = [
     'voiceprints',

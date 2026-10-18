@@ -38,7 +38,7 @@ describe('JobFileAskChrome phone tabs', () => {
     expect(ask.className).toMatch(/data-\[state=inactive\]:hidden/);
   });
 
-  it('keeps the File pane as the only flex-grow panel while it is open', () => {
+  it('keeps the File pane as the only grow panel while it is open', () => {
     render(
       <JobFileAskChrome jobId="job-1">
         <p>File body</p>
@@ -95,7 +95,7 @@ describe('JobFileAskChrome source', () => {
     expect(askIdx).toBeGreaterThan(-1);
     expect(splitIdx).toBeGreaterThan(askIdx);
     expect(fileIdx).toBeGreaterThan(splitIdx);
-    expect(chromeSrc).toContain('lg:w-[var(--job-file-ask-width)]');
+    expect(chromeSrc).toContain('lg:w-(--job-file-ask-width)');
     expect(chromeSrc).toContain('desktop pins Ask on the left');
   });
 
@@ -114,9 +114,9 @@ describe('JobFileAskChrome source', () => {
 
   it('does not put a bare flex utility on the Ask TabPanel', () => {
     expect(chromeSrc).toContain(
-      'min-h-0 flex-1 flex-col outline-none data-[state=active]:flex data-[state=inactive]:hidden',
+      'min-h-0 flex-1 flex-col outline-hidden data-[state=active]:flex data-[state=inactive]:hidden',
     );
-    expect(chromeSrc).not.toContain('className="flex min-h-0 flex-1 flex-col outline-none"');
+    expect(chromeSrc).not.toContain('className="flex min-h-0 flex-1 flex-col outline-hidden"');
   });
 
   it('strips Overview-labeled backs so File/Ask cannot sit under that row', () => {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { loadAiAllowance, settleUsageCost } from '../src/metering/aiBudgetService.js';
 
 const sql = readFileSync(
-  fileURLToPath(new URL('../supabase/migrations/20261002130000_ai_allowance_enforcement.sql', import.meta.url)),
+  fileURLToPath(new URL('../supabase/migrations_archive/20261002130000_ai_allowance_enforcement.sql', import.meta.url)),
   'utf8',
 );
 
@@ -14,6 +14,7 @@ const PAGE_CREDIT = 999_000_000_000_000;
 
 function allowanceClient(opts?: {
   creditBalance?: number;
+  billing?: Record<string, unknown>;
   settle?: (args: Record<string, unknown>) => { data: unknown; error: { message?: string; code?: string } | null };
 }) {
   const creditBalance = opts?.creditBalance ?? 0;
@@ -71,6 +72,7 @@ function allowanceClient(opts?: {
               atmosphere_plan_code: 'starter',
               extra_fc_seats: 0,
               billing_interval: 'month',
+              ...(opts?.billing ?? {}),
             },
             error: null,
           };
@@ -200,4 +202,20 @@ test('the budget hold column is server-write-only', () => {
   assert.match(sql, /ai_budget_hold is server-write-only/);
   assert.match(sql, /current_user not in \('service_role', 'postgres', 'supabase_admin'\)/);
   assert.match(sql, /grant update on table public\.job_proofs to service_role/);
+});
+
+test('a comp_ subscription id makes AI unlimited at the gate, not just in Settings', async () => {
+  const client = allowanceClient({ billing: { stripe_subscription_id: 'comp_jack_7a79ee9665a24d778dee5bb37426b240' } });
+  const view = await loadAiAllowance(client as never, 'org-1', { now: new Date('2026-10-15T00:00:00.000Z') });
+  assert.equal(view.paused, false);
+  assert.equal(view.state, 'unlimited');
+  await settleUsageCost(client as never, { orgId: 'org-1', requestId: 'r-comp', costNanos: 1_000_000_000 });
+  assert.equal(client.rpcCalls.some((call) => call.name === 'settle_ai_usage'), false, 'comps never spend allowance or credits');
+});
+
+test('a real sub_ id with the same spend is still limited', async () => {
+  const client = allowanceClient({ billing: { stripe_subscription_id: 'sub_1Abc' } });
+  const view = await loadAiAllowance(client as never, 'org-1', { now: new Date('2026-10-15T00:00:00.000Z') });
+  assert.equal(view.paused, true);
+  assert.equal(view.state, 'limited');
 });

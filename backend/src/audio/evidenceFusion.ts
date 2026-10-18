@@ -9,6 +9,7 @@
  * with a seek time. Never invent dialogue, people, objects, or motives.
  */
 
+import { config } from '../config.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
 import {
@@ -112,6 +113,7 @@ export async function fuseVisionTranscriptEvidence(input: {
   try {
     const completed = await completeAskText({
       system: FUSION_SYSTEM,
+      anthropicModel: config.technician.assistant.lightModel,
       user: [
         input.durationSeconds != null && Number.isFinite(Number(input.durationSeconds))
           ? `Clip length: ${Math.round(Number(input.durationSeconds))} seconds.`

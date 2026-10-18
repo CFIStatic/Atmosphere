@@ -1,21 +1,70 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, ROLE_LABELS, type MemberRole, type OrgInvite } from '../../lib/api';
+import { api, ApiError, ROLE_LABELS, type MemberRole, type OrgInvite, type PlatformSeatCounts } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
-import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
+import { isGlobalAdmin } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
 import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
-import type { ServiceRoleSlug } from '../../lib/serviceRole';
 import { APP_SHELL_SEATS_NOTE, isInAppShell } from '../../lib/appShell';
+import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
+import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 
 /**
  * Adding somebody to the team.
  *
- * Org invites create Employee (or Global Admin) seats. Invited workers on one
- * job are invited from the job file via a job-share token — not here.
+ * Org invites create Employee (Field Capture) seats, or a Platform
+ * seat ($75/mo): Global Admin access on the Platform, no Field Capture, no
+ * Billing and Usage. Invited workers on one job are invited from the job file
+ * via a job-share token — not here.
  */
 
-const ROLES: OrgProductRole[] = ['employee', 'global_admin'];
+export const PLATFORM_SEAT_PRICE_LABEL = '$75/mo';
+
+/**
+ * One control for who the person is. The workspace has one Global Admin, the
+ * account owner who pays; nobody else can be invited as one.
+ *   field_capture -> role employee (uses a Field Capture seat)
+ *   platform      -> role global_admin + seatType platform ($75/mo; the
+ *                    database role behind a Platform seat, not a Global Admin)
+ */
+export type InviteKind = 'field_capture' | 'platform';
+export const INVITE_KINDS: InviteKind[] = ['field_capture', 'platform'];
+export const INVITE_KIND_LABELS: Record<InviteKind, string> = {
+  field_capture: 'Field Capture',
+  platform: 'Platform',
+};
+
+/** The one helper line under the row. No prices inside the phone app (App Store 3.1.1). */
+export function inviteKindHelp(
+  kind: InviteKind,
+  opts: {
+    inApp: boolean;
+    fieldCaptureSeats?: { used: number; allowed: number } | null;
+    platformSeats?: PlatformSeatCounts | null;
+  },
+): string {
+  const { inApp, fieldCaptureSeats, platformSeats } = opts;
+  if (kind === 'field_capture') {
+    const base = 'Films jobs in Field Capture and uses the Platform.';
+    return fieldCaptureSeats
+      ? `${base} ${fieldCaptureSeats.used} of ${fieldCaptureSeats.allowed} Field Capture seats used.`
+      : base;
+  }
+  let line = 'Full Platform access except Billing and Usage, no Field Capture.';
+  if (!inApp) line += ` ${PLATFORM_SEAT_PRICE_LABEL} each.`;
+  // Only once some are bought: never "0 of 0".
+  if (platformSeats && platformSeats.allowed > 0) {
+    line += ` ${platformSeats.used} of ${platformSeats.allowed} in use.`;
+  }
+  return line;
+}
+
+const SEGMENT_GROUP =
+  'flex items-center gap-1 rounded-lg bg-ink-900/5 p-1 ring-1 ring-inset ring-ink-900/10';
+const segmentClass = (on: boolean) =>
+  `h-[30px] flex-1 whitespace-nowrap rounded-md px-3 text-sm transition outline-hidden focus-visible:ring-2 focus-visible:ring-brand-300 sm:flex-none ${
+    on ? 'bg-ink-900/10 font-medium text-ink-900 shadow-xs' : 'text-ink-500 hover:text-ink-800'
+  }`;
 
 const STATUS_STYLE: Record<OrgInvite['status'], string> = {
   pending: 'bg-caution-50 text-caution-600',
@@ -30,18 +79,23 @@ const ago = (iso: string) => {
   return `${days}d ago`;
 };
 
-export function InvitePanel() {
+export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
   const t = useT();
   const { membership } = useAuth();
   const actionsLocked = useProductActionsLocked();
   const admin = isGlobalAdmin(membership?.role);
-  const roles: OrgProductRole[] = ROLES;
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<MemberRole>('employee');
-  const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
-  const [serviceRoleCustom, setServiceRoleCustom] = useState('');
+  const [kind, setKind] = useState<InviteKind>('field_capture');
+  const platformSeat = kind === 'platform';
+  const role: MemberRole = platformSeat ? 'global_admin' : 'employee';
+  const [platformSeats, setPlatformSeats] = useState<PlatformSeatCounts | null>(null);
+  const phoneEnabled = usePhoneAuthEnabled();
+  const [byPhone, setByPhone] = useState(false);
+  const [phone, setPhone] = useState('');
+  const phoneE164 = normalizePhoneE164(phone);
+  const usingPhone = phoneEnabled && byPhone;
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,13 +115,16 @@ export function InvitePanel() {
       setInvites((prev) => prev ?? []);
     }
     try {
-      const workspace = await api.getBillingWorkspace();
+      // Seat counts come with the onboarding status every member can read;
+      // the full billing workspace is the account owner's alone.
+      const workspace = await api.getBillingOnboarding();
       if (workspace.fieldCaptureSeats) {
         setSeats({
           used: workspace.fieldCaptureSeats.used,
           allowed: workspace.fieldCaptureSeats.allowed,
         });
       }
+      if (workspace.platformSeats) setPlatformSeats(workspace.platformSeats);
     } catch {
       /* billing is optional on this screen */
     }
@@ -93,7 +150,12 @@ export function InvitePanel() {
       setError(planRequiredMessage());
       return;
     }
-    if (inApp && seatsFull && role !== 'global_admin') {
+    if (inApp && platformSeat && platformSeats && platformSeats.remaining <= 0) {
+      setOutcome(null);
+      setError(`Every Platform seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
+      return;
+    }
+    if (inApp && seatsFull && !platformSeat) {
       setOutcome(null);
       setError(`Every Field Capture seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;
@@ -103,19 +165,22 @@ export function InvitePanel() {
     setOutcome(null);
     try {
       const res = await api.createOrgInvite({
-        email,
+        ...(usingPhone ? { phone: phoneE164 ?? phone } : { email }),
         role,
-        serviceRole: serviceRole || undefined,
-        serviceRoleCustom: serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
+        ...(platformSeat ? { seatType: 'platform' as const } : {}),
       });
       setOutcome(
-        res.emailed
-          ? `Invited — Atmosphere emailed ${email}.`
-          : `Invited. Atmosphere could not email them, so let them know to check with you.`,
+        usingPhone
+          ? res.texted
+            ? `Invited. Atmosphere texted ${formatPhone(phoneE164)} a sign-in link.`
+            : `Invited. Tell them to open app.atmosphereteam.com, tap "Text me a code instead", and enter ${formatPhone(phoneE164)}. We'll text them a sign-in code.`
+          : res.emailed
+            ? `Invited — Atmosphere emailed ${email}.`
+            : `Invited. Atmosphere could not email them, so let them know to check with you.`,
       );
       setEmail('');
-      setServiceRole('');
-      setServiceRoleCustom('');
+      setPhone('');
+      onInvited?.();
       await load();
     } catch (err) {
       if (!inApp && err instanceof ApiError && err.checkoutUrl) {
@@ -149,70 +214,95 @@ export function InvitePanel() {
         </div>
       ) : null}
 
-      <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="their@email.com"
-          className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
-        />
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as MemberRole)}
-          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          title={PRODUCT_ROLE_BLURBS[role as OrgProductRole] ?? ''}
-        >
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {ROLE_LABELS[r]}
-            </option>
-          ))}
-        </select>
-        <select
-          value={serviceRole}
-          onChange={(e) => setServiceRole((e.target.value || '') as ServiceRoleSlug | '')}
-          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          title="Service title for Analysis labels"
-        >
-          <option value="">Title (optional)</option>
-          <option value="adjuster">Adjuster</option>
-          <option value="estimator">Estimator</option>
-          <option value="project_manager">Project Manager</option>
-          <option value="electrician">Electrician</option>
-          <option value="plumber">Plumber</option>
-          <option value="roofer">Roofer</option>
-          <option value="technician">Technician</option>
-          <option value="crew">Crew</option>
-          <option value="inspector">Inspector</option>
-          <option value="other">Other</option>
-        </select>
-        {serviceRole === 'other' ? (
-          <input
-            type="text"
-            maxLength={60}
-            value={serviceRoleCustom}
-            onChange={(e) => setServiceRoleCustom(e.target.value)}
-            placeholder="Custom title"
-            className="min-w-[8rem] rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
-        ) : null}
-        <button
-          type="submit"
-          disabled={busy || !email.trim()}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
-        >
-          {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-          {t('settings.invites.button')}
-        </button>
+      <form onSubmit={invite} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap" data-testid="invite-row">
+        <div className="flex min-w-0 flex-col gap-2 sm:min-w-[18rem] sm:flex-1 sm:flex-row">
+          {phoneEnabled ? (
+            <div role="radiogroup" aria-label="Invite by" data-testid="invite-via" className={`${SEGMENT_GROUP} shrink-0`}>
+              {(['email', 'phone'] as const).map((key) => {
+                const on = key === 'phone' ? byPhone : !byPhone;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    data-testid={`invite-via-${key}`}
+                    onClick={() => {
+                      setByPhone(key === 'phone');
+                      setError(null);
+                    }}
+                    className={segmentClass(on)}
+                  >
+                    {key === 'email' ? 'Email' : 'Phone'}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          {usingPhone ? (
+            <input
+              type="tel"
+              inputMode="tel"
+              required
+              aria-label="Mobile number"
+              data-testid="invite-phone"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+              placeholder="(555) 123-4567"
+              className="w-full min-w-0 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            />
+          ) : (
+            <input
+              type="email"
+              required
+              aria-label="Email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="their@email.com"
+              className="w-full min-w-0 flex-1 rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-hidden placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            />
+          )}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div role="radiogroup" aria-label="Access" data-testid="invite-seat-type" className={`${SEGMENT_GROUP} shrink-0`}>
+            {INVITE_KINDS.map((key) => {
+              const on = kind === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  data-testid={`invite-seat-${key}`}
+                  onClick={() => {
+                    setKind(key);
+                    setError(null);
+                  }}
+                  className={segmentClass(on)}
+                >
+                  {INVITE_KIND_LABELS[key]}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="submit"
+            disabled={busy || (usingPhone ? !phoneE164 : !email.trim())}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition outline-hidden hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-50 sm:w-auto"
+          >
+            {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
+            {t('settings.invites.button')}
+          </button>
+        </div>
       </form>
-      <p className="mt-1.5 text-[11px] text-ink-400">
-        {t('settings.invites.rolesHint')}
-        {seats
-          ? ` Field Capture accounts: ${seats.used} of ${seats.allowed} in use.`
-          : ' Work Verification includes 3 Field Capture accounts.'}
-        {inApp && seatsFull ? (
+      <p className="mt-1.5 text-xs text-ink-500" data-testid="invite-help">
+        {inviteKindHelp(kind, { inApp, fieldCaptureSeats: seats, platformSeats })}
+        {platformSeat && platformSeats && platformSeats.available === false && platformSeats.remaining <= 0 ? (
+          <span data-testid="platform-seat-unavailable"> Platform seats aren&apos;t available yet.</span>
+        ) : null}
+        {inApp && seatsFull && kind === 'field_capture' ? (
           <span data-testid="app-shell-seats-note"> {APP_SHELL_SEATS_NOTE}</span>
         ) : null}
       </p>
@@ -229,9 +319,9 @@ export function InvitePanel() {
           {invites.slice(0, 12).map((inv) => (
             <li key={inv.id} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0">
-                <span className="block truncate text-xs font-medium text-ink-800">{inv.email}</span>
+                <span className="block truncate text-xs font-medium text-ink-800">{inv.email || formatPhone(inv.phone)}</span>
                 <span className="block text-[11px] text-ink-500">
-                  {ROLE_LABELS[inv.role as MemberRole] ?? inv.role}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
+                  {inv.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[inv.role as MemberRole] ?? inv.role)}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">

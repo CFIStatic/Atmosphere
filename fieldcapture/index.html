@@ -1162,7 +1162,7 @@
       <!-- Invite token path: film here AND open the job file (scope / brief / recordings). -->
       <p class="job-file-link" id="job-file-link" hidden>
         <a id="job-file-href" href="#">Open job file</a>
-        <span> — scope, do-nots, brief, and recordings for this job.</span>
+        <span> — scope, do-nots, brief, and the videos you recorded on this job.</span>
       </p>
       <p class="lede" id="live-status" hidden></p>
     </div>
@@ -1224,8 +1224,55 @@
           <span class="lbl">Sign in</span>
         </button>
         <p class="auth-foot">
+          <a id="email-code-toggle" href="#email-code">Email me a code instead</a>
+        </p>
+        <p class="auth-foot">
           Don&apos;t have an account?
           <a id="signup-link" href="#create-account">Create an account</a>
+        </p>
+        <p class="auth-foot" id="phone-toggle-wrap" hidden>
+          <a id="phone-toggle" href="#phone">Text me a code instead</a>
+        </p>
+        <p class="auth-foot">
+          <a id="homeowner-link" href="https://platform.atmosphereteam.com/signup?homeowner=1">Homeowner? Sign in with your email</a>
+        </p>
+      </form>
+      <form class="auth-form" id="email-code-form" hidden novalidate>
+        <label for="code-email" id="code-email-wrap">Email
+          <input id="code-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@company.com" />
+        </label>
+        <label for="email-code" id="email-code-wrap" hidden>
+          <span id="email-code-label">Enter the 6-digit code we emailed you</span>
+          <input id="email-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="123456" />
+        </label>
+        <p class="auth-err" id="email-code-err" hidden></p>
+        <button class="daybtn" type="submit" id="email-code-btn">
+          <span class="lbl" id="email-code-btn-lbl">Email me a code</span>
+        </button>
+        <p class="auth-foot">
+          <a id="email-code-resend" href="#resend" hidden>Resend code</a>
+        </p>
+        <p class="auth-foot">
+          <a id="email-code-back" href="#signin">Use password instead</a>
+        </p>
+      </form>
+      <form class="auth-form" id="phone-form" hidden novalidate>
+        <label for="phone-number" id="phone-number-wrap">Mobile number
+          <input id="phone-number" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567" />
+        </label>
+        <label for="phone-code" id="phone-code-wrap" hidden>
+          <span id="phone-code-label">Enter the 6-digit code we texted you</span>
+          <input id="phone-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="123456" />
+        </label>
+        <p class="auth-err" id="phone-err" hidden></p>
+        <button class="daybtn" type="submit" id="phone-btn">
+          <span class="lbl" id="phone-btn-lbl">Text me a code</span>
+        </button>
+        <p class="auth-foot">
+          <a id="phone-resend" href="#resend" hidden>Resend code</a>
+        </p>
+        <p class="auth-foot">
+          <a id="email-toggle" href="#signin">Use email instead</a>
         </p>
       </form>
       <form class="auth-form" id="signup-form" hidden novalidate>
@@ -1367,8 +1414,8 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=app-shell-1"></script>
-<script src="js/app.js?v=app-shell-1"></script>
-<script src="js/native-bridge.js?v=app-shell-1"></script>
+<script src="js/capture-core.js?v=app-session-1"></script>
+<script src="js/app.js?v=app-session-1"></script>
+<script src="js/native-bridge.js?v=app-session-1"></script>
 </body>
 </html>

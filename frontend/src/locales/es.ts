@@ -89,6 +89,7 @@ export const ES: MessageCatalog = {
   'settings.account.emailConfirmed': 'Correo confirmado',
   'settings.account.emailConfirmedYes': 'Sí',
   'settings.account.emailConfirmedNo': 'Aún no confirmado',
+  'settings.account.phone': 'Número de móvil',
   'settings.account.memberSince': 'Miembro desde',
   'settings.account.lastSignIn': 'Último acceso',
   'settings.account.emailLocked':
@@ -139,10 +140,8 @@ export const ES: MessageCatalog = {
   'settings.invites.adminOnly':
     'Solo el administrador global puede invitar a este espacio. Pídele que envíe una invitación.',
   'settings.invites.description':
-    'Solo tú (administrador global) puedes crear cuentas de espacio para otros. Abren el correo de invitación y crean un acceso con esa dirección. Para un subcontratista en un solo trabajo, invítalo desde el archivo del trabajo.',
+    'Invita a personas por correo o teléfono. Para agregar un subcontratista a un solo trabajo, invítalo desde el archivo del trabajo.',
   'settings.invites.button': 'Invitar',
-  'settings.invites.rolesHint':
-    'El administrador global gestiona la facturación. Los empleados pueden hacer el resto.',
 
   'theme.light': 'Claro',
   'theme.dark': 'Oscuro',

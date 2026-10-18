@@ -9,6 +9,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
+import { isOrgOwnerRow, loadOrgOwnerId, requireOrgOwner } from '../middleware/requireOrgOwner.js';
 import { config } from '../config.js';
 import { badRequest, forbidden } from '../lib/errors.js';
 import { createUserClient } from '../lib/supabase.js';
@@ -16,7 +17,7 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { planChangeIdempotencyKey, planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
 import {
   ensureCustomer,
-  isExtraSeatLineItem,
+  isSeatAddOnLineItem,
   liveStripeSubscriptionId,
   normalizeAtmosphereBillingInterval,
   stripeClient,
@@ -24,9 +25,15 @@ import {
   subscriptionItemPriceId,
 } from '../lib/stripe.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
+import { checkoutTaxParams, ensureSubscriptionAutomaticTax, type AutomaticTaxStripe } from '../lib/stripeTax.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import {
+  applyComplimentaryPlanChange,
+  assertNotComplimentaryPurchase,
+  loadOrgBillingExempt,
+} from '../lib/complimentaryBilling.js';
 import { aiBudgetConfig, creditPackByCode, creditPackPriceId } from '../metering/aiBudgetConfig.js';
-import { canPurchaseAiCredits, creditNanosForPaymentCents } from '../metering/aiBudget.js';
+import { creditNanosForPaymentCents } from '../metering/aiBudget.js';
 import { loadAiAllowance, publicAllowance } from '../metering/aiBudgetService.js';
 import {
   readAutoRecharge,
@@ -36,7 +43,7 @@ import {
 } from '../metering/autoRecharge.js';
 
 export const aiAllowanceRouter = Router();
-aiAllowanceRouter.use(requireAuth, requireOrg);
+aiAllowanceRouter.use(requireAuth, requireOrg, requireOrgOwner);
 
 const packSchema = z.object({
   packCode: z.string().min(1).max(32),
@@ -54,15 +61,9 @@ const planSchema = z.object({
   billingInterval: z.string().optional(),
 });
 
+/** Billing and Usage are the owner's alone (orgs.created_by). */
 async function callerCanManage(req: Request): Promise<boolean> {
-  const supabase = createUserClient(req.accessToken!);
-  const { data } = await supabase
-    .from('org_members')
-    .select('role')
-    .eq('org_id', req.orgId!)
-    .eq('user_id', req.user!.id)
-    .maybeSingle();
-  return canPurchaseAiCredits((data as { role?: string } | null)?.role);
+  return isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, req.orgId!) }, req.user!.id);
 }
 
 aiAllowanceRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -86,6 +87,10 @@ aiAllowanceRouter.post('/credits/checkout', rejectPurchasesInAppShell, async (re
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can buy AI credits.', 'billing_forbidden');
     }
+    assertNotComplimentaryPurchase(
+      await loadOrgBillingExempt(createUserClient(req.accessToken!), req.orgId!, req.user!.email),
+      'credits',
+    );
     if (config.billing.paymentProvider !== 'stripe') {
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
     }
@@ -124,6 +129,7 @@ aiAllowanceRouter.post('/credits/checkout', rejectPurchasesInAppShell, async (re
         payment_intent_data: { metadata },
         invoice_creation: { enabled: true },
         line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
       {
         // A stable key is replayed for 24 hours. Buying the same pack again
@@ -142,12 +148,24 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
     if (!(await callerCanManage(req))) {
       throw forbidden('Only an owner can change the plan.', 'billing_forbidden');
     }
-    if (config.billing.paymentProvider !== 'stripe') {
-      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
-    }
     const body = planSchema.parse(req.body ?? {});
     const plan = atmospherePlan(parseAtmospherePlanCode(body.planCode));
     const supabase = createUserClient(req.accessToken!);
+    // Comped workspace: switch the plan in the database. No Checkout, no charge.
+    if (await loadOrgBillingExempt(supabase, req.orgId!, req.user!.email)) {
+      await applyComplimentaryPlanChange(supabase, req.orgId!, plan.code);
+      res.status(200).json({
+        checkoutUrl: null,
+        updated: true,
+        complimentary: true,
+        planCode: plan.code,
+        billingInterval: normalizeAtmosphereBillingInterval(body.billingInterval),
+      });
+      return;
+    }
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
     const { data: billing } = await supabase
       .from('org_billing')
       .select('stripe_subscription_id')
@@ -164,11 +182,13 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
       if (!priceId) {
         throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
       }
-      const planItem = (existing.items?.data ?? []).find((item) => item.id && !isExtraSeatLineItem(item));
+      const planItem = (existing.items?.data ?? []).find((item) => item.id && !isSeatAddOnLineItem(item));
       if (subscriptionItemPriceId(planItem) === priceId) {
         res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
         return;
       }
+      // Older subscriptions predate Stripe Tax; turn it on first (best effort).
+      await ensureSubscriptionAutomaticTax(stripe as unknown as AutomaticTaxStripe, currentSub, existing);
       const update = planItemUpdateParams(existing.items?.data ?? [], priceId);
       // A stable key is replayed for 24 hours. Switching away and back to this
       // plan in that window must send a new update, not the cached one.
@@ -224,9 +244,11 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
         client_reference_id: req.orgId,
         metadata,
         subscription_data: { metadata },
+        // A plan's included seats get no Chest Mount. Stripe Tax on.
         line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
-      { idempotencyKey: stripeIdempotencyKey('plan-change', req.orgId, plan.code, interval, priceId) },
+      { idempotencyKey: stripeIdempotencyKey('plan-change-v2', req.orgId, plan.code, interval, priceId) },
     );
     res.status(201).json({ checkoutUrl: session.url, planCode: plan.code, billingInterval: interval });
   } catch (err) {
@@ -258,6 +280,12 @@ aiAllowanceRouter.put('/auto-recharge', rejectPurchasesInAppShell, async (req: R
   try {
     const canManage = await callerCanManage(req);
     const body = autoRechargeSchema.parse(req.body ?? {});
+    if (body.enabled) {
+      assertNotComplimentaryPurchase(
+        await loadOrgBillingExempt(createUserClient(req.accessToken!), req.orgId!, req.user!.email),
+        'auto_recharge',
+      );
+    }
     const admin = unscopedAdminOrNull();
     if (!admin && canManage) {
       throw badRequest('Auto-recharge is not available on this server.', 'auto_recharge_unavailable');
