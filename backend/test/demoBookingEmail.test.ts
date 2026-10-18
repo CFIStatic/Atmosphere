@@ -60,14 +60,17 @@ test('guest email: their zone, calendar + reply lines, no host-only notes', () =
   assert.match(m.text, /reply to this email/i);
 });
 
-test('no shared Meet link, dial-in or .ics: Google invite line with CT time instead', () => {
+test('no shared Meet link, dial-in or .ics: Google invite line in the guest\'s own time instead', () => {
   const g = demoGuestEmail(b, start, 'Jack Cyganiak');
   const h = demoHostEmail(b, start);
   const line =
-    'Your Google Calendar invite with the video link for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is on its way from Jack Cyganiak.';
+    'Your Google Calendar invite with the video link for Tuesday, October 13, 2026, 10:00 – 10:30 AM EDT is on its way from Jack Cyganiak.';
   assert.ok(g.html.includes(line) && g.text.includes(line));
+  const ct = demoGuestEmail({ ...b, timeZone: 'America/Chicago' }, start, 'Jack Cyganiak');
+  assert.ok(ct.text.includes('for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is on its way'));
+  assert.ok(!/AM CT/.test(g.html + g.text), 'one zone per guest email: theirs');
   assert.match(h.text, /A Google Calendar invite with the video link for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is going out to/);
   for (const m of [g, h]) {
-    assert.ok(!/meet\.google\.com|Join with Google Meet|502-947-4063|PIN|\.ics|attached/i.test(m.html + m.text));
+    assert.ok(!/meet\.google\.com|Join meeting|Join with Google Meet|wcd-dsir-qyg|502-947-4063|PIN|\.ics|attached|Dec(ember)? 31/i.test(m.html + m.text));
   }
 });

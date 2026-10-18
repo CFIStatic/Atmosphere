@@ -6,7 +6,7 @@ import {
   isBookableSlot,
   type DemoBookingInput,
 } from './demoBooking.js';
-import { demoHostEmail } from './demoBookingEmail.js';
+import { demoGuestEmail, demoHostEmail } from './demoBookingEmail.js';
 
 export const DEMO_ORGANIZER_EMAIL = (process.env.DEMO_BOOKING_TO_EMAIL || 'jack@jettx.ai').trim();
 export const DEMO_ORGANIZER_NAME = (process.env.DEMO_BOOKING_HOST_NAME || 'Jack Cyganiak').trim();
@@ -145,13 +145,16 @@ export async function openDemoSlots(store: DemoBookingStore, now: Date = new Dat
 }
 
 /**
- * Book a slot, with no email; Google's Calendar invite and notifyHostWithMeet follow. The row is the
- * source of truth: once it is in, the slot is held even if mail fails.
+ * Book a slot and send the guest the branded confirmation (their time only, no
+ * meeting link). Google's Calendar invite from the host's calendar carries the
+ * per-booking Meet link, and notifyHostWithMeet emails the host. The row is the
+ * source of truth: once it is in, the slot is held even if mail fails, and
+ * `emailed` says whether the confirmation actually went out.
  */
 export async function bookDemo(
   input: DemoBookingInput,
   deps: { store: DemoBookingStore; send: DemoMailer; ip: string | null; now?: Date },
-): Promise<{ id: string; slotStart: string }> {
+): Promise<{ id: string; slotStart: string; emailed: boolean }> {
   const now = deps.now ?? new Date();
   if (!isBookableSlot(input.slotStart, now)) {
     throw new HttpError(409, 'That time is no longer available. Pick another.', 'slot_unavailable');
@@ -173,10 +176,34 @@ export async function bookDemo(
     throw new HttpError(409, 'Someone just booked that time. Pick another.', 'slot_taken');
   }
 
-  // No email at booking time. The guest's email is Google's own Calendar
-  // invite; the host's single email goes out from notifyHostWithMeet once
-  // the per-booking Meet link exists.
-  return { id: inserted.id, slotStart };
+  const emailed = await sendGuestConfirmation(inserted.id, input, start, deps);
+  return { id: inserted.id, slotStart, emailed };
+}
+
+/** Never throws: a mail failure must not undo or 500 a held booking. */
+async function sendGuestConfirmation(
+  id: string,
+  input: DemoBookingInput,
+  start: Date,
+  deps: { store: DemoBookingStore; send: DemoMailer },
+): Promise<boolean> {
+  try {
+    const sent = await deps.send({
+      to: input.email,
+      ...demoGuestEmail(input, start, DEMO_ORGANIZER_NAME),
+      replyTo: DEMO_ORGANIZER_EMAIL,
+      keepReplyTo: true,
+    });
+    if (!sent.ok) {
+      console.error('[demo] guest confirmation failed:', sent.why);
+      return false;
+    }
+    await deps.store.markEmailed(id, 'guest_emailed_at').catch(() => undefined);
+    return true;
+  } catch (err) {
+    console.error('[demo] guest confirmation failed:', err instanceof Error ? err.message : err);
+    return false;
+  }
 }
 
 export { DEMO_WINDOW_DAYS };

@@ -141,9 +141,9 @@ function memStore(): DemoBookingStore & { rows: Record<string, unknown>[] } {
   };
 }
 
-test('booking: stores, sends no email at booking time, blocks double booking', async () => {
+test('booking: stores, emails the guest a branded confirmation (no Meet link), blocks double booking', async () => {
   const store = memStore();
-  const sent: Array<{ to: string; subject: string; attachments?: MailAttachment[] }> = [];
+  const sent: Array<Parameters<DemoMailer>[0] & { attachments?: MailAttachment[] }> = [];
   const send: DemoMailer = async (m) => {
     sent.push(m);
     return { ok: true };
@@ -160,8 +160,21 @@ test('booking: stores, sends no email at booking time, blocks double booking', a
   });
   const r = await bookDemo(input, { store, send, ip: '203.0.113.9', now: NOW });
   assert.equal(r.slotStart, slot);
+  assert.equal(r.emailed, true);
   assert.equal(store.rows[0]!.client_ip, '203.0.113.9');
-  assert.equal(sent.length, 0, 'no email at booking time');
+  assert.equal(store.rows[0]!.guest_emailed_at, 'now');
+  assert.equal(sent.length, 1, 'one email at booking time: the guest confirmation');
+  const m = sent[0]!;
+  assert.equal(m.to, 'dana@example.com');
+  assert.equal(m.subject, 'Your Atmosphere demo is confirmed: Tue Oct 13, 11:00 AM EDT');
+  assert.equal(m.replyTo, 'jack@jettx.ai');
+  assert.equal(m.keepReplyTo, true);
+  assert.equal(m.attachments, undefined, 'no .ics');
+  const body = `${m.html}\n${m.text}`;
+  assert.match(body, /Tuesday, October 13, 2026/);
+  assert.match(body, /11:00 – 11:30 AM EDT/);
+  assert.ok(!/meet\.google\.com|Join meeting|Join with Google Meet|wcd-dsir-qyg|502-947-4063|Dec(ember)? 31/i.test(body), 'no placeholder Meet link');
+  assert.ok(!body.includes('Three crews'), 'host-only notes stay out of the guest email');
 
   const open = await openDemoSlots(store, NOW);
   assert.ok(!open.includes(slot), 'booked slot is hidden');
@@ -178,6 +191,7 @@ test('booking: stores, sends no email at booking time, blocks double booking', a
     (e: { code?: string }) => e.code === 'slot_unavailable',
   );
   assert.equal(store.rows.length, 1);
+  assert.equal(sent.length, 1, 'rejected bookings send nothing');
 });
 
 test('meet hook: stores event + link, sends Jack ONE email with Join meeting, idempotent', async () => {
@@ -214,15 +228,27 @@ test('meet hook: stores event + link, sends Jack ONE email with Join meeting, id
   await assert.rejects(notifyHostWithMeet('nope', meet, { store, send }), (e: { status?: number }) => e.status === 404);
 });
 
-test('booking: slot is held even when mail fails', async () => {
+test('booking: slot is held and emailed is false when mail fails or throws', async () => {
   const store = memStore();
-  const send: DemoMailer = async () => ({ ok: false, why: 'down' });
   const input = demoBookingSchema.parse({
     slotStart: '2026-10-14T15:00:00.000Z',
     name: 'D',
     email: 'd@example.com',
     company: 'C',
   });
-  await bookDemo(input, { store, send, ip: null, now: NOW });
+  const failing: DemoMailer = async () => ({ ok: false, why: 'down' });
+  const r = await bookDemo(input, { store, send: failing, ip: null, now: NOW });
+  assert.equal(r.emailed, false);
   assert.equal(store.rows.length, 1);
+  assert.equal(store.rows[0]!.guest_emailed_at, undefined);
+
+  const throwing: DemoMailer = async () => {
+    throw new Error('socket hang up');
+  };
+  const r2 = await bookDemo(
+    { ...input, slotStart: '2026-10-14T15:30:00.000Z' },
+    { store, send: throwing, ip: null, now: NOW },
+  );
+  assert.equal(r2.emailed, false);
+  assert.equal(store.rows.length, 2);
 });

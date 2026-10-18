@@ -56,7 +56,11 @@ demoRouter.get('/slots', slotsLimiter, async (_req: Request, res: Response, next
   }
 });
 
-/** POST /api/demo/book — hold the slot and notify the host; the guest's invite comes from Google Calendar. */
+/**
+ * POST /api/demo/book — hold the slot and email the guest a branded confirmation
+ * (`emailed` is true only if it was accepted for delivery). The Meet link comes
+ * in the Google Calendar invite; the host is emailed by the meet hook.
+ */
 demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = demoBookingSchema.parse(req.body);
@@ -66,7 +70,7 @@ demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: 
       return;
     }
     const result = await bookDemo(input, { store: store(), send: sendSystemMail, ip: clientIp(req) });
-    res.json({ ok: true, slotStart: result.slotStart, emailed: true });
+    res.json({ ok: true, slotStart: result.slotStart, emailed: result.emailed });
   } catch (err) {
     next(err);
   }

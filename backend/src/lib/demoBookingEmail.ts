@@ -226,8 +226,10 @@ function ctLabel(start: Date): string {
   const p = slotParts(start, DEMO_TIME_ZONE);
   return `${p.date}, ${p.time}`;
 }
-export function guestInviteLine(start: Date, hostName: string): string {
-  return `Your Google Calendar invite with the video link for ${ctLabel(start)} is on its way from ${hostName}.`;
+/** The guest's line, in the guest's own zone (falls back to CT). No link: the Google invite carries it. */
+export function guestInviteLine(start: Date, hostName: string, tz: string = DEMO_TIME_ZONE): string {
+  const p = slotParts(start, validZone(tz));
+  return `Your Google Calendar invite with the video link for ${p.date}, ${p.time} is on its way from ${hostName}.`;
 }
 export function hostInviteLine(start: Date, guestName: string): string {
   return `A Google Calendar invite with the video link for ${ctLabel(start)} is going out to ${guestName} from your calendar.`;
@@ -311,9 +313,10 @@ export function demoGuestEmail(
     { label: 'Booked for', value: `${b.name} · ${b.company}` },
     { label: 'Email', value: b.email },
   ];
-  const invite = guestInviteLine(start, hostName);
+  const invite = guestInviteLine(start, hostName, zone);
   const html = layout({
     invite,
+    meetUrl: null,
     title: subject,
     preheader: `You're booked for ${slotSubjectLabel(start, zone)}. Your calendar invite is on its way.`,
     eyebrow: 'Demo confirmed',
