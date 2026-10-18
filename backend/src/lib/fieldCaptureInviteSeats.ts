@@ -28,6 +28,7 @@ import {
   type AtmosphereBillingInterval,
 } from './stripe.js';
 import { atmospherePlan } from './stripeCatalog.js';
+import { withChestMounts } from './stripeTax.js';
 import { resolveOnboardingPriceId } from './workspaceBilling.js';
 
 export async function createWorkVerificationExtraSeatCheckout(input: {
@@ -69,12 +70,16 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
       client_reference_id: input.orgId,
       metadata: planMeta,
       subscription_data: { metadata: planMeta },
-      line_items: [
-        { price: input.workVerificationPriceId, quantity: 1 },
-        { price: seatPriceId, quantity: extra },
-      ],
+      // One Chest Mount per extra Field Capture seat; included seats get none.
+      ...withChestMounts(
+        [
+          { price: input.workVerificationPriceId, quantity: 1 },
+          { price: seatPriceId, quantity: extra },
+        ],
+        extra,
+      ),
     },
-    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats', input.orgId, extra, interval) },
+    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats-v2', input.orgId, extra, interval) },
   );
   if (!session.url) {
     throw paymentRequired(

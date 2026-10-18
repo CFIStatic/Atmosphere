@@ -78,11 +78,13 @@ export const LEGACY_WORK_VERIFICATION_PRICE_ID = 'price_1UD4Sq1b5twUY3Ly6nqfRaGC
 export const LEGACY_SCALE_PRICE_ID = 'price_1UD7vj1b5twUY3Ly1Q4uv4kS';
 export const LEGACY_EXTRA_FC_SEAT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyjD850F4V';
 
-/** Live Chest Mount one-time $49.99. */
+/** Live Chest Mount one-time $99.99 (the product's default price). */
 export const LIVE_CHEST_MOUNT_PRODUCT_ID = 'prod_VDVQSFSfFnEs4J';
-export const LIVE_CHEST_MOUNT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyFtodoczS';
+export const LIVE_CHEST_MOUNT_PRICE_ID = 'price_1UIvqJ1b5twUY3LyoDRKBus2';
+/** Archived $49.99 price. Kept so old Checkout lines still read as a chest mount. */
+export const LEGACY_CHEST_MOUNT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyFtodoczS';
 
-/** Active Payment Link that sells the $49.99 Chest Mount (old $49 link is inactive). */
+/** Active Payment Link that sells the Chest Mount on the website. */
 export const LIVE_CHEST_MOUNT_PAYMENT_LINK =
   'https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01';
 
@@ -154,7 +156,7 @@ export const EXTRA_SEAT_PLAN_CODES = [FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE, 'extra
 export function isExtraSeatPlanCode(value: string | null | undefined): boolean {
   return EXTRA_SEAT_PLAN_CODES.includes(value as (typeof EXTRA_SEAT_PLAN_CODES)[number]);
 }
-export const CHEST_MOUNT_PRICE_CENTS = 4_999;
+export const CHEST_MOUNT_PRICE_CENTS = 9_999;
 
 export function isAtmosphereSelfServePlanCode(
   value: string | null | undefined,
