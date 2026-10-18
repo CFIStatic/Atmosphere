@@ -238,13 +238,26 @@ orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) =
 
     const { data: currentRows, error: currentError } = await supabase
       .from('org_members')
-      .select('role')
+      .select('role, org_id')
       .eq('user_id', req.user!.id)
       .limit(1);
     if (currentError) throw new HttpError(500, currentError.message, 'membership_update_failed');
     const currentRole = currentRows?.[0]?.role as string | undefined;
     if (!currentRole) {
       throw new HttpError(404, 'You are not linked to an organization yet.', 'not_onboarded');
+    }
+    const currentOrgId = currentRows?.[0]?.org_id as string | undefined;
+    if (
+      !isGlobalAdmin(role) &&
+      isGlobalAdmin(currentRole) &&
+      currentOrgId &&
+      (await loadOrgOwnerId(req, currentOrgId)) === req.user!.id
+    ) {
+      throw new HttpError(
+        403,
+        'The account owner stays Global Admin. Nobody can step down from it.',
+        'owner_stays_global_admin',
+      );
     }
     if (isGlobalAdmin(role) && !isGlobalAdmin(currentRole)) {
       throw new HttpError(403, GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, 'global_admin_owner_only');

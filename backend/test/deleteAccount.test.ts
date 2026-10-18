@@ -167,6 +167,47 @@ test('deleteOwnAccount refuses with 409 last_admin and touches nothing', async (
   assert.ok(!calls.some((c) => c.startsWith('delete') || c.startsWith('scrub') || c.startsWith('soft')));
 });
 
+function ownerMembership(orgId = ORG, orgName = 'Acme Roofing'): AccountMembership {
+  return { ...membership('global_admin', orgId, orgName), isOwner: true };
+}
+
+test('the owner is blocked while a Platform seat is still in the workspace', () => {
+  const plan = planAccountDeletion(ME, [ownerMembership()], new Map([
+    [ORG, [member(ME, 'global_admin'), member(OTHER, 'global_admin')]],
+  ]));
+  assert.deepEqual(plan, { ok: false, reason: 'owner_has_members', blocked: [{ orgId: ORG, orgName: 'Acme Roofing' }] });
+});
+
+test('the owner is blocked by any other member, even an inactive one', () => {
+  for (const other of [member(OTHER, 'employee'), member(OTHER, 'employee', 'inactive')]) {
+    const plan = planAccountDeletion(ME, [ownerMembership()], new Map([[ORG, [member(ME, 'global_admin'), other]]]));
+    assert.equal(plan.ok, false);
+    assert.equal(!plan.ok && plan.reason, 'owner_has_members');
+  }
+});
+
+test('the owner alone in the workspace can delete their account', () => {
+  const plan = planAccountDeletion(ME, [ownerMembership()], new Map([[ORG, [member(ME, 'global_admin')]]]));
+  assert.deepEqual(plan, { ok: true, orgs: [{ orgId: ORG, orgName: 'Acme Roofing', soleMember: true }] });
+});
+
+test('deleteOwnAccount refuses the owner with 409 owner_has_members and touches nothing', async () => {
+  const { store, calls } = fakeStore({
+    memberships: [ownerMembership()],
+    members: { [ORG]: [member(ME, 'global_admin'), member(OTHER, 'global_admin'), member(THIRD, 'employee')] },
+  });
+  await assert.rejects(deleteOwnAccount(store, ME), (err: unknown) => {
+    assert.ok(err instanceof HttpError);
+    assert.equal(err.status, 409);
+    assert.equal(err.code, 'owner_has_members');
+    assert.match(err.message, /You own Acme Roofing/);
+    assert.match(err.message, /Platform seats included/);
+    assert.match(err.message, /Remove everyone else from Team settings first/);
+    return true;
+  });
+  assert.ok(!calls.some((c) => c.startsWith('delete') || c.startsWith('scrub') || c.startsWith('soft')));
+});
+
 test('deleteOwnAccount hard-deletes membership, profile, and login when nothing blocks it', async () => {
   const { store, calls } = fakeStore({
     memberships: [membership('field_technician')],
@@ -289,14 +330,14 @@ test('Supabase store pins every write to the caller and soft-deletes a reference
   const { supabaseAccountDeletionStore } = await import('../src/account/deleteAccount.js');
   const { admin, log, authCalls } = recordingAdmin(
     {
-      org_members: [{ org_id: ORG, role: 'field_technician', status: 'active', orgs: { name: 'Acme Roofing' }, user_id: ME }],
+      org_members: [{ org_id: ORG, role: 'field_technician', status: 'active', orgs: { name: 'Acme Roofing', created_by: OTHER }, user_id: ME }],
     },
     ['profiles'],
   );
   const store = supabaseAccountDeletionStore(admin);
   const memberships = await store.listMemberships(ME);
   assert.deepEqual(memberships, [
-    { orgId: ORG, orgName: 'Acme Roofing', role: 'field_technician', status: 'active' },
+    { isOwner: false, orgId: ORG, orgName: 'Acme Roofing', role: 'field_technician', status: 'active' },
   ]);
 
   const result = await deleteOwnAccount(

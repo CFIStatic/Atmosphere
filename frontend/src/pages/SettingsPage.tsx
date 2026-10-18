@@ -756,7 +756,13 @@ function DeleteAccountCard() {
       await logout().catch(() => undefined);
       navigate('/login', { replace: true, state: { notice: result.message } });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.deleteAccount.error'));
+      setError(
+        err instanceof ApiError && err.code === 'owner_has_members'
+          ? t('settings.deleteAccount.ownerHasMembers')
+          : err instanceof ApiError
+            ? err.message
+            : t('settings.deleteAccount.error'),
+      );
       setBusy(false);
     }
   }

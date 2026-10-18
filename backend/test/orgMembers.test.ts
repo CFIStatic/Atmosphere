@@ -98,3 +98,11 @@ test('nobody removes the account owner, even a Platform seat that carries the ad
   assert.equal(decision.allowed, false);
   assert.equal(decision.allowed === false && decision.code, 'owner_cannot_be_removed');
 });
+
+test('the owner cannot step down from Global Admin through PATCH /me', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/routes/org.ts', import.meta.url), 'utf8');
+  const patch = src.slice(src.indexOf("orgRouter.patch('/me'"), src.indexOf("orgRouter.patch('/',"));
+  assert.match(patch, /owner_stays_global_admin/);
+  assert.ok(patch.indexOf('owner_stays_global_admin') < patch.indexOf(".update({ role"));
+});

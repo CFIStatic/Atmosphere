@@ -312,6 +312,27 @@ describe('Settings Delete account', () => {
     expect(await screen.findByText('You are the only admin of Jett.')).toBeInTheDocument();
     expect(authState.logout).not.toHaveBeenCalled();
   });
+
+  it('tells the owner to remove everyone else first (owner_has_members)', async () => {
+    const { ApiError } = await import('../lib/api');
+    const err = new ApiError('server text');
+    (err as unknown as { code: string }).code = 'owner_has_members';
+    apiMocks.deleteAccount.mockRejectedValue(err);
+    renderSettings('/settings?section=security');
+    await userEvent.click(screen.getByTestId('delete-account-open'));
+    await userEvent.click(screen.getByTestId('delete-account-confirm-button'));
+    expect(
+      await screen.findByText(
+        'You own this workspace and other people are still on it, Platform seats included. Remove everyone else from Team settings first, then delete your account.',
+      ),
+    ).toBeInTheDocument();
+    expect(authState.logout).not.toHaveBeenCalled();
+  });
+
+  it('has the owner message in Spanish', async () => {
+    const { ES } = await import('../locales/es');
+    expect(ES['settings.deleteAccount.ownerHasMembers']).toMatch(/Primero elimina a todos los demás/);
+  });
 });
 
 describe('Settings sections', () => {

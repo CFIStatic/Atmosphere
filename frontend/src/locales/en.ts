@@ -121,6 +121,8 @@ export const EN = {
   'settings.deleteAccount.cancel': 'Cancel',
   'settings.deleteAccount.deleting': 'Deleting…',
   'settings.deleteAccount.error': 'Your account could not be deleted right now. Try again in a moment.',
+  'settings.deleteAccount.ownerHasMembers':
+    'You own this workspace and other people are still on it, Platform seats included. Remove everyone else from Team settings first, then delete your account.',
 
   'settings.linked.title': 'Linked accounts',
   'settings.linked.description':

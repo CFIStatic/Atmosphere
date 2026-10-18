@@ -8,8 +8,11 @@
  *   photo go with them. Terms acceptances keep the version and time but
  *   lose the IP address and user agent.
  * - Jobs, files, and videos belong to the company and stay with it.
- * - If the person is the only active admin of an org that still has other
- *   active members, deletion is blocked until someone else is made an admin.
+ * - The account owner (orgs.created_by, the one Global Admin, who pays)
+ *   cannot delete their account while anyone else is still in the workspace,
+ *   Platform seats included. They remove everyone else first.
+ * - A legacy sole admin who is not the owner is still blocked while other
+ *   active members remain.
  * - If the person is the only member of an org, the membership is removed
  *   and the company data is left in place.
  *
@@ -32,6 +35,8 @@ export type AccountMembership = {
   orgName: string | null;
   role: string | null;
   status: string | null;
+  /** True when this person created (owns and pays for) the org. */
+  isOwner?: boolean;
 };
 
 export type OrgMemberRow = {
@@ -49,8 +54,10 @@ export type OrgOutcome = {
   soleMember: boolean;
 };
 
+export type AccountDeletionBlockReason = 'owner_has_members' | 'last_admin';
+
 export type AccountDeletionPlan =
-  | { ok: false; blocked: BlockedOrg[] }
+  | { ok: false; reason: AccountDeletionBlockReason; blocked: BlockedOrg[] }
   | { ok: true; orgs: OrgOutcome[] };
 
 function isActive(status: string | null | undefined): boolean {
@@ -66,6 +73,7 @@ export function planAccountDeletion(
   memberships: AccountMembership[],
   membersByOrg: Map<string, OrgMemberRow[]>,
 ): AccountDeletionPlan {
+  const ownerBlocked: BlockedOrg[] = [];
   const blocked: BlockedOrg[] = [];
   const orgs: OrgOutcome[] = [];
 
@@ -74,6 +82,13 @@ export function planAccountDeletion(
     const others = members.filter((m) => m.userId !== userId && isActive(m.status));
     const callerIsActiveAdmin = isActive(membership.status) && isGlobalAdmin(membership.role);
     const otherAdmins = others.filter((m) => isGlobalAdmin(m.role));
+
+    // The owner goes last: anyone else still on the workspace (any seat, any
+    // status) keeps the owner's account in place.
+    if (membership.isOwner && members.some((m) => m.userId !== userId)) {
+      ownerBlocked.push({ orgId: membership.orgId, orgName: membership.orgName });
+      continue;
+    }
 
     if (callerIsActiveAdmin && others.length > 0 && otherAdmins.length === 0) {
       blocked.push({ orgId: membership.orgId, orgName: membership.orgName });
@@ -86,7 +101,8 @@ export function planAccountDeletion(
     });
   }
 
-  if (blocked.length > 0) return { ok: false, blocked };
+  if (ownerBlocked.length > 0) return { ok: false, reason: 'owner_has_members', blocked: ownerBlocked };
+  if (blocked.length > 0) return { ok: false, reason: 'last_admin', blocked };
   return { ok: true, orgs };
 }
 
@@ -95,6 +111,14 @@ export function blockedMessage(blocked: BlockedOrg[]): string {
   return (
     `You are the only admin of ${names}, and other people still use it. ` +
     'Remove the other people first, or contact Atmosphere support to hand the workspace to someone else, then delete your account.'
+  );
+}
+
+export function ownerBlockedMessage(blocked: BlockedOrg[]): string {
+  const names = blocked.map((b) => b.orgName?.trim() || 'your company').join(', ');
+  return (
+    `You own ${names}, and other people are still on it, Platform seats included. ` +
+    'Remove everyone else from Team settings first, then delete your account.'
   );
 }
 
@@ -143,6 +167,9 @@ export async function deleteOwnAccount(
 
   const plan = planAccountDeletion(userId, memberships, membersByOrg);
   if (!plan.ok) {
+    if (plan.reason === 'owner_has_members') {
+      throw new HttpError(409, ownerBlockedMessage(plan.blocked), 'owner_has_members');
+    }
     throw new HttpError(409, blockedMessage(plan.blocked), 'last_admin');
   }
 
@@ -170,10 +197,13 @@ export function supabaseAccountDeletionStore(admin: SupabaseClient): AccountDele
     async listMemberships(userId) {
       const { data, error } = await admin
         .from('org_members')
-        .select('org_id, role, status, orgs(name)')
+        .select('org_id, role, status, orgs(name, created_by)')
         .eq('user_id', userId);
       if (error) throw new HttpError(500, error.message, 'account_delete_failed');
       return ((data ?? []) as any[]).map((row) => ({
+        isOwner:
+          String((Array.isArray(row.orgs) ? row.orgs[0]?.created_by : row.orgs?.created_by) ?? '') ===
+          userId,
         orgId: String(row.org_id),
         orgName: (Array.isArray(row.orgs) ? row.orgs[0]?.name : row.orgs?.name) ?? null,
         role: row.role ?? null,

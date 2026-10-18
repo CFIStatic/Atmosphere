@@ -124,6 +124,8 @@ export const ES: MessageCatalog = {
   'settings.deleteAccount.cancel': 'Cancelar',
   'settings.deleteAccount.deleting': 'Eliminando…',
   'settings.deleteAccount.error': 'No se pudo eliminar tu cuenta ahora. Inténtalo de nuevo en un momento.',
+  'settings.deleteAccount.ownerHasMembers':
+    'Eres el dueño de este espacio de trabajo y todavía hay otras personas en él, incluidos los puestos de Platform. Primero elimina a todos los demás desde la configuración del equipo y luego elimina tu cuenta.',
 
   'settings.linked.title': 'Cuentas vinculadas',
   'settings.linked.description':
