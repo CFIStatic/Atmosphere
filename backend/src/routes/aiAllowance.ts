@@ -25,6 +25,7 @@ import {
   subscriptionItemPriceId,
 } from '../lib/stripe.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
+import { checkoutTaxParams, ensureSubscriptionAutomaticTax, withChestMounts, type AutomaticTaxStripe } from '../lib/stripeTax.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import {
   applyComplimentaryPlanChange,
@@ -128,6 +129,7 @@ aiAllowanceRouter.post('/credits/checkout', rejectPurchasesInAppShell, async (re
         payment_intent_data: { metadata },
         invoice_creation: { enabled: true },
         line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
       {
         // A stable key is replayed for 24 hours. Buying the same pack again
@@ -185,6 +187,8 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
         res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
         return;
       }
+      // Older subscriptions predate Stripe Tax; turn it on first (best effort).
+      await ensureSubscriptionAutomaticTax(stripe as unknown as AutomaticTaxStripe, currentSub, existing);
       const update = planItemUpdateParams(existing.items?.data ?? [], priceId);
       // A stable key is replayed for 24 hours. Switching away and back to this
       // plan in that window must send a new update, not the cached one.
@@ -240,9 +244,10 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
         client_reference_id: req.orgId,
         metadata,
         subscription_data: { metadata },
-        line_items: [{ price: priceId, quantity: 1 }],
+        // One Chest Mount per included Field Capture seat; Stripe Tax on.
+        ...withChestMounts([{ price: priceId, quantity: 1 }], plan.includedFcSeats),
       },
-      { idempotencyKey: stripeIdempotencyKey('plan-change', req.orgId, plan.code, interval, priceId) },
+      { idempotencyKey: stripeIdempotencyKey('plan-change-v2', req.orgId, plan.code, interval, priceId) },
     );
     res.status(201).json({ checkoutUrl: session.url, planCode: plan.code, billingInterval: interval });
   } catch (err) {

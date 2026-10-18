@@ -10,8 +10,10 @@ billing period. Optional credit packs add more allowance. The annual rate is
 locked for the term. Annual plans are non-refundable and cancel at the end of
 the term.
 Signup Checkout and Settings → Billing are that bill. Enterprise is
-contact-sales only — there is no fourth self-serve SKU. The Field Capture Chest
-Mount is a one-time **$49.99** Payment Link on the website.
+contact-sales only — there is no fourth self-serve SKU. Platform seats are
+**$75/month** each (monthly only). The Field Capture Chest Mount is **$99.99**
+one-time: every Field Capture seat bought ships with one (see below), and the
+website Payment Link sells extras.
 
 A leftover seat / LLM-credit catalog (`billing_plans`, the old credit wallet)
 still has API and webhook handlers so existing Stripe events do not break. It
@@ -143,13 +145,37 @@ env id, the pinned live id, or by price metadata `atmosphere_plan_code`
 `atmosphere_interval=year`. Extra seats added later use the subscription's
 interval (Stripe default proration). Usage billing is unchanged.
 
-Chest Mount hardware is one-time `price_1UD4Sl1b5twUY3LyFtodoczS` ($49.99).
+Chest Mount hardware is one-time `price_1UIvqJ1b5twUY3LyoDRKBus2` ($99.99,
+the product default). `price_1UD4Sl1b5twUY3LyFtodoczS` ($49.99) is archived.
 The live Payment Link is
 `https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01`. The older
 `https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00` link is $49 and inactive.
 
 A price that is not in either catalog is a **hard webhook failure** (500 +
 retry). Do not skip unmapped prices — that loses a paid signup.
+
+## Stripe Tax
+
+Every Checkout session (plan, plan + extra seats, plan + Platform seats, AI
+credits) sets `automatic_tax: { enabled: true }`, requires a billing address,
+offers tax-id collection, and sets `customer_update: { address: 'auto', name:
+'auto' }` so the address lands on the existing Customer. Seat and plan changes
+on a live subscription first turn on `automatic_tax` for subscriptions created
+before this (best effort — a customer with no address is logged and the change
+still goes through). The head office is set; with **no tax registrations**
+Stripe calculates $0, so this is safe until registrations are added in the
+Dashboard. `STRIPE_AUTOMATIC_TAX=off` is the kill switch.
+
+## Chest Mount per Field Capture seat
+
+1 Field Capture seat = 1 Chest Mount. Plan Checkout adds the plan's included
+seats as mounts (Starter 1, Work Verification 3, Scale 10); plan + extra-seat
+Checkout adds included + extra. Adding N extra seats to a live subscription
+puts N mounts on the next invoice (`add_invoice_items`, alongside the seat
+proration). Platform seats and the Global Admin get none. Any session with a
+mount collects a US/CA shipping address. `STRIPE_CHEST_MOUNT_PRICE_ID` wins;
+otherwise the live id is used **only with a live secret key**, so staging
+(test key) never sends a live price. `STRIPE_CHEST_MOUNT_PER_SEAT=off` stops it.
 
 ## Webhook endpoint
 
@@ -197,6 +223,10 @@ STRIPE_STARTER_ANNUAL_PRICE_ID=price_1UJL4a1b5twUY3LyozTzumYn        # Starter $
 STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_1UJL7O1b5twUY3LysyTksWMm     # Work Verification $8,490/yr
 STRIPE_SCALE_ANNUAL_PRICE_ID=price_1UJLA31b5twUY3LysRs2YVmw          # Scale $19,990/yr
 STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_1UJLCg1b5twUY3Ly33CATdSo     # Extra Field Capture seat $1,250/yr
+STRIPE_PLATFORM_SEAT_PRICE_ID=price_1US1Th1b5twUY3Lymw8VLJ1s        # live Platform seat $75/mo (prod_VSxOWDwwutmmw9); staging uses a test-mode price
+# STRIPE_CHEST_MOUNT_PRICE_ID=price_…     # optional; live falls back to price_1UIvqJ1b5twUY3LyoDRKBus2 only with a live key
+# STRIPE_AUTOMATIC_TAX=off                # kill switch for Stripe Tax (on by default)
+# STRIPE_CHEST_MOUNT_PER_SEAT=off         # stop adding a mount per Field Capture seat
 SUPABASE_SERVICE_ROLE_KEY=…
 FRONTEND_ORIGIN=http://localhost:5174,http://localhost:5173
 # Optional — defaults land on Settings → Billing:

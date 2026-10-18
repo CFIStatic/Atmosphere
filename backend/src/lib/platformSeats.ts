@@ -23,6 +23,7 @@ import { forbidden, HttpError, paymentRequired } from './errors.js';
 import { isWorkVerificationEntitled } from './fieldCaptureSeats.js';
 import { unscopedAdminOrNull } from './scopedAdmin.js';
 import { PLATFORM_SEAT_MONTHLY_CENTS, PLATFORM_SEAT_PLAN_CODE, atmospherePlan } from './stripeCatalog.js';
+import { ensureSubscriptionAutomaticTax, withChestMounts, type AutomaticTaxStripe } from './stripeTax.js';
 
 export const PLATFORM_SEAT_TYPE = 'platform';
 export const FIELD_CAPTURE_SEAT_TYPE = 'field_capture';
@@ -300,6 +301,11 @@ export interface PlatformSeatInviteDeps {
   idempotencyKey(...parts: Array<string | number>): string;
   /** Checkout (plan + Platform seat) for a workspace without a live subscription. */
   createCheckout(input: { orgId: string; priceId: string }): Promise<string>;
+  /** Turn on Stripe Tax for an older live subscription. Optional (tests). */
+  ensureAutomaticTax?(
+    subscriptionId: string,
+    sub: Awaited<ReturnType<PlatformSeatStripe['subscriptions']['retrieve']>>,
+  ): Promise<unknown>;
 }
 
 /**
@@ -343,6 +349,8 @@ export async function addPlatformSeatForInvite(
     if (deps.intervalOf(sub) === 'year') {
       throw paymentRequired(PLATFORM_SEAT_ANNUAL_MESSAGE, 'platform_seat_interval');
     }
+    // Stripe Tax on the subscription before the $75 line is added (best effort).
+    await deps.ensureAutomaticTax?.(decision.subscriptionId, sub);
     const existing = sub.items.data.find((item) => deps.isPlatformSeatItem(item));
     if (existing) {
       await stripe.subscriptionItems.update(
@@ -412,6 +420,12 @@ export async function ensurePlatformSeatForInvite(
       intervalOf: (sub) => stripeLib.recurringIntervalFromSubscription(sub as never),
       isPlatformSeatItem: (item) => stripeLib.isPlatformSeatLineItem(item as never),
       idempotencyKey: (...parts) => stripeLib.stripeIdempotencyKey(...parts),
+      ensureAutomaticTax: (subscriptionId, sub) =>
+        ensureSubscriptionAutomaticTax(
+          stripeLib.stripeClient() as unknown as AutomaticTaxStripe,
+          subscriptionId,
+          sub as { automatic_tax?: { enabled?: boolean | null } | null },
+        ),
       createCheckout: async ({ orgId: id, priceId: seatPriceId }) => {
         if (config.billing.paymentProvider !== 'stripe' || !stripeLib.isStripeConfigured()) {
           throw paymentRequired(PLATFORM_SEAT_UNAVAILABLE_MESSAGE, 'platform_seat_unavailable');
@@ -450,12 +464,17 @@ export async function ensurePlatformSeatForInvite(
             client_reference_id: id,
             metadata: meta,
             subscription_data: { metadata: meta },
-            line_items: [
-              { price: planPriceId, quantity: 1 },
-              { price: seatPriceId, quantity: Math.max(billing.purchased, usage.used) + 1 },
-            ],
+            // Chest Mounts for the plan's Field Capture seats only; a
+            // Platform seat never gets one.
+            ...withChestMounts(
+              [
+                { price: planPriceId, quantity: 1 },
+                { price: seatPriceId, quantity: Math.max(billing.purchased, usage.used) + 1 },
+              ],
+              plan.includedFcSeats,
+            ),
           },
-          { idempotencyKey: stripeLib.stripeIdempotencyKey('invite-platform-seats', id, usage.used + 1) },
+          { idempotencyKey: stripeLib.stripeIdempotencyKey('invite-platform-seats-v2', id, usage.used + 1) },
         );
         if (!session.url) {
           throw paymentRequired('Stripe Checkout did not return a URL. Try again in a moment.', 'checkout_unavailable');
