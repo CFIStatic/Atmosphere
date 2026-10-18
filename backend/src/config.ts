@@ -364,12 +364,12 @@ export const config = {
     platformSeatPriceId: process.env.STRIPE_PLATFORM_SEAT_PRICE_ID ?? '',
     /**
      * Field Capture Chest Mount one-time price ($99.99). One mount ships with
-     * every Field Capture seat bought through Checkout or added to a live
-     * subscription. Empty falls back to LIVE_CHEST_MOUNT_PRICE_ID only when the
+     * every extra Field Capture seat (beyond the plan's included seats),
+     * bought at signup or added later. Included seats get none. Empty falls back to LIVE_CHEST_MOUNT_PRICE_ID only when the
      * secret key is a live key, so a test-mode server never sends a live id.
      */
     chestMountPriceId: process.env.STRIPE_CHEST_MOUNT_PRICE_ID ?? '',
-    /** `off` stops adding a chest mount per Field Capture seat. On by default. */
+    /** `off` stops adding a chest mount per extra Field Capture seat. On by default. */
     chestMountPerSeat: !/^(off|false|0|no)$/i.test(process.env.STRIPE_CHEST_MOUNT_PER_SEAT ?? ''),
     /**
      * Stripe Tax on every Checkout session and subscription change. On by

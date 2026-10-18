@@ -25,7 +25,7 @@ import {
   subscriptionItemPriceId,
 } from '../lib/stripe.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
-import { checkoutTaxParams, ensureSubscriptionAutomaticTax, withChestMounts, type AutomaticTaxStripe } from '../lib/stripeTax.js';
+import { checkoutTaxParams, ensureSubscriptionAutomaticTax, type AutomaticTaxStripe } from '../lib/stripeTax.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import {
   applyComplimentaryPlanChange,
@@ -244,8 +244,9 @@ aiAllowanceRouter.post('/plan/checkout', rejectPurchasesInAppShell, async (req: 
         client_reference_id: req.orgId,
         metadata,
         subscription_data: { metadata },
-        // One Chest Mount per included Field Capture seat; Stripe Tax on.
-        ...withChestMounts([{ price: priceId, quantity: 1 }], plan.includedFcSeats),
+        // A plan's included seats get no Chest Mount. Stripe Tax on.
+        line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
       { idempotencyKey: stripeIdempotencyKey('plan-change-v2', req.orgId, plan.code, interval, priceId) },
     );

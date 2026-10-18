@@ -23,7 +23,7 @@ import { forbidden, HttpError, paymentRequired } from './errors.js';
 import { isWorkVerificationEntitled } from './fieldCaptureSeats.js';
 import { unscopedAdminOrNull } from './scopedAdmin.js';
 import { PLATFORM_SEAT_MONTHLY_CENTS, PLATFORM_SEAT_PLAN_CODE, atmospherePlan } from './stripeCatalog.js';
-import { ensureSubscriptionAutomaticTax, withChestMounts, type AutomaticTaxStripe } from './stripeTax.js';
+import { checkoutTaxParams, ensureSubscriptionAutomaticTax, type AutomaticTaxStripe } from './stripeTax.js';
 
 export const PLATFORM_SEAT_TYPE = 'platform';
 export const FIELD_CAPTURE_SEAT_TYPE = 'field_capture';
@@ -464,15 +464,12 @@ export async function ensurePlatformSeatForInvite(
             client_reference_id: id,
             metadata: meta,
             subscription_data: { metadata: meta },
-            // Chest Mounts for the plan's Field Capture seats only; a
-            // Platform seat never gets one.
-            ...withChestMounts(
-              [
-                { price: planPriceId, quantity: 1 },
-                { price: seatPriceId, quantity: Math.max(billing.purchased, usage.used) + 1 },
-              ],
-              plan.includedFcSeats,
-            ),
+            // No Chest Mount: included seats and Platform seats get none.
+            line_items: [
+              { price: planPriceId, quantity: 1 },
+              { price: seatPriceId, quantity: Math.max(billing.purchased, usage.used) + 1 },
+            ],
+            ...checkoutTaxParams(),
           },
           { idempotencyKey: stripeLib.stripeIdempotencyKey('invite-platform-seats-v2', id, usage.used + 1) },
         );

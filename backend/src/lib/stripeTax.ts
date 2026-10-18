@@ -8,9 +8,11 @@
  * registrations Stripe calculates $0, so this is safe before any state is
  * registered. `STRIPE_AUTOMATIC_TAX=off` is the kill switch.
  *
- * Chest mount: every Field Capture seat bought ships with one Field Capture
- * Chest Mount ($99.99, one-time). Platform seats and the Global Admin get
- * none. `STRIPE_CHEST_MOUNT_PER_SEAT=off` turns this off.
+ * Chest mount: every extra Field Capture seat (beyond the plan's included
+ * seats, at signup or added later) ships with one Field Capture Chest Mount
+ * ($99.99, one-time). A plan's included seats, Platform seats, the Global
+ * Admin and plan upgrades get none. `STRIPE_CHEST_MOUNT_PER_SEAT=off` turns
+ * this off.
  */
 
 import { config } from '../config.js';
@@ -42,7 +44,7 @@ export function chestMountPriceId(
   return isLiveSecretKey(opts.secretKey ?? config.stripe.secretKey) ? LIVE_CHEST_MOUNT_PRICE_ID : null;
 }
 
-/** One Chest Mount per Field Capture seat, as a one-time Checkout line. */
+/** One Chest Mount per extra Field Capture seat, as a one-time Checkout line. */
 export function chestMountLineItems(
   fieldCaptureSeats: number,
   priceId: string | null = chestMountPriceId(),
@@ -78,8 +80,9 @@ export function checkoutTaxParams(opts: { shipsHardware?: boolean; taxEnabled?: 
 }
 
 /**
- * Plan / seat Checkout line items with N Chest Mounts for N Field Capture
- * seats, plus the matching tax and shipping params.
+ * Plan + extra-seat Checkout line items with N Chest Mounts for N extra
+ * Field Capture seats, plus the matching tax and shipping params. Shipping
+ * is collected only when a mount is in the session.
  */
 export function withChestMounts(
   lineItems: Array<{ price: string; quantity: number }>,

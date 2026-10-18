@@ -70,13 +70,13 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
       client_reference_id: input.orgId,
       metadata: planMeta,
       subscription_data: { metadata: planMeta },
-      // Every Field Capture seat (included + extra) ships with a Chest Mount.
+      // One Chest Mount per extra Field Capture seat; included seats get none.
       ...withChestMounts(
         [
           { price: input.workVerificationPriceId, quantity: 1 },
           { price: seatPriceId, quantity: extra },
         ],
-        plan.includedFcSeats + extra,
+        extra,
       ),
     },
     { idempotencyKey: stripeIdempotencyKey('invite-extra-seats-v2', input.orgId, extra, interval) },

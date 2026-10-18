@@ -90,31 +90,33 @@ test('Chest Mount price: env wins; live id only with a live key; never on a test
   assert.equal(chestMountPriceId({ envPriceId: 'price_testMount', secretKey: 'sk_live_x', enabled: false }), null);
 });
 
-test('N Field Capture seats → N Chest Mounts', () => {
+test('N extra Field Capture seats → N Chest Mounts', () => {
   assert.deepEqual(chestMountLineItems(3, 'price_mount'), [{ price: 'price_mount', quantity: 3 }]);
   assert.deepEqual(chestMountLineItems(0, 'price_mount'), []);
   assert.deepEqual(chestMountLineItems(2, null), []);
 });
 
-test('plan Checkout: Work Verification (3 seats) adds 3 mounts and asks for shipping', () => {
-  const session = withChestMounts([{ price: 'price_plan', quantity: 1 }], 3, 'price_mount');
-  assert.deepEqual(session.line_items, [
-    { price: 'price_plan', quantity: 1 },
-    { price: 'price_mount', quantity: 3 },
-  ]);
-  assert.ok(session.shipping_address_collection);
+test('plan Checkout with no extras: zero mounts, no shipping step', () => {
+  const session = withChestMounts([{ price: 'price_plan', quantity: 1 }], 0, 'price_mount');
+  assert.deepEqual(session.line_items, [{ price: 'price_plan', quantity: 1 }]);
+  assert.equal('shipping_address_collection' in session, false);
 });
 
-test('plan + 2 extra seats Checkout: 3 included + 2 extra = 5 mounts', () => {
+test('plan + 2 extra seats Checkout: 2 mounts (included seats get none) and shipping', () => {
   const session = withChestMounts(
     [
       { price: 'price_plan', quantity: 1 },
       { price: 'price_seat', quantity: 2 },
     ],
-    3 + 2,
+    2,
     'price_mount',
   );
-  assert.deepEqual(session.line_items.at(-1), { price: 'price_mount', quantity: 5 });
+  assert.deepEqual(session.line_items, [
+    { price: 'price_plan', quantity: 1 },
+    { price: 'price_seat', quantity: 2 },
+    { price: 'price_mount', quantity: 2 },
+  ]);
+  assert.ok(session.shipping_address_collection);
 });
 
 test('no mount price configured (staging without one): no mount line, no shipping step', () => {

@@ -18,7 +18,7 @@ import {
   stripeIdempotencyKey,
 } from '../lib/stripe.js';
 import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
-import { checkoutTaxParams, withChestMounts } from '../lib/stripeTax.js';
+import { checkoutTaxParams } from '../lib/stripeTax.js';
 import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { billedUsageRateClause } from '../lib/usageDisplayRates.js';
@@ -638,8 +638,9 @@ billingRouter.post('/checkout/onboarding', rejectPurchasesInAppShell, async (req
         client_reference_id: req.orgId,
         metadata: planMeta,
         subscription_data: { metadata: planMeta },
-        // One Chest Mount per included Field Capture seat; Stripe Tax on.
-        ...withChestMounts([{ price: priceId, quantity: 1 }], plan.includedFcSeats),
+        // Included seats get no Chest Mount; only extra seats do. Stripe Tax on.
+        line_items: [{ price: priceId, quantity: 1 }],
+        ...checkoutTaxParams(),
       },
       { idempotencyKey: stripeIdempotencyKey('onboarding-v2', req.orgId, priceId, interval) },
     );

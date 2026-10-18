@@ -12,8 +12,8 @@ the term.
 Signup Checkout and Settings → Billing are that bill. Enterprise is
 contact-sales only — there is no fourth self-serve SKU. Platform seats are
 **$75/month** each (monthly only). The Field Capture Chest Mount is **$99.99**
-one-time: every Field Capture seat bought ships with one (see below), and the
-website Payment Link sells extras.
+one-time: every extra Field Capture seat ships with one (see below), and the
+website Payment Link sells more.
 
 A leftover seat / LLM-credit catalog (`billing_plans`, the old credit wallet)
 still has API and webhook handlers so existing Stripe events do not break. It
@@ -166,15 +166,16 @@ still goes through). The head office is set; with **no tax registrations**
 Stripe calculates $0, so this is safe until registrations are added in the
 Dashboard. `STRIPE_AUTOMATIC_TAX=off` is the kill switch.
 
-## Chest Mount per Field Capture seat
+## Chest Mount per extra Field Capture seat
 
-1 Field Capture seat = 1 Chest Mount. Plan Checkout adds the plan's included
-seats as mounts (Starter 1, Work Verification 3, Scale 10); plan + extra-seat
-Checkout adds included + extra. Adding N extra seats to a live subscription
-puts N mounts on the next invoice (`add_invoice_items`, alongside the seat
-proration). Platform seats and the Global Admin get none. Any session with a
-mount collects a US/CA shipping address. `STRIPE_CHEST_MOUNT_PRICE_ID` wins;
-otherwise the live id is used **only with a live secret key**, so staging
+1 extra Field Capture seat = 1 Chest Mount ($99.99 one-time). A plan's
+included seats (Starter 1, Work Verification 3, Scale 10) get **none**, so a
+signup with no extras has no mount. Plan + extra-seat Checkout adds one mount
+per extra seat. Adding N extra seats to a live subscription puts N mounts on
+the next invoice (`add_invoice_items`, alongside the seat proration). Platform
+seats, the Global Admin and plan upgrades get none. A US/CA shipping address
+is collected only when a mount is in the session. `STRIPE_CHEST_MOUNT_PRICE_ID`
+wins; otherwise the live id is used **only with a live secret key**, so staging
 (test key) never sends a live price. `STRIPE_CHEST_MOUNT_PER_SEAT=off` stops it.
 
 ## Webhook endpoint
