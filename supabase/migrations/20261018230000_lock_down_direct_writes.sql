@@ -39,6 +39,12 @@
 --    are gone, so it can only error; it was still callable without signing in.
 --
 -- Additive for the server: the service role keeps every privilege it had.
+--
+-- Rollout: this file only revokes what the live BFF does not call with a user
+-- token in production, so it can be applied before the code that uses the
+-- *_as wrappers deploys. 20261018230200_revoke_user_token_rpcs.sql revokes
+-- the rest (join_org, set_billing_settings, record_token_usage,
+-- link_stripe_customer) and must be applied once that code is live.
 
 -- 1. org_members -------------------------------------------------------------
 drop policy if exists org_members_insert_self on public.org_members;
@@ -60,17 +66,11 @@ grant update (role, work_type, usage_intents) on public.org_members to authentic
 revoke execute on function public.set_billing_plan(uuid, text, public.billing_interval, integer) from public, anon, authenticated;
 grant execute on function public.set_billing_plan(uuid, text, public.billing_interval, integer) to service_role;
 
-revoke execute on function public.set_billing_settings(uuid, boolean, bigint, bigint, bigint, boolean) from public, anon, authenticated;
-grant execute on function public.set_billing_settings(uuid, boolean, bigint, bigint, bigint, boolean) to service_role;
 
 revoke execute on function public.record_usage(uuid, text, text, bigint, bigint, bigint, bigint, bigint, boolean, text) from public, anon, authenticated;
 grant execute on function public.record_usage(uuid, text, text, bigint, bigint, bigint, bigint, bigint, boolean, text) to service_role;
 
-revoke execute on function public.record_token_usage(uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz, bigint, text, bigint, bigint, bigint, jsonb, text) from public, anon, authenticated;
-grant execute on function public.record_token_usage(uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz, bigint, text, bigint, bigint, bigint, jsonb, text) to service_role;
 
-revoke execute on function public.link_stripe_customer(uuid, text) from public, anon, authenticated;
-grant execute on function public.link_stripe_customer(uuid, text) to service_role;
 
 -- Run owner/member-checked functions as the signed-in user the BFF has
 -- already authenticated. Service role only: the server is trusted to pass the
@@ -187,8 +187,6 @@ revoke all on function public.record_usage_as(uuid, uuid, text, text, bigint, bi
 grant execute on function public.record_usage_as(uuid, uuid, text, text, bigint, bigint, bigint, bigint, bigint, boolean, text) to service_role;
 
 -- 2b. Joining a workspace ----------------------------------------------------
-revoke execute on function public.join_org(text, public.member_role, public.work_type) from public, anon, authenticated;
-grant execute on function public.join_org(text, public.member_role, public.work_type) to service_role;
 revoke execute on function public.preview_org_by_join_code(text) from public, anon, authenticated;
 grant execute on function public.preview_org_by_join_code(text) to service_role;
 
