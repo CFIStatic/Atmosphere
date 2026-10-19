@@ -70,6 +70,23 @@ test('createVideoUploadSchema rejects path separators in file names', () => {
   );
 });
 
+test('verification uploads take films up to 80 GiB and 24 h (no 2 GB / 4 h schema cap)', () => {
+  const gib = 1024 * 1024 * 1024;
+  const parsed = createVideoUploadSchema.parse({
+    jobId: '11111111-1111-1111-1111-111111111111',
+    fileName: 'day-film.mp4',
+    fileSize: 40 * gib,
+    durationSeconds: 10 * 60 * 60,
+  });
+  assert.equal(parsed.fileSize, 40 * gib);
+  assert.equal(
+    validateUploadConstraints({ mimeType: 'video/mp4', fileSize: 40 * gib, durationSeconds: 10 * 60 * 60 }).ok,
+    true,
+  );
+  assert.equal(validateUploadConstraints({ mimeType: 'video/mp4', fileSize: 81 * gib }).ok, false);
+  assert.equal(validateUploadConstraints({ mimeType: 'video/mp4', durationSeconds: 25 * 60 * 60 }).ok, false);
+});
+
 test('buildStoragePath is org/job scoped and sanitized', () => {
   const path = buildStoragePath({
     orgId: 'org1',

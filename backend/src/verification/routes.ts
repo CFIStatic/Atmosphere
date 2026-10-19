@@ -12,6 +12,7 @@ import rateLimit from 'express-rate-limit';
 import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
+import { writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
   completeVideoUpload,
@@ -91,8 +92,11 @@ verificationRouter.post('/videos/:videoId/complete', async (req, res, next) => {
   try {
     const { orgId, userId, supabase } = orgReq(req);
     const videoId = z.string().uuid().parse(req.params.videoId);
+    // Video rows and job-proofs objects are server-only for user tokens
+    // (20261019150000): writes go through the org-scoped service client.
+    const writer = writerForOrg(orgId, supabase).raw;
     const result = await completeVideoUpload(
-      { supabase, orgId, uploaderId: userId },
+      { supabase: writer, orgId, uploaderId: userId },
       videoId,
       req.body,
     );
@@ -101,7 +105,7 @@ verificationRouter.post('/videos/:videoId/complete', async (req, res, next) => {
       const video = await getVideoForOrg({ supabase, orgId, uploaderId: userId }, videoId);
       const orch = getVerificationOrchestrator();
       const job = await orch.enqueue({
-        supabase,
+        supabase: writer,
         orgId,
         videoId,
         jobId: video.job_id,
@@ -123,8 +127,9 @@ verificationRouter.post('/videos/:videoId/reprocess', async (req, res, next) => 
     const videoId = z.string().uuid().parse(req.params.videoId);
     const video = await getVideoForOrg({ supabase, orgId, uploaderId: userId }, videoId);
     const orch = getVerificationOrchestrator();
+    const writer = writerForOrg(orgId, supabase).raw;
     const job = await orch.enqueue({
-      supabase,
+      supabase: writer,
       orgId,
       videoId,
       jobId: video.job_id,

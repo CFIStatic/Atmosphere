@@ -33,9 +33,11 @@ export const createVideoUploadSchema = z.object({
     .min(1)
     .max(260)
     .regex(/^[^\\/]+$/, 'File name must not contain path separators'),
-  fileSize: z.number().int().positive().max(2_000_000_000).optional().nullable(),
+  // Size and length ceilings live in verificationConfig (80 GiB / 24 h) and
+  // are enforced by validateUploadRequest, so they stay in one place.
+  fileSize: z.number().int().positive().optional().nullable(),
   mimeType: z.enum(ALLOWED_VIDEO_MIME_TYPES).default('video/mp4'),
-  durationSeconds: z.number().nonnegative().max(4 * 60 * 60).optional().nullable(),
+  durationSeconds: z.number().nonnegative().optional().nullable(),
   captureDate: z.string().datetime().optional().nullable(),
   deviceMetadata: deviceMetadataSchema.optional(),
   latitude: z.number().min(-90).max(90).optional().nullable(),

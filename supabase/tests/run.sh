@@ -60,6 +60,9 @@ bash "$HERE/17_platform_seats.sh" "$@"
 echo "==> Direct writes with a user token: membership, billing, limits (baseline + later migrations)"
 bash "$HERE/18_direct_write_lockdown.sh" "$@"
 
+echo "==> Video evidence is write-once for a user token (baseline + later migrations)"
+bash "$HERE/19_video_write_once.sh" "$@"
+
 echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"
 echo "    refusing the operation. Orchestration section 3 (event update) and 4"
