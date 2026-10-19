@@ -21,6 +21,7 @@ import { getBillingOnboardingShared } from './lib/billingOnboardingShared';
 import { LoginPage } from './pages/LoginPage';
 import { AppShellSignupBlockedPage } from './pages/AppShellSignupBlockedPage';
 import { isInAppShell } from './lib/appShell';
+import { SupportBanner } from './components/SupportBanner';
 import { billingStepHref, unpaidWorkspaceTarget } from './lib/firstRun';
 import { safeAuthRedirect } from './lib/authRedirect';
 import { isUnpaidEvaluationLocation, sharedJobInsteadOfSetup } from './lib/unpaidEvaluation';
@@ -389,6 +390,7 @@ export default function App() {
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
         <DocumentTitle />
+        <SupportBanner />
         <DocumentRobotsMeta />
         <Suspense fallback={<FullScreenSpinner />}>
           <TermsGate>

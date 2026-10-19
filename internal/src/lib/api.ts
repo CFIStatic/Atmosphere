@@ -1,3 +1,4 @@
+import type { CustomersResponse, SupportSessionCreated } from './customers';
 import type {
   MotionClipsStaffResponse,
   AccessRequest,
@@ -119,6 +120,14 @@ function rangeQuery({ from, to, months }: RangeParams): string {
 }
 
 export const api = {
+  customers: () => request<CustomersResponse>('/api/analytics/customers'),
+
+  openSupportSession: (input: { orgId: string; userId: string; reason?: string }) =>
+    request<SupportSessionCreated>('/api/analytics/support-sessions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   startSignIn: (input: StaffIdentity) =>
     request<StaffChallengeResponse>('/api/auth/internal-challenge', {
       method: 'POST',

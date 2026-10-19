@@ -68,6 +68,11 @@ export const config = {
     apiKey: process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? '',
   },
 
+  support: {
+    // Platform origin that redeems an "Open account" handoff (staff support).
+    platformUrl: (process.env.PLATFORM_PUBLIC_URL ?? 'https://platform.atmosphereteam.com').replace(/\/+$/, ''),
+  },
+
   cookies: {
     accessTokenName: 'atm_access_token',
     refreshTokenName: 'atm_refresh_token',

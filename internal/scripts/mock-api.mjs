@@ -440,6 +440,49 @@ function aiBudgets(includeInternal) {
   return { budgets, includeInternal, allowanceFraction: 0.1, costWindow: { ...month, timeZone: 'UTC' } };
 }
 
+
+// ----------------------------------------------------------------- customers (TEST DATA, example.com only)
+function customers() {
+  const day = 86400000;
+  const at = (d) => iso(new Date(NOW.getTime() - d * day));
+  const person = (id, name, email, role, seatType, owner, signin) => ({
+    userId: `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`, name, email, role, seatType, status: 'active',
+    isOwner: owner, joinedAt: at(120), lastSignInAt: signin == null ? null : at(signin),
+  });
+  const org = (n, name, status, extra, people) => ({
+    orgId: `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`, name, ownerEmail: people.find((p) => p.isOwner)?.email ?? null,
+    ownerName: people.find((p) => p.isOwner)?.name ?? null, planCode: 'atmosphere_pro', billingStatus: status === 'paying' ? 'active' : status === 'trial' ? 'trialing' : status === 'comped' ? 'active' : null,
+    status, stripeCustomerId: status === 'paying' || status === 'trial' ? `cus_TEST${n}` : null, stripeLive: status === 'paying' ? true : false,
+    mrrCents: 0, includedFcSeats: 3, extraFcSeats: 0, platformSeats: 2, memberCount: people.length, jobsCount: 0,
+    createdAt: at(200 - n * 9), lastActivityAt: at(n), flags: [], people, ...extra,
+  });
+  return {
+    generatedAt: iso(NOW),
+    customers: [
+      org(1, 'Ridgeline Roofing & Exteriors', 'paying', { mrrCents: 148500, jobsCount: 214, extraFcSeats: 6, platformSeats: 5 }, [
+        person(1, 'Maya Okafor', 'maya.okafor@example.com', 'owner', 'platform', true, 0.2),
+        person(2, 'Daniel Brooks', 'daniel.brooks@example.com', 'admin', 'platform', false, 1),
+        person(3, 'Luis Romero', 'luis.romero@example.com', 'member', 'field', false, 0.1),
+        person(4, 'Priya Shah', 'priya.shah@example.com', 'member', 'field', false, 3),
+        person(5, 'Tom Ellison', 'tom.ellison@example.com', 'estimator', 'platform', false, 12),
+      ]),
+      org(2, 'Atlas Commercial Builders', 'paying', { mrrCents: 89900, jobsCount: 96, platformSeats: 3 }, [
+        person(6, 'Grace Lin', 'grace.lin@example.com', 'owner', 'platform', true, 2),
+        person(7, 'Owen Patel', 'owen.patel@example.com', 'member', 'field', false, 4),
+      ]),
+      org(3, 'Summit Storm Restoration', 'trial', { jobsCount: 18 }, [
+        person(8, 'Hannah Reyes', 'hannah.reyes@example.com', 'owner', 'platform', true, 1),
+        person(9, 'Marcus Webb', 'marcus.webb@example.com', 'member', 'field', false, null),
+      ]),
+      org(4, 'Bluebonnet Gutters', 'paying', { mrrCents: 29900, jobsCount: 41 }, [person(10, 'Ana Torres', 'ana.torres@example.com', 'owner', 'platform', true, 6)]),
+      org(5, 'Pioneer Siding Co.', 'comped', { jobsCount: 7, flags: ['excluded: design partner'] }, [person(11, 'Ben Carter', 'ben.carter@example.com', 'owner', 'platform', true, 20)]),
+      org(6, 'Atmosphere Staff Sandbox', 'comped', { jobsCount: 33, flags: ['staff', 'test-name'] }, [person(12, 'Staff Tester', 'staff.tester@example.com', 'owner', 'platform', true, 0.5)]),
+      org(7, 'Lone Star Solar Installs', 'none', { planCode: null, platformSeats: 0, includedFcSeats: 0 }, [person(13, 'Ivy Nguyen', 'ivy.nguyen@example.com', 'owner', 'platform', true, 40)]),
+      org(8, 'Harbor Point Remodeling', 'unpaid', { planCode: 'atmosphere_core', jobsCount: 12, stripeCustomerId: 'cus_TEST8', billingStatus: 'past_due' }, [person(14, 'Sam Hollis', 'sam.hollis@example.com', 'owner', 'platform', true, 9)]),
+    ],
+  };
+}
+
 // ----------------------------------------------------------------- server
 function send(res, status, body) {
   res.writeHead(status, {
@@ -486,6 +529,11 @@ const server = http.createServer(async (req, res) => {
   if (r === '/token-usage') return send(res, 200, tokenUsage());
   if (r === '/ai-reconciliation') return send(res, 200, aiReconciliation());
   if (r === '/ai-budgets') return send(res, 200, aiBudgets(includeInternal));
+  if (r === '/customers') return send(res, 200, customers());
+  if (r === '/support-sessions' && m === 'POST') {
+    // The mock never creates a session; it hands back a local Platform preview URL.
+    return send(res, 201, { sessionId: 'mock', expiresAt: iso(new Date(Date.now() + 30 * 60000)), openUrl: 'about:blank' });
+  }
   if (r === '/access-requests') return send(res, 200, { requests: [], pendingCount: 0 });
 
   if (r === '/contacts') {
