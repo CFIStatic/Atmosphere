@@ -226,9 +226,8 @@ function ctLabel(start: Date): string {
   const p = slotParts(start, DEMO_TIME_ZONE);
   return `${p.date}, ${p.time}`;
 }
-export function guestInviteLine(start: Date, hostName: string): string {
-  return `Your Google Calendar invite with the video link for ${ctLabel(start)} is on its way from ${hostName}.`;
-}
+/** Under the guest's Join button: the attached invite puts the call on their calendar. */
+export const GUEST_CALENDAR_LINE = 'The calendar invite is attached. Open it to add the call to your calendar.';
 export function hostInviteLine(start: Date, guestName: string): string {
   return `A Google Calendar invite with the video link for ${ctLabel(start)} is going out to ${guestName} from your calendar.`;
 }
@@ -244,6 +243,7 @@ export function demoHostEmail(
   b: DemoBookingInput,
   start: Date,
   meetUrl: string | null = null,
+  guestConfirmation: 'sent' | 'failed' | null = null,
 ): { subject: string; text: string; html: string } {
   const ct = slotParts(start, DEMO_TIME_ZONE);
   const guestZone = b.timeZone ? validZone(b.timeZone) : null;
@@ -260,6 +260,7 @@ export function demoHostEmail(
       : []),
     ...(theirs ? [{ label: 'Their time', value: `${theirs.time} (${guestZone})` }] : []),
     ...(b.notes ? [{ label: 'Notes', value: b.notes }] : []),
+    ...(guestConfirmation ? [{ label: 'Guest email', value: guestStatusLabel(guestConfirmation) }] : []),
   ];
   const invite = hostInviteLine(start, b.name);
   const html = layout({
@@ -284,6 +285,7 @@ export function demoHostEmail(
     b.phone ? `Phone:    ${b.phone}` : null,
     theirs ? `Their time: ${theirs.time} (${guestZone})` : null,
     b.notes ? `Notes:    ${b.notes}` : null,
+    guestConfirmation ? `Guest email: ${guestStatusLabel(guestConfirmation)}` : null,
     '',
     ...(meetUrl ? [`Join meeting: ${meetUrl}`] : [invite]),
     '',
@@ -296,32 +298,47 @@ export function demoHostEmail(
   return { subject, text, html };
 }
 
+function guestStatusLabel(state: 'sent' | 'failed'): string {
+  return state === 'sent'
+    ? 'Confirmation with this Join link sent'
+    : 'Confirmation NOT delivered: send them the Join link';
+}
+
+/**
+ * The guest's one email: their time in their own zone, their booking's own Meet
+ * link (Join meeting button), and the .ics attached by the caller.
+ */
 export function demoGuestEmail(
   b: DemoBookingInput,
   start: Date,
   hostName: string,
+  meetUrl: string,
 ): { subject: string; text: string; html: string } {
+  if (!/^https:\/\/meet\.google\.com\//.test(meetUrl)) {
+    throw new Error('demoGuestEmail: needs the booking\'s own Google Meet link');
+  }
   const zone = validZone(b.timeZone || DEMO_TIME_ZONE);
   const when = slotParts(start, zone);
   const first = b.name.split(/\s+/)[0] || b.name;
+  const host = hostName.split(/\s+/)[0] || hostName;
   const subject = `Your Atmosphere demo is confirmed: ${slotSubjectLabel(start, zone)}`;
   const rows: Row[] = [
     { label: 'With', value: `${hostName}, Founder` },
     { label: 'Length', value: `${DEMO_SLOT_MINUTES} minutes` },
     { label: 'Booked for', value: `${b.name} · ${b.company}` },
-    { label: 'Email', value: b.email },
+    { label: 'Calendar', value: 'Invite attached (.ics)' },
   ];
-  const invite = guestInviteLine(start, hostName);
   const html = layout({
-    invite,
+    invite: GUEST_CALENDAR_LINE,
+    meetUrl,
     title: subject,
-    preheader: `You're booked for ${slotSubjectLabel(start, zone)}. Your calendar invite is on its way.`,
+    preheader: `You're booked for ${slotSubjectLabel(start, zone)}. Your Google Meet link is inside.`,
     eyebrow: 'Demo confirmed',
     heading: `You're booked, ${first}`,
-    intro: `Thanks for booking time with Atmosphere. ${esc(hostName)} will walk you through what Atmosphere would do on the jobs you run.`,
+    intro: `Thanks for booking time with Atmosphere. ${esc(hostName)} will walk you through what Atmosphere would do on the jobs you run. Join from the button below at your time; the invite is attached for your calendar.`,
     when,
     rows,
-    after: `<strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(hostName.split(/\s+/)[0] || hostName)}.`,
+    after: `<strong class="em-ink" style="color:${INK};">Need to reschedule or have a question?</strong> Just reply to this email and it goes straight to ${esc(host)}.`,
   });
   const text = [
     `Hi ${first},`,
@@ -331,7 +348,9 @@ export function demoGuestEmail(
     `When:   ${when.date}, ${when.time} (${DEMO_SLOT_MINUTES} min)`,
     `With:   ${hostName}, Founder`,
     '',
-    invite,
+    `Join with Google Meet: ${meetUrl}`,
+    '',
+    GUEST_CALENDAR_LINE,
     '',
     'Need to reschedule or have a question? Just reply to this email.',
     '',

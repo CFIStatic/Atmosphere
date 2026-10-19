@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { bookDemo, notifyHostWithMeet, openDemoSlots, supabaseDemoStore, type DemoBookingStore } from '../lib/demoBookingService.js';
 import { unscopedAdmin } from '../lib/scopedAdmin.js';
+import { createGoogleCalendarClient, type GoogleCalendarClient } from '../lib/googleCalendar.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 
 /**
@@ -21,6 +22,18 @@ export function setDemoStoreForTests(store: DemoBookingStore | null): void {
 }
 function store(): DemoBookingStore {
   return storeOverride ?? supabaseDemoStore(unscopedAdmin());
+}
+
+let calendarOverride: { client: GoogleCalendarClient | null } | null = null;
+/** Tests only. */
+export function setDemoCalendarForTests(client: GoogleCalendarClient | null | undefined): void {
+  calendarOverride = client === undefined ? null : { client };
+}
+let calendarClient: GoogleCalendarClient | null | undefined;
+function calendar(): GoogleCalendarClient | null {
+  if (calendarOverride) return calendarOverride.client;
+  if (calendarClient === undefined) calendarClient = createGoogleCalendarClient();
+  return calendarClient;
 }
 
 const slotsLimiter = rateLimit({
@@ -56,7 +69,12 @@ demoRouter.get('/slots', slotsLimiter, async (_req: Request, res: Response, next
   }
 });
 
-/** POST /api/demo/book — hold the slot and notify the host; the guest's invite comes from Google Calendar. */
+/**
+ * POST /api/demo/book — hold the slot; when Google Calendar is configured, make
+ * the booking's event + Meet link and email the guest once with that link.
+ * `emailed` is true only if that confirmation was accepted for delivery; when
+ * false, the routine's meet hook sends it after it creates the event.
+ */
 demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = demoBookingSchema.parse(req.body);
@@ -65,8 +83,13 @@ demoRouter.post('/book', bookLimiter, async (req: Request, res: Response, next: 
       res.json({ ok: true, slotStart: input.slotStart });
       return;
     }
-    const result = await bookDemo(input, { store: store(), send: sendSystemMail, ip: clientIp(req) });
-    res.json({ ok: true, slotStart: result.slotStart, emailed: true });
+    const result = await bookDemo(input, {
+      store: store(),
+      send: sendSystemMail,
+      calendar: calendar(),
+      ip: clientIp(req),
+    });
+    res.json({ ok: true, slotStart: result.slotStart, emailed: result.emailed });
   } catch (err) {
     next(err);
   }
@@ -87,8 +110,10 @@ function secretOk(given: string | undefined): boolean {
 
 /**
  * POST /api/demo/bookings/:id/meet — staff routine only (X-Demo-Meet-Secret).
- * Stores the booking's Google event + Meet link and sends the host ONE email
- * with a Join meeting button. Idempotent: a second call does not resend.
+ * Fallback for bookings without a calendar event: stores the routine's event +
+ * Meet link and sends the guest's one email (link + .ics) and the host's one
+ * email, whichever have not gone out. Idempotent. If the backend already made
+ * this booking's event, returns status "already_handled" and sends nothing.
  */
 demoRouter.post('/bookings/:id/meet', async (req: Request, res: Response, next: NextFunction) => {
   try {

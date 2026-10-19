@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -15,20 +14,6 @@ export const DEMO_DAY_START_HOUR = 9;
 export const DEMO_DAY_END_HOUR = 17;
 export const DEMO_WINDOW_DAYS = 21;
 export const DEMO_MIN_LEAD_MS = 2 * 60 * 60 * 1000;
-
-/** Every demo is a Google Meet call on the host's reusable room. */
-export const DEMO_MEET_URL = (
-  process.env.DEMO_BOOKING_MEET_URL || 'https://meet.google.com/wcd-dsir-qyg'
-).trim();
-export const DEMO_MEET_DIAL_IN = (
-  process.env.DEMO_BOOKING_MEET_DIAL_IN || '+1 502-947-4063'
-).trim();
-export const DEMO_MEET_PIN = (process.env.DEMO_BOOKING_MEET_PIN || '126500844').trim();
-
-/** "126 500 844#" — how Meet prints a dial-in PIN. */
-export function meetPinLabel(pin: string = DEMO_MEET_PIN): string {
-  return `${pin.replace(/(\d{3})(?=\d)/g, '$1 ')}#`;
-}
 
 const chicagoParts = new Intl.DateTimeFormat('en-US', {
   timeZone: DEMO_TIME_ZONE,
@@ -158,32 +143,32 @@ function fold(line: string): string {
   return out.join('\r\n');
 }
 
+/**
+ * The .ics on the guest's confirmation. Its UID is the Google event's iCalUID, so
+ * a calendar that already shows the Google event updates it instead of adding a
+ * second copy. Only ever carries the booking's own Meet link.
+ */
 export function buildDemoIcs(input: {
-  uid?: string;
+  uid: string;
+  meetUrl: string;
   start: Date;
   organizerEmail: string;
   organizerName: string;
   attendeeEmail: string;
   attendeeName: string;
   company: string;
-  phone?: string;
-  notes?: string;
   now?: Date;
 }): string {
+  if (!/^https:\/\//.test(input.meetUrl)) throw new Error('buildDemoIcs: meetUrl must be https');
   const end = new Date(input.start.getTime() + DEMO_SLOT_MINUTES * 60 * 1000);
   const description = [
     `Atmosphere product demo with ${input.organizerName}.`,
     '',
-    `Join with Google Meet: ${DEMO_MEET_URL}`,
-    DEMO_MEET_DIAL_IN ? `Join by phone: ${DEMO_MEET_DIAL_IN}, PIN: ${meetPinLabel()}` : '',
+    `Join with Google Meet: ${input.meetUrl}`,
     '',
-    `Guest: ${input.attendeeName} (${input.company}), ${input.attendeeEmail}`,
-    input.phone ? `Phone: ${input.phone}` : '',
-    input.notes ? `Notes: ${input.notes}` : '',
-    `Need to change the time? Reply to the confirmation email.`,
-  ]
-    .filter((line, i, all) => line !== '' || (all[i - 1] !== '' && i > 0))
-    .join('\n');
+    `Guest: ${input.attendeeName} (${input.company})`,
+    `Need a different time? Reply to the confirmation email.`,
+  ].join('\n');
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -191,14 +176,14 @@ export function buildDemoIcs(input: {
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
-    `UID:${input.uid ?? randomUUID()}@atmosphereteam.com`,
+    `UID:${input.uid}`,
     `DTSTAMP:${icsStamp(input.now ?? new Date())}`,
     `DTSTART:${icsStamp(input.start)}`,
     `DTEND:${icsStamp(end)}`,
     'SUMMARY:Atmosphere product demo',
     `DESCRIPTION:${icsText(description)}`,
-    `LOCATION:${icsText(DEMO_MEET_URL)}`,
-    `URL:${DEMO_MEET_URL}`,
+    `LOCATION:${icsText(input.meetUrl)}`,
+    `URL:${input.meetUrl}`,
     `ORGANIZER;CN=${icsText(input.organizerName)}:mailto:${input.organizerEmail}`,
     `ATTENDEE;CN=${icsText(input.attendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${input.attendeeEmail}`,
     `ATTENDEE;CN=${icsText(input.organizerName)};ROLE=CHAIR;PARTSTAT=ACCEPTED:mailto:${input.organizerEmail}`,
