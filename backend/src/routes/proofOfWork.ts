@@ -2857,7 +2857,9 @@ export async function decideProofDay(req: Request, res: Response, next: NextFunc
       })
       .parse(req.body ?? {});
 
-    const { error } = await supabase
+    // Clip rows are server-only for user tokens (20261019150000).
+    const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
+    const { error } = await writer
       .from('job_proofs')
       .update({
         state: input.decision,
@@ -5065,7 +5067,9 @@ export async function setEvidenceHold(req: Request, res: Response, next: NextFun
       );
     }
 
-    const { error } = await supabase
+    // Clip rows are server-only for user tokens (20261019150000).
+    const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
+    const { error } = await writer
       .from('job_proofs')
       .update({
         legal_hold: input.hold,
