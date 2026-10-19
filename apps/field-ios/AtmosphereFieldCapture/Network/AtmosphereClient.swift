@@ -715,6 +715,23 @@ final class AtmosphereClient: ObservableObject {
             return (size, hex, begin.path)
         }
 
+        // Too big for the office to stitch: straight to storage, resumable, so a
+        // dropped signal picks up where it left off instead of restarting.
+        if size > Int64(MediaUploadClient.maxAssembleBytes),
+           let token = begin.token, !token.isEmpty,
+           begin.uploadUrl.contains("/upload/sign/") {
+            try await MediaUploadClient.uploadFileTus(
+                localURL: localURL,
+                byteSize: size,
+                supabaseURL: supabaseURL,
+                apiKey: supabaseAnonKey,
+                signedToken: token,
+                objectPath: begin.path,
+                contentType: proofUploadContentType(begin.path)
+            )
+            return (size, hex, begin.path)
+        }
+
         guard let uploadURL = URL(string: begin.uploadUrl) else {
             throw APIError.http(status: 0, body: "Bad upload URL")
         }
@@ -730,7 +747,8 @@ final class AtmosphereClient: ObservableObject {
             if let accessToken {
                 headers["Authorization"] = "Bearer \(accessToken)"
             }
-            headers["x-upsert"] = "true"
+            // Video files are write-once for a user token; every clip has its own path.
+            headers["x-upsert"] = "false"
         }
         try await MediaUploadClient.putFile(
             localURL: localURL,
@@ -1458,9 +1476,6 @@ final class AtmosphereClient: ObservableObject {
         let rows: [ProofInsertRow] = try await supabaseRest(
             path: "/rest/v1/job_proofs",
             method: "POST",
-            query: [
-                URLQueryItem(name: "on_conflict", value: "party_id,work_date,phase"),
-            ],
             json: Insert(
                 org_id: membership.org_id,
                 job_id: jobId,
@@ -1477,8 +1492,10 @@ final class AtmosphereClient: ObservableObject {
                 accuracy_m: body.accuracyM,
                 state: "uploaded"
             ),
+            // A new row per clip: there is no (party, day, phase) key to merge on,
+            // and clip rows are not client-updatable.
             extraHeaders: [
-                "Prefer": "resolution=merge-duplicates,return=representation",
+                "Prefer": "return=representation",
             ]
         )
         return ProofRecordResponse(proof: .init(id: rows.first?.id))

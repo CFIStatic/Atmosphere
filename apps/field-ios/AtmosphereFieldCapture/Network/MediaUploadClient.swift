@@ -116,6 +116,121 @@ enum MediaUploadClient {
         }
     }
 
+    /// Resumable (TUS) slice size, matching web Field Capture `TUS_CHUNK_BYTES`.
+    static let tusChunkBytes = 6 * 1024 * 1024
+    static let tusMaxAttempts = 8
+
+    /// Films over the office stitch cap go straight to Supabase Storage with
+    /// resumable TUS and the BFF's signed upload token (same as web Field
+    /// Capture `putFileTus`). Bytes leave in 6 MiB PATCHes read from disk; a
+    /// dropped PATCH re-reads the server offset (HEAD) and carries on, so a
+    /// weak signal never restarts a multi-GB film from zero.
+    static func uploadFileTus(
+        localURL: URL,
+        byteSize: Int64,
+        supabaseURL: URL,
+        apiKey: String,
+        signedToken: String,
+        bucket: String = "job-proofs",
+        objectPath: String,
+        contentType: String,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws {
+        let base = supabaseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let endpoint = URL(string: base + "/storage/v1/upload/resumable/sign") else {
+            throw APIError.http(status: 0, body: "Bad storage URL")
+        }
+        let baseHeaders = [
+            "Tus-Resumable": "1.0.0",
+            "x-signature": signedToken,
+            "apikey": apiKey,
+        ]
+        func metadata(_ value: String) -> String { Data(value.utf8).base64EncodedString() }
+
+        var create = URLRequest(url: endpoint)
+        create.httpMethod = "POST"
+        for (key, value) in baseHeaders { create.setValue(value, forHTTPHeaderField: key) }
+        create.setValue(String(byteSize), forHTTPHeaderField: "Upload-Length")
+        create.setValue("true", forHTTPHeaderField: "x-upsert")
+        create.setValue(
+            [
+                "bucketName \(metadata(bucket))",
+                "objectName \(metadata(objectPath))",
+                "contentType \(metadata(contentType))",
+                "cacheControl \(metadata("3600"))",
+            ].joined(separator: ","),
+            forHTTPHeaderField: "Upload-Metadata"
+        )
+        let (_, createdResponse) = try await sessionForLargeUpload.data(for: create)
+        guard let created = createdResponse as? HTTPURLResponse, created.statusCode == 201,
+              var location = created.value(forHTTPHeaderField: "Location"), !location.isEmpty
+        else {
+            let status = (createdResponse as? HTTPURLResponse)?.statusCode ?? 0
+            throw APIError.http(status: status, body: "Could not start the upload (\(status)).")
+        }
+        if !location.lowercased().hasPrefix("http") { location = base + location }
+        guard let uploadURL = URL(string: location) else {
+            throw APIError.http(status: 0, body: "Storage did not return an upload location.")
+        }
+
+        let handle = try FileHandle(forReadingFrom: localURL)
+        defer { try? handle.close() }
+        var offset: Int64 = 0
+        var failures = 0
+
+        func resync() async {
+            var head = URLRequest(url: uploadURL)
+            head.httpMethod = "HEAD"
+            for (key, value) in baseHeaders { head.setValue(value, forHTTPHeaderField: key) }
+            if let result = try? await sessionForLargeUpload.data(for: head),
+               let http = result.1 as? HTTPURLResponse,
+               let raw = http.value(forHTTPHeaderField: "Upload-Offset"),
+               let serverOffset = Int64(raw), serverOffset >= 0 {
+                offset = serverOffset
+            }
+        }
+
+        while offset < byteSize {
+            let end = min(byteSize, offset + Int64(tusChunkBytes))
+            try handle.seek(toOffset: UInt64(offset))
+            let data = try handle.read(upToCount: Int(end - offset)) ?? Data()
+            guard data.count == Int(end - offset) else {
+                throw APIError.http(status: 0, body: "Could not read the film from disk.")
+            }
+            var patch = URLRequest(url: uploadURL)
+            patch.httpMethod = "PATCH"
+            for (key, value) in baseHeaders { patch.setValue(value, forHTTPHeaderField: key) }
+            patch.setValue(String(offset), forHTTPHeaderField: "Upload-Offset")
+            patch.setValue("application/offset+octet-stream", forHTTPHeaderField: "Content-Type")
+            patch.httpBody = data
+
+            var status = 0
+            var serverOffset: Int64?
+            if let result = try? await sessionForLargeUpload.data(for: patch),
+               let http = result.1 as? HTTPURLResponse {
+                status = http.statusCode
+                serverOffset = http.value(forHTTPHeaderField: "Upload-Offset").flatMap { Int64($0) }
+            }
+            if status == 204 {
+                offset = max(end, serverOffset ?? end)
+                failures = 0
+                onProgress?(min(1, Double(offset) / Double(max(byteSize, 1))))
+                continue
+            }
+            if (400 ..< 500).contains(status), ![408, 409, 429].contains(status) {
+                throw APIError.http(status: status, body: "Storage refused the upload (\(status)).")
+            }
+            failures += 1
+            if failures >= tusMaxAttempts {
+                throw APIError.http(status: status, body: "Upload keeps dropping. It will resume when signal is back.")
+            }
+            let backoff = UInt64(min(30, 1 << min(failures, 5))) * 1_000_000_000
+            try await Task.sleep(nanoseconds: backoff)
+            await resync()
+        }
+        onProgress?(1)
+    }
+
     /// Slice plan matching BFF `planProofChunks` / web STREAM_PART_BYTES.
     static func shouldMultipart(byteSize: Int64) -> Bool {
         byteSize > Int64(defaultPartBytes) && byteSize <= Int64(maxAssembleBytes)
