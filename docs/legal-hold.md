@@ -98,3 +98,5 @@ bodies the monitor might copy.
 ```bash
 LEGAL_STORE=memory MEDIA_STORE=memory npm test -- --test-name-pattern legal
 ```
+
+See also [legal-requests.md](legal-requests.md) for the public intake (legal@atmosphereteam.com).
