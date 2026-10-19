@@ -59,8 +59,9 @@ Google Gemini, Anthropic (vision / Ask). See `docs/ai-vendor-data-controls.md`.
 1. **Check legal hold** on org/job/video (`docs/legal-hold.md`). If held,
    refuse customer purge; preserve and notify counsel.
 2. Soft-delete visible proofs (`deleted_at`) via Global Admin delete paths —
-   see video delete policy. Confirm 30-day purge sweep will remove bytes when
-   not held (`proofPurgeSweep`).
+   see video delete policy. The product never erases stored evidence bytes
+   (system of record); a verified erasure request that must remove bytes is a
+   manual, audited ops step after the legal-hold check.
 3. Revoke share tokens (`verifier_shares`, job-party tokens, progress grants)
    for the subject’s email.
 4. Remove org membership (`DELETE /api/org/members/:userId`) — this also

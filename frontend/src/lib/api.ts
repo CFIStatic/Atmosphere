@@ -4584,7 +4584,7 @@ export const api = {
     }),
 
   deleteEvidence: (jobId: string, proofId: string) =>
-    request<{ ok: boolean; deletedAt: string; scheduledPurgeAt: string }>(
+    request<{ ok: boolean; deletedAt: string; scheduledPurgeAt?: string | null }>(
       `/api/operations/shared/${jobId}/evidence/${proofId}`,
       { method: 'DELETE' },
     ),

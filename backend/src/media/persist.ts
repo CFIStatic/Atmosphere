@@ -4,7 +4,7 @@
  */
 import { HttpError } from '../lib/errors.js';
 import { adminOrNull, requireAdmin, useMemoryMediaStore } from '../lib/adminClient.js';
-import type { MediaObject, MediaUploadSession, OrgMediaQuota } from './types.js';
+import type { MediaObject, MediaUploadSession } from './types.js';
 
 export function mediaRowToObject(r: Record<string, unknown>): MediaObject {
   return {
@@ -87,47 +87,6 @@ export async function fetchMediaForOrg(orgId: string): Promise<MediaObject[]> {
     .limit(500);
   if (error) throw new HttpError(502, error.message, 'media_list_failed');
   return (data ?? []).map((row) => mediaRowToObject(row as Record<string, unknown>));
-}
-
-export async function persistOrgQuota(quota: OrgMediaQuota): Promise<void> {
-  if (useMemoryMediaStore()) return;
-  const admin = requireAdmin();
-  const { error } = await admin.from('org_media_quotas').upsert(
-    {
-      org_id: quota.orgId,
-      max_hot_bytes: quota.maxHotBytes,
-      max_total_bytes: quota.maxTotalBytes,
-      max_ingest_seconds_per_day: quota.maxIngestSecondsPerDay,
-      max_object_bytes: quota.maxObjectBytes,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id' },
-  );
-  if (error) {
-    throw new HttpError(502, `org_media_quotas upsert failed: ${error.message}`, 'quota_persist_failed');
-  }
-}
-
-export async function fetchOrgQuota(orgId: string): Promise<OrgMediaQuota | null> {
-  if (useMemoryMediaStore()) return null;
-  const admin = adminOrNull();
-  if (!admin) return null;
-  const { data, error } = await admin
-    .from('org_media_quotas')
-    .select('*')
-    .eq('org_id', orgId)
-    .maybeSingle();
-  if (error) throw new HttpError(502, error.message, 'quota_fetch_failed');
-  if (!data) return null;
-  const r = data as Record<string, unknown>;
-  return {
-    orgId,
-    maxHotBytes: r.max_hot_bytes != null ? Number(r.max_hot_bytes) : null,
-    maxTotalBytes: r.max_total_bytes != null ? Number(r.max_total_bytes) : null,
-    maxIngestSecondsPerDay:
-      r.max_ingest_seconds_per_day != null ? Number(r.max_ingest_seconds_per_day) : null,
-    maxObjectBytes: r.max_object_bytes != null ? Number(r.max_object_bytes) : null,
-  };
 }
 
 export async function persistUploadSession(session: MediaUploadSession): Promise<void> {

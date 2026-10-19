@@ -6,7 +6,7 @@ import {
   completeMediaUpload,
   orgUsage,
   resetMediaCatalogForTests,
-  setOrgQuota,
+  getOrgQuota,
 } from '../src/media/catalog.js';
 import { MemoryMediaStorage, S3MediaStorageStub } from '../src/media/driver.js';
 import { assertWithinQuotas, formatDurationHours } from '../src/media/quotas.js';
@@ -60,25 +60,28 @@ test('a 24h object uploads, completes, and counts toward fleet hours', async () 
   assert.equal(usage.ingestDurationSecondsToday, day);
 });
 
-test('soft hot quota rejects another large object', async () => {
+test('no workspace storage or daily-filming quota: uploads keep going', async () => {
   resetMediaCatalogForTests();
-  await setOrgQuota({
-    orgId: 'org-1',
-    maxHotBytes: 5_000,
-    maxTotalBytes: null,
-    maxIngestSecondsPerDay: null,
-    maxObjectBytes: null,
-  });
-  const { session } = await beginMediaUpload({
-    orgId: 'org-1',
-    kind: 'field_day_video',
-    contentType: 'video/mp4',
-    durationSeconds: 60,
-    byteSize: 4_000,
-    driver: new MemoryMediaStorage(),
-  });
-  await completeMediaUpload({ orgId: 'org-1', sessionId: session.id, byteSize: 4_000 });
+  const quota = await getOrgQuota('org-1');
+  assert.equal(quota.maxHotBytes, null);
+  assert.equal(quota.maxTotalBytes, null);
+  assert.equal(quota.maxIngestSecondsPerDay, null);
+  for (let i = 0; i < 3; i += 1) {
+    const { session } = await beginMediaUpload({
+      orgId: 'org-1',
+      kind: 'field_day_video',
+      contentType: 'video/mp4',
+      durationSeconds: 86_400,
+      byteSize: 70 * 1024 * 1024 * 1024,
+      driver: new MemoryMediaStorage(),
+    });
+    await completeMediaUpload({ orgId: 'org-1', sessionId: session.id, byteSize: 70 * 1024 * 1024 * 1024 });
+  }
+  assert.equal(orgUsage('org-1').objectCount, 3);
+});
 
+test('per-file ceiling still applies (80 GiB)', async () => {
+  resetMediaCatalogForTests();
   await assert.rejects(
     () =>
       beginMediaUpload({
@@ -86,10 +89,10 @@ test('soft hot quota rejects another large object', async () => {
         kind: 'field_day_video',
         contentType: 'video/mp4',
         durationSeconds: 60,
-        byteSize: 2_000,
+        byteSize: 81 * 1024 * 1024 * 1024,
         driver: new MemoryMediaStorage(),
       }),
-    (e: unknown) => e instanceof HttpError && e.code === 'hot_quota_exceeded',
+    (e: unknown) => e instanceof HttpError && e.code === 'object_too_large',
   );
 });
 

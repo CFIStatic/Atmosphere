@@ -9,7 +9,7 @@ See `/docs/media-storage.md` for the architecture.
 | `types.ts` | Catalog / quota / session shapes (`hasAudio`) |
 | `capturePolicy.ts` | Field day / proof video must include mic track |
 | `driver.ts` | `MediaStorageDriver` (supabase / s3 stub / memory) |
-| `quotas.ts` | Soft org ceiling checks |
+| `quotas.ts` | Per-file ceiling checks (no workspace storage quota) |
 | `catalog.ts` | In-process catalog + upload sessions |
 | `../routes/mediaCatalog.ts` | `/api/media/catalog/*` |
 | `../supabase/migrations_archive/20260815090000_media_catalog.sql` | Durable tables |

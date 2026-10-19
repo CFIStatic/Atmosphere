@@ -688,8 +688,8 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
 /**
  * DELETE /api/operations/shared/:jobId
  * Product policy: no deleting job files / evidence from the application.
- * Soft-delete, tombstone, and proof purge infrastructure remain for ops
- * retention sweeps; Restore stays available for already-queued clips.
+ * Evidence is the job's system of record: nothing purges stored bytes.
+ * Restore stays available for clips hidden earlier.
  */
 sharedJobsRouter.delete('/shared/:jobId', async (req: Request, _res: Response, next: NextFunction) => {
   try {

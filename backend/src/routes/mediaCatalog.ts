@@ -14,7 +14,6 @@ import {
   listMediaForOrgHydrated,
   markTier,
   orgUsageHydrated,
-  setOrgQuota,
   getOrgQuota,
   softDeleteMedia,
 } from '../media/catalog.js';
@@ -58,9 +57,9 @@ mediaCatalogRouter.get('/scale', (_req, res) => {
     archiveBucket: config.media.archiveBucket || null,
     multipartThresholdBytes: config.media.multipartThresholdBytes,
     defaultQuotas: {
-      maxHotBytes: config.media.defaultMaxHotBytes,
-      maxTotalBytes: config.media.defaultMaxTotalBytes,
-      maxIngestSecondsPerDay: config.media.defaultMaxIngestSecondsPerDay,
+      maxHotBytes: null,
+      maxTotalBytes: null,
+      maxIngestSecondsPerDay: null,
       maxObjectBytes: config.media.defaultMaxObjectBytes,
     },
   });
@@ -224,38 +223,3 @@ mediaCatalogRouter.post(
     }
   },
 );
-
-const quotaSchema = z.object({
-  maxHotBytes: z.number().int().positive().nullable().optional(),
-  maxTotalBytes: z.number().int().positive().nullable().optional(),
-  maxIngestSecondsPerDay: z.number().int().positive().nullable().optional(),
-  maxObjectBytes: z.number().int().positive().nullable().optional(),
-});
-
-/**
- * PUT /api/media/catalog/quota
- * Soft org ceilings — durable in org_media_quotas on the same Supabase project.
- */
-mediaCatalogRouter.put('/quota', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { orgId } = await requireOrgContext(req);
-    const body = quotaSchema.parse(req.body ?? {});
-    const current = await getOrgQuota(orgId);
-    const nextQuota = {
-      orgId,
-      maxHotBytes: body.maxHotBytes === undefined ? current.maxHotBytes : body.maxHotBytes,
-      maxTotalBytes: body.maxTotalBytes === undefined ? current.maxTotalBytes : body.maxTotalBytes,
-      maxIngestSecondsPerDay:
-        body.maxIngestSecondsPerDay === undefined
-          ? current.maxIngestSecondsPerDay
-          : body.maxIngestSecondsPerDay,
-      maxObjectBytes: body.maxObjectBytes === undefined ? current.maxObjectBytes : body.maxObjectBytes,
-    };
-    await setOrgQuota(nextQuota);
-    const usage = await orgUsageHydrated(orgId);
-    res.json({ quota: nextQuota, usage });
-  } catch (err) {
-    if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
-    else next(err);
-  }
-});

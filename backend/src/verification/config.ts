@@ -19,8 +19,8 @@ export const verificationConfig = {
   bucket: process.env.VERIFICATION_STORAGE_BUCKET ?? 'job-proofs',
 
   /** Upload constraints. */
-  maxUploadBytes: num('VERIFICATION_MAX_UPLOAD_BYTES', 1_500_000_000),
-  maxDurationSeconds: num('VERIFICATION_MAX_DURATION_SECONDS', 2 * 60 * 60),
+  maxUploadBytes: num('VERIFICATION_MAX_UPLOAD_BYTES', 80 * 1024 * 1024 * 1024),
+  maxDurationSeconds: num('VERIFICATION_MAX_DURATION_SECONDS', 24 * 60 * 60),
   minDurationSeconds: num('VERIFICATION_MIN_DURATION_SECONDS', 5),
   signedUploadTtlSeconds: num('VERIFICATION_SIGNED_UPLOAD_TTL_SECONDS', 30 * 60),
   signedDownloadTtlSeconds: num('VERIFICATION_SIGNED_DOWNLOAD_TTL_SECONDS', 10 * 60),

@@ -1038,7 +1038,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       proofRows = (data ?? []) as any[];
     }
     const firstPageProofs = proofRows.length;
-    // Global Admins also see clips queued for the 30-day purge so they can restore.
+    // Global Admins also see hidden (soft-deleted) clips so they can restore. Bytes are never purged.
     if (isGlobalAdmin(role)) {
       const writer = writerForOrg(orgId, supabase).raw;
       const { data: pending, error: pendingErr } = await writer

@@ -5112,7 +5112,7 @@ export async function deleteEvidence(req: Request, _res: Response, next: NextFun
 
 /**
  * POST /api/operations/shared/:jobId/evidence/:proofId/restore
- * Global Admin only. Cancel a pending deletion before the purge window elapses.
+ * Global Admin only. Un-hide a soft-deleted clip (bytes were never removed).
  */
 export async function restoreEvidence(req: Request, res: Response, next: NextFunction) {
   try {

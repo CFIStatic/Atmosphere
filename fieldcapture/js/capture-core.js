@@ -1318,6 +1318,134 @@
     });
   }
 
+  /**
+   * Direct resumable (TUS) upload into Supabase Storage with the signed upload
+   * token, for films too big for the office to stitch (> STREAM_MAX_BYTES).
+   * Bytes go phone → storage in 6 MiB PATCHes; nothing passes through the
+   * BFF, so no body cap applies and there is no size dead end below the
+   * bucket's per-file ceiling. A dropped PATCH resumes from the server offset.
+   */
+  var TUS_CHUNK_BYTES = 6 * 1024 * 1024;
+  var TUS_BUCKET = 'job-proofs';
+
+  function tusB64(value) {
+    var bytes = [];
+    var str = unescape(encodeURIComponent(String(value == null ? '' : value)));
+    for (var i = 0; i < str.length; i += 1) bytes.push(str.charCodeAt(i) & 255);
+    var abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var out = '';
+    for (var j = 0; j < bytes.length; j += 3) {
+      var n = (bytes[j] << 16) | ((bytes[j + 1] || 0) << 8) | (bytes[j + 2] || 0);
+      out += abc[(n >> 18) & 63] + abc[(n >> 12) & 63];
+      out += j + 1 < bytes.length ? abc[(n >> 6) & 63] : '=';
+      out += j + 2 < bytes.length ? abc[n & 63] : '=';
+    }
+    return out;
+  }
+
+  function tusEndpoint(storageBase) {
+    return String(storageBase || '').replace(/\/+$/, '') + '/storage/v1/upload/resumable/sign';
+  }
+
+  function putFileTus(opts) {
+    var slot = opts.slot || {};
+    var file = opts.file;
+    var doFetch = opts.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+    var wait = opts.wait || waitMs;
+    var onProgress = opts.onProgress || function () {};
+    var onStep = opts.onStep || function () {};
+    var chunkBytes = Math.max(1, Number(opts.chunkBytes) || TUS_CHUNK_BYTES);
+    var maxAttempts = Number(opts.attempts) || PROOF_UPLOAD_ATTEMPTS;
+    if (!doFetch) return Promise.reject(new Error('Uploads need a newer browser.'));
+    if (!slot.token || !slot.path) {
+      return Promise.reject(new Error('Upload link is missing. Try again.'));
+    }
+    var baseHeaders = { 'Tus-Resumable': '1.0.0', 'x-signature': slot.token };
+    function headers(extra) {
+      var h = {};
+      Object.keys(baseHeaders).forEach(function (k) { h[k] = baseHeaders[k]; });
+      Object.keys(extra || {}).forEach(function (k) { h[k] = extra[k]; });
+      return h;
+    }
+    onStep('Uploading…');
+    return doFetch(tusEndpoint(opts.storageBase), {
+      method: 'POST',
+      headers: headers({
+        'Upload-Length': String(file.size),
+        'x-upsert': 'true',
+        'Upload-Metadata': [
+          'bucketName ' + tusB64(TUS_BUCKET),
+          'objectName ' + tusB64(slot.path),
+          'contentType ' + tusB64(storageUploadContentType(opts.mimeType)),
+          'cacheControl ' + tusB64('3600'),
+        ].join(','),
+      }),
+    }).then(function (created) {
+      if (!created || created.status !== 201) {
+        var err = new Error('Could not start the upload (' + (created && created.status) + ').');
+        err.status = created && created.status;
+        throw err;
+      }
+      var location = created.headers && created.headers.get ? created.headers.get('Location') : null;
+      if (!location) throw new Error('Storage did not return an upload location.');
+      if (!/^https?:/i.test(location)) {
+        location = String(opts.storageBase || '').replace(/\/+$/, '') + location;
+      }
+      var offset = 0;
+      var failures = 0;
+      function resync() {
+        return doFetch(location, { method: 'HEAD', headers: headers() }).then(function (r) {
+          var o = Number(r && r.headers && r.headers.get ? r.headers.get('Upload-Offset') : NaN);
+          if (Number.isFinite(o) && o >= 0) offset = o;
+        });
+      }
+      function next() {
+        if (offset >= file.size) {
+          onProgress(1);
+          return Promise.resolve({ slot: slot, via: 'tus' });
+        }
+        var end = Math.min(file.size, offset + chunkBytes);
+        return doFetch(location, {
+          method: 'PATCH',
+          headers: headers({
+            'Upload-Offset': String(offset),
+            'Content-Type': 'application/offset+octet-stream',
+          }),
+          body: file.slice(offset, end),
+        }).then(
+          function (r) {
+            if (r && r.status === 204) {
+              var o = Number(r.headers && r.headers.get ? r.headers.get('Upload-Offset') : NaN);
+              offset = Number.isFinite(o) && o > offset ? o : end;
+              failures = 0;
+              onProgress(Math.min(1, offset / file.size));
+              return next();
+            }
+            if (r && r.status >= 400 && r.status < 500 && r.status !== 409 && r.status !== 408 && r.status !== 429) {
+              var hard = new Error('Storage refused the upload (' + r.status + ').');
+              hard.status = r.status;
+              throw hard;
+            }
+            return retry();
+          },
+          function () {
+            return retry();
+          },
+        );
+      }
+      function retry() {
+        failures += 1;
+        if (failures >= maxAttempts) throw new Error('Upload keeps dropping. It will resume when signal is back.');
+        return wait(nextUploadBackoffMs(failures)).then(resync).then(next, next);
+      }
+      return next();
+    });
+  }
+
+  function needsDirectResumable(byteSize) {
+    return Math.max(0, Math.floor(Number(byteSize) || 0)) > STREAM_MAX_BYTES;
+  }
+
   function shouldMultipartUpload(byteSize) {
     var size = Math.max(0, Math.floor(Number(byteSize) || 0));
     return size > WHOLE_BODY_MAX_BYTES && size <= STREAM_MAX_BYTES;
@@ -1619,7 +1747,20 @@
       });
     }
 
+    function putDirectResumable(slot) {
+      return putFileTus({
+        slot: slot,
+        file: file,
+        mimeType: mimeType,
+        storageBase: storageBase,
+        onStep: onStep,
+        onProgress: onProgress,
+      });
+    }
+
     function putLargeOrResumable(slot) {
+      // Too big for the office to stitch: straight to storage, resumable.
+      if (needsDirectResumable(file.size)) return putDirectResumable(slot);
       var parts = slot && slot.parts && slot.parts.length > 1 ? slot.parts : null;
       if (parts) {
         return putFileResumable({
@@ -1695,6 +1836,10 @@
               return mintSlot().then(function (fresh) {
                 return uploadMultipartViaPartUrls(fresh.path, fresh.chunkSize);
               });
+            }
+            if (err && err.streamFailed && needsDirectResumable(file.size)) {
+              // Past the stitch cap: upload the whole film straight to storage.
+              return mintSlot().then(putDirectResumable);
             }
             throw err;
           })
@@ -3905,6 +4050,9 @@
     friendlyPayloadTooLargeMessage: friendlyPayloadTooLargeMessage,
     fitProofFrames: fitProofFrames,
     shouldMultipartUpload: shouldMultipartUpload,
+    needsDirectResumable: needsDirectResumable,
+    putFileTus: putFileTus,
+    TUS_CHUNK_BYTES: TUS_CHUNK_BYTES,
     normalizeJobTitle: normalizeJobTitle,
     findOfficeJobByTitle: findOfficeJobByTitle,
     WHOLE_BODY_MAX_BYTES: WHOLE_BODY_MAX_BYTES,

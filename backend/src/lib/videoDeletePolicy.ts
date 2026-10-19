@@ -1,18 +1,14 @@
 /**
  * Atmosphere video deletion policy.
  *
- * Only a Global Admin may queue a clip for deletion. The clip leaves the
- * library immediately (deleted_at) and is permanently removed after 30 days
- * (scheduled_purge_at), unless restored or blocked by a legal hold.
+ * Atmosphere is the job's system of record, so evidence bytes are never
+ * erased by the product. Deleting a video only hides it (deleted_at) and is
+ * written to the audit trail; it can be restored at any time, and a legal
+ * hold still blocks the delete. There is no purge window and no worker that
+ * removes stored files.
  */
 import { isGlobalAdmin } from './productRoles.js';
 import { HttpError } from './errors.js';
-
-export const VIDEO_DELETE_PENDING_MS = 30 * 24 * 60 * 60 * 1000;
-
-export function scheduledPurgeAt(from: Date = new Date()): string {
-  return new Date(from.getTime() + VIDEO_DELETE_PENDING_MS).toISOString();
-}
 
 /** Refuse unless the caller is a Global Admin (legacy office_manager maps in). */
 export function assertGlobalAdminCanDeleteVideo(role: string | null | undefined): void {
@@ -25,20 +21,7 @@ export function assertGlobalAdminCanDeleteVideo(role: string | null | undefined)
   }
 }
 
-export function isPendingPurge(row: {
-  deleted_at?: string | null;
-  scheduled_purge_at?: string | null;
-}): boolean {
-  return Boolean(row.deleted_at && row.scheduled_purge_at);
-}
-
-/** True when the pending window has elapsed (purge worker may remove bytes). */
-export function purgeWindowElapsed(
-  scheduledPurgeAtIso: string | null | undefined,
-  now: Date = new Date(),
-): boolean {
-  if (!scheduledPurgeAtIso) return false;
-  const at = Date.parse(scheduledPurgeAtIso);
-  if (Number.isNaN(at)) return false;
-  return at <= now.getTime();
+/** True when a clip is hidden from the library (soft-deleted). Bytes are kept. */
+export function isHiddenVideo(row: { deleted_at?: string | null }): boolean {
+  return Boolean(row.deleted_at);
 }
