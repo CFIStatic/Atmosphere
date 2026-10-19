@@ -69,9 +69,30 @@ import { practiceSchedule } from '../computer/iq/practice/scheduler.js';
 import { PracticeConfigError, practiceOrgId, runPracticeSuite, utcDate } from '../computer/iq/practice/runner.js';
 import { PRACTICE_TASKS } from '../computer/iq/practice/catalog.js';
 
+import { staffSupportRouter } from './support.js';
+import { loadCustomers } from '../analytics/customers.js';
+
 export const analyticsRouter = Router();
 
 analyticsRouter.use(requireAuth);
+
+/** Staff support access ("Open account"): internal scope only, audit-logged. */
+analyticsRouter.use('/support-sessions', requireAnalytics('internal'), staffSupportRouter);
+
+/** Customers directory: every workspace and its people. Internal scope only. */
+analyticsRouter.get(
+  '/customers',
+  requireAnalytics('internal'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Customers needs the server service key.', 'no_admin');
+      res.json({ generatedAt: new Date().toISOString(), customers: await loadCustomers(admin) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 function staffReports(req: Request) {
   const userId = req.user?.id ?? '';

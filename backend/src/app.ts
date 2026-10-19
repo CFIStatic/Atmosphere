@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { supportRouter } from './routes/support.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { telemetryRouter } from './routes/telemetry.js';
 import { profileRouter } from './routes/profile.js';
@@ -200,6 +201,8 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  // Staff support view (redeem / banner / exit) on the Platform origin.
+  app.use('/api/support', supportRouter);
   // Email Worker intake: shared-secret auth, so it sits before the staff router.
   app.use('/api/legal/inbound', legalInboundRouter);
   app.use('/api/legal', legalRouter);

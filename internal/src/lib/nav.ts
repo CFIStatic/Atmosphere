@@ -18,6 +18,7 @@ import {
   UploadCloud,
   Wallet,
   Receipt,
+  Users,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -48,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Growth & revenue',
     items: [
       { to: '/growth', label: 'Revenue & customers', icon: BadgeDollarSign },
+      { to: '/customers', label: 'Customers', icon: Users, internal: true },
       { to: '/accounts', label: 'Organizations', icon: Building2, internal: true },
       // Experiments is hidden: nothing is instrumented (/experiments shows an empty state).
     ],

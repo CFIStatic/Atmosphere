@@ -7,6 +7,17 @@ import { unauthorized, serviceUnavailable } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
 import { isTermsExemptPath } from '../legal/terms.js';
 import { assertCurrentTermsAccepted } from '../legal/termsStore.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { HttpError } from '../lib/errors.js';
+import { recordUserAction } from '../legal/monitor.js';
+import {
+  SUPPORT_SID_COOKIE,
+  SUPPORT_TOKEN_COOKIE,
+  findLiveSessionByCookie,
+  isBlockedSupportRequest,
+  isSessionLive,
+} from '../support/sessions.js';
+import { clearSupportCookies, endSupportSession } from '../routes/support.js';
 
 declare global {
    
@@ -14,6 +25,8 @@ declare global {
     interface Request {
       user?: User;
       accessToken?: string;
+      /** Set while an Analytics staff member is viewing Platform as this user. */
+      support?: { sessionId: string; staffUserId: string; staffEmail: string | null; orgId: string };
     }
   }
 }
@@ -48,6 +61,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
     const accessToken = cookieAccess || bearerAccessToken(req);
     const supabase = createAnonClient();
+
+    // Staff support session ("Open account" from Analytics): host-only cookies
+    // on the Platform host take precedence over the staff member's own session.
+    if (req.cookies?.[SUPPORT_SID_COOKIE] && !requestPath(req).startsWith('/api/analytics')) {
+      if (await applySupportSession(req, res)) {
+        next();
+        return;
+      }
+    }
 
     if (accessToken) {
       const { data, error } = await supabase.auth.getUser(accessToken);
@@ -89,6 +111,68 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   } catch (err) {
     next(err);
   }
+}
+
+function requestPath(req: Request): string {
+  return (req.originalUrl || req.url || req.path || '').split('?')[0] ?? '';
+}
+
+/**
+ * Resolve a live support session to the customer user. Returns false (and
+ * clears the support cookies) when there is none, so the request falls back
+ * to the caller's own session. Billing writes are refused, never silent.
+ */
+async function applySupportSession(req: Request, res: Response): Promise<boolean> {
+  const admin = createAdminClient();
+  const sid = req.cookies?.[SUPPORT_SID_COOKIE] as string | undefined;
+  const token = req.cookies?.[SUPPORT_TOKEN_COOKIE] as string | undefined;
+  if (!admin || !sid) return false;
+  const row = await findLiveSessionByCookie(admin, sid);
+  if (!row || !isSessionLive(row) || !token) {
+    if (row && !row.ended_at) await endSupportSession(admin, row, token, 'expired');
+    clearSupportCookies(res);
+    return false;
+  }
+  const { data, error } = await createAnonClient().auth.getUser(token);
+  if (error || !data.user || data.user.id !== row.target_user_id) {
+    await endSupportSession(admin, row, token, 'revoked');
+    clearSupportCookies(res);
+    return false;
+  }
+  const path = requestPath(req);
+  if (isBlockedSupportRequest(req.method, path)) {
+    await admin
+      .from('staff_support_sessions')
+      .update({ blocked_actions: 1 })
+      .eq('id', row.id)
+      .eq('blocked_actions', 0);
+    await recordUserAction({
+      actorUserId: row.staff_user_id,
+      actorEmail: row.staff_email,
+      actorLabel: 'Atmosphere staff (support)',
+      orgId: row.org_id,
+      action: 'support.billing_blocked',
+      resourceType: 'user',
+      resourceId: row.target_user_id,
+      method: req.method,
+      path,
+      detail: { supportSessionId: row.id },
+    });
+    throw new HttpError(
+      403,
+      'Billing and account changes are turned off while viewing as a customer. Ask the customer to do this, or exit support view.',
+      'support_billing_blocked',
+    );
+  }
+  req.user = data.user;
+  req.accessToken = token;
+  req.support = {
+    sessionId: row.id,
+    staffUserId: row.staff_user_id,
+    staffEmail: row.staff_email,
+    orgId: row.org_id,
+  };
+  return true;
 }
 
 async function enforceTermsIfRequired(req: Request): Promise<void> {
