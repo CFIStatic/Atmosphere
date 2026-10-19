@@ -2087,6 +2087,8 @@
       .start()
       .then(function () {
         show('s-rec');
+        /* Same full-bleed preview on every recording, not just the first. */
+        if (Core.refreshLivePreview) Core.refreshLivePreview(videoEl);
         announceRecording('start', { stream: stream });
         state.stopWatch = state.recorder.watchPosition(function (site) {
           state.site = site;
