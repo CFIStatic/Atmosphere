@@ -8,6 +8,7 @@ import {
   slotSubjectLabel,
 } from '../src/lib/demoBookingEmail.js';
 
+const MEET = 'https://meet.google.com/abc-defg-hij';
 const start = new Date('2026-10-13T14:00:00.000Z'); // Tue Oct 13, 9:00 AM CT
 const b = demoBookingSchema.parse({
   slotStart: start.toISOString(),
@@ -26,12 +27,12 @@ test('subject lines', () => {
     'New demo booked: Alpha Test, Tue Oct 13, 9:00 AM CT',
   );
   assert.equal(
-    demoGuestEmail(b, start, 'Jack Cyganiak').subject,
+    demoGuestEmail(b, start, 'Jack Cyganiak', MEET).subject,
     'Your Atmosphere demo is confirmed: Tue Oct 13, 10:00 AM EDT',
   );
-  const ct = demoGuestEmail({ ...b, timeZone: 'America/Chicago' }, start, 'Jack').subject;
+  const ct = demoGuestEmail({ ...b, timeZone: 'America/Chicago' }, start, 'Jack', MEET).subject;
   assert.equal(ct, 'Your Atmosphere demo is confirmed: Tue Oct 13, 9:00 AM CT');
-  const bogus = demoGuestEmail({ ...b, timeZone: 'Not/AZone' }, start, 'Jack').subject;
+  const bogus = demoGuestEmail({ ...b, timeZone: 'Not/AZone' }, start, 'Jack', MEET).subject;
   assert.match(bogus, /9:00 AM CT$/);
 });
 
@@ -53,24 +54,26 @@ test('host email: branded HTML with every detail, escaped, plus text', () => {
 });
 
 test('guest email: their zone, calendar + reply lines, no host-only notes', () => {
-  const m = demoGuestEmail(b, start, 'Jack Cyganiak');
+  const m = demoGuestEmail(b, start, 'Jack Cyganiak', MEET);
   assert.match(m.html, /10:00 – 10:30 AM EDT/);
   assert.match(m.html, /reschedule or have a question/);
   assert.ok(!m.html.includes('Three crews'));
   assert.match(m.text, /reply to this email/i);
 });
 
-test('no shared Meet link, dial-in or .ics: Google invite line in the guest\'s own time instead', () => {
-  const g = demoGuestEmail(b, start, 'Jack Cyganiak');
-  const h = demoHostEmail(b, start);
-  const line =
-    'Your Google Calendar invite with the video link for Tuesday, October 13, 2026, 10:00 – 10:30 AM EDT is on its way from Jack Cyganiak.';
-  assert.ok(g.html.includes(line) && g.text.includes(line));
-  const ct = demoGuestEmail({ ...b, timeZone: 'America/Chicago' }, start, 'Jack Cyganiak');
-  assert.ok(ct.text.includes('for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is on its way'));
+test('guest email: the booking\'s own Meet link (button + text), their zone only, never the shared room', () => {
+  const g = demoGuestEmail(b, start, 'Jack Cyganiak', MEET);
+  assert.match(g.html, /href="https:\/\/meet\.google\.com\/abc-defg-hij"[^>]*>Join meeting</);
+  assert.match(g.text, /Join with Google Meet: https:\/\/meet\.google\.com\/abc-defg-hij/);
+  assert.match(g.html + g.text, /calendar invite is attached/i);
   assert.ok(!/AM CT/.test(g.html + g.text), 'one zone per guest email: theirs');
-  assert.match(h.text, /A Google Calendar invite with the video link for Tuesday, October 13, 2026, 9:00 – 9:30 AM CT is going out to/);
-  for (const m of [g, h]) {
-    assert.ok(!/meet\.google\.com|Join meeting|Join with Google Meet|wcd-dsir-qyg|502-947-4063|PIN|\.ics|attached|Dec(ember)? 31/i.test(m.html + m.text));
-  }
+  assert.ok(!/wcd-dsir-qyg|502-947-4063|PIN|Dec(ember)? 31/i.test(g.html + g.text));
+  assert.throws(() => demoGuestEmail(b, start, 'Jack', ''), /own Google Meet link/);
+  assert.throws(() => demoGuestEmail(b, start, 'Jack', 'https://evil.example/x'), /own Google Meet link/);
+});
+
+test('host email: guest-delivery line only when given', () => {
+  assert.ok(!/Guest email/.test(demoHostEmail(b, start, MEET).text));
+  assert.match(demoHostEmail(b, start, MEET, 'sent').text, /Guest email: Confirmation with this Join link sent/);
+  assert.match(demoHostEmail(b, start, MEET, 'failed').html, /Confirmation NOT delivered/);
 });
