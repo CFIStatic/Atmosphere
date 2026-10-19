@@ -1,10 +1,9 @@
 /**
- * Soft quota math for fleet video retention.
+ * Per-file ceilings for fleet video.
  *
- * Quotas protect a single org from unbounded hot-tier spend. They do not
- * invent cluster capacity — "billions of hours" is an object-storage
- * economics problem (tiering + retention), enforced here only as ceilings
- * the product can configure per org.
+ * There is no workspace storage, total or daily-filming quota: every upload
+ * is kept as the job's record. Only per-object limits (~24h, 80 GiB) apply,
+ * so one file stays physically uploadable.
  */
 import { HttpError } from '../lib/errors.js';
 import type { MediaObject, OrgMediaQuota, OrgMediaUsage } from './types.js';
@@ -69,32 +68,9 @@ export function assertWithinQuotas(input: {
     );
   }
 
-  if (quota.maxHotBytes != null && usage.hotBytes + bytes > quota.maxHotBytes) {
-    throw new HttpError(
-      402,
-      'Hot-tier storage quota exceeded for this organisation. Move older video to warm/cold or raise the quota.',
-      'hot_quota_exceeded',
-    );
-  }
-
-  if (quota.maxTotalBytes != null && usage.totalBytes + bytes > quota.maxTotalBytes) {
-    throw new HttpError(
-      402,
-      'Total storage quota exceeded for this organisation.',
-      'total_quota_exceeded',
-    );
-  }
-
-  if (
-    quota.maxIngestSecondsPerDay != null
-    && usage.ingestDurationSecondsToday + duration > quota.maxIngestSecondsPerDay
-  ) {
-    throw new HttpError(
-      429,
-      'Daily ingest duration quota exceeded for this organisation.',
-      'ingest_quota_exceeded',
-    );
-  }
+  // No workspace storage, total or daily-filming quota: Atmosphere is the job's
+  // system of record. Only the per-file ceilings above remain.
+  void usage;
 }
 
 /** Human-facing fleet rollup — hours, not a claim about current holdings. */

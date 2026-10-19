@@ -11,10 +11,8 @@ import { mediaDriverFor, mediaObjectKey, type MediaStorageDriver } from './drive
 import {
   fetchMediaForOrg,
   fetchMediaObject,
-  fetchOrgQuota,
   fetchUploadSession,
   persistMediaObject,
-  persistOrgQuota,
   persistUploadSession,
 } from './persist.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
@@ -29,13 +27,11 @@ import type {
 
 const objects = new Map<string, MediaObject>();
 const sessions = new Map<string, MediaUploadSession>();
-const quotas = new Map<string, OrgMediaQuota>();
 const ingestDay = new Map<string, number>();
 
 export function resetMediaCatalogForTests(): void {
   objects.clear();
   sessions.clear();
-  quotas.clear();
   ingestDay.clear();
 }
 
@@ -50,24 +46,16 @@ function view(): CatalogView {
   };
 }
 
-export async function setOrgQuota(quota: OrgMediaQuota): Promise<void> {
-  quotas.set(quota.orgId, quota);
-  await persistOrgQuota(quota);
-}
-
+/**
+ * Workspaces have no storage, total or daily-filming quota. Rows left in
+ * org_media_quotas are ignored; only the per-file byte ceiling applies.
+ */
 export async function getOrgQuota(orgId: string): Promise<OrgMediaQuota> {
-  const cached = quotas.get(orgId);
-  if (cached) return cached;
-  const fromDb = await fetchOrgQuota(orgId);
-  if (fromDb) {
-    quotas.set(orgId, fromDb);
-    return fromDb;
-  }
   return {
     orgId,
-    maxHotBytes: config.media.defaultMaxHotBytes,
-    maxTotalBytes: config.media.defaultMaxTotalBytes,
-    maxIngestSecondsPerDay: config.media.defaultMaxIngestSecondsPerDay,
+    maxHotBytes: null,
+    maxTotalBytes: null,
+    maxIngestSecondsPerDay: null,
     maxObjectBytes: config.media.defaultMaxObjectBytes,
   };
 }

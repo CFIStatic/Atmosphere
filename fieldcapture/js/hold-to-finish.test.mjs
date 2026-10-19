@@ -2098,5 +2098,58 @@ console.log('keyboard chrome: ok');
   console.log('no live safety stream: ok');
 }
 
+/* ---------- day films over the 512 MB stitch cap go straight to storage (TUS) ---------- */
+{
+  assert.equal(Core.needsDirectResumable(512 * 1024 * 1024), false);
+  assert.equal(Core.needsDirectResumable(512 * 1024 * 1024 + 1), true);
+  assert.equal(Core.shouldMultipartUpload(2 * 1024 * 1024 * 1024), false, 'never stitch past the cap');
+  assert.equal(Core.TUS_CHUNK_BYTES, 6 * 1024 * 1024, 'Supabase TUS needs 6 MiB chunks');
+  assert.match(coreSrc, /needsDirectResumable\(file\.size\)\) return putDirectResumable\(slot\)/);
+  assert.match(coreSrc, /err\.streamFailed && needsDirectResumable\(file\.size\)/, 'a refused stitch falls back to direct upload');
+
+  const size = 20 * 1024 * 1024 + 123; // small stand-in, chunked like a 2 GB film
+  const file = { size, slice: (a, b) => ({ size: b - a, a, b }) };
+  const calls = [];
+  let server = 0;
+  let dropOnce = true;
+  const hdr = (h) => ({ get: (k) => (h[k] ?? h[k.toLowerCase()] ?? null) });
+  const fakeFetch = async (url, init) => {
+    calls.push({ url, method: init.method, headers: init.headers, body: init.body });
+    if (init.method === 'POST') return { status: 201, headers: hdr({ Location: 'https://st.example.com/storage/v1/upload/resumable/sign/abc' }) };
+    if (init.method === 'HEAD') return { status: 200, headers: hdr({ 'Upload-Offset': String(server) }) };
+    if (init.method === 'PATCH') {
+      if (server > 0 && dropOnce) { dropOnce = false; throw new Error('network'); }
+      assert.equal(Number(init.headers['Upload-Offset']), server, 'PATCH resumes at the server offset');
+      server += init.body.size;
+      return { status: 204, headers: hdr({ 'Upload-Offset': String(server) }) };
+    }
+    throw new Error('unexpected ' + init.method);
+  };
+  const progress = [];
+  const out = await Core.putFileTus({
+    slot: { path: 'org/job/2026-10-19/after-x.webm', token: 'signed-token' },
+    file,
+    mimeType: 'video/webm',
+    storageBase: 'https://st.example.com',
+    fetch: fakeFetch,
+    wait: async () => {},
+    onProgress: (p) => progress.push(p),
+  });
+  assert.equal(out.via, 'tus');
+  assert.equal(server, size, 'every byte lands');
+  const post = calls[0];
+  assert.equal(post.url, 'https://st.example.com/storage/v1/upload/resumable/sign');
+  assert.equal(post.headers['x-signature'], 'signed-token');
+  assert.equal(post.headers['Upload-Length'], String(size));
+  assert.match(post.headers['Upload-Metadata'], /bucketName /);
+  assert.ok(calls.some((c) => c.method === 'HEAD'), 'a dropped PATCH resyncs with HEAD');
+  for (const c of calls.filter((c) => c.method === 'PATCH')) {
+    assert.ok(c.body.size <= Core.TUS_CHUNK_BYTES);
+    assert.equal(c.headers['x-signature'], 'signed-token');
+  }
+  assert.equal(progress.at(-1), 1);
+  console.log('day film over 512 MB uploads direct (TUS): ok');
+}
+
 // Stay signed in until force close (runs in the same CI step).
 await import('./app-session.test.mjs');

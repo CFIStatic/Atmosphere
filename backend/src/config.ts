@@ -186,12 +186,6 @@ export const config = {
       process.env.MEDIA_MULTIPART_THRESHOLD_BYTES ?? 64 * 1024 * 1024,
     ),
     multipartPartBytes: Number(process.env.MEDIA_MULTIPART_PART_BYTES ?? 16 * 1024 * 1024),
-    // Soft defaults when an org has no row in org_media_quotas (null = unlimited).
-    defaultMaxHotBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_HOT_BYTES),
-    defaultMaxTotalBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_TOTAL_BYTES),
-    defaultMaxIngestSecondsPerDay: optionalPositiveInt(
-      process.env.MEDIA_DEFAULT_MAX_INGEST_SECONDS_PER_DAY,
-    ),
     // ~3 GB/hour × 24h ≈ 72 GB — generous single-object ceiling for a day file.
     defaultMaxObjectBytes: Number(
       process.env.MEDIA_DEFAULT_MAX_OBJECT_BYTES ?? 80 * 1024 * 1024 * 1024,
@@ -474,14 +468,6 @@ export const config = {
     investorEmails: parseEmailList(process.env.ANALYTICS_INVESTOR_EMAILS, []),
   },
 } as const;
-
-/** Positive int from env, or null when unset / invalid (means “unlimited”). */
-function optionalPositiveInt(value: string | undefined): number | null {
-  if (value == null || value.trim() === '') return null;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.floor(n);
-}
 
 function parseEmailList(value: string | undefined, fallback: string[]): string[] {
   const raw = value?.trim() ? value : fallback.join(',');

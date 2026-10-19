@@ -5,7 +5,6 @@ import { scheduleClipRoomBackfill, stopClipRoomBackfill } from './lib/backfillCl
 import { schedulePlayableProofBackfill, stopPlayableProofBackfill } from './lib/backfillPlayableProofs.js';
 import { scheduleTimedTranscriptBackfill, stopTimedTranscriptBackfill } from './lib/backfillTimedTranscripts.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
-import { startProofPurgeSweep, stopProofPurgeSweep } from './shared/proofPurgeSweep.js';
 import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { startVerificationLeaseSweep, stopVerificationLeaseSweep } from './verification/reclaim.js';
@@ -58,7 +57,6 @@ const server = app.listen(config.port, host, () => {
     scheduleTimedTranscriptBackfill();
     // One-shot room segments for clips analyzed before room rows existed. PROOF_ROOM_BACKFILL_ON_BOOT=0 turns it off.
     scheduleClipRoomBackfill();
-    startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
     startDailyJobReportSweep();
@@ -82,7 +80,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopPlayableProofBackfill();
     stopTimedTranscriptBackfill();
     stopClipRoomBackfill();
-    stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();
     stopComputerTaskSweep();
