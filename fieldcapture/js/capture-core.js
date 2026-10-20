@@ -44,6 +44,28 @@
     videoEl.onloadedmetadata = play;
   }
 
+  /**
+   * Re-attach the live stream once the recording screen is visible.
+   *
+   * The stream is bound while #s-rec is still display:none. On iOS WebKit a
+   * <video> that already painted a camera once (the first recording) keeps its
+   * old render-layer size when it is bound again while hidden, so a second
+   * recording shows a small boxed picture with black around it instead of a
+   * full-bleed preview. Detaching and re-attaching the same stream after the
+   * screen is laid out makes WebKit size the picture to the element again
+   * (object-fit: cover). The MediaRecorder records the stream, not the
+   * element, so this never touches the film.
+   */
+  function refreshLivePreview(videoEl) {
+    if (!videoEl) return false;
+    var stream = videoEl.srcObject;
+    if (!stream) return false;
+    videoEl.srcObject = null;
+    if (typeof videoEl.removeAttribute === 'function') videoEl.removeAttribute('src');
+    bindLivePreview(videoEl, stream);
+    return true;
+  }
+
   function resolveFinishHold(input) {
     input = input || {};
     if (input.recorder) return 'live';
@@ -4007,6 +4029,7 @@
     buildFieldCaptureSupportUrl: buildFieldCaptureSupportUrl,
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
+    refreshLivePreview: refreshLivePreview,
     bindKeyboardChrome: bindKeyboardChrome,
     isTextEntry: isTextEntry,
     keyboardShrunk: keyboardShrunk,
