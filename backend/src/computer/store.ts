@@ -9,7 +9,14 @@
 import { randomUUID } from 'node:crypto';
 import type { ApprovedOrderSelection } from './supplyOrder.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ApprovalField, ComputerProviderId, ComputerTaskStatus, ConsequentialKind, NeedsYouReason, ProjectedJobField } from './types.js';
+import type {
+  ApprovalField,
+  ComputerProviderId,
+  ComputerTaskStatus,
+  ConsequentialKind,
+  NeedsYouReason,
+  ProjectedJobField,
+} from './types.js';
 
 export interface ComputerTaskRow {
   id: string;
@@ -126,7 +133,9 @@ export interface ComputerLoginRow {
 }
 
 export type NewSession = Pick<ComputerSessionRow, 'org_id' | 'provider' | 'provider_context_id'> &
-  Partial<Pick<ComputerSessionRow, 'purpose' | 'login_id' | 'target_url' | 'target_label' | 'started_by'>>;
+  Partial<
+    Pick<ComputerSessionRow, 'purpose' | 'login_id' | 'target_url' | 'target_label' | 'started_by'>
+  >;
 
 export interface SavedLogin {
   org_id: string;
@@ -161,11 +170,26 @@ export interface ComputerCredentialRow {
 
 export type NewCredential = Pick<
   ComputerCredentialRow,
-  'login_id' | 'org_id' | 'username_sealed' | 'password_sealed' | 'company_id_sealed' | 'key_fingerprint' | 'login_url'
+  | 'login_id'
+  | 'org_id'
+  | 'username_sealed'
+  | 'password_sealed'
+  | 'company_id_sealed'
+  | 'key_fingerprint'
+  | 'login_url'
 > & { user_id: string | null; at: string };
 
 export type CredentialPatch = Partial<
-  Pick<ComputerCredentialRow, 'status' | 'attention_reason' | 'last_used_at' | 'username_sealed' | 'password_sealed' | 'company_id_sealed' | 'key_fingerprint'>
+  Pick<
+    ComputerCredentialRow,
+    | 'status'
+    | 'attention_reason'
+    | 'last_used_at'
+    | 'username_sealed'
+    | 'password_sealed'
+    | 'company_id_sealed'
+    | 'key_fingerprint'
+  >
 >;
 
 export interface ComputerAuditRow {
@@ -183,7 +207,15 @@ export interface ComputerAuditRow {
 
 export type NewTask = Pick<
   ComputerTaskRow,
-  'org_id' | 'job_id' | 'created_by' | 'instructions' | 'start_url' | 'job_projection' | 'model_id' | 'max_steps' | 'budget_nanos'
+  | 'org_id'
+  | 'job_id'
+  | 'created_by'
+  | 'instructions'
+  | 'start_url'
+  | 'job_projection'
+  | 'model_id'
+  | 'max_steps'
+  | 'budget_nanos'
 > &
   Partial<Pick<ComputerTaskRow, 'practice'>>;
 
@@ -202,7 +234,10 @@ export type NewApproval = Pick<
   | 'expires_at'
 >;
 
-export type NewAudit = Omit<ComputerAuditRow, 'id' | 'created_at' | 'session_id' | 'job_id' | 'actor_user_id' | 'detail'> & {
+export type NewAudit = Omit<
+  ComputerAuditRow,
+  'id' | 'created_at' | 'session_id' | 'job_id' | 'actor_user_id' | 'detail'
+> & {
   session_id?: string | null;
   job_id?: string | null;
   actor_user_id?: string | null;
@@ -215,8 +250,14 @@ export interface ComputerStore {
   getTask(orgId: string | null, id: string): Promise<ComputerTaskRow | null>;
   updateTask(id: string, patch: Partial<ComputerTaskRow>): Promise<void>;
   /** Conditional update; false when the row was not in one of `from` (or a unique rule blocked it). */
-  transitionTask(id: string, from: readonly ComputerTaskStatus[], patch: Partial<ComputerTaskRow>): Promise<boolean>;
+  transitionTask(
+    id: string,
+    from: readonly ComputerTaskStatus[],
+    patch: Partial<ComputerTaskRow>,
+  ): Promise<boolean>;
   listQueuedTasks(limit: number): Promise<ComputerTaskRow[]>;
+  /** Newest tasks run from one job, scoped to the org. */
+  listJobTasks(orgId: string, jobId: string, limit: number): Promise<ComputerTaskRow[]>;
   listStaleActiveTasks(olderThanIso: string): Promise<ComputerTaskRow[]>;
   latestContextId(orgId: string, provider: string): Promise<string | null>;
   insertSession(row: NewSession): Promise<ComputerSessionRow>;
@@ -271,7 +312,9 @@ export class SessionBusyError extends Error {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === 'object' && (error as { code?: string }).code === '23505');
+  return Boolean(
+    error && typeof error === 'object' && (error as { code?: string }).code === '23505',
+  );
 }
 
 export class SupabaseComputerStore implements ComputerStore {
@@ -292,11 +335,18 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async updateTask(id: string, patch: Partial<ComputerTaskRow>) {
-    const { error } = await this.db.from('computer_tasks').update({ ...patch, updated_at: nowIso() }).eq('id', id);
+    const { error } = await this.db
+      .from('computer_tasks')
+      .update({ ...patch, updated_at: nowIso() })
+      .eq('id', id);
     if (error) throw error;
   }
 
-  async transitionTask(id: string, from: readonly ComputerTaskStatus[], patch: Partial<ComputerTaskRow>) {
+  async transitionTask(
+    id: string,
+    from: readonly ComputerTaskStatus[],
+    patch: Partial<ComputerTaskRow>,
+  ) {
     const { data, error } = await this.db
       .from('computer_tasks')
       .update({ ...patch, updated_at: nowIso() })
@@ -308,6 +358,18 @@ export class SupabaseComputerStore implements ComputerStore {
       throw error;
     }
     return Array.isArray(data) && data.length > 0;
+  }
+
+  async listJobTasks(orgId: string, jobId: string, limit: number) {
+    const { data, error } = await this.db
+      .from('computer_tasks')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []) as ComputerTaskRow[];
   }
 
   async listQueuedTasks(limit: number) {
@@ -347,7 +409,11 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async insertSession(row: NewSession) {
-    const { data, error } = await this.db.from('computer_sessions').insert(row).select('*').single();
+    const { data, error } = await this.db
+      .from('computer_sessions')
+      .insert(row)
+      .select('*')
+      .single();
     if (error) {
       if (isUniqueViolation(error)) throw new SessionBusyError();
       throw error;
@@ -374,7 +440,11 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async getSession(id: string) {
-    const { data, error } = await this.db.from('computer_sessions').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await this.db
+      .from('computer_sessions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     return (data as ComputerSessionRow | null) ?? null;
   }
@@ -413,7 +483,12 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async getLogin(orgId: string, id: string) {
-    const { data, error } = await this.db.from('computer_logins').select('*').eq('org_id', orgId).eq('id', id).maybeSingle();
+    const { data, error } = await this.db
+      .from('computer_logins')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     return (data as ComputerLoginRow | null) ?? null;
   }
@@ -431,11 +506,18 @@ export class SupabaseComputerStore implements ComputerStore {
       label: row.label,
       url: row.url,
       cookie_domains: [...new Set([...(prev?.cookie_domains ?? []), ...row.cookie_domains])].sort(),
-      ...(row.signed_in === false ? {} : { last_signed_in_at: row.at, last_signed_in_by: row.user_id }),
+      ...(row.signed_in === false
+        ? {}
+        : { last_signed_in_at: row.at, last_signed_in_by: row.user_id }),
       updated_at: row.at,
     };
     if (prev) {
-      const { data, error } = await this.db.from('computer_logins').update(patch).eq('id', prev.id).select('*').single();
+      const { data, error } = await this.db
+        .from('computer_logins')
+        .update(patch)
+        .eq('id', prev.id)
+        .select('*')
+        .single();
       if (error) throw error;
       return data as ComputerLoginRow;
     }
@@ -449,13 +531,22 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async deleteLogin(orgId: string, id: string) {
-    const { data, error } = await this.db.from('computer_logins').delete().eq('org_id', orgId).eq('id', id).select('id');
+    const { data, error } = await this.db
+      .from('computer_logins')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('id');
     if (error) throw error;
     return Array.isArray(data) && data.length > 0;
   }
 
   async listCredentials(orgId: string) {
-    const { data, error } = await this.db.from('computer_login_credentials').select('*').eq('org_id', orgId).limit(200);
+    const { data, error } = await this.db
+      .from('computer_login_credentials')
+      .select('*')
+      .eq('org_id', orgId)
+      .limit(200);
     if (error) throw error;
     return (data ?? []) as ComputerCredentialRow[];
   }
@@ -512,7 +603,11 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 
   async insertApproval(row: NewApproval) {
-    const { data, error } = await this.db.from('computer_approvals').insert(row).select('*').single();
+    const { data, error } = await this.db
+      .from('computer_approvals')
+      .insert(row)
+      .select('*')
+      .single();
     if (error) throw error;
     return data as ComputerApprovalRow;
   }
@@ -606,7 +701,6 @@ export class SupabaseComputerStore implements ComputerStore {
   }
 }
 
-
 export class MemoryComputerStore implements ComputerStore {
   tasks = new Map<string, ComputerTaskRow>();
   approvals = new Map<string, ComputerApprovalRow>();
@@ -656,17 +750,30 @@ export class MemoryComputerStore implements ComputerStore {
     if (t) this.tasks.set(id, { ...t, ...patch, updated_at: nowIso() });
   }
 
-  async transitionTask(id: string, from: readonly ComputerTaskStatus[], patch: Partial<ComputerTaskRow>) {
+  async transitionTask(
+    id: string,
+    from: readonly ComputerTaskStatus[],
+    patch: Partial<ComputerTaskRow>,
+  ) {
     const t = this.tasks.get(id);
     if (!t || !from.includes(t.status)) return false;
     const next = { ...t, ...patch, updated_at: nowIso() };
     if (ACTIVE.includes(next.status)) {
       for (const other of this.tasks.values()) {
-        if (other.id !== id && other.org_id === t.org_id && ACTIVE.includes(other.status)) return false;
+        if (other.id !== id && other.org_id === t.org_id && ACTIVE.includes(other.status))
+          return false;
       }
     }
     this.tasks.set(id, next);
     return true;
+  }
+
+  async listJobTasks(orgId: string, jobId: string, limit: number) {
+    return [...this.tasks.values()]
+      .filter((t) => t.org_id === orgId && t.job_id === jobId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit)
+      .map((t) => ({ ...t }));
   }
 
   async listQueuedTasks(limit: number) {
@@ -692,7 +799,8 @@ export class MemoryComputerStore implements ComputerStore {
 
   async insertSession(row: NewSession) {
     for (const other of this.sessions.values()) {
-      if (other.org_id === row.org_id && (other.status === 'starting' || other.status === 'active')) throw new SessionBusyError();
+      if (other.org_id === row.org_id && (other.status === 'starting' || other.status === 'active'))
+        throw new SessionBusyError();
     }
     const at = nowIso();
     const s: ComputerSessionRow = {
@@ -736,7 +844,9 @@ export class MemoryComputerStore implements ComputerStore {
     return s ? { ...s } : null;
   }
   async liveSession(orgId: string) {
-    const s = [...this.sessions.values()].find((x) => x.org_id === orgId && (x.status === 'starting' || x.status === 'active'));
+    const s = [...this.sessions.values()].find(
+      (x) => x.org_id === orgId && (x.status === 'starting' || x.status === 'active'),
+    );
     return s ? { ...s } : null;
   }
 
@@ -758,7 +868,9 @@ export class MemoryComputerStore implements ComputerStore {
   }
 
   async saveLogin(row: SavedLogin) {
-    const prev = [...this.logins.values()].find((l) => l.org_id === row.org_id && l.host === row.host);
+    const prev = [...this.logins.values()].find(
+      (l) => l.org_id === row.org_id && l.host === row.host,
+    );
     const next: ComputerLoginRow = {
       id: prev?.id ?? randomUUID(),
       org_id: row.org_id,
@@ -812,7 +924,8 @@ export class MemoryComputerStore implements ComputerStore {
 
   async updateCredential(orgId: string, loginId: string, patch: CredentialPatch) {
     const c = this.credentials.get(loginId);
-    if (c && c.org_id === orgId) this.credentials.set(loginId, { ...c, ...patch, updated_at: new Date().toISOString() });
+    if (c && c.org_id === orgId)
+      this.credentials.set(loginId, { ...c, ...patch, updated_at: new Date().toISOString() });
   }
 
   async deleteCredential(orgId: string, loginId: string) {
@@ -821,7 +934,6 @@ export class MemoryComputerStore implements ComputerStore {
     this.credentials.delete(loginId);
     return true;
   }
-
 
   async insertApproval(row: NewApproval) {
     const a: ComputerApprovalRow = {
@@ -878,14 +990,22 @@ export class MemoryComputerStore implements ComputerStore {
 
   async consumeApproval(id: string, tokenHash: string, at: string) {
     const a = this.approvals.get(id);
-    if (!a || a.status !== 'approved' || a.token_hash !== tokenHash || a.consumed_at || a.expires_at <= at) return false;
+    if (
+      !a ||
+      a.status !== 'approved' ||
+      a.token_hash !== tokenHash ||
+      a.consumed_at ||
+      a.expires_at <= at
+    )
+      return false;
     this.approvals.set(id, { ...a, status: 'consumed', consumed_at: at });
     return true;
   }
 
   async expireApproval(id: string) {
     const a = this.approvals.get(id);
-    if (a && (a.status === 'pending' || a.status === 'approved')) this.approvals.set(id, { ...a, status: 'expired' });
+    if (a && (a.status === 'pending' || a.status === 'approved'))
+      this.approvals.set(id, { ...a, status: 'expired' });
   }
 
   async appendAudit(row: NewAudit) {
