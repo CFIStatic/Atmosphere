@@ -1339,6 +1339,21 @@ export interface ProofQuestion {
 
 export type AskFeedbackReason = 'wrong' | 'incomplete' | 'not_on_file' | 'unclear' | 'other';
 
+export type ClipSummaryFeedbackReason = 'wrong' | 'missing' | 'made_up' | 'unclear' | 'other';
+
+/** This person's rating, and fix, of one clip's AI summary. */
+export interface ClipSummaryFeedback {
+  rating: 1 | -1;
+  reason: ClipSummaryFeedbackReason | null;
+  correctedText: string | null;
+}
+
+/** Whether the workspace lets its corrected AI text train Atmosphere's own models. */
+export interface AiTrainingSetting {
+  optedIn: boolean;
+  changedAt: string | null;
+}
+
 export interface AskFeedback {
   rating: 1 | -1;
   reason: AskFeedbackReason | null;
@@ -4493,6 +4508,32 @@ export const api = {
       `/api/operations/shared/${jobId}/ask/questions/${encodeURIComponent(questionId)}/feedback`,
       { method: 'POST', body: JSON.stringify({ rating, ...(extra ?? {}) }) },
     ),
+
+  /** Thumbs up (1) / down (-1) on a clip's summary, with an optional fix, or 0 to clear. Office members. */
+  rateClipSummary: (
+    jobId: string,
+    proofId: string,
+    rating: 1 | -1 | 0,
+    extra?: { reason?: ClipSummaryFeedbackReason | null; correctedText?: string | null },
+  ) =>
+    request<{ feedback: ClipSummaryFeedback | null }>(
+      `/api/operations/shared/${jobId}/proofs/${encodeURIComponent(proofId)}/summary-feedback`,
+      { method: 'POST', body: JSON.stringify({ rating, ...(extra ?? {}) }) },
+    ),
+
+  clipSummaryFeedback: (jobId: string) =>
+    request<{ feedback: Record<string, ClipSummaryFeedback> }>(
+      `/api/operations/shared/${jobId}/proofs/summary-feedback`,
+      { method: 'GET' },
+    ),
+
+  getAiTraining: () => request<{ setting: AiTrainingSetting }>('/api/org/ai-training', { method: 'GET' }),
+
+  setAiTraining: (optedIn: boolean) =>
+    request<{ setting: AiTrainingSetting }>('/api/org/ai-training', {
+      method: 'PUT',
+      body: JSON.stringify({ optedIn }),
+    }),
 
   askFeedback: (jobId: string, questionIds: string[]) =>
     request<{ feedback: Record<string, AskFeedback> }>(

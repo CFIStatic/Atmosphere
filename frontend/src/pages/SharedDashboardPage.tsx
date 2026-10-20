@@ -534,6 +534,7 @@ function JobFileSections({
             showCollectionAsk={false}
             readOnly={viewerOnly}
             allowDownload
+            rateSummaries={!grantViewer}
           />
         ) : null}
 
