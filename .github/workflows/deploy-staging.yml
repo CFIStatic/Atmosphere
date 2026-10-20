@@ -1,0 +1,120 @@
+# Ship every merge to main to staging.
+#
+# Staging is the Railway "staging" environment (Atmosphere APIs, Platform,
+# Field Capture). Its services autodeploy from the `staging` branch through
+# Railway's GitHub integration, so shipping to staging means moving that
+# branch to main. Before this workflow the branch was moved by hand and fell
+# behind (seven merges on 2026-10-20 never reached staging).
+#
+# Order matches production: schema first, then code.
+#   1. Apply pending supabase/migrations to the STAGING database only
+#      (Supabase project "Atmosphere Staging", emqhwupfeoeafbzabdkg).
+#   2. Fast-forward `staging` to this main commit. Railway builds from that.
+#
+# Safety: the staging project ref is pinned here and checked before migrate
+# runs. No database URL, password or Railway-loaded env is passed to the
+# migrate step, so it can only reach staging through the Management API.
+# Production is ccxatzfsvzetciiwsjlj and the job refuses that ref outright.
+#
+# Connection: STAGING_SUPABASE_ACCESS_TOKEN in the `Keys` environment, else
+# the shared SUPABASE_ACCESS_TOKEN (a personal access token reaches every
+# project in the Supabase org). With neither, migrations are skipped with a
+# warning and code still ships, so staging never silently stops following main.
+#
+# The branch push uses STAGING_PUSH_TOKEN when set, else GITHUB_TOKEN. GitHub
+# does not start other workflows from a GITHUB_TOKEN push (CI already ran on
+# main), but Railway's GitHub app still receives it and deploys. GitHub refuses
+# a GITHUB_TOKEN push that changes files under .github/workflows; for those
+# merges the job fails with instructions unless STAGING_PUSH_TOKEN (a token
+# with the `workflow` scope) is set.
+
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  STAGING_SUPABASE_REF: emqhwupfeoeafbzabdkg
+  PRODUCTION_SUPABASE_REF: ccxatzfsvzetciiwsjlj
+
+jobs:
+  migrate:
+    name: Apply migrations to staging database
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Apply database migrations (staging)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN || secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ env.STAGING_SUPABASE_REF }}
+          SUPABASE_URL: https://${{ env.STAGING_SUPABASE_REF }}.supabase.co
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          if [ "$SUPABASE_PROJECT_REF" = "$PRODUCTION_SUPABASE_REF" ]; then
+            echo "::error::Staging migrate is pointed at the production Supabase project. Refusing."
+            exit 1
+          fi
+          # Belt and braces: nothing but the Management API target may be set.
+          unset DATABASE_URL SUPABASE_DB_URL DIRECT_URL POSTGRES_URL \
+            DATABASE_PRIVATE_URL DATABASE_PUBLIC_URL SUPABASE_DB_PASSWORD POSTGRES_PASSWORD
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::warning::No STAGING_SUPABASE_ACCESS_TOKEN or SUPABASE_ACCESS_TOKEN in Keys; staging migrations skipped. Code still ships to staging."
+            exit 0
+          fi
+          # Staging was built by hand to the squashed production baseline, and
+          # its ledger was created empty. With an empty ledger the runner would
+          # replay the baseline over that schema, so record the baseline file
+          # (only files carrying the squashed-baseline marker) as applied first.
+          # Idempotent: already-recorded versions are left alone. Everything
+          # after the baseline then applies normally.
+          grep -l '^-- atmosphere:squashed-baseline' ../supabase/migrations/*.sql \
+            | xargs -n1 basename | sed 's/\.sql$//' > "$RUNNER_TEMP/staging-baseline.txt"
+          node scripts/migrate.mjs --baseline --versions-from "$RUNNER_TEMP/staging-baseline.txt"
+          node scripts/migrate.mjs
+
+  sync:
+    name: Move staging branch to main
+    needs: migrate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.STAGING_PUSH_TOKEN || github.token }}
+
+      - name: Fast-forward staging
+        run: |
+          set -euo pipefail
+          git fetch origin staging || true
+          if git rev-parse --verify -q origin/staging >/dev/null; then
+            if ! git merge-base --is-ancestor origin/staging "$GITHUB_SHA"; then
+              echo "::error::staging has commits that are not on main. Not overwriting them; merge them into main or reset staging by hand."
+              git log --oneline "$GITHUB_SHA..origin/staging" | head -20
+              exit 1
+            fi
+            if git merge-base --is-ancestor "$GITHUB_SHA" origin/staging; then
+              echo "staging already contains $GITHUB_SHA; nothing to do."
+              exit 0
+            fi
+          fi
+          if ! git push origin "$GITHUB_SHA:refs/heads/staging"; then
+            echo "::error::Could not move staging. If this merge changed .github/workflows, GitHub blocks the default token: add a STAGING_PUSH_TOKEN secret with the workflow scope, or run: git push origin $GITHUB_SHA:refs/heads/staging"
+            exit 1
+          fi
+          echo "staging -> $GITHUB_SHA"
