@@ -141,9 +141,14 @@ export async function extractFrames(opts: {
     } catch {
       break;
     }
-    const timestampSeconds = Math.min((i - 1) * interval, Math.max(opts.durationSeconds - 0.1, 0));
+    const timestampSeconds = Number(
+      Math.min((i - 1) * interval, Math.max(opts.durationSeconds - 0.1, 0)).toFixed(3),
+    );
+    // ffmpeg can emit more frames than the stored duration allows; those all
+    // clamp to the same timestamp and break the (video_id, timestamp) key.
+    if (frames.length && frames[frames.length - 1]!.timestampSeconds >= timestampSeconds) break;
     frames.push({
-      timestampSeconds: Number(timestampSeconds.toFixed(3)),
+      timestampSeconds,
       sequenceNumber: i - 1,
       localPath,
       width: null,

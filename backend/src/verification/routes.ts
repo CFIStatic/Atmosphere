@@ -268,18 +268,10 @@ verificationRouter.get('/usage', async (req, res, next) => {
 /** GET /api/verification/jobs/:jobId/timeline */
 verificationRouter.get('/jobs/:jobId/timeline', async (req, res, next) => {
   try {
-    const { orgId, supabase } = orgReq(req);
+    orgReq(req);
     const jobId = z.string().uuid().parse(req.params.jobId);
-    const { data, error } = await supabase
-      .from('project_timeline_events')
-      .select(
-        'id, occurred_at, title, summary, status, completion_state, room_or_area, activity_id, system_confidence, confidence_breakdown, evidence_frame_ids, evidence_clip_ids, result_id, llm_run_id, provenance',
-      )
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .order('occurred_at', { ascending: true, nullsFirst: false });
-    if (error) throw new Error(error.message);
-    res.json({ jobId, events: data ?? [] });
+    // project_timeline_events dropped
+    res.json({ jobId, events: [] });
   } catch (err) {
     next(toHttp(err));
   }
