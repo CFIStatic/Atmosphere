@@ -213,8 +213,8 @@ describe('All videos search in the list', () => {
     const dom = bootWithLibrary(library);
     const doc = dom.window.document;
     await until(() => Boolean(doc.querySelector('tr.jobrow[data-job="job-tif"]')));
-    // Collapse Tiffany first: a search hit inside must still show.
-    (doc.querySelector('tr.jobrow[data-job="job-tif"]') as HTMLElement).click();
+    // Folders land collapsed: a search hit inside must still show.
+    expect(doc.querySelector('tr.jobrow[data-job="job-tif"]')!.getAttribute('aria-expanded')).toBe('false');
     expect(doc.querySelector('tr[data-id="clip-a"]')).toBeNull();
 
     await typeSearch(dom, 'img_0001');

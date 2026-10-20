@@ -1,3 +1,4 @@
+import { expandJobFoldersOnRender } from './verifierTestExpandFolders';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -32,6 +33,7 @@ function bootVerifier() {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
+      expandJobFoldersOnRender(window);
       window.fetch = () => Promise.reject(new Error('offline'));
       window.matchMedia = ((query: string) => ({
         matches: false,

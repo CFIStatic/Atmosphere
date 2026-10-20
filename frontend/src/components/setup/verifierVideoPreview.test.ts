@@ -1,3 +1,4 @@
+import { expandJobFoldersOnRender } from './verifierTestExpandFolders';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +57,7 @@ function bootVerifier(html = verifierHtml) {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
+      expandJobFoldersOnRender(window);
       window.fetch = () => Promise.reject(new Error('offline'));
       window.matchMedia = ((query: string) => ({
         matches: false,
@@ -515,6 +517,7 @@ describe('verifier dashboard video preview screen', () => {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
+      expandJobFoldersOnRender(window);
         window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
         window.fetch = ((input: RequestInfo | URL) => {
           const url = String(input);
@@ -690,6 +693,7 @@ describe('verifier dashboard video preview screen', () => {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
+      expandJobFoldersOnRender(window);
         window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
         window.fetch = ((input: RequestInfo | URL) => {
           const url = String(input);
@@ -824,6 +828,7 @@ describe('verifier dashboard video preview screen', () => {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
+      expandJobFoldersOnRender(window);
         window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
         window.fetch = ((input: RequestInfo | URL) => {
           const url = String(input);

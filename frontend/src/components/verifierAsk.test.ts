@@ -1,3 +1,4 @@
+import { expandJobFoldersOnRender } from './setup/verifierTestExpandFolders';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,7 @@ function bootVerifier() {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
+      expandJobFoldersOnRender(window);
       window.fetch = () => Promise.reject(new Error('offline'));
       window.matchMedia = ((query: string) => ({
         matches: false,
@@ -458,6 +460,7 @@ describe('verifier clip Ask tab and live analysis', () => {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
+      expandJobFoldersOnRender(window);
         window.matchMedia = ((query: string) => ({
           matches: false,
           media: query,
@@ -668,6 +671,7 @@ describe('verifier clip Ask tab and live analysis', () => {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
+      expandJobFoldersOnRender(window);
         window.alert = () => {};
         window.matchMedia = ((query: string) => ({
           matches: false,

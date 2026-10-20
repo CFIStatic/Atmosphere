@@ -92,6 +92,10 @@ function bootOrgVerifier(fetchImpl: typeof fetch) {
 async function waitForClip(document: Document, id: string) {
   for (let i = 0; i < 40; i += 1) {
     if (document.querySelector(`tr[data-id="${id}"]`)) return;
+    // Job folders land collapsed: open them the way a person would.
+    document
+      .querySelectorAll<HTMLElement>('tr.jobrow[aria-expanded="false"]')
+      .forEach((row) => row.click());
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`clip row ${id} never rendered`);
