@@ -6739,6 +6739,8 @@ export interface TokenEmployeeBreakdown extends TokenTotals {
   email: string | null;
   role: string;
   roleLabel: string;
+  /** Not an org member: a homeowner or sub using Chat on a shared job. Absent on older payloads. */
+  outsideOrg?: boolean;
   byFeature: Record<TokenFeature, TokenTotals>;
 }
 

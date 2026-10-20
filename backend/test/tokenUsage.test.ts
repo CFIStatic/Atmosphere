@@ -9,6 +9,8 @@ import {
   eachUtcDay,
   estimatedUsdToNanos,
   eventBillableNanos,
+  guestPartyName,
+  guestRoleLabel,
   quoteMeasuredUsageCostNanos,
   recordMeasuredTokenUsageAsync,
   recordTokenUsage,
@@ -227,6 +229,73 @@ test('aggregateTokenUsage keeps a System row only when no actor exists', () => {
   assert.equal(report.byEmployee[0]?.name, 'Unattributed');
   assert.equal(report.byEmployee[0]?.roleLabel, 'System');
   assert.equal(report.byEmployee[0]?.userId, null);
+});
+
+test('aggregateTokenUsage marks a shared-job subcontractor as outside the org, not an employee', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({ id: 'jack-ask', feature: 'ask', userId: 'user-jack', createdAt: '2026-10-11T10:00:00.000Z' }),
+    event({ id: 'sub-ask', feature: 'ask', userId: 'user-sub', createdAt: '2026-10-11T20:23:00.000Z' }),
+  ];
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-10-11T00:00:00.000Z', end: '2026-10-12T00:00:00.000Z' },
+    [{ userId: 'user-jack', fullName: 'El Presidente', email: 'jack@jettx.ai', role: 'global_admin' }],
+    undefined,
+    [
+      {
+        userId: 'user-sub',
+        fullName: 'Alpha co',
+        email: 'sub@example.com',
+        roleLabel: guestRoleLabel(['subcontractor']),
+      },
+    ],
+  );
+  const jack = report.byEmployee.find((row) => row.userId === 'user-jack');
+  const sub = report.byEmployee.find((row) => row.userId === 'user-sub');
+  assert.equal(jack?.outsideOrg, false);
+  assert.equal(sub?.outsideOrg, true);
+  assert.equal(sub?.name, 'Alpha co');
+  assert.equal(sub?.roleLabel, 'Subcontractor (shared job)');
+  assert.notEqual(sub?.roleLabel, 'Employee');
+  assert.equal(report.recent.find((row) => row.id === 'sub-ask')?.userName, 'Alpha co');
+});
+
+test('aggregateTokenUsage never calls an unknown non-member a Teammate', () => {
+  const report = aggregateTokenUsage(
+    [event({ id: 'x', feature: 'ask', userId: 'user-gone', createdAt: '2026-10-11T10:00:00.000Z' })],
+    { start: '2026-10-11T00:00:00.000Z', end: '2026-10-12T00:00:00.000Z' },
+    [],
+  );
+  assert.equal(report.byEmployee[0]?.outsideOrg, true);
+  assert.equal(report.byEmployee[0]?.name, 'Outside account');
+  assert.equal(report.byEmployee[0]?.roleLabel, 'Not on this organization');
+});
+
+test('guestPartyName uses the newest active invite name', () => {
+  const party = (company: string, created_at: string, revoked = false) => ({
+    role: 'subcontractor',
+    contact_name: null,
+    company,
+    revoked_at: revoked ? created_at : null,
+    created_at,
+  });
+  assert.equal(
+    guestPartyName([
+      party('home owner', '2026-08-31T19:41:44Z'),
+      party('Jack Smith', '2026-09-05T16:39:29Z'),
+      party('UWM FC primary', '2026-09-11T16:34:42Z', true),
+      party('Alpha co', '2026-10-11T04:40:04Z'),
+    ]),
+    'Alpha co',
+  );
+  assert.equal(guestPartyName([party('Old name', '2026-09-01T00:00:00Z', true)]), 'Old name');
+  assert.equal(guestPartyName([]), null);
+});
+
+test('guestRoleLabel names homeowners and subs from their job_parties role', () => {
+  assert.equal(guestRoleLabel(['owner']), 'Homeowner (shared job)');
+  assert.equal(guestRoleLabel(['subcontractor', 'owner']), 'Homeowner (shared job)');
+  assert.equal(guestRoleLabel([]), 'Shared job guest');
 });
 
 const askUsage = {

@@ -120,7 +120,21 @@ export interface TokenEmployeeBreakdown extends TokenTotals {
   email: string | null;
   role: string;
   roleLabel: string;
+  /**
+   * True when the seat is not a member of this organization: a homeowner or
+   * subcontractor using Chat on a job the org shared with them. Their usage
+   * stays on the org's bill but they are not an employee.
+   */
+  outsideOrg: boolean;
   byFeature: Record<TokenFeature, TokenTotals>;
+}
+
+/** A signed-in person on the ledger who is not an org member (shared-job guest). */
+export interface TokenGuestSeat {
+  userId: string;
+  fullName: string | null;
+  email: string | null;
+  roleLabel: string;
 }
 
 export interface TokenUsageRecent {
@@ -330,6 +344,7 @@ export function aggregateTokenUsage(
     jobs: Array<{ jobId: string; title: string; jobNumber: number | null }>;
     analysisSecondsByJob: Map<string, number>;
   },
+  guests: TokenGuestSeat[] = [],
 ): Omit<TokenUsageReport, 'range'> {
   const totals = EMPTY_TOTALS();
   const featureMap = emptyByFeature();
@@ -338,6 +353,9 @@ export function aggregateTokenUsage(
   const employeeMap = new Map<string, TokenEmployeeBreakdown>();
 
   const memberById = new Map(members.map((m) => [m.userId, m]));
+  const guestById = new Map(guests.map((g) => [g.userId, g]));
+  const personById = (userId: string | null) =>
+    userId ? (memberById.get(userId) ?? guestById.get(userId)) : undefined;
 
   function employeeKey(userId: string | null): string {
     return userId ?? '__unattributed__';
@@ -348,12 +366,23 @@ export function aggregateTokenUsage(
     const existing = employeeMap.get(key);
     if (existing) return existing;
     const member = userId ? memberById.get(userId) : undefined;
+    const guest = userId && !member ? guestById.get(userId) : undefined;
+    const person = member ?? guest;
+    const outsideOrg = Boolean(userId) && !member;
     const row: TokenEmployeeBreakdown = {
       userId,
-      name: member?.fullName?.trim() || member?.email?.split('@')[0] || (userId ? 'Teammate' : 'Unattributed'),
-      email: member?.email ?? null,
-      role: member?.role ?? (userId ? 'employee' : 'system'),
-      roleLabel: userId ? labelForMemberRole(member?.role) : 'System',
+      name:
+        person?.fullName?.trim() ||
+        person?.email?.split('@')[0] ||
+        (userId ? (outsideOrg ? 'Outside account' : 'Teammate') : 'Unattributed'),
+      email: person?.email ?? null,
+      role: member?.role ?? (outsideOrg ? 'guest' : 'system'),
+      roleLabel: member
+        ? labelForMemberRole(member.role)
+        : outsideOrg
+          ? (guest?.roleLabel ?? 'Not on this organization')
+          : 'System',
+      outsideOrg,
       byFeature: emptyByFeature(),
       ...EMPTY_TOTALS(),
     };
@@ -388,7 +417,7 @@ export function aggregateTokenUsage(
     const actor = actors.get(actorKey);
     if (actor) actor.events += 1;
     else {
-      const member = row.userId ? memberById.get(row.userId) : undefined;
+      const member = personById(row.userId);
       actors.set(actorKey, {
         userId: row.userId,
         name: meteredUserName(row.userId, member),
@@ -424,7 +453,7 @@ export function aggregateTokenUsage(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 40)
     .map((row) => {
-      const member = row.userId ? memberById.get(row.userId) : undefined;
+      const member = personById(row.userId);
       return {
         id: row.id,
         createdAt: row.createdAt,
@@ -953,16 +982,123 @@ export async function loadTokenUsageReport(
   ]);
   const rows = await attributeUnownedRows(client, orgId, storedRows);
   const jobIds = [...new Set(rows.map((r) => r.jobId).filter((id): id is string => Boolean(id)))];
-  const [jobs, analysisSecondsByJob] = await Promise.all([
+  const [jobs, analysisSecondsByJob, guests] = await Promise.all([
     loadJobMeta(client, orgId, jobIds),
     loadAnalysedFilmSeconds(client, orgId, jobIds, window),
+    loadGuestSeats(client, orgId, rows, members),
   ]);
 
   return {
     range,
     orgName,
-    ...aggregateTokenUsage(rows, window, members, { jobs, analysisSecondsByJob }),
+    ...aggregateTokenUsage(rows, window, members, { jobs, analysisSecondsByJob }, guests),
   };
+}
+
+const PARTY_ROLE_LABELS: Record<string, string> = {
+  owner: 'Homeowner',
+  subcontractor: 'Subcontractor',
+  adjuster: 'Adjuster',
+  general_contractor: 'Contractor',
+};
+
+/** Label for a shared-job guest from the job_parties role they were invited as. */
+export function guestRoleLabel(partyRoles: Array<string | null | undefined>): string {
+  for (const role of ['owner', 'subcontractor', 'adjuster', 'general_contractor']) {
+    if (partyRoles.includes(role)) return `${PARTY_ROLE_LABELS[role]} (shared job)`;
+  }
+  return 'Shared job guest';
+}
+
+export type GuestParty = {
+  role: string | null;
+  contact_name: string | null;
+  company: string | null;
+  revoked_at: string | null;
+  created_at: string | null;
+};
+
+/**
+ * The name the contractor gave this person on their newest active invite
+ * ("Alpha co"). One email is often invited many times under different names;
+ * revoked invites only count when nothing active is left.
+ */
+export function guestPartyName(parties: GuestParty[]): string | null {
+  const ranked = [...parties].sort((a, b) => {
+    if (Boolean(a.revoked_at) !== Boolean(b.revoked_at)) return a.revoked_at ? 1 : -1;
+    return (b.created_at ?? '').localeCompare(a.created_at ?? '');
+  });
+  for (const party of ranked) {
+    const name = party.contact_name?.trim() || party.company?.trim();
+    if (name) return name;
+  }
+  return null;
+}
+
+/**
+ * Ledger seats that are not org members: homeowners and subcontractors who
+ * used Chat on a job this org shared with them. Their profile is outside the
+ * org, so it is read with the service role (only ids already on this org's
+ * ledger). Best-effort: a miss leaves the row labelled "Not on this
+ * organization", never fails the report.
+ */
+async function loadGuestSeats(
+  client: SupabaseClient,
+  orgId: string,
+  rows: TokenUsageEventRow[],
+  members: Array<{ userId: string }>,
+): Promise<TokenGuestSeat[]> {
+  const memberIds = new Set(members.map((m) => m.userId));
+  const ids = [
+    ...new Set(rows.map((r) => r.userId).filter((id): id is string => Boolean(id) && !memberIds.has(id!))),
+  ];
+  if (ids.length === 0) return [];
+  const reader = unscopedAdminOrNull() ?? client;
+  try {
+    const { data: profiles } = await reader
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', ids);
+    const byId = new Map(
+      ((profiles ?? []) as Array<{ id: string; email: string | null; full_name: string | null }>).map(
+        (p) => [p.id, p],
+      ),
+    );
+    const emails = [
+      ...new Set(
+        [...byId.values()]
+          .map((p) => p.email?.trim().toLowerCase())
+          .filter((e): e is string => Boolean(e)),
+      ),
+    ];
+    const partiesByEmail = new Map<string, GuestParty[]>();
+    if (emails.length > 0) {
+      const { data: parties } = await reader
+        .from('job_parties')
+        .select('email, role, contact_name, company, revoked_at, created_at')
+        .eq('org_id', orgId)
+        .in('email', emails);
+      for (const party of (parties ?? []) as Array<GuestParty & { email: string | null }>) {
+        const email = party.email?.trim().toLowerCase();
+        if (!email) continue;
+        partiesByEmail.set(email, [...(partiesByEmail.get(email) ?? []), party]);
+      }
+    }
+    return ids.map((userId) => {
+      const profile = byId.get(userId);
+      const email = profile?.email ?? null;
+      const invites = partiesByEmail.get(email?.trim().toLowerCase() ?? '') ?? [];
+      return {
+        userId,
+        fullName: guestPartyName(invites) || profile?.full_name?.trim() || null,
+        email,
+        roleLabel: guestRoleLabel(invites.map((p) => p.role)),
+      };
+    });
+  } catch (err) {
+    console.warn('[metering] could not load shared-job guests for token usage:', err);
+    return [];
+  }
 }
 
 /**
