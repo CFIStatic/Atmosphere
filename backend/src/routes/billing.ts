@@ -482,7 +482,7 @@ billingRouter.get('/workspace', async (req: Request, res: Response, next: NextFu
   }
 });
 
-const TOKEN_USAGE_RANGES = new Set<TokenUsageRange>(['period', '30d', '90d']);
+const TOKEN_USAGE_RANGES = new Set<TokenUsageRange>(['period', '7d', '30d', '90d', '365d']);
 
 /**
  * GET /api/billing/token-usage
@@ -494,7 +494,8 @@ const TOKEN_USAGE_RANGES = new Set<TokenUsageRange>(['period', '30d', '90d']);
  * tokens→minutes guess) plus token spend for events attributed to each job.
  *
  * `range=period` (default) is the current Stripe / org billing period.
- * `30d` and `90d` are rolling windows for the usage graph.
+ * `7d`, `30d`, `90d` and `365d` are rolling windows for the usage graph
+ * (Week, Month, Quarter, Annual).
  */
 billingRouter.get('/token-usage', async (req: Request, res: Response, next: NextFunction) => {
   try {

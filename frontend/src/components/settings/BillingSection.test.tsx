@@ -156,7 +156,7 @@ describe('BillingSection', () => {
     expect(screen.getAllByText('$849').length).toBeGreaterThan(0);
     expect(screen.getByText('Per Month')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Usage over time' })).toBeInTheDocument();
     expect(screen.queryByText(/50 jobs included/)).toBeNull();
     expect(screen.queryByText(/\$30 each/)).toBeNull();
     expect(screen.queryByText(/additional job/i)).toBeNull();
@@ -354,7 +354,7 @@ describe('BillingSection in the iPhone app', () => {
   it('shows the plan and seats with no prices, payment buttons, invoices, or links', async () => {
     const { container } = renderBilling();
     expect(await screen.findByText('Work Verification')).toBeInTheDocument();
-    expect(await screen.findByText('Token usage')).toBeInTheDocument();
+    expect(await screen.findByText('Usage over time')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Manage plan and payment method/ })).toBeNull();
     expect(screen.queryByText(/Switch to|Upgrade to|Downgrade to|Buy /)).toBeNull();
     expect(screen.queryByText('Invoices / Receipts')).toBeNull();

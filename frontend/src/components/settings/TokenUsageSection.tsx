@@ -13,26 +13,34 @@ import { formatTokens } from '../../lib/money';
 import { TokenUsageChart } from './TokenUsageChart';
 import {
   TOKEN_FEATURE_TRACK,
+  type UsageBucket,
   dailyUsageRows,
   formatAnalysisMinutes,
   mergeAskIntoChat,
   sharePct,
 } from './tokenUsageModel';
 
-const RANGES: { id: TokenUsageRange; label: string }[] = [
-  { id: 'period', label: 'This period' },
-  { id: '30d', label: 'Last 30 days' },
-  { id: '90d', label: 'Last 90 days' },
+// Usage over time picks its own window; the rest of the page is the billing period.
+const CHART_RANGES: { id: TokenUsageRange; label: string; bucket: UsageBucket }[] = [
+  { id: '7d', label: 'Week', bucket: 'day' },
+  { id: '30d', label: 'Month', bucket: 'day' },
+  { id: '90d', label: 'Quarter', bucket: 'week' },
+  { id: '365d', label: 'Annual', bucket: 'month' },
 ];
 
+const BUCKET_CAPTION: Record<UsageBucket, string> = {
+  day: 'Stacked daily tokens',
+  week: 'Stacked weekly tokens',
+  month: 'Stacked monthly tokens',
+};
+
 export function TokenUsageSection() {
-  const [range, setRange] = useState<TokenUsageRange>('period');
+  const range: TokenUsageRange = 'period';
   const [report, setReport] = useState<TokenUsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    setError(null);
     api
       .getTokenUsage(range)
       .then((next) => {
@@ -44,7 +52,7 @@ export function TokenUsageSection() {
     return () => {
       live = false;
     };
-  }, [range]);
+  }, []);
 
   const totals = report?.totals;
   const featureMax = useMemo(() => {
@@ -74,83 +82,12 @@ export function TokenUsageSection() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl glass-card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-ink-900">Token usage</h3>
-            <p className="mt-0.5 text-xs text-ink-500">
-              AI model calls for the signed-in organization.
-            </p>
-          </div>
-          <div
-            className="flex rounded-lg border border-line bg-paper-50 p-0.5"
-            role="tablist"
-            aria-label="Usage window"
-          >
-            {RANGES.map((option) => {
-              const active = range === option.id;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setRange(option.id)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
-                    active ? 'bg-paper-0 text-ink-900 shadow-xs' : 'text-ink-600 hover:text-ink-900'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi
-            label="Tokens used"
-            value={formatTokens(totals.totalTokens)}
-            hint={`${totals.events.toLocaleString()} metered calls`}
-          />
-          <Kpi
-            label="Metered calls"
-            value={totals.events.toLocaleString()}
-            hint="Video analysis, chat, and web search"
-          />
-          <Kpi
-            label="Input / output"
-            value={`${formatTokens(totals.inputTokens)} / ${formatTokens(totals.outputTokens)}`}
-            hint={
-              totals.cacheTokens ? `${formatTokens(totals.cacheTokens)} cached` : 'No cache hits'
-            }
-          />
-          <Kpi
-            label="People using tokens"
-            value={String(employees.filter((row) => row.totalTokens > 0 && row.userId).length)}
-            hint={
-              guests.length > 0
-                ? `Employees · plus ${guests.length} shared-job ${guests.length === 1 ? 'guest' : 'guests'}`
-                : 'Attributed to a signed-in teammate'
-            }
-          />
-        </dl>
-      </section>
-
-      <section className="rounded-xl glass-card p-5">
-        <h3 className="text-base font-semibold text-ink-900">Usage over time</h3>
-        <p className="mt-0.5 text-xs text-ink-500">
-          Stacked daily tokens — video analysis, chat, and web search.
-        </p>
-        <div className="mt-4">
-          <TokenUsageChart days={report.byDay} />
-        </div>
-      </section>
+      <UsageOverTime />
 
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">Metering</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          How this window’s tokens split by class and by product surface.
+          How this billing period’s tokens split by class and by product surface.
         </p>
 
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
@@ -302,7 +239,9 @@ export function TokenUsageSection() {
 
       <section className="rounded-xl glass-card p-5" data-testid="daily-usage">
         <h3 className="text-base font-semibold text-ink-900">Daily usage</h3>
-        <p className="mt-0.5 text-xs text-ink-500">One row per day in this window, newest first.</p>
+        <p className="mt-0.5 text-xs text-ink-500">
+          One row per day in this billing period, newest first.
+        </p>
         {daily.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
             Nothing metered yet.
@@ -352,13 +291,77 @@ export function TokenUsageSection() {
   );
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint: string }) {
+function UsageOverTime() {
+  const [range, setRange] = useState<TokenUsageRange>('30d');
+  const [report, setReport] = useState<TokenUsageReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getTokenUsage(range)
+      .then((next) => {
+        if (live) {
+          setReport(mergeAskIntoChat(next));
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : 'Could not load token usage.');
+      });
+    return () => {
+      live = false;
+    };
+  }, [range]);
+
+  const option = CHART_RANGES.find((item) => item.id === range) ?? CHART_RANGES[1]!;
+  const ready = report?.range === range;
+
   return (
-    <div className="rounded-lg border border-line bg-paper-50/80 px-3.5 py-3">
-      <dt className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">{label}</dt>
-      <dd className="mt-1 text-lg font-semibold tabular-nums text-ink-900">{value}</dd>
-      <p className="mt-0.5 text-[11px] text-ink-500">{hint}</p>
-    </div>
+    <section className="rounded-xl glass-card p-5" data-testid="usage-over-time">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-ink-900">Usage over time</h3>
+          <p className="mt-0.5 text-xs text-ink-500">
+            {BUCKET_CAPTION[option.bucket]} — video analysis, chat, and computer.
+          </p>
+        </div>
+        <div
+          className="flex rounded-lg border border-line bg-paper-50 p-0.5"
+          role="tablist"
+          aria-label="Usage over time window"
+        >
+          {CHART_RANGES.map((item) => {
+            const active = range === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setRange(item.id)}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
+                  active ? 'bg-paper-0 text-ink-900 shadow-xs' : 'text-ink-600 hover:text-ink-900'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-4">
+        {ready ? (
+          <TokenUsageChart days={report.byDay} bucket={option.bucket} />
+        ) : error ? (
+          <p role="alert" className="text-sm text-danger-600">
+            {error}
+          </p>
+        ) : (
+          <p className="py-8 text-center text-sm text-ink-600">Loading usage…</p>
+        )}
+      </div>
+    </section>
   );
 }
 

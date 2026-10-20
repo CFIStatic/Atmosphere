@@ -6705,7 +6705,7 @@ export function tokenDisplayFeature(feature: string | null | undefined): TokenDi
   return 'other';
 }
 
-export type TokenUsageRange = 'period' | '30d' | '90d';
+export type TokenUsageRange = 'period' | '7d' | '30d' | '90d' | '365d';
 
 export interface TokenTotals {
   events: number;
