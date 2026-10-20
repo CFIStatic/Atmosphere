@@ -5221,7 +5221,8 @@
       rowsEl.innerHTML = order.map(function (k) {
         // While searching, a job file opens on the clips that matched — a
         // folder the person collapsed earlier must not hide the hit.
-        var collapsed = q ? !!state.searchCollapsed[k] : !!state.collapsed[k];
+        // Folders land collapsed; only a folder the person opened shows its clips.
+        var collapsed = q ? !!state.searchCollapsed[k] : state.collapsed[k] !== false;
         var clips = collapsed ? '' : (groups[k] || []).map(function (e) { return clipRow(e, true); }).join('');
         return jobRow(k, groups[k] || [], collapsed) + clips;
       }).join('');
@@ -5261,8 +5262,12 @@
 
     Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow'), function (tr) {
       function flip() {
-        var bag = state.q.trim() ? state.searchCollapsed : state.collapsed;
-        bag[tr.dataset.job] = !bag[tr.dataset.job];
+        if (state.q.trim()) {
+          state.searchCollapsed[tr.dataset.job] = !state.searchCollapsed[tr.dataset.job];
+        } else {
+          // Default is collapsed (undefined), so store an explicit open/closed.
+          state.collapsed[tr.dataset.job] = state.collapsed[tr.dataset.job] === false;
+        }
         render();
       }
       tr.addEventListener('click', function (ev) {
