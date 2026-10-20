@@ -292,7 +292,7 @@ export function serializeEvidence(input: {
   const shownConversation = servable.conversation;
   const analysis = analysisStateOf({
     phase: proof.phase,
-    analysisStatus: proof.analysis_status ?? null,
+    analysisStatus: proof.verification_status === 'failed' ? 'failed' : (proof.analysis_status ?? null),
     hasAiSummary: Boolean(
       (typeof proof.ai_summary === 'string' && proof.ai_summary.trim()) ||
         (typeof proof.narration_text === 'string' && proof.narration_text.trim()),

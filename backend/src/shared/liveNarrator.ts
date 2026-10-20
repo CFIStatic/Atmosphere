@@ -218,6 +218,16 @@ export function parseNarration(
   return { entries, coverage, report: parsed.report.trim().slice(0, 2000), actions };
 }
 
+/** Anthropic allows at most 100 images per request; leave headroom. */
+export const MAX_NARRATION_FRAMES = 90;
+
+/** Evenly spaced subset (keeps first and last) so a long clip stays under the image cap. */
+export function capNarrationFrames<T>(frames: T[], max = MAX_NARRATION_FRAMES): T[] {
+  if (frames.length <= max) return frames;
+  const step = (frames.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, i) => frames[Math.round(i * step)]);
+}
+
 export async function narrateProofVideo(input: {
   frames: Array<{ atSeconds: number; base64: string }>;
   steps: StageStep[];
@@ -227,6 +237,9 @@ export async function narrateProofVideo(input: {
 }): Promise<VideoNarration | null> {
   if (!isModelProviderConfigured()) return null;
   if (!input.frames.length || !input.steps.length) return null;
+  // Anthropic rejects a request with more than 100 images ("Too much media").
+  // A 2-minute clip produced 131 frames and failed narration, so cap evenly.
+  const frames = capNarrationFrames(input.frames);
 
   const list = input.steps.map((s, i) => `${i}. [${s.kind}] ${s.label}`).join('\n');
   const scope = input.scopeTitles.length
@@ -251,7 +264,7 @@ export async function narrateProofVideo(input: {
               `The scope of work on this job:\n${scope}\n` +
               `The frames, in order (frame index precedes each):`,
           },
-          ...input.frames.flatMap((frame, i) => [
+          ...frames.flatMap((frame, i) => [
             { type: 'text' as const, text: `frame ${i} — at ${Math.round(frame.atSeconds)}s:` },
             {
               type: 'image' as const,
@@ -266,7 +279,7 @@ export async function narrateProofVideo(input: {
 
   const text = response.content.find((b) => b.type === 'text');
   const parsed =
-    text && text.type === 'text' ? parseNarration(text.text, input.frames, input.steps) : null;
+    text && text.type === 'text' ? parseNarration(text.text, frames, input.steps) : null;
   return parsed ? { ...parsed, model: response.model } : null;
 }
 

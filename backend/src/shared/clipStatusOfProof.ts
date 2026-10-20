@@ -46,9 +46,15 @@ export function clipProcessingInputOfProof(proof: any): ClipProcessingInput {
       (transcriptLive && transcriptError && !noSpeech),
   );
 
+  // A failed verification run (verification_videos.status) is a failed
+  // analysis even when the proof columns say done — unless a rerun is live.
+  const verificationFailed = text(row.verification_status).toLowerCase() === 'failed';
+  const analysisStatus =
+    verificationFailed && !analysisLive ? 'failed' : (row.analysis_status ?? null);
+
   return {
     proofState: row.state ?? null,
-    analysisStatus: row.analysis_status ?? null,
+    analysisStatus,
     transcriptStatus: row.transcript_status ?? null,
     narrationStatus: row.narration_status ?? null,
     summaryState,

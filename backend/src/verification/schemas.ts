@@ -69,6 +69,55 @@ export const evidenceRegionSchema = z.object({
   height: z.number().min(0).max(1),
 });
 
+function finiteNum(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Models sometimes return boxes in pixels or on Gemini's 0-1000 grid instead
+ * of 0-1 fractions. One bad box used to fail the whole video (Oct 19 2026), so:
+ *   - values already in 0-1 are kept;
+ *   - with a known frame size, out-of-range values are treated as pixels;
+ *   - otherwise a region whose values fit 0-1000 is divided by 1000 (0-100 by 100);
+ *   - the result is clamped to the frame, and boxes that are non-numeric or
+ *     have no area are dropped.
+ */
+export function normalizeEvidenceRegions(
+  input: unknown,
+  frame?: { width: number; height: number },
+): unknown {
+  if (input == null) return [];
+  if (!Array.isArray(input)) return [];
+  const out: Array<{ label?: string; x: number; y: number; width: number; height: number }> = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    let x = finiteNum(r.x);
+    let y = finiteNum(r.y);
+    let w = finiteNum(r.width ?? r.w);
+    let h = finiteNum(r.height ?? r.h);
+    if (x == null || y == null || w == null || h == null) continue;
+    const max = Math.max(x, y, w, h);
+    if (max > 1) {
+      if (frame && frame.width > 0 && frame.height > 0) {
+        x /= frame.width; w /= frame.width; y /= frame.height; h /= frame.height;
+      } else {
+        const scale = max <= 100 ? 100 : 1000;
+        x /= scale; y /= scale; w /= scale; h /= scale;
+      }
+    }
+    const cx = Math.min(1, Math.max(0, x));
+    const cy = Math.min(1, Math.max(0, y));
+    const cw = Math.min(1 - cx, Math.max(0, w));
+    const ch = Math.min(1 - cy, Math.max(0, h));
+    if (!(cw > 0 && ch > 0)) continue;
+    const label = typeof r.label === 'string' ? r.label.slice(0, 120) : undefined;
+    out.push({ ...(label !== undefined ? { label } : {}), x: cx, y: cy, width: cw, height: ch });
+  }
+  return out;
+}
+
 /** Structured output required from the primary vision model. */
 export const frameObservationSchema = z.object({
   room_type: z.enum(ROOM_TYPES).or(z.string().min(1).max(80)),
@@ -82,7 +131,7 @@ export const frameObservationSchema = z.object({
   visible_text: z.array(z.string().max(200)).default([]),
   uncertainty_reasons: z.array(z.string().max(200)).default([]),
   confidence: z.number().min(0).max(1),
-  evidence_regions: z.array(evidenceRegionSchema).default([]),
+  evidence_regions: z.preprocess((v) => normalizeEvidenceRegions(v), z.array(evidenceRegionSchema)).default([]),
   model_name: z.string().min(1).max(120).optional(),
   model_version: z.string().max(80).optional().nullable(),
 });

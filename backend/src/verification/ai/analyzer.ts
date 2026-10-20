@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { googleVisionApiKey } from '../../lib/visionProvider.js';
 import { getProvider, type ProviderId } from '../../ai/providers/index.js';
 import { verificationConfig } from '../config.js';
+import { assertModelForProvider, modelForProvider } from '../../lib/modelProviderGuard.js';
 import {
   frameComparisonSchema,
   frameObservationSchema,
@@ -234,6 +235,10 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         return result;
       } catch (err) {
         // fall through to Gemini, keeping any billed-but-unusable reply
+        console.warn(
+          '[verification] Anthropic escalation failed, falling back to Gemini:',
+          err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+        );
         discarded.push(...billedCallsOf(err));
       }
     }
@@ -244,7 +249,9 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         images,
         schema: frameObservationSchema,
         userNote: `Escalation: ${reason}`,
-        model: verificationConfig.escalationModel,
+        // Never hand Google an Anthropic id: use the escalation model only when
+        // it is a Gemini id, otherwise the primary Gemini model.
+        model: modelForProvider('google', verificationConfig.escalationModel, verificationConfig.primaryModel),
         escalate: true,
       });
       return discarded.length ? { ...result, discardedCalls: [...(result.discardedCalls ?? []), ...discarded] } : result;
@@ -266,6 +273,7 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
     if (!this.apiKey) {
       throw new Error('GOOGLE_API_KEY / GEMINI_API_KEY is not configured');
     }
+    assertModelForProvider('google', opts.model);
     const fetchFn = this.opts?.fetchFn ?? fetch;
     const started = Date.now();
     const url = `${this.baseUrl}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent`;
@@ -344,6 +352,7 @@ async function escalateWithAnthropic(
 ): Promise<AnalysisResult<FrameObservationParsed>> {
   const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  assertModelForProvider('anthropic', verificationConfig.escalationModel);
   const started = Date.now();
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -372,7 +381,9 @@ async function escalateWithAnthropic(
     }),
   });
   if (!response.ok) {
-    throw new Error(`Anthropic escalation failed: ${response.status}`);
+    // Keep the provider's reason (no secrets in it) so the failure is diagnosable.
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Anthropic escalation failed: ${response.status} ${detail.slice(0, 300)}`);
   }
   const payload = (await response.json()) as {
     content?: Array<{ type: string; text?: string }>;
@@ -625,6 +636,9 @@ export function createAnalyzeFramesHandler(opts: {
     let analyzed = 0;
     let cached = 0;
     let escalated = 0;
+    let failedFrames = 0;
+    let escalationFailures = 0;
+    let lastFrameError: unknown = null;
 
     for (const frame of frames ?? []) {
       const digest = inputDigest([frame.id], verificationConfig.promptVersion, 'frame_analysis');
@@ -642,6 +656,7 @@ export function createAnalyzeFramesHandler(opts: {
       let runId: string;
       let modelName: string;
       let promptVersion: string;
+      let usedEscalation = false;
 
       if (prior?.parsed_response) {
         observation = frameObservationSchema.parse(prior.parsed_response);
@@ -684,7 +699,15 @@ export function createAnalyzeFramesHandler(opts: {
           );
         } catch (err) {
           await recordBilled(billedCallsOf(err));
-          throw err;
+          // One unreadable frame must not fail the whole video. Skip it; the
+          // step only fails when no frame at all could be read.
+          failedFrames += 1;
+          lastFrameError = err;
+          console.warn(
+            `[verification] frame analysis failed video=${ctx.videoId} frame=${frame.id}:`,
+            err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+          );
+          continue;
         }
         await recordBilled(result.discardedCalls ?? []);
         if (
@@ -698,33 +721,44 @@ export function createAnalyzeFramesHandler(opts: {
             humanRequested: false,
           })
         ) {
-          // The primary reading was billed; the escalation replaces it.
-          await recordBilled(
-            result.cached || !result.usage.measured
-              ? []
-              : [
-                  {
-                    provider: result.provider,
-                    modelName: result.modelName,
-                    usage: result.usage.measured,
-                    estimatedCostUsd: result.usage.estimatedCostUsd,
-                    providerRequestId: result.usage.providerRequestId,
-                    reason: 'replaced_by_escalation',
-                  },
-                ],
-          );
+          // A second opinion is optional: if escalation fails, keep the
+          // primary reading instead of failing the video.
+          let second: AnalysisResult<FrameObservationParsed> | null = null;
           try {
-            result = await opts.analyzer.escalateAnalysis(
+            second = await opts.analyzer.escalateAnalysis(
               [{ mimeType: 'image/jpeg', base64, frameId: frame.id }],
               'low_confidence_or_safety',
               analysisContext,
             );
           } catch (err) {
             await recordBilled(billedCallsOf(err));
-            throw err;
+            escalationFailures += 1;
+            console.warn(
+              `[verification] escalation failed, keeping primary reading video=${ctx.videoId} frame=${frame.id}:`,
+              err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+            );
           }
-          await recordBilled(result.discardedCalls ?? []);
-          escalated += 1;
+          if (second) {
+            // The primary reading was billed; the escalation replaces it.
+            await recordBilled(
+              result.cached || !result.usage.measured
+                ? []
+                : [
+                    {
+                      provider: result.provider,
+                      modelName: result.modelName,
+                      usage: result.usage.measured,
+                      estimatedCostUsd: result.usage.estimatedCostUsd,
+                      providerRequestId: result.usage.providerRequestId,
+                      reason: 'replaced_by_escalation',
+                    },
+                  ],
+            );
+            result = second;
+            await recordBilled(result.discardedCalls ?? []);
+            escalated += 1;
+            usedEscalation = true;
+          }
         }
 
         runId = randomUUID();
@@ -737,7 +771,7 @@ export function createAnalyzeFramesHandler(opts: {
           org_id: ctx.orgId,
           video_id: ctx.videoId,
           processing_job_id: ctx.processingJobId,
-          purpose: escalated ? 'escalation' : 'frame_analysis',
+          purpose: usedEscalation ? 'escalation' : 'frame_analysis',
           provider: result.provider,
           model_name: result.modelName,
           model_version: result.modelVersion,
@@ -810,6 +844,11 @@ export function createAnalyzeFramesHandler(opts: {
       analyzed += 1;
     }
 
+    if (analyzed === 0 && failedFrames > 0) {
+      // Nothing readable at all: fail (and retry) with the real reason.
+      throw lastFrameError instanceof Error ? lastFrameError : new Error(String(lastFrameError));
+    }
+
     await appendAuditEvent(ctx.supabase, {
       orgId: ctx.orgId,
       jobId: ctx.jobId,
@@ -817,10 +856,10 @@ export function createAnalyzeFramesHandler(opts: {
       eventType: 'ai.frames_analyzed',
       entityType: 'verification_video',
       entityId: ctx.videoId,
-      payload: { analyzed, cached, escalated },
+      payload: { analyzed, cached, escalated, failedFrames, escalationFailures },
     });
 
-    return { output: { analyzed, cached, escalated } };
+    return { output: { analyzed, cached, escalated, failedFrames, escalationFailures } };
   };
 }
 
