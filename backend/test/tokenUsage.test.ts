@@ -9,6 +9,7 @@ import {
   eachUtcDay,
   estimatedUsdToNanos,
   eventBillableNanos,
+  guestPartyName,
   guestRoleLabel,
   quoteMeasuredUsageCostNanos,
   recordMeasuredTokenUsageAsync,
@@ -268,6 +269,27 @@ test('aggregateTokenUsage never calls an unknown non-member a Teammate', () => {
   assert.equal(report.byEmployee[0]?.outsideOrg, true);
   assert.equal(report.byEmployee[0]?.name, 'Outside account');
   assert.equal(report.byEmployee[0]?.roleLabel, 'Not on this organization');
+});
+
+test('guestPartyName uses the newest active invite name', () => {
+  const party = (company: string, created_at: string, revoked = false) => ({
+    role: 'subcontractor',
+    contact_name: null,
+    company,
+    revoked_at: revoked ? created_at : null,
+    created_at,
+  });
+  assert.equal(
+    guestPartyName([
+      party('home owner', '2026-08-31T19:41:44Z'),
+      party('Jack Smith', '2026-09-05T16:39:29Z'),
+      party('UWM FC primary', '2026-09-11T16:34:42Z', true),
+      party('Alpha co', '2026-10-11T04:40:04Z'),
+    ]),
+    'Alpha co',
+  );
+  assert.equal(guestPartyName([party('Old name', '2026-09-01T00:00:00Z', true)]), 'Old name');
+  assert.equal(guestPartyName([]), null);
 });
 
 test('guestRoleLabel names homeowners and subs from their job_parties role', () => {

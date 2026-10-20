@@ -1010,6 +1010,31 @@ export function guestRoleLabel(partyRoles: Array<string | null | undefined>): st
   return 'Shared job guest';
 }
 
+export type GuestParty = {
+  role: string | null;
+  contact_name: string | null;
+  company: string | null;
+  revoked_at: string | null;
+  created_at: string | null;
+};
+
+/**
+ * The name the contractor gave this person on their newest active invite
+ * ("Alpha co"). One email is often invited many times under different names;
+ * revoked invites only count when nothing active is left.
+ */
+export function guestPartyName(parties: GuestParty[]): string | null {
+  const ranked = [...parties].sort((a, b) => {
+    if (Boolean(a.revoked_at) !== Boolean(b.revoked_at)) return a.revoked_at ? 1 : -1;
+    return (b.created_at ?? '').localeCompare(a.created_at ?? '');
+  });
+  for (const party of ranked) {
+    const name = party.contact_name?.trim() || party.company?.trim();
+    if (name) return name;
+  }
+  return null;
+}
+
 /**
  * Ledger seats that are not org members: homeowners and subcontractors who
  * used Chat on a job this org shared with them. Their profile is outside the
@@ -1046,36 +1071,28 @@ async function loadGuestSeats(
           .filter((e): e is string => Boolean(e)),
       ),
     ];
-    const rolesByEmail = new Map<string, string[]>();
-    const nameByEmail = new Map<string, string>();
+    const partiesByEmail = new Map<string, GuestParty[]>();
     if (emails.length > 0) {
       const { data: parties } = await reader
         .from('job_parties')
-        .select('email, role, contact_name, company')
+        .select('email, role, contact_name, company, revoked_at, created_at')
         .eq('org_id', orgId)
         .in('email', emails);
-      for (const party of (parties ?? []) as Array<{
-        email: string | null;
-        role: string | null;
-        contact_name: string | null;
-        company: string | null;
-      }>) {
+      for (const party of (parties ?? []) as Array<GuestParty & { email: string | null }>) {
         const email = party.email?.trim().toLowerCase();
         if (!email) continue;
-        const partyName = party.contact_name?.trim() || party.company?.trim();
-        if (partyName && !nameByEmail.has(email)) nameByEmail.set(email, partyName);
-        rolesByEmail.set(email, [...(rolesByEmail.get(email) ?? []), String(party.role ?? '')]);
+        partiesByEmail.set(email, [...(partiesByEmail.get(email) ?? []), party]);
       }
     }
     return ids.map((userId) => {
       const profile = byId.get(userId);
       const email = profile?.email ?? null;
-      const key = email?.trim().toLowerCase() ?? '';
+      const invites = partiesByEmail.get(email?.trim().toLowerCase() ?? '') ?? [];
       return {
         userId,
-        fullName: profile?.full_name?.trim() || nameByEmail.get(key) || null,
+        fullName: guestPartyName(invites) || profile?.full_name?.trim() || null,
         email,
-        roleLabel: guestRoleLabel(rolesByEmail.get(key) ?? []),
+        roleLabel: guestRoleLabel(invites.map((p) => p.role)),
       };
     });
   } catch (err) {
