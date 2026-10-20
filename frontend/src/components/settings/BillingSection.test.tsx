@@ -356,7 +356,7 @@ describe('BillingSection in the iPhone app', () => {
     expect(await screen.findByText('Work Verification')).toBeInTheDocument();
     expect(await screen.findByText('Token usage')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Manage plan and payment method/ })).toBeNull();
-    expect(screen.queryByText(/Switch to|Buy /)).toBeNull();
+    expect(screen.queryByText(/Switch to|Upgrade to|Downgrade to|Buy /)).toBeNull();
     expect(screen.queryByText('Invoices / Receipts')).toBeNull();
     expect(screen.queryByText(/Auto-recharge/i)).toBeNull();
     expect(screen.getAllByTestId('app-shell-billing-note').length).toBeGreaterThan(0);

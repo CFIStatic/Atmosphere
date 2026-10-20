@@ -95,6 +95,7 @@ describe('AI credits card', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    fireEvent.click(screen.getByTestId('confirm-plan-scale'));
     await waitFor(() => expect(checkout).toHaveBeenCalledWith('scale', 'year'));
     checkout.mockRestore();
   });
@@ -116,14 +117,91 @@ describe('AI credits card', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    fireEvent.click(screen.getByTestId('confirm-plan-scale'));
     await waitFor(() => {
       expect(onUpdated).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('upgrade-plan-scale')).toBeDisabled();
     });
     expect(screen.getByTestId('plan-change-updated')).toHaveTextContent(/Plan updated/);
     expect(screen.getByTestId('upgrade-plan-starter')).toBeEnabled();
-    expect(screen.getByTestId('upgrade-plan-scale')).toHaveTextContent('Scale');
+    expect(screen.getByTestId('upgrade-plan-scale')).toHaveTextContent('Current plan');
+    expect(screen.getByTestId('upgrade-plan-starter')).toHaveTextContent('Downgrade to Starter');
     checkout.mockRestore();
+  });
+
+  it('shows each plan price and labels upgrades and downgrades against the current plan', () => {
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ canManage: true })}
+        currentPlanCode="work_verification"
+        onError={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('plan-option-starter')).toHaveTextContent('$399/mo');
+    expect(screen.getByTestId('plan-option-starter')).toHaveTextContent('1 Field Capture account');
+    expect(screen.getByTestId('plan-option-work_verification')).toHaveTextContent('$849/mo');
+    expect(screen.getByTestId('plan-option-scale')).toHaveTextContent('$1,999/mo');
+    expect(screen.getByTestId('upgrade-plan-starter')).toHaveTextContent('Downgrade to Starter');
+    expect(screen.getByTestId('upgrade-plan-work_verification')).toHaveTextContent('Current plan');
+    expect(screen.getByTestId('upgrade-plan-work_verification')).toBeDisabled();
+    expect(screen.getByTestId('upgrade-plan-scale')).toHaveTextContent('Upgrade to Scale');
+  });
+
+  it('shows yearly prices on a yearly plan', () => {
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ canManage: true, billingInterval: 'year' })}
+        currentPlanCode="starter"
+        onError={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('plan-option-scale')).toHaveTextContent('$19,990/yr');
+  });
+
+  it('confirms the bill change before switching, and Cancel changes nothing', () => {
+    const checkout = vi.spyOn(api, 'checkoutAiPlan');
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ canManage: true })}
+        currentPlanCode="work_verification"
+        fieldCaptureAccountsUsed={3}
+        onError={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    expect(checkout).not.toHaveBeenCalled();
+    expect(screen.getByTestId('plan-change-price')).toHaveTextContent(
+      '$1,999/mo instead of $849/mo, $1,150/mo more.',
+    );
+    expect(screen.getByTestId('plan-change-bill')).toHaveTextContent(/added to your next invoice/);
+    expect(screen.queryByTestId('plan-change-seat-warning')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('upgrade-plan-starter'));
+    expect(screen.getByTestId('plan-change-confirm')).toHaveTextContent('Downgrade to Starter');
+    expect(screen.getByTestId('plan-change-price')).toHaveTextContent('$399/mo instead of $849/mo, $450/mo less.');
+    expect(screen.getByTestId('plan-change-bill')).toHaveTextContent(/Unused time on Work Verification is credited/);
+    expect(screen.getByTestId('plan-change-seat-warning')).toHaveTextContent(
+      'already has 3 Field Capture accounts and Starter includes 1',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('plan-change-confirm')).toBeNull();
+    expect(checkout).not.toHaveBeenCalled();
+    checkout.mockRestore();
+  });
+
+  it('says checkout comes next when there is no subscription yet', () => {
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ canManage: true })}
+        currentPlanCode="work_verification"
+        hasStripeSubscription={false}
+        onError={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    expect(screen.getByTestId('plan-change-bill')).toHaveTextContent(/Stripe checkout page/);
+    expect(screen.getByTestId('confirm-plan-scale')).toHaveTextContent('Continue to checkout');
   });
 });
 
@@ -163,7 +241,8 @@ describe('AI credits card: no dollar balances, and no purchases in the app', () 
         onError={() => {}}
       />,
     );
-    expect(screen.queryByText(/Switch to/)).toBeNull();
+    expect(screen.queryByText(/Switch to|Upgrade to|Downgrade to/)).toBeNull();
+    expect(screen.queryByTestId('plan-option-scale')).toBeNull();
     expect(screen.queryByText(/Buy/)).toBeNull();
     expect(screen.queryByTestId('ai-credit-history')).toBeNull();
     expect(screen.getByTestId('app-shell-billing-note')).toHaveTextContent(
@@ -197,6 +276,9 @@ describe('AI credits card: no dollar balances, and no purchases in the app', () 
     expect(screen.queryByTestId('buy-credits-credits_10')).not.toBeInTheDocument();
     expect(screen.getByTestId('ai-credits-complimentary')).toHaveTextContent(/unlimited/i);
     fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    expect(screen.getByTestId('plan-change-price')).toHaveTextContent(/No charge/);
+    expect(screen.queryByTestId('plan-change-bill')).toBeNull();
+    fireEvent.click(screen.getByTestId('confirm-plan-scale'));
     await waitFor(() => expect(screen.getByTestId('plan-change-updated')).toHaveTextContent(/No charge/));
     expect(screen.getByTestId('plan-change-updated')).not.toHaveTextContent(/Stripe/);
     expect(buy).not.toHaveBeenCalled();

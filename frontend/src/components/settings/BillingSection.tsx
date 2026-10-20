@@ -141,6 +141,8 @@ export function BillingSection() {
           allowance={allowance}
           currentPlanCode={sub.code}
           complimentary={complimentary}
+          hasStripeSubscription={sub.hasStripeSubscription}
+          fieldCaptureAccountsUsed={workspace.fieldCaptureSeats?.used}
           onError={setError}
           onUpdated={refreshAfterPlanChange}
         />
