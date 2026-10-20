@@ -77,6 +77,7 @@ test('customers assemble per org with people, counts and test flags', () => {
       { org_id: 'o1', updated_at: '2026-10-05T00:00:00Z' },
     ],
     lastSignIn: new Map([['u2', '2026-10-10T00:00:00Z']]),
+    fcSeatsUsed: new Map([['o1', 1]]),
   });
   assert.equal(out.length, 2, 'nothing is dropped');
   const o1 = out[0]!;
@@ -87,5 +88,7 @@ test('customers assemble per org with people, counts and test flags', () => {
   assert.equal(o1.status, 'trial');
   assert.equal(o1.lastActivityAt, '2026-10-10T00:00:00Z');
   assert.ok(o1.flags.includes('test'));
+  assert.equal(o1.fcSeatsUsed, 1);
   assert.equal(out[1]!.memberCount, 0);
+  assert.equal(out[1]!.fcSeatsUsed, null, 'not counted reads as unknown, not zero');
 });

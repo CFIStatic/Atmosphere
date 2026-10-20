@@ -4,6 +4,7 @@
  * Nothing is dropped; test / staff / comped workspaces are marked.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { countFieldCaptureSeats } from '../lib/fieldCaptureSeats.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -34,6 +35,8 @@ export type CustomerOrg = {
   mrrCents: number;
   includedFcSeats: number;
   extraFcSeats: number;
+  /** Field Capture seats in use, by the same rule billing enforces; null when it could not be counted. */
+  fcSeatsUsed: number | null;
   platformSeats: number;
   memberCount: number;
   jobsCount: number;
@@ -85,6 +88,7 @@ export function assembleCustomers(input: {
   billing: any[];
   jobs: Array<{ org_id: string; updated_at?: string | null }>;
   lastSignIn: Map<string, string | null>;
+  fcSeatsUsed?: Map<string, number>;
 }): CustomerOrg[] {
   const profileById = new Map(input.profiles.map((p) => [p.id, p]));
   const billingByOrg = new Map(input.billing.map((b) => [b.org_id, b]));
@@ -134,6 +138,7 @@ export function assembleCustomers(input: {
       mrrCents: Number(b?.stripe_mrr_cents ?? 0),
       includedFcSeats: Number(b?.included_fc_seats ?? b?.seats ?? 0),
       extraFcSeats: Number(b?.extra_fc_seats ?? 0),
+      fcSeatsUsed: input.fcSeatsUsed?.get(org.id) ?? null,
       platformSeats: Number(b?.platform_seats ?? 0),
       memberCount: people.length,
       jobsCount: jobs.count,
@@ -156,6 +161,23 @@ async function allAuthSignIns(admin: SupabaseClient): Promise<Map<string, string
   return out;
 }
 
+/** countFieldCaptureSeats per org, a few at a time; an org that fails to count is left out. */
+async function fcSeatsUsedByOrg(admin: SupabaseClient, orgIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const queue = [...orgIds];
+  const worker = async () => {
+    for (let id = queue.shift(); id; id = queue.shift()) {
+      try {
+        out.set(id, await countFieldCaptureSeats(admin, id));
+      } catch {
+        // Seat count is informational here; the row still renders.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, queue.length) }, worker));
+  return out;
+}
+
 export async function loadCustomers(admin: SupabaseClient): Promise<CustomerOrg[]> {
   const [orgs, members, profiles, billing, jobs, lastSignIn] = await Promise.all([
     admin.from('orgs').select('id, name, created_by, created_at, exclude_from_analytics, analytics_exclusion_reason').limit(10000),
@@ -171,6 +193,7 @@ export async function loadCustomers(admin: SupabaseClient): Promise<CustomerOrg[
   for (const r of [orgs, members, profiles, billing, jobs]) {
     if (r.error) throw new Error(r.error.message);
   }
+  const fcSeatsUsed = await fcSeatsUsedByOrg(admin, (orgs.data ?? []).map((o: any) => o.id));
   return assembleCustomers({
     orgs: orgs.data ?? [],
     members: members.data ?? [],
@@ -178,5 +201,6 @@ export async function loadCustomers(admin: SupabaseClient): Promise<CustomerOrg[
     billing: billing.data ?? [],
     jobs: (jobs.data ?? []) as any,
     lastSignIn,
+    fcSeatsUsed,
   });
 }
