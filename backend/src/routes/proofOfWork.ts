@@ -1,3 +1,4 @@
+import { attachVerificationStatus } from '../shared/verificationStatusOfProofs.js';
 import { askAgentEnabled } from '../shared/askAgent.js';
 import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import { visibleAfterEdits } from '../shared/askEdits.js';
@@ -4782,6 +4783,7 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
         )
         .eq('org_id', orgId)
         .in('id', proofIds);
+      await attachVerificationStatus(supabase, orgId, (proofs ?? []) as any[]);
       for (const proof of (proofs ?? []) as any[]) {
         if (!proof?.id) continue;
         processingById.set(proof.id, clipProcessingInputOfProof(proof));

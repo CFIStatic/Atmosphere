@@ -1,3 +1,4 @@
+import { attachVerificationStatus } from '../shared/verificationStatusOfProofs.js';
 import { randomUUID } from 'node:crypto';
 import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -182,6 +183,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
     posterUrls(proofs),
+    attachVerificationStatus(client, orgId, proofs),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
