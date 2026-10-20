@@ -11,6 +11,8 @@ import {
   peakDayTokens,
   sharePct,
   tokenSpendCaption,
+  bucketUsageDays,
+  usageBarLabels,
 } from './tokenUsageModel';
 
 describe('tokenUsageModel', () => {
@@ -259,5 +261,45 @@ describe('mergeAskIntoChat', () => {
     expect(merged.byDay[0]?.byFeature.ask).toEqual(emptyTokenTotals());
     expect(merged.recent[0]?.feature).toBe('chat');
     expect(dailyUsageRows(merged.byDay)[0]?.surfaces).toBe('Chat, Web search');
+  });
+
+  it('rolls days into Monday weeks and calendar months', () => {
+    const day = (iso: string, video: number, chat: number): TokenUsageDay => ({
+      day: iso,
+      ...emptyTokenTotals(),
+      totalTokens: video + chat,
+      byFeature: {
+        video_analysis: { ...emptyTokenTotals(), totalTokens: video },
+        chat: { ...emptyTokenTotals(), totalTokens: chat },
+        ask: emptyTokenTotals(),
+        web_search: emptyTokenTotals(),
+        computer: emptyTokenTotals(),
+        other: emptyTokenTotals(),
+      },
+    });
+    // Sun Oct 4, Mon Oct 5, Sun Oct 11, Mon Oct 12 (2026).
+    const days = [
+      day('2026-10-04', 100, 0),
+      day('2026-10-05', 10, 5),
+      day('2026-10-11', 0, 20),
+      day('2026-10-12', 7, 0),
+    ];
+    const weeks = bucketUsageDays(days, 'week');
+    expect(weeks.map((w) => [w.day, w.totalTokens])).toEqual([
+      ['2026-09-28', 100],
+      ['2026-10-05', 35],
+      ['2026-10-12', 7],
+    ]);
+    expect(weeks[1]?.byFeature.chat.totalTokens).toBe(25);
+    expect(days[1]?.byFeature.chat.totalTokens).toBe(5);
+
+    const months = bucketUsageDays([day('2026-09-30', 1, 0), ...days], 'month');
+    expect(months.map((m) => [m.day, m.totalTokens])).toEqual([
+      ['2026-09-01', 1],
+      ['2026-10-01', 142],
+    ]);
+    expect(bucketUsageDays(days, 'day')).toBe(days);
+    expect(usageBarLabels('2026-10-05', 'week').title).toMatch(/^Week of Oct 5/);
+    expect(usageBarLabels('2026-10-01', 'month').title).toMatch(/October 2026/);
   });
 });

@@ -132,23 +132,26 @@ const report: TokenUsageReport = {
 
 describe('TokenUsageSection', () => {
   beforeEach(() => {
-    getTokenUsage.mockReset().mockResolvedValue(report);
+    getTokenUsage
+      .mockReset()
+      .mockImplementation((range: string) => Promise.resolve({ ...report, range }));
   });
 
   it('shows org totals, the graph, metering, and a per-employee breakdown', async () => {
     render(<TokenUsageSection />);
 
-    expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
-    expect(screen.getByText('288k')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Usage over time' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
+    // The stat tiles row (Tokens used, Metered calls, ...) is gone.
+    expect(screen.queryByText('Metered calls')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tokens used')).not.toBeInTheDocument();
     // Customers never see AI allowance or usage dollar amounts.
     expect(screen.queryByText('Billed AI usage')).not.toBeInTheDocument();
-    expect(screen.getByText('Metered calls')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\$\d|USD/);
-    expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Daily usage' })).toBeInTheDocument();
-    expect(screen.getByText('One row per day in this window, newest first.')).toBeInTheDocument();
+    expect(screen.getByText('One row per day in this billing period, newest first.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Recent calls' })).not.toBeInTheDocument();
     expect(
       screen.queryByText('Newest metered model calls in this window.'),
@@ -241,17 +244,26 @@ describe('TokenUsageSection', () => {
     expect(guests).toHaveTextContent('Alpha co');
     expect(guests).toHaveTextContent('Subcontractor (shared job)');
     expect(screen.queryByText('Teammate')).not.toBeInTheDocument();
-    expect(screen.getByText('Employees · plus 1 shared-job guest')).toBeInTheDocument();
   });
 
-  it('reloads when the window changes', async () => {
+  it('switches Usage over time between week, month, quarter, and annual', async () => {
     const user = userEvent.setup();
     render(<TokenUsageSection />);
-    await screen.findByRole('heading', { name: 'Token usage' });
+    await screen.findByRole('heading', { name: 'Usage over time' });
+    // The tables below stay on the billing period; the chart opens on Month.
     expect(getTokenUsage).toHaveBeenCalledWith('period');
-
-    await user.click(screen.getByRole('tab', { name: 'Last 30 days' }));
     expect(getTokenUsage).toHaveBeenCalledWith('30d');
+    expect(screen.getByRole('tab', { name: 'Month' })).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(screen.getByRole('tab', { name: 'Week' }));
+    expect(getTokenUsage).toHaveBeenCalledWith('7d');
+    await user.click(screen.getByRole('tab', { name: 'Quarter' }));
+    expect(getTokenUsage).toHaveBeenCalledWith('90d');
+    expect(await screen.findByRole('img', { name: /token usage by week/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Annual' }));
+    expect(getTokenUsage).toHaveBeenCalledWith('365d');
+    expect(await screen.findByRole('img', { name: /token usage by month/i })).toBeInTheDocument();
+    expect(getTokenUsage).toHaveBeenCalledTimes(5);
   });
 });
 

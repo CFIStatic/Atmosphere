@@ -4,15 +4,24 @@ import { formatTokens } from '../../lib/money';
 import {
   TOKEN_FEATURE_COLOR,
   activeFeatures,
-  compactDayLabel,
+  type UsageBucket,
+  bucketUsageDays,
   featureTokens,
   peakDayTokens,
+  usageBarLabels,
 } from './tokenUsageModel';
 
 const HEIGHT = 196;
 const PAD = { top: 12, right: 8, bottom: 28, left: 8 };
 
-export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
+export function TokenUsageChart({
+  days: dailyRows,
+  bucket = 'day',
+}: {
+  days: TokenUsageDay[];
+  bucket?: UsageBucket;
+}) {
+  const days = bucketUsageDays(dailyRows, bucket);
   const width = 720;
   const peak = peakDayTokens(days);
   const features = activeFeatures(days);
@@ -57,7 +66,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
       <div ref={wrapRef} className="relative" onMouseLeave={() => setActive(null)}>
         <svg
           role="img"
-          aria-label="Token usage by day, stacked by video analysis, chat, and web search"
+          aria-label={`Token usage by ${bucket}, stacked by video analysis, chat, and web search`}
           viewBox={`0 0 ${width} ${HEIGHT}`}
           className="h-48 w-full"
         >
@@ -135,7 +144,7 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
               fill="rgb(var(--ink-500))"
               fontSize={11}
             >
-              {compactDayLabel(days[index]!.day)}
+              {usageBarLabels(days[index]!.day, bucket).axis}
             </text>
           ))}
         </svg>
@@ -147,7 +156,9 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
             style={tooltipSide}
           >
             <div className="flex items-baseline justify-between gap-3 sm:gap-4">
-              <span className="font-semibold text-ink-900">{compactDayLabel(activeDay.day)}</span>
+              <span className="font-semibold text-ink-900">
+                {usageBarLabels(activeDay.day, bucket).title}
+              </span>
               <span className="tabular-nums font-semibold text-ink-900">
                 {exactTokens(activeDay.totalTokens)} tokens
               </span>
@@ -184,7 +195,9 @@ export function TokenUsageChart({ days }: { days: TokenUsageDay[] }) {
             {TOKEN_FEATURE_LABELS[feature]}
           </li>
         ))}
-        <li className="ml-auto tabular-nums text-ink-500">Peak day {formatTokens(peak)}</li>
+        <li className="ml-auto tabular-nums text-ink-500">
+          Peak {bucket} {formatTokens(peak)}
+        </li>
       </ul>
     </div>
   );

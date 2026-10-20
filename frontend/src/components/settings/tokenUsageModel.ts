@@ -97,6 +97,67 @@ export function mergeAskIntoChat(report: TokenUsageReport): TokenUsageReport {
   };
 }
 
+const ROLLING_DAYS: Record<Exclude<TokenUsageRange, 'period'>, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  '365d': 365,
+};
+
+export type UsageBucket = 'day' | 'week' | 'month';
+
+/** Bucket start (UTC) for an ISO day: itself, its Monday, or the 1st of its month. */
+function bucketStart(isoDay: string, bucket: UsageBucket): string {
+  if (bucket === 'day') return isoDay;
+  if (bucket === 'month') return `${isoDay.slice(0, 7)}-01`;
+  const date = new Date(`${isoDay}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+}
+
+/** Roll daily rows into weekly or monthly bars; `day` becomes the bucket's first day. */
+export function bucketUsageDays(days: TokenUsageDay[], bucket: UsageBucket): TokenUsageDay[] {
+  if (bucket === 'day') return days;
+  const buckets = new Map<string, TokenUsageDay>();
+  for (const day of days) {
+    const key = bucketStart(day.day, bucket);
+    const current = buckets.get(key);
+    if (!current) {
+      buckets.set(key, { ...addTotals(day, undefined), day: key, byFeature: { ...day.byFeature } });
+      continue;
+    }
+    Object.assign(current, addTotals(current, day));
+    for (const [feature, totals] of Object.entries(day.byFeature ?? {}) as [
+      TokenFeature,
+      TokenTotals,
+    ][]) {
+      current.byFeature[feature] = addTotals(current.byFeature[feature], totals);
+    }
+  }
+  return [...buckets.values()];
+}
+
+/** Axis and tooltip labels for one bar. */
+export function usageBarLabels(
+  isoDay: string,
+  bucket: UsageBucket,
+): { axis: string; title: string } {
+  const date = new Date(`${isoDay}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return { axis: isoDay, title: isoDay };
+  if (bucket === 'month') {
+    return {
+      axis: date.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }),
+      title: date.toLocaleDateString(undefined, {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }),
+    };
+  }
+  const compact = compactDayLabel(isoDay);
+  return { axis: compact, title: bucket === 'week' ? `Week of ${compact}` : compact };
+}
+
 /** A day's totals for a display category (`chat` includes the ledger's `ask`). */
 export function featureTokens(day: TokenUsageDay, feature: TokenFeature): number {
   return featureActivity(day, feature)?.totalTokens ?? 0;
@@ -148,11 +209,7 @@ export function tokenSpendCaption(input: {
   orgName?: string | null;
 }): string {
   const period =
-    input.range === '90d'
-      ? 'Last 90 days'
-      : input.range === '30d'
-        ? 'Last 30 days'
-        : 'This billing period';
+    input.range === 'period' ? 'This billing period' : `Last ${ROLLING_DAYS[input.range]} days`;
   const who = input.orgName?.trim() || 'this organization';
   return `${period}, ${formatUtcDateLabel(input.periodStart)} to ${formatUtcDateLabel(input.periodEnd)} UTC · USD · ${who}`;
 }

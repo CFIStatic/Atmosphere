@@ -181,7 +181,14 @@ export interface TokenUsageReport {
   recent: TokenUsageRecent[];
 }
 
-export type TokenUsageRange = 'period' | '30d' | '90d';
+export type TokenUsageRange = 'period' | '7d' | '30d' | '90d' | '365d';
+
+const ROLLING_RANGE_DAYS: Record<Exclude<TokenUsageRange, 'period'>, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  '365d': 365,
+};
 
 const EMPTY_TOTALS = (): TokenTotals => ({
   events: 0,
@@ -326,7 +333,7 @@ export function resolveTokenUsageWindow(opts: {
       : nowIso;
     return { start: opts.periodStart, end };
   }
-  const days = opts.range === '90d' ? 90 : 30;
+  const days = opts.range === 'period' ? 30 : ROLLING_RANGE_DAYS[opts.range];
   const start = new Date(now.getTime() - days * 86_400_000);
   return { start: start.toISOString(), end: nowIso };
 }

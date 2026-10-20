@@ -57,6 +57,12 @@ test('resolveTokenUsageWindow falls back to a rolling window', () => {
 
   const ninety = resolveTokenUsageWindow({ range: '90d', now });
   assert.equal(Date.parse(now.toISOString()) - Date.parse(ninety.start), 90 * 86_400_000);
+
+  const week = resolveTokenUsageWindow({ range: '7d', now });
+  assert.equal(Date.parse(now.toISOString()) - Date.parse(week.start), 7 * 86_400_000);
+
+  const year = resolveTokenUsageWindow({ range: '365d', now });
+  assert.equal(Date.parse(now.toISOString()) - Date.parse(year.start), 365 * 86_400_000);
 });
 
 test('eachUtcDay fills empty calendar days', () => {
