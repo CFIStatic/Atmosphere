@@ -13,6 +13,7 @@ import {
   planDescription,
 } from './stripeCatalog.js';
 import {
+  countFieldCaptureSeats,
   entitledFcSeatCounts,
   fcSeatLimitError,
   isFcSeatLimitDbError,
@@ -163,5 +164,53 @@ describe('Field Capture seat allowance', () => {
       () => persistExtraFcSeats(admin as never, 'org-1', 1),
       /org_billing row was not updated/,
     );
+  });
+
+  it('counts an owner or admin who films in Field Capture as one seat', async () => {
+    type Row = Record<string, unknown>;
+    const tables: Record<string, Row[]> = {
+      org_members: [
+        // Owner signed up as "exploring" but films jobs in Field Capture.
+        { org_id: 'org-1', role: 'global_admin', usage_intents: ['exploring'], seat_type: 'field_capture', profiles: { email: 'Owner@Office.example' } },
+        // Office admin who never filmed.
+        { org_id: 'org-1', role: 'global_admin', usage_intents: [], seat_type: 'field_capture', profiles: { email: 'office@office.example' } },
+        // Platform seat who filmed once still never uses a Field Capture seat.
+        { org_id: 'org-1', role: 'global_admin', usage_intents: [], seat_type: 'platform', profiles: { email: 'platform@office.example' } },
+        // Admin whose only clip was hidden.
+        { org_id: 'org-1', role: 'global_admin', usage_intents: [], seat_type: 'field_capture', profiles: { email: 'hidden@office.example' } },
+        { org_id: 'org-1', role: 'employee', usage_intents: ['field_work'], seat_type: 'field_capture', profiles: { email: 'crew@office.example' } },
+      ],
+      org_invites: [],
+      job_parties: [
+        { id: 'p-owner', org_id: 'org-1', trade: 'field_capture', email: 'owner@office.example' },
+        { id: 'p-office', org_id: 'org-1', trade: 'field_capture', email: 'office@office.example' },
+        { id: 'p-platform', org_id: 'org-1', trade: 'field_capture', email: 'platform@office.example' },
+        { id: 'p-hidden', org_id: 'org-1', trade: 'field_capture', email: 'hidden@office.example' },
+        { id: 'p-other-org', org_id: 'org-2', trade: 'field_capture', email: 'office@office.example' },
+      ],
+      job_proofs: [
+        { id: 'v1', party_id: 'p-owner', deleted_at: null },
+        { id: 'v2', party_id: 'p-platform', deleted_at: null },
+        { id: 'v3', party_id: 'p-hidden', deleted_at: '2026-10-01T00:00:00Z' },
+        { id: 'v4', party_id: 'p-other-org', deleted_at: null },
+      ],
+    };
+    const supabase = {
+      from(table: string) {
+        let rows = [...(tables[table] ?? [])];
+        const query = {
+          select: () => query,
+          eq: (col: string, value: unknown) => ((rows = rows.filter((r) => r[col] === value)), query),
+          in: (col: string, values: unknown[]) => ((rows = rows.filter((r) => values.includes(r[col]))), query),
+          is: (col: string, value: unknown) => ((rows = rows.filter((r) => (r[col] ?? null) === value)), query),
+          not: (col: string, _op: string, value: unknown) => ((rows = rows.filter((r) => (r[col] ?? null) !== value)), query),
+          limit: (n: number) => ((rows = rows.slice(0, n)), query),
+          then: (resolve: (v: { data: Row[]; error: null }) => unknown) => resolve({ data: rows, error: null }),
+        };
+        return query;
+      },
+    };
+    // Owner (filmed) + crew employee = 2; office admin, Platform seat and hidden-only admin do not count.
+    assert.equal(await countFieldCaptureSeats(supabase as never, 'org-1'), 2);
   });
 });

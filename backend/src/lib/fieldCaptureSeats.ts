@@ -4,8 +4,10 @@
  *
  * A Field Capture seat is an org member (or a pending invite that will become
  * one) who uses Field Capture — crew logins and Employee / field-technician
- * roles. Global Admins do not consume a seat unless they have a Field Capture
- * inbox. Job-scoped invited workers are not org seats.
+ * roles. Global Admins and other office members do not consume a seat unless
+ * they have a Field Capture inbox or have filmed in Field Capture on this
+ * workspace (see `memberEmailsWhoFilmed`). Job-scoped invited workers are not
+ * org seats. Mirrored in SQL by private.field_capture_seats_used.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -111,6 +113,47 @@ function profileEmail(row: { profiles?: { email?: string | null } | Array<{ emai
   return (profile?.email as string | undefined) ?? null;
 }
 
+/**
+ * Of `emails` (lowercased), the ones that have filmed at least one clip in
+ * this workspace through Field Capture: a proof (not hidden) on one of the org's
+ * "Field Capture" job parties (trade `field_capture`) carrying that email.
+ * Same rule as private.has_filmed_in_field_capture.
+ */
+export async function memberEmailsWhoFilmed(
+  supabase: SupabaseClient,
+  orgId: string,
+  emails: readonly string[],
+): Promise<Set<string>> {
+  const filmed = new Set<string>();
+  const wanted = new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean));
+  if (!wanted.size) return filmed;
+  const { data: parties, error } = await supabase
+    .from('job_parties')
+    .select('id, email')
+    .eq('org_id', orgId)
+    .eq('trade', 'field_capture')
+    .not('email', 'is', null);
+  if (error || !parties?.length) return filmed;
+  const partiesByEmail = new Map<string, string[]>();
+  for (const party of parties as Array<{ id: string; email?: string | null }>) {
+    const email = party.email?.trim().toLowerCase() ?? '';
+    if (!wanted.has(email)) continue;
+    partiesByEmail.set(email, [...(partiesByEmail.get(email) ?? []), party.id]);
+  }
+  await Promise.all(
+    [...partiesByEmail].map(async ([email, partyIds]) => {
+      const { data: proofs, error: proofsError } = await supabase
+        .from('job_proofs')
+        .select('id')
+        .in('party_id', partyIds)
+        .is('deleted_at', null)
+        .limit(1);
+      if (!proofsError && proofs?.length) filmed.add(email);
+    }),
+  );
+  return filmed;
+}
+
 export async function countFieldCaptureSeats(
   supabase: SupabaseClient,
   orgId: string,
@@ -146,6 +189,7 @@ export async function countFieldCaptureSeats(
   );
 
   let used = 0;
+  const notYetCounted: string[] = [];
   for (const row of memberRows) {
     if (
       isFieldCaptureSeat({
@@ -156,8 +200,13 @@ export async function countFieldCaptureSeats(
       })
     ) {
       used += 1;
+    } else if (row.seat_type !== 'platform') {
+      const email = profileEmail(row)?.trim().toLowerCase();
+      if (email) notYetCounted.push(email);
     }
   }
+  // An owner or admin who films with Field Capture uses a seat too.
+  used += (await memberEmailsWhoFilmed(supabase, orgId, notYetCounted)).size;
 
   for (const invite of (invites ?? []) as unknown as Array<{ email?: string; role?: string; seat_type?: string | null }>) {
     const email = invite.email?.trim().toLowerCase() ?? '';
