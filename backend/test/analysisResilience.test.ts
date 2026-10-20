@@ -165,12 +165,12 @@ test('narration never sends more than the Anthropic image limit', () => {
 
 function fakeSupabase(frames: Array<{ id: string; storage_path: string }>) {
   const inserts: Array<{ table: string; row: unknown }> = [];
-  const builder = (table: string): any => {
+  const builder = (table: string): unknown => {
     const result = () => ({
       data: table === 'verification_frames' ? frames.map((f, i) => ({ ...f, scene_id: null, timestamp_seconds: i })) : null,
       error: null,
     });
-    const b: any = new Proxy(
+    const b: unknown = new Proxy(
       {},
       {
         get(_t, prop) {
@@ -211,7 +211,7 @@ function ctxFor(client: unknown) {
     videoId: 'vid',
     processingJobId: 'pj',
     attributedUserId: null,
-  } as any;
+  } as unknown as Parameters<ReturnType<typeof createAnalyzeFramesHandler>>[0];
 }
 
 test('a failing escalation keeps the primary reading instead of failing the video', async () => {
