@@ -32,7 +32,7 @@ import { listOpenReviewTasks, recordReviewDecision } from './review/queue.js';
 import { correctSceneRoom } from './scenes/group.js';
 import { linkOutcomeSchema, roomCorrectionSchema } from './schemas.js';
 import { monthSpendUsd } from './cost/tracker.js';
-import { linkOutcome } from './timeline/graph.js';
+import { linkOutcome, timelineEventsForJob } from './timeline/graph.js';
 import { createDatasetExampleFromResult } from './dataset/examples.js';
 import { exportDatasetVersionJsonl } from './dataset/exportJsonl.js';
 
@@ -270,16 +270,8 @@ verificationRouter.get('/jobs/:jobId/timeline', async (req, res, next) => {
   try {
     const { orgId, supabase } = orgReq(req);
     const jobId = z.string().uuid().parse(req.params.jobId);
-    const { data, error } = await supabase
-      .from('project_timeline_events')
-      .select(
-        'id, occurred_at, title, summary, status, completion_state, room_or_area, activity_id, system_confidence, confidence_breakdown, evidence_frame_ids, evidence_clip_ids, result_id, llm_run_id, provenance',
-      )
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .order('occurred_at', { ascending: true, nullsFirst: false });
-    if (error) throw new Error(error.message);
-    res.json({ jobId, events: data ?? [] });
+    const data = await timelineEventsForJob(supabase, orgId, jobId);
+    res.json({ jobId, events: data });
   } catch (err) {
     next(toHttp(err));
   }

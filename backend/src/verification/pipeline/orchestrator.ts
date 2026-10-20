@@ -17,7 +17,7 @@ import {
   tryClaimVideoProcessingJobById,
 } from '../../shared/outboxClaim.js';
 import { shouldRunSoldPathWorkers } from '../../bootFlags.js';
-import { PROCESSING_STAGES, type ProcessingStage, type StepStatus } from '../types.js';
+import { OPTIONAL_STAGES, PROCESSING_STAGES, type ProcessingStage, type StepStatus } from '../types.js';
 import { verificationConfig } from '../config.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
 import { leaseOwnerId, leaseUntilIso } from '../lease.js';
@@ -395,6 +395,30 @@ export class ProcessingOrchestrator {
           .eq('id', step.id);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        if (OPTIONAL_STAGES.has(stage)) {
+          console.warn(
+            `[verification] optional stage ${stage} failed, continuing video=${job.videoId}: ${message.slice(0, 300)}`,
+          );
+          await job.supabase
+            .from('video_processing_steps')
+            .update({
+              status: 'skipped',
+              completed_at: new Date().toISOString(),
+              last_error: message,
+              output: { reason: 'optional_stage_failed', error: message.slice(0, 500) },
+            })
+            .eq('id', step.id);
+          await appendAuditEvent(job.supabase, {
+            orgId: job.orgId,
+            jobId: row.job_id,
+            videoId: job.videoId,
+            eventType: 'pipeline.optional_stage_failed',
+            entityType: 'video_processing_job',
+            entityId: job.processingJobId,
+            payload: { stage, error: message.slice(0, 500) },
+          });
+          continue;
+        }
         await job.supabase
           .from('video_processing_steps')
           .update({ status: 'failed', last_error: message })

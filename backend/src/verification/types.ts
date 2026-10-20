@@ -40,6 +40,19 @@ export const PROCESSING_STAGES = [
 ] as const;
 export type ProcessingStage = (typeof PROCESSING_STAGES)[number];
 
+/**
+ * Enrichment stages: useful, but a video is still verified without them. A
+ * failure here is recorded on the step and the pipeline continues, so one
+ * broken extra can never fail the whole video (Oct 19 2026: a dropped table
+ * in update_project_graph failed every video).
+ */
+export const OPTIONAL_STAGES: ReadonlySet<ProcessingStage> = new Set<ProcessingStage>([
+  'generate_verified_events',
+  'update_project_graph',
+  'evaluate_dataset_eligibility',
+  'create_dataset_examples',
+]);
+
 export const STEP_STATUSES = [
   'pending',
   'running',

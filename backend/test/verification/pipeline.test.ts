@@ -644,6 +644,181 @@ test('processing orchestrator is idempotent on the same key and retries failures
   assert.equal(job?.status, 'completed');
 });
 
+test('an optional enrichment stage failing does not fail the video', async () => {
+  const tick = () => new Promise((r) => setImmediate(r));
+  async function drained(q: { pending: number }) {
+    for (let i = 0; i < 400 && q.pending > 0; i += 1) await tick();
+  }
+
+  const store = {
+    jobs: new Map<string, Record<string, unknown>>(),
+    steps: new Map<string, Record<string, unknown>>(),
+    videos: new Map<string, Record<string, unknown>>(),
+  };
+
+  // Minimal supabase mock for orchestrator.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase: any = {
+    from(table: string) {
+      const api = {
+        _filters: {} as Record<string, unknown>,
+        select() {
+          return api;
+        },
+        insert(row: Record<string, unknown> | Record<string, unknown>[]) {
+          if (table === 'video_processing_jobs') {
+            const r = Array.isArray(row) ? row[0]! : row;
+            const id = (r.id as string) ?? cryptoRandom();
+            store.jobs.set(id, { ...r, id, status: r.status ?? 'pending' });
+            return {
+              select() {
+                return {
+                  single: async () => ({ data: store.jobs.get(id), error: null }),
+                };
+              },
+              then: undefined,
+            };
+          }
+          if (table === 'video_processing_steps') {
+            const rows = Array.isArray(row) ? row : [row];
+            for (const r of rows) {
+              const id = cryptoRandom();
+              store.steps.set(id, { ...r, id, status: 'pending', attempt_count: 0 });
+            }
+            return { error: null };
+          }
+          if (table === 'verification_audit_events') return { error: null };
+          return { error: null };
+        },
+        update(patch: Record<string, unknown>) {
+          const chain: {
+            eq: (col: string, val: string) => typeof chain;
+            then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => void;
+          } = {
+            eq(col: string, val: string) {
+              if (table === 'video_processing_jobs' && col === 'id') {
+                const job = store.jobs.get(val);
+                if (job) store.jobs.set(val, { ...job, ...patch });
+              }
+              if (table === 'verification_videos' && col === 'id') {
+                store.videos.set(val, { ...(store.videos.get(val) ?? {}), ...patch, id: val });
+              }
+              if (table === 'video_processing_steps') {
+                if (col === 'id') {
+                  const step = store.steps.get(val);
+                  if (step) store.steps.set(val, { ...step, ...patch });
+                } else {
+                  for (const [id, step] of store.steps) {
+                    if (step[col] === val) store.steps.set(id, { ...step, ...patch });
+                  }
+                }
+              }
+              return chain;
+            },
+            then(resolve) {
+              resolve({ error: null });
+            },
+          };
+          return chain;
+        },
+        eq(col: string, val: unknown) {
+          api._filters[col] = val;
+          return api;
+        },
+        maybeSingle: async () => {
+          if (table === 'video_processing_jobs') {
+            if (api._filters.idempotency_key) {
+              for (const job of store.jobs.values()) {
+                if (job.idempotency_key === api._filters.idempotency_key) {
+                  return { data: job, error: null };
+                }
+              }
+              return { data: null, error: null };
+            }
+            if (api._filters.id) {
+              const job = store.jobs.get(api._filters.id as string);
+              if (!job) return { data: null, error: null };
+              return {
+                data: {
+                  ...job,
+                  job_id: 'job-1',
+                  verification_videos: { job_id: 'job-1', status: 'queued' },
+                },
+                error: null,
+              };
+            }
+          }
+          if (table === 'video_processing_steps') {
+            for (const step of store.steps.values()) {
+              if (
+                step.processing_job_id === api._filters.processing_job_id &&
+                step.stage === api._filters.stage
+              ) {
+                return { data: step, error: null };
+              }
+            }
+            return { data: null, error: null };
+          }
+          return { data: null, error: null };
+        },
+      };
+      return api;
+    },
+  };
+
+  const orch = new ProcessingOrchestrator({
+    delaysMs: [1],
+    sleep: async () => undefined,
+    handlers: {
+      validate_video: async () => ({ output: { ok: true } }),
+      extract_metadata: async () => ({ output: {} }),
+      extract_frames: async () => ({ output: { frameCount: 0 } }),
+      score_frame_quality: async () => ({ output: {} }),
+      deduplicate_frames: async () => ({ output: {} }),
+      classify_scenes: async () => ({ output: {} }),
+      analyze_frames: async () => ({ output: {} }),
+      compare_timeline: async () => ({ output: {} }),
+      generate_verifications: async () => ({ output: {} }),
+      calculate_confidence: async () => ({ output: {} }),
+      update_project_graph: async () => {
+        throw new Error("Could not find the table 'public.project_timeline_events' in the schema cache");
+      },
+      create_dataset_examples: async () => {
+        throw new Error('optional extra broke');
+      },
+      finalize_report: async () => ({ output: { done: true } }),
+    },
+  });
+
+  store.videos.set('vid-1', { id: 'vid-1', status: 'uploaded' });
+
+  const first = await orch.enqueue({
+    supabase,
+    orgId: 'org-1',
+    videoId: 'vid-1',
+    jobId: 'job-1',
+    idempotencyKey: 'vid-1:v1',
+  });
+  const second = await orch.enqueue({
+    supabase,
+    orgId: 'org-1',
+    videoId: 'vid-1',
+    jobId: 'job-1',
+    idempotencyKey: 'vid-1:v1',
+  });
+  assert.equal(first.processingJobId, second.processingJobId);
+  assert.equal(first.created, true);
+  assert.equal(second.created, false);
+
+  await drained(orch);
+  const job = store.jobs.get(first.processingJobId);
+  assert.equal(job?.status, 'completed', 'optional stage failures must not fail the video');
+  const graphStep = [...store.steps.values()].find(
+    (st) => st.processing_job_id === first.processingJobId && st.stage === 'update_project_graph',
+  );
+  assert.equal(graphStep?.status, 'skipped');
+});
+
 function cryptoRandom(): string {
   return `id-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
