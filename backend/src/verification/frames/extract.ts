@@ -254,11 +254,7 @@ export function createExtractMetadataHandler(opts?: {
 
 export function createExtractFramesHandler(opts?: {
   runner?: CommandRunner;
-  uploadFrame?: (
-    ctx: PipelineContext,
-    frame: ExtractedFrame,
-    bytes: Buffer,
-  ) => Promise<string>;
+  uploadFrame?: (ctx: PipelineContext, frame: ExtractedFrame, bytes: Buffer) => Promise<string>;
 }): (ctx: PipelineContext) => Promise<{ output: Record<string, unknown>; digest: string }> {
   return async (ctx) => {
     const localPath =
@@ -281,7 +277,10 @@ export function createExtractFramesHandler(opts?: {
     if ((count ?? 0) > 0) {
       return {
         output: { frameCount: count, reused: true },
-        digest: createHash('sha256').update(`frames:${ctx.videoId}:${count}`).digest('hex').slice(0, 32),
+        digest: createHash('sha256')
+          .update(`frames:${ctx.videoId}:${count}`)
+          .digest('hex')
+          .slice(0, 32),
       };
     }
 
@@ -314,7 +313,10 @@ export function createExtractFramesHandler(opts?: {
     }
 
     if (rows.length) {
-      const { error } = await ctx.supabase.from('verification_frames').insert(rows);
+      // Two runs of this step can race past the count check above; keep the first set of frames.
+      const { error } = await ctx.supabase
+        .from('verification_frames')
+        .upsert(rows, { onConflict: 'video_id,sequence_number', ignoreDuplicates: true });
       if (error) throw new Error(error.message);
     }
 

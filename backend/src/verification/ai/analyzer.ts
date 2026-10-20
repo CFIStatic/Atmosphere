@@ -59,7 +59,10 @@ export interface AnalysisResult<T> {
 }
 
 export interface VisionAnalyzer {
-  analyzeFrame(image: VisionImage, context?: AnalysisContext): Promise<AnalysisResult<FrameObservationParsed>>;
+  analyzeFrame(
+    image: VisionImage,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>>;
   compareFrames(
     before: VisionImage,
     after: VisionImage,
@@ -251,13 +254,22 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
         userNote: `Escalation: ${reason}`,
         // Never hand Google an Anthropic id: use the escalation model only when
         // it is a Gemini id, otherwise the primary Gemini model.
-        model: modelForProvider('google', verificationConfig.escalationModel, verificationConfig.primaryModel),
+        model: modelForProvider(
+          'google',
+          verificationConfig.escalationModel,
+          verificationConfig.primaryModel,
+        ),
         escalate: true,
       });
-      return discarded.length ? { ...result, discardedCalls: [...(result.discardedCalls ?? []), ...discarded] } : result;
+      return discarded.length
+        ? { ...result, discardedCalls: [...(result.discardedCalls ?? []), ...discarded] }
+        : result;
     } catch (err) {
       if (!discarded.length) throw err;
-      throw new BilledReplyError(err instanceof BilledReplyError ? err.cause : err, [...discarded, ...billedCallsOf(err)]);
+      throw new BilledReplyError(err instanceof BilledReplyError ? err.cause : err, [
+        ...discarded,
+        ...billedCallsOf(err),
+      ]);
     }
   }
 
@@ -594,7 +606,11 @@ export async function loadJobScopeLines(
  * Each gets its own idempotency key: a pipeline retry calls the provider
  * again and is billed again.
  */
-async function recordBilledCalls(ctx: PipelineContext, frameId: string, calls: BilledCall[]): Promise<void> {
+async function recordBilledCalls(
+  ctx: PipelineContext,
+  frameId: string,
+  calls: BilledCall[],
+): Promise<void> {
   for (const call of calls) {
     await recordAiCost(ctx.supabase, {
       orgId: ctx.orgId,
@@ -685,8 +701,7 @@ export function createAnalyzeFramesHandler(opts: {
         // Every billed provider call lands on the ledger, including replies
         // that failed validation (the step then fails and retries) and a
         // primary reading that an escalation replaced.
-        const recordBilled = (calls: BilledCall[]) =>
-          recordBilledCalls(ctx, frame.id, calls);
+        const recordBilled = (calls: BilledCall[]) => recordBilledCalls(ctx, frame.id, calls);
         let result: AnalysisResult<FrameObservationParsed>;
         try {
           result = await opts.analyzer.analyzeFrame(
@@ -804,28 +819,32 @@ export function createAnalyzeFramesHandler(opts: {
         });
       }
 
-      await ctx.supabase.from('frame_observations').insert({
-        org_id: ctx.orgId,
-        video_id: ctx.videoId,
-        frame_id: frame.id,
-        analysis_run_id: runId,
-        scene_id: frame.scene_id,
-        room_type: observation.room_type,
-        observed_conditions: observation.observed_conditions,
-        damage_types: observation.damage_types,
-        work_activities: observation.work_activities,
-        materials_present: observation.materials_present,
-        equipment_present: observation.equipment_present,
-        completion_indicators: observation.completion_indicators,
-        safety_issues: observation.safety_issues,
-        visible_text: observation.visible_text,
-        uncertainty_reasons: observation.uncertainty_reasons,
-        evidence_regions: observation.evidence_regions,
-        model_confidence: observation.confidence,
-        model_name: modelName,
-        prompt_version: promptVersion,
-        parsed: observation,
-      });
+      await ctx.supabase.from('frame_observations').upsert(
+        {
+          org_id: ctx.orgId,
+          video_id: ctx.videoId,
+          frame_id: frame.id,
+          analysis_run_id: runId,
+          scene_id: frame.scene_id,
+          room_type: observation.room_type,
+          observed_conditions: observation.observed_conditions,
+          damage_types: observation.damage_types,
+          work_activities: observation.work_activities,
+          materials_present: observation.materials_present,
+          equipment_present: observation.equipment_present,
+          completion_indicators: observation.completion_indicators,
+          safety_issues: observation.safety_issues,
+          visible_text: observation.visible_text,
+          uncertainty_reasons: observation.uncertainty_reasons,
+          evidence_regions: observation.evidence_regions,
+          model_confidence: observation.confidence,
+          model_name: modelName,
+          prompt_version: promptVersion,
+          parsed: observation,
+        },
+        // One row per (run, frame): a retried or re-run step must not error on rows it already saved.
+        { onConflict: 'analysis_run_id,frame_id', ignoreDuplicates: true },
+      );
 
       // Promote AI room type onto scenes that are still unidentified.
       if (frame.scene_id && observation.room_type && observation.room_type !== 'unidentified') {

@@ -175,7 +175,7 @@ function fakeSupabase(frames: Array<{ id: string; storage_path: string }>) {
       {
         get(_t, prop) {
           if (prop === 'then') return (res: (v: unknown) => void) => res(result());
-          if (prop === 'insert') return (row: unknown) => {
+          if (prop === 'insert' || prop === 'upsert') return (row: unknown) => {
             inserts.push({ table, row });
             return b;
           };
