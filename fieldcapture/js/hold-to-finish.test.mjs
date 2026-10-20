@@ -2153,3 +2153,28 @@ console.log('keyboard chrome: ok');
 
 // Stay signed in until force close (runs in the same CI step).
 await import('./app-session.test.mjs');
+
+/* Re-record: the preview must be re-attached after #s-rec is shown, so the
+   second recording fills the screen like the first (no black box). */
+{
+  assert.equal(typeof Core.refreshLivePreview, 'function', 'refreshLivePreview exported');
+  const stream = { id: 'cam' };
+  const assigned = [];
+  const el = {
+    _src: stream,
+    get srcObject() { return this._src; },
+    set srcObject(v) { assigned.push(v); this._src = v; },
+    setAttribute() {}, removeAttribute() {},
+    play() { return Promise.resolve(); },
+  };
+  assert.equal(Core.refreshLivePreview(el), true);
+  assert.deepEqual(assigned, [null, stream], 'stream detached then re-attached');
+  assert.equal(Core.refreshLivePreview({ srcObject: null }), false);
+  const showAt = appSrc.indexOf("show('s-rec');\n        /* Same full-bleed");
+  assert.ok(showAt > 0 && appSrc.indexOf('Core.refreshLivePreview(videoEl)', showAt) > showAt,
+    'live start refreshes the preview after showing the recording screen');
+  const css = html.slice(html.indexOf('#preview {'), html.indexOf('}', html.indexOf('#preview {')));
+  assert.match(css, /object-fit: cover/);
+  assert.doesNotMatch(css, /translateZ/, 'no stale compositing layer on the preview');
+}
+console.log('re-record preview ok');
