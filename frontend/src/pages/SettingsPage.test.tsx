@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,8 @@ const apiMocks = vi.hoisted(() => ({
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
   getMembers: vi.fn().mockResolvedValue({ members: [] }),
+  getAiTraining: vi.fn().mockResolvedValue({ setting: { optedIn: false, changedAt: null } }),
+  setAiTraining: vi.fn(),
   orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
   createOrgInvite: vi.fn(),
   revokeOrgInvite: vi.fn(),
@@ -209,6 +211,25 @@ describe('Settings organization', () => {
     expect(screen.queryByText('Company type')).toBeNull();
     expect(screen.queryByRole('link', { name: 'field-capture-production.up.railway.app' })).toBeNull();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
+  });
+
+  it('lets a Global Admin turn on Help improve Atmosphere\'s AI, and shows it off by default', async () => {
+    apiMocks.setAiTraining.mockResolvedValue({ setting: { optedIn: true, changedAt: '2026-10-20T00:00:00Z' } });
+    renderSettings('/settings?section=organization');
+    const box = within(await screen.findByTestId('ai-training-toggle')).getByRole('checkbox');
+    await waitFor(() => expect(box).not.toBeDisabled());
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    await waitFor(() => expect(apiMocks.setAiTraining).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(box).toBeChecked());
+  });
+
+  it('shows the AI training setting read-only to an Employee', async () => {
+    authState.membership = { role: 'employee', org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' } };
+    renderSettings('/settings?section=organization');
+    const box = within(await screen.findByTestId('ai-training-toggle')).getByRole('checkbox');
+    expect(box).toBeDisabled();
+    expect(screen.getByText('Only a Global Admin can change this.')).toBeInTheDocument();
   });
 
   it('labels a Platform seat "Platform" in the member list', async () => {

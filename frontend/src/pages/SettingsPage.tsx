@@ -182,6 +182,7 @@ export function SettingsPage() {
               <InvitePanel />
               <LinkedAccountsCard />
               <TeamVoiceList currentUserId={user?.id} />
+              <AiTrainingCard />
               <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
                 <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>
                 <p className="mt-1 text-sm text-ink-600">
@@ -846,6 +847,73 @@ function SupportSection() {
 /* -------------------------------------------------------------------------- *
  * Organization
  * -------------------------------------------------------------------------- */
+
+/**
+ * "Help improve Atmosphere's AI": whether this workspace's corrected clip
+ * summaries (text only, names removed) may train Atmosphere's own models.
+ * Off by default; a Global Admin changes it, everyone else sees it.
+ */
+function AiTrainingCard() {
+  const { membership } = useAuth();
+  const canChange = isGlobalAdmin(membership?.role);
+  const [optedIn, setOptedIn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAiTraining()
+      .then(({ setting }) => {
+        if (!cancelled) setOptedIn(setting.optedIn);
+      })
+      .catch(() => {
+        if (!cancelled) setOptedIn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggle(next: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { setting } = await api.setAiTraining(next);
+      setOptedIn(setting.optedIn);
+    } catch {
+      setError('Could not save that. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card
+      title="Help improve Atmosphere's AI"
+      description="When this is on, the summaries your team rates or fixes on the Videos tab can be used to train Atmosphere's own AI, as text only with names, phone numbers and addresses removed. Videos, audio and still images are never used, and neither are clips with a child or private moment."
+    >
+      <label className="flex items-center gap-3" data-testid="ai-training-toggle">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-brand-600"
+          checked={optedIn === true}
+          disabled={!canChange || busy || optedIn === null}
+          onChange={(event) => void toggle(event.target.checked)}
+        />
+        <span className="text-sm text-ink-800">
+          {optedIn ? 'On for this workspace' : 'Off for this workspace'}
+        </span>
+      </label>
+      {!canChange ? (
+        <p className="mt-2 text-xs text-ink-500">Only a Global Admin can change this.</p>
+      ) : null}
+      <div className="mt-2">
+        <ErrorText message={error} />
+      </div>
+    </Card>
+  );
+}
 
 function LinkedAccountsCard() {
   const t = useT();

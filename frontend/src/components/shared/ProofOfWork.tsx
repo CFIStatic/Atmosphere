@@ -4,7 +4,10 @@ import {
   type ProofResponse,
   type ProofQuestion,
   type ProofVideoRecord,
+  type ClipSummaryFeedback,
+  type ClipSummaryFeedbackReason,
 } from '../../lib/api';
+import { ClipSummaryRating } from './ClipSummaryRating';
 import { formatClipLength } from '../../lib/clipDuration';
 import {
   clipClock,
@@ -78,6 +81,7 @@ export function ProofOfWork({
   videoFetcher,
   showCollectionAsk = true,
   allowDownload = false,
+  rateSummaries = false,
 }: {
   jobId?: string;
   heading?: string;
@@ -88,6 +92,8 @@ export function ProofOfWork({
   showCollectionAsk?: boolean;
   /** Office copy of the original file. Off for homeowners and guests. */
   allowDownload?: boolean;
+  /** Show each clip's AI summary with thumbs up / down and Fix it. Office members only. */
+  rateSummaries?: boolean;
 }) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
@@ -239,6 +245,7 @@ export function ProofOfWork({
             videos={data.videos ?? []}
             videoFetcher={videoFetcher}
             allowDownload={allowDownload && Boolean(jobId)}
+            rateSummaries={rateSummaries && Boolean(jobId)}
             seekProofId={seekProofId}
             seekAt={seekAt}
             seekNonce={seekNonce}
@@ -455,6 +462,50 @@ function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[
   return meta;
 }
 
+interface ClipSummaryFeedbackState {
+  byClip: Record<string, ClipSummaryFeedback>;
+  rate: (
+    proofId: string,
+    rating: 1 | -1 | 0,
+    extra?: { reason?: ClipSummaryFeedbackReason | null; correctedText?: string | null },
+  ) => Promise<void>;
+}
+
+/** This person's ratings on the job's clip summaries, loaded once per job. */
+function useClipSummaryFeedback(jobId: string | undefined): ClipSummaryFeedbackState {
+  // Keyed by job so another job's ratings never show while this one loads.
+  const [loaded, setLoaded] = useState<{ jobId: string; byClip: Record<string, ClipSummaryFeedback> } | null>(null);
+  const byClip = loaded && loaded.jobId === jobId ? loaded.byClip : {};
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    void api
+      .clipSummaryFeedback(jobId)
+      .then((res) => {
+        if (!cancelled) setLoaded({ jobId, byClip: res.feedback ?? {} });
+      })
+      .catch(() => {
+        /* no ratings shown; rating still works */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+  return {
+    byClip,
+    async rate(proofId, rating, extra) {
+      if (!jobId) return;
+      const res = await api.rateClipSummary(jobId, proofId, rating, extra);
+      setLoaded((prev) => {
+        const next = { ...(prev && prev.jobId === jobId ? prev.byClip : {}) };
+        if (res.feedback) next[proofId] = res.feedback;
+        else delete next[proofId];
+        return { jobId, byClip: next };
+      });
+    },
+  };
+}
+
 function ClipSpeakerList({ jobId, proofId }: { jobId: string; proofId: string }) {
   const [speakers, setSpeakers] = useState<ClipSpeaker[]>([]);
   useEffect(() => {
@@ -594,6 +645,7 @@ function VideoCatalog({
   videos,
   videoFetcher,
   allowDownload = false,
+  rateSummaries = false,
   seekProofId,
   seekAt,
   seekNonce,
@@ -603,6 +655,7 @@ function VideoCatalog({
   videos: ProofVideoRecord[];
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   allowDownload?: boolean;
+  rateSummaries?: boolean;
   seekProofId?: string | null;
   seekAt?: number | null;
   seekNonce?: number;
@@ -616,6 +669,7 @@ function VideoCatalog({
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const scrollOnOpen = useRef(false);
   const library = useLibraryClipMeta(jobId, videos);
+  const summaryFeedback = useClipSummaryFeedback(rateSummaries ? jobId : undefined);
 
   useEffect(() => {
     if (seekProofId) setOpenId(seekProofId);
@@ -715,6 +769,7 @@ function VideoCatalog({
             jobId={jobId}
             videoFetcher={videoFetcher}
             allowDownload={allowDownload}
+            summaryFeedback={rateSummaries ? summaryFeedback : null}
             seekAt={seekProofId === openRow.video.id ? seekAt : null}
             seekNonce={seekProofId === openRow.video.id ? seekNonce : 0}
             onSeek={onSeek}
@@ -824,6 +879,7 @@ function VideoViewer({
   jobId,
   videoFetcher,
   allowDownload,
+  summaryFeedback,
   seekAt,
   seekNonce,
   onSeek,
@@ -833,12 +889,14 @@ function VideoViewer({
   jobId?: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   allowDownload: boolean;
+  summaryFeedback?: ClipSummaryFeedbackState | null;
   seekAt?: number | null;
   seekNonce?: number;
   onSeek?: (proofId: string, seconds: number) => void;
   onClose: () => void;
 }) {
   const { video, title } = row;
+  const summary = video.aiSummary?.trim() || null;
   const captions = captionsForVideo(video);
   const plain = transcriptPlainText(video);
   const hasTranscript = Boolean(plain);
@@ -915,6 +973,13 @@ function VideoViewer({
         >
           Privacy-protected · {redactions} segment{redactions === 1 ? '' : 's'}
         </p>
+      ) : null}
+      {summaryFeedback && summary ? (
+        <ClipSummaryRating
+          summary={summary}
+          feedback={summaryFeedback.byClip[video.id] ?? null}
+          onRate={(rating, extra) => summaryFeedback.rate(video.id, rating, extra)}
+        />
       ) : null}
       {moments.length > 0 ? (
         <div className="flex flex-wrap gap-1" data-testid="job-video-moments">

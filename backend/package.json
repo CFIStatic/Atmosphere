@@ -39,6 +39,7 @@
     "eval:ask": "tsx src/scripts/askEval.ts",
     "bench:ask": "tsx src/scripts/askLatencyBench.ts",
     "reconcile:ai-costs": "tsx src/scripts/reconcileAiCosts.ts",
+    "export:training-set": "tsx src/scripts/exportTrainingSet.ts",
     "rotate:computer-credentials": "tsx src/scripts/rotateComputerCredentials.ts"
   },
   "engines": {

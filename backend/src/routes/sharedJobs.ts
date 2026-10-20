@@ -1,5 +1,6 @@
 import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
 import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
+import { listClipSummaryFeedback, rateClipSummaryRoute } from './clipFeedback.js';
 import { approveAskApproval, denyAskApproval, getAskApproval, listAskFeedback, listAskPins, pinAskAnswer, rateAskAnswer, searchAskChats, unpinAskAnswer } from './askExtras.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -1701,6 +1702,8 @@ sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.get('/shared/:jobId/ask/threads', listJobAskThreads);
 sharedJobsRouter.get('/shared/:jobId/ask/search', searchAskChats);
 sharedJobsRouter.get('/shared/:jobId/ask/feedback', listAskFeedback);
+sharedJobsRouter.get('/shared/:jobId/proofs/summary-feedback', listClipSummaryFeedback);
+sharedJobsRouter.post('/shared/:jobId/proofs/:proofId/summary-feedback', rateClipSummaryRoute);
 sharedJobsRouter.get('/shared/:jobId/ask/pins', listAskPins);
 sharedJobsRouter.post('/shared/:jobId/ask/questions/:questionId/feedback', rateAskAnswer);
 sharedJobsRouter.post('/shared/:jobId/ask/questions/:questionId/pin', pinAskAnswer);
