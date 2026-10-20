@@ -65,7 +65,10 @@ export function TokenUsageSection() {
     return <p className="text-sm text-ink-600">Loading token usage…</p>;
   }
 
-  const employees = report.byEmployee.filter((row) => row.userId !== null || row.totalTokens > 0);
+  const seats = report.byEmployee.filter((row) => row.userId !== null || row.totalTokens > 0);
+  // Homeowners and subs using Chat on a shared job are billed here but are not employees.
+  const employees = seats.filter((row) => !row.outsideOrg);
+  const guests = seats.filter((row) => row.outsideOrg && row.totalTokens > 0);
   const tokenShare = (count: number) => sharePct(count, totals.totalTokens);
   const daily = dailyUsageRows(report.byDay, report.recent);
 
@@ -125,7 +128,11 @@ export function TokenUsageSection() {
           <Kpi
             label="People using tokens"
             value={String(employees.filter((row) => row.totalTokens > 0 && row.userId).length)}
-            hint="Attributed to a signed-in teammate"
+            hint={
+              guests.length > 0
+                ? `Employees · plus ${guests.length} shared-job ${guests.length === 1 ? 'guest' : 'guests'}`
+                : 'Attributed to a signed-in teammate'
+            }
           />
         </dl>
       </section>
@@ -237,6 +244,28 @@ export function TokenUsageSection() {
             </table>
           </div>
         )}
+        {guests.length > 0 ? (
+          <div className="mt-5" data-testid="shared-job-guests">
+            <h4 className="text-sm font-semibold text-ink-900">People you shared jobs with</h4>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Homeowners and subcontractors outside this organization who used AI on a job you
+              shared. They are not employees, but their usage is on this organization&apos;s bill.
+            </p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-xl text-left text-xs">
+                <tbody>
+                  {guests.map((row) => (
+                    <EmployeeRow
+                      key={row.userId ?? 'guest'}
+                      row={row}
+                      totalTokens={totals.totalTokens}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-xl glass-card p-5">

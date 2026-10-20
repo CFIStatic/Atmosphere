@@ -204,6 +204,46 @@ describe('TokenUsageSection', () => {
     expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
   });
 
+  it('lists a shared-job subcontractor apart from employees', async () => {
+    const seat = (partial: Partial<TokenUsageReport['byEmployee'][number]>) => ({
+      email: null,
+      role: 'employee',
+      roleLabel: 'Employee',
+      ...totals({ totalTokens: 17_000 }),
+      byFeature: {
+        video_analysis: emptyTokenTotals(),
+        chat: totals({ totalTokens: 17_000 }),
+        ask: emptyTokenTotals(),
+        other: emptyTokenTotals(),
+      },
+      userId: 'u',
+      name: 'x',
+      ...partial,
+    });
+    getTokenUsage.mockResolvedValue({
+      ...report,
+      byEmployee: [
+        seat({ userId: 'u-jack', name: 'El Presidente', roleLabel: 'Global Admin', outsideOrg: false }),
+        seat({
+          userId: 'u-sub',
+          name: 'Alpha co',
+          role: 'guest',
+          roleLabel: 'Subcontractor (shared job)',
+          outsideOrg: true,
+        }),
+      ],
+    });
+
+    render(<TokenUsageSection />);
+    expect(await screen.findByText('El Presidente')).toBeInTheDocument();
+    const guests = screen.getByTestId('shared-job-guests');
+    expect(guests).toHaveTextContent('People you shared jobs with');
+    expect(guests).toHaveTextContent('Alpha co');
+    expect(guests).toHaveTextContent('Subcontractor (shared job)');
+    expect(screen.queryByText('Teammate')).not.toBeInTheDocument();
+    expect(screen.getByText('Employees · plus 1 shared-job guest')).toBeInTheDocument();
+  });
+
   it('reloads when the window changes', async () => {
     const user = userEvent.setup();
     render(<TokenUsageSection />);
