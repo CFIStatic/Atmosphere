@@ -99,6 +99,7 @@ service_already_deployed_for_head() {
 
 attempt=1
 skip_retries=0
+paused_wait="${RAILWAY_UP_PAUSED_WAIT:-180}"
 while [ "$attempt" -le "$max_attempts" ]; do
   if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ] && [ -f "${RAILWAY_UP_STAMP_FILE}" ]; then
     printf '\n# railway-up-retry %s %s\n' "$attempt" "$(date -u +%s)" >> "$RAILWAY_UP_STAMP_FILE"
@@ -148,9 +149,14 @@ while [ "$attempt" -le "$max_attempts" ]; do
     exit 0
   fi
   echo "railway up exited $status"
-  if grep -qi 'paused due to an upstream issue' "$log"; then
-    echo "Railway paused deploys (https://status.railway.com/incident/VVL3A03V). Retrying."
-    sleep $((attempt * 60))
+  # Railway words a platform-wide pause two ways ("paused due to an upstream
+  # issue", "Deploys have been paused temporarily"). Nothing was uploaded, so
+  # wait out the incident (up to ~40 min across attempts) and skip the build-log
+  # dump, which only shows an older deploy's healthy build and misleads.
+  if grep -qiE 'paused due to an upstream issue|deploys have been paused' "$log"; then
+    echo "Railway has paused deploys (see https://status.railway.com). Waiting $((paused_wait / 60)) min, then retrying."
+    sleep "$paused_wait"
+    paused_wait=$(( paused_wait < 600 ? paused_wait + 120 : 600 ))
   else
     dump_build_logs
     sleep $((attempt * 30))
