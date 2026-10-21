@@ -11,6 +11,7 @@ import express, { Router, type Request, type Response, type NextFunction } from 
 import rateLimit from 'express-rate-limit';
 import { clientIpKeyGenerator } from '../lib/clientIp.js';
 import { z } from 'zod';
+import { queueJobSuggestionEvaluation } from '../suggestions/store.js';
 import { askQuestionText } from '../shared/askQuestionSchema.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
@@ -266,6 +267,12 @@ chatDocumentsRouter.post('/documents', uploadLimiter, requireAuth, uploadJson, a
         await admin.from('job_chat_documents').delete().eq('id', id).eq('org_id', orgId);
         throw new HttpError(500, 'The document could not be indexed.', 'doc_index_failed');
       }
+    }
+
+    // An estimate on the job changes what Suggested work offers (no more
+    // "Build the estimate"; supplements are measured against it).
+    if (attach && ingested.kind === 'estimate') {
+      queueJobSuggestionEvaluation(admin, { orgId, jobId: job!.id, trigger: 'estimate_document' });
     }
 
     if (attach && job) {

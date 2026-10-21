@@ -18,6 +18,7 @@ import {
   type JobFileSectionId,
   type JobFileSectionTab,
 } from '../components/shared/JobFileSectionBar';
+import { JobSuggestions } from '../components/suggestions/JobSuggestions';
 import { initialJobFileSection, timelineRedirectSearch } from '../components/shared/jobTimeline';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
@@ -497,6 +498,11 @@ function JobFileSections({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2" data-job-file-sections="">
+      {!grantViewer ? (
+        <div className="shrink-0">
+          <JobSuggestions jobId={record.job.id} onHandoff={() => onSectionChange('chat')} />
+        </div>
+      ) : null}
       <div className="shrink-0">
         <JobFileSectionBar tabs={tabs} active={active} onChange={onSectionChange} />
       </div>

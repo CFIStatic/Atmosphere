@@ -38,6 +38,7 @@ import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
 import { legalInboundRouter } from './routes/legalInbound.js';
 import { playbooksRouter } from './routes/playbooks.js';
+import { suggestionsRouter } from './routes/suggestions.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
 import { childPrivacyRouter } from './routes/childPrivacy.js';
@@ -216,6 +217,7 @@ export function createApp(): Express {
   // Chat's browser agent (org members only; service-role tables).
   app.use('/api/chat-computer', computerRouter);
   app.use('/api/playbooks', playbooksRouter);
+  app.use('/api/suggestions', suggestionsRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/speaker-identity', speakerIdentityRouter);

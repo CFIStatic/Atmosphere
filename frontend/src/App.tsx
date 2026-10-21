@@ -61,6 +61,7 @@ const SettingsPage = lazy(() =>
 const SpeakerIdPreviewPage = import.meta.env.DEV
   ? lazy(() => import('./pages/SpeakerIdPreviewPage').then((m) => ({ default: m.SpeakerIdPreviewPage })))
   : null;
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const LoginsPage = lazy(() => import('./pages/LoginsPage').then((m) => ({ default: m.LoginsPage })));
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
@@ -490,6 +491,8 @@ export default function App() {
             <Route path="/my-work" element={<Navigate to="/field" replace />} />
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/logins" element={<LoginsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/suggested-work" element={<Navigate to="/notifications" replace />} />
             <Route path="/jobs" element={<Navigate to="/verifier-library" replace />} />
             {/* Same job file as Overview — /jobs/:id bookmarks join /job-progress. */}
             <Route path="/jobs/:id/packet" element={<JobFileFromProfileRedirect />} />

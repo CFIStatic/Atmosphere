@@ -9,13 +9,13 @@ const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html
 const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 
 describe('verifier office rail', () => {
-  it('lists Start a job, Dashboard and Logins (plus Start your plan, hidden unless unpaid)', () => {
+  it('lists Start a job, Dashboard, Notifications and Logins (plus Start your plan, hidden unless unpaid)', () => {
     const nav = verifierHtml.match(
       /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
     );
     expect(nav).not.toBeNull();
     const labels = [...nav![0].matchAll(/<span class="label"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
-    expect(labels).toEqual(['Start a job', 'Dashboard', 'Logins', 'Start your plan']);
+    expect(labels).toEqual(['Start a job', 'Dashboard', 'Notifications', 'Logins', 'Start your plan']);
     expect(nav![0]).toContain('id="nav-start-plan" hidden');
     expect(nav![0]).toContain('id="nav-logins"');
     expect(nav![0]).not.toContain('data-route="/field"');
@@ -32,6 +32,7 @@ describe('verifier office rail', () => {
     expect(verifierHtml).not.toContain("goShell('/jobs')");
     expect(verifierHtml).toContain("goShell('/intake')");
     expect(verifierHtml).toContain("goShell('/logins')");
+    expect(verifierHtml).toContain("goShell('/notifications')");
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
 

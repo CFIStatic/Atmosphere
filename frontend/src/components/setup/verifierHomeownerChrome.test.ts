@@ -10,7 +10,7 @@ describe('Invited homeowner chrome', () => {
   it('hides Start a job, Logins and Settings (rail and account menu)', () => {
     const rule = verifierHtml.slice(verifierHtml.indexOf('body[data-atm-viewer] #nav-start-job'));
     const selectors = rule.slice(0, rule.indexOf('{'));
-    for (const id of ['#nav-start-job', '#nav-logins', '#nav-settings', '#menu-settings']) {
+    for (const id of ['#nav-start-job', '#nav-logins', '#nav-notifications', '#nav-settings', '#menu-settings']) {
       expect(selectors).toContain(`body[data-atm-viewer] ${id}`);
     }
   });

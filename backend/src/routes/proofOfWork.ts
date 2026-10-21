@@ -122,6 +122,7 @@ import { looksLikeComputerCapabilityAsk } from '../shared/askComputerCapability.
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { evaluateJobSuggestions } from '../suggestions/store.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
@@ -1345,6 +1346,17 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     action: 'analysed',
     actorLabel: 'Atmosphere',
     detail: `${job.workDate} — ${materialChangeWords(result.materialChange)}`,
+  });
+
+  // Suggested work looks at the whole job after each reading. Most readings
+  // change nothing it acts on and it stays quiet; the model check it may run
+  // is billed with this video's analysis.
+  void withVideoUsageScope(
+    admin,
+    { proofId: job.proofId, orgId: job.orgId, jobId: job.jobId, partyId: job.partyId, triggeredBy: job.triggeredBy ?? null },
+    () => evaluateJobSuggestions(admin, { orgId: job.orgId, jobId: job.jobId, trigger: 'analysis' }),
+  ).catch((err) => {
+    console.warn(`[suggested-work] evaluate failed proof=${job.proofId} error=${err instanceof Error ? err.message.slice(0, 160) : 'unknown'}`);
   });
 
   return result;
