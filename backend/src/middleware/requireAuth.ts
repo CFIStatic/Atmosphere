@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { User } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { createAnonClient } from '../lib/supabase.js';
+import { cachedGetUser } from '../lib/authUserCache.js';
 import { setSessionCookies, clearSessionCookies } from '../lib/session.js';
 import { unauthorized, serviceUnavailable } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
@@ -55,7 +56,19 @@ export function bearerAccessToken(req: Request): string | undefined {
  * 3. On a transient upstream failure it returns 503 and leaves cookies intact.
  * 4. On a genuine auth failure it clears cookies and returns 401.
  */
+/**
+ * Several routers share one mount point (four of them on /api/operations) and
+ * each runs requireAuth, so one request used to verify the session and look
+ * up the Terms acceptance up to four times in a row. The first pass marks the
+ * request; later passes reuse what it established.
+ */
+const AUTH_DONE = Symbol.for('atmosphere.requireAuth.done');
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if ((req as Request & { [AUTH_DONE]?: boolean })[AUTH_DONE] && req.user) {
+    next();
+    return;
+  }
   try {
     const cookieAccess = req.cookies?.[config.cookies.accessTokenName] as string | undefined;
     const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
@@ -66,17 +79,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // on the Platform host take precedence over the staff member's own session.
     if (req.cookies?.[SUPPORT_SID_COOKIE] && !requestPath(req).startsWith('/api/analytics')) {
       if (await applySupportSession(req, res)) {
+        markAuthDone(req);
         next();
         return;
       }
     }
 
     if (accessToken) {
-      const { data, error } = await supabase.auth.getUser(accessToken);
+      const { data, error } = await cachedGetUser(accessToken, (token) => supabase.auth.getUser(token));
       if (!error && data.user) {
         req.user = data.user;
         req.accessToken = accessToken;
         await enforceTermsIfRequired(req);
+        markAuthDone(req);
         next();
         return;
       }
@@ -95,6 +110,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         req.user = data.user;
         req.accessToken = data.session.access_token;
         await enforceTermsIfRequired(req);
+        markAuthDone(req);
         next();
         return;
       }
@@ -111,6 +127,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   } catch (err) {
     next(err);
   }
+}
+
+function markAuthDone(req: Request): void {
+  (req as Request & { [AUTH_DONE]?: boolean })[AUTH_DONE] = true;
 }
 
 function requestPath(req: Request): string {

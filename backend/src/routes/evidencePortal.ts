@@ -548,6 +548,19 @@ async function backfillStills(proofIds: string[]): Promise<void> {
   }
 }
 
+const POSTER_URL_SECONDS = 3600;
+/**
+ * A poster's signed link is handed out again for its first half hour, so it
+ * still has at least 30 minutes to live when a page gets it. The same link on
+ * every Dashboard load and 10-second refresh lets the browser keep the JPEG
+ * instead of downloading every thumbnail again under a new token. A still's
+ * path names its clip and second, so a re-extracted still is the same moment.
+ * Which still a clip shows (and the child-privacy skip) is still decided on
+ * every request; only the link to that file is reused.
+ */
+const POSTER_URL_REUSE_MS = 30 * 60_000;
+const POSTER_URLS = new Map<string, { url: string; reuseUntil: number }>();
+
 /**
  * One still per clip, for the library's preview cell.
  *
@@ -625,17 +638,27 @@ async function posterUrls(
 
     if (!pathByProof.size) return out;
 
-    const paths = [...pathByProof.values()];
-    // An hour, rather than the file's ten minutes. A poster is a single JPEG
-    // of a frame the reviewer is already entitled to see, and a list that goes
-    // blank while somebody is still reading it looks broken.
-    const { data: signed } = await admin.storage
-      .from(PROOF_BUCKET)
-      .createSignedUrls(paths, 3600);
-
     const urlByPath = new Map<string, string>();
-    for (const row of (signed ?? []) as any[]) {
-      if (row?.path && row?.signedUrl) urlByPath.set(row.path, row.signedUrl);
+    const now = Date.now();
+    const paths: string[] = [];
+    for (const path of new Set(pathByProof.values())) {
+      const kept = POSTER_URLS.get(path);
+      if (kept && kept.reuseUntil > now) urlByPath.set(path, kept.url);
+      else paths.push(path);
+    }
+    if (paths.length) {
+      // An hour, rather than the file's ten minutes. A poster is a single JPEG
+      // of a frame the reviewer is already entitled to see, and a list that goes
+      // blank while somebody is still reading it looks broken.
+      const { data: signed } = await admin.storage
+        .from(PROOF_BUCKET)
+        .createSignedUrls(paths, POSTER_URL_SECONDS);
+      if (POSTER_URLS.size > 20_000) POSTER_URLS.clear();
+      for (const row of (signed ?? []) as any[]) {
+        if (!row?.path || !row?.signedUrl) continue;
+        urlByPath.set(row.path, row.signedUrl);
+        POSTER_URLS.set(row.path, { url: row.signedUrl, reuseUntil: now + POSTER_URL_REUSE_MS });
+      }
     }
     for (const [proofId, path] of pathByProof) {
       const url = urlByPath.get(path);
@@ -890,13 +913,17 @@ export async function viewerLibraryPayload(
   /** Leave out jobs from this org (the caller's own workspace lists those). */
   excludeOrgId?: string,
 ): Promise<Record<string, unknown> | null> {
-  const homeownerGrants = (await listJobProgressGrants(admin, userId, userEmail)).filter(
-    (g) => g.orgId !== excludeOrgId,
-  );
+  // Both lists in one round trip; the sub list is filtered against the
+  // homeowner grants afterwards, as before.
+  const [allGrants, allPartyViews] = await Promise.all([
+    listJobProgressGrants(admin, userId, userEmail),
+    listJobPartyViews(admin, userEmail),
+  ]);
+  const homeownerGrants = allGrants.filter((g) => g.orgId !== excludeOrgId);
   // Invited subcontractors list their jobs too, but each job carries only
   // the clips that sub recorded.
   const granted = new Set(homeownerGrants.map((g) => g.jobId));
-  const partyViews = (await listJobPartyViews(admin, userEmail)).filter(
+  const partyViews = allPartyViews.filter(
     (v) => !granted.has(v.jobId) && v.orgId !== excludeOrgId,
   );
   const partyByJob = new Map(partyViews.map((v) => [v.jobId, v.partyId]));
@@ -1023,10 +1050,10 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     // page the library opens on.
     const searchQ = !jobId && q?.trim() ? q.trim() : '';
     const searched = searchQ ? await searchOrgLibraryRows(supabase, orgId, searchQ, tz) : null;
-    let proofRows: any[];
-    if (searched) {
-      proofRows = searched.proofRows;
-    } else {
+    // Every read below depends only on the org, not on another read's answer,
+    // so they go out together instead of one round trip after another.
+    const proofsRequest = (async (): Promise<any[]> => {
+      if (searched) return searched.proofRows;
       let proofsQuery = supabase
         .from('job_proofs')
         .select(PORTAL_PROOF_SELECT)
@@ -1037,20 +1064,55 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         .order('received_at', { ascending: false })
         .limit(500);
       if (error) throw new HttpError(500, error.message, 'library_failed');
-      proofRows = (data ?? []) as any[];
-    }
-    const firstPageProofs = proofRows.length;
+      return (data ?? []) as any[];
+    })();
     // Global Admins also see hidden (soft-deleted) clips so they can restore. Bytes are never purged.
-    if (isGlobalAdmin(role)) {
-      const writer = writerForOrg(orgId, supabase).raw;
-      const { data: pending, error: pendingErr } = await writer
-        .from('job_proofs')
-        .select(PORTAL_PROOF_SELECT)
-        .eq('org_id', orgId)
-        .not('scheduled_purge_at', 'is', null)
-        .not('deleted_at', 'is', null)
-        .order('deleted_at', { ascending: false })
-        .limit(200);
+    // A query builder only runs once something awaits it (and again on every
+    // await), so each one is started here, once, by Promise.resolve.
+    const pendingRequest: Promise<{ data: any[] | null; error: { message: string } | null }> | null =
+      isGlobalAdmin(role)
+        ? Promise.resolve(
+            writerForOrg(orgId, supabase)
+              .raw.from('job_proofs')
+              .select(PORTAL_PROOF_SELECT)
+              .eq('org_id', orgId)
+              .not('scheduled_purge_at', 'is', null)
+              .not('deleted_at', 'is', null)
+              .order('deleted_at', { ascending: false })
+              .limit(200),
+          )
+        : null;
+    const jobRowsRequest: Promise<{ data: any[] | null; error: { message: string } | null }> = searched
+      ? Promise.resolve({ data: searched.jobRows, error: null })
+      : Promise.resolve(
+          supabase
+            .from('crm_jobs')
+            .select('id, title, job_number, created_at, property_id, claim_number')
+            .eq('org_id', orgId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(200),
+        );
+    const tombstonesRequest = listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
+    // Jobs other companies shared with this person (as homeowner or
+    // invited sub) sit on the same Dashboard, read-only, with only the
+    // clips they may see.
+    const viewerAdmin = jobId ? null : unscopedAdminOrNull();
+    const sharedRequest = viewerAdmin
+      ? viewerLibraryPayload(viewerAdmin, req.user!.id, req.user!.email, orgId).catch((err) => {
+          console.warn('[library] shared jobs unavailable:', err instanceof Error ? err.message : err);
+          return null;
+        })
+      : Promise.resolve(null);
+    // Nothing may reject unobserved while an earlier await throws.
+    void jobRowsRequest.catch(() => undefined);
+    void pendingRequest?.catch(() => undefined);
+    void tombstonesRequest.catch(() => undefined);
+
+    const proofRows = await proofsRequest;
+    const firstPageProofs = proofRows.length;
+    if (pendingRequest) {
+      const { data: pending, error: pendingErr } = await pendingRequest;
       if (pendingErr) {
         console.warn('[library] pending purge list failed:', pendingErr.message);
       } else {
@@ -1060,6 +1122,37 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         }
       }
     }
+
+    // Job names, addresses and companies load while the clips are assembled.
+    const jobsMetaRequest = (async () => {
+      const { data: jobRows, error: jobsError } = await jobRowsRequest;
+      if (jobsError) return { jobRows, jobsError, tombstoned: null, liveJobRows: [], addrByProperty: null, partyResults: [] };
+      const tombstoned = await tombstonesRequest;
+      const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
+      const jobIds = liveJobRows.map((j) => j.id as string).filter(Boolean);
+      const partyChunks: Array<Promise<{ data: any[] | null; error: { message: string } | null }>> = [];
+      for (let chunk = 0; chunk < jobIds.length; chunk += 200) {
+        partyChunks.push(
+          Promise.resolve(
+            supabase
+              .from('job_parties')
+              .select('job_id, company, contact_name')
+              .eq('org_id', orgId)
+              .in('job_id', jobIds.slice(chunk, chunk + 200))
+              .is('revoked_at', null),
+          ),
+        );
+      }
+      const [addrByProperty, partyResults] = await Promise.all([
+        chunkedAddresses(
+          supabase,
+          liveJobRows.map((j) => j.property_id as string | null),
+        ),
+        Promise.all(partyChunks),
+      ]);
+      return { jobRows, jobsError: null, tombstoned, liveJobRows, addrByProperty, partyResults };
+    })();
+    void jobsMetaRequest.catch(() => undefined);
 
     let items = await assembleLibrary(supabase, orgId, proofRows);
 
@@ -1077,35 +1170,14 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       sharedWithMe?: boolean;
     };
     let jobs: LibraryJob[] = [];
-    const { data: jobRows, error: jobsError } = searched
-      ? { data: searched.jobRows, error: null as { message: string } | null }
-      : await supabase
-          .from('crm_jobs')
-          .select('id, title, job_number, created_at, property_id, claim_number')
-          .eq('org_id', orgId)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(200);
+    const { jobRows, jobsError, tombstoned, liveJobRows, addrByProperty, partyResults } = await jobsMetaRequest;
     const firstPageJobs = (jobRows ?? []).length;
-    if (jobsError) {
-      console.warn('[library] crm_jobs unavailable:', jobsError.message);
+    if (jobsError || !tombstoned || !addrByProperty) {
+      if (jobsError) console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
-      const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
-      const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
       items = items.filter((item: any) => !tombstoned.has(item.jobId as string));
-      const addrByProperty = await chunkedAddresses(
-        supabase,
-        liveJobRows.map((j) => j.property_id as string | null),
-      );
       const partyByJob = new Map<string, { company: string | null; person: string | null }>();
-      const jobIds = liveJobRows.map((j) => j.id as string).filter(Boolean);
-      for (let chunk = 0; chunk < jobIds.length; chunk += 200) {
-        const { data: parties, error: partiesError } = await supabase
-          .from('job_parties')
-          .select('job_id, company, contact_name')
-          .eq('org_id', orgId)
-          .in('job_id', jobIds.slice(chunk, chunk + 200))
-          .is('revoked_at', null);
+      for (const { data: parties, error: partiesError } of partyResults) {
         if (partiesError) {
           console.warn('[library] job_parties unavailable:', partiesError.message);
         } else {
@@ -1151,16 +1223,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     }
 
     if (!jobId) {
-      // Jobs other companies shared with this person (as homeowner or
-      // invited sub) sit on the same Dashboard, read-only, with only the
-      // clips they may see.
-      const viewerAdmin = unscopedAdminOrNull();
-      const shared = viewerAdmin
-        ? await viewerLibraryPayload(viewerAdmin, req.user!.id, req.user!.email, orgId).catch((err) => {
-            console.warn('[library] shared jobs unavailable:', err instanceof Error ? err.message : err);
-            return null;
-          })
-        : null;
+      const shared = await sharedRequest;
       if (shared) {
         const known = new Set(jobs.map((j) => j.jobId));
         items = [...items, ...((shared.items ?? []) as any[])];

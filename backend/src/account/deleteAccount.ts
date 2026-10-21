@@ -26,6 +26,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { HttpError } from '../lib/errors.js';
 import { AVATAR_BUCKET } from '../lib/avatar.js';
+import { forgetCachedUser } from '../lib/authUserCache.js';
+import { forgetTermsAcceptance } from '../legal/termsStore.js';
 
 export type AccountMembership = {
   orgId: string;
@@ -158,6 +160,8 @@ export async function deleteOwnAccount(
     await store.softDeleteAuthUser(userId);
     mode = 'soft';
   }
+  forgetCachedUser(userId);
+  forgetTermsAcceptance(userId);
 
   return { ok: true, mode, orgs: plan.orgs, message: outcomeMessage(plan.orgs) };
 }

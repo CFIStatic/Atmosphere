@@ -78,14 +78,37 @@ export async function loadTermsStatus(
   return termsStatus(await latestTermsAcceptance(userId, accessToken));
 }
 
+/**
+ * People who already accepted the current Terms. Every signed-in request
+ * checks this, and an acceptance of this version is never withdrawn (a new
+ * version ships with a deploy, which empties the map), so a yes is kept for a
+ * while instead of read from the database on every call. A no is never kept.
+ */
+const ACCEPTED_TTL_MS = 10 * 60_000;
+const accepted = new Map<string, { until: number; status: TermsStatus }>();
+
+function acceptedKey(userId: string): string {
+  return `${userId}|${CURRENT_TERMS_VERSION}`;
+}
+
+export function forgetTermsAcceptance(userId: string): void {
+  accepted.delete(acceptedKey(userId));
+}
+
 export async function assertCurrentTermsAccepted(
   userId: string,
   accessToken?: string | null,
 ): Promise<TermsStatus> {
+  const key = acceptedKey(userId);
+  const hit = accepted.get(key);
+  if (hit && hit.until > Date.now()) return hit.status;
   const status = await loadTermsStatus(userId, accessToken);
   if (status.required) {
+    accepted.delete(key);
     throw new HttpError(403, TERMS_REQUIRED_MESSAGE, TERMS_REQUIRED_CODE);
   }
+  if (accepted.size > 10_000) accepted.clear();
+  accepted.set(key, { until: Date.now() + ACCEPTED_TTL_MS, status });
   return status;
 }
 

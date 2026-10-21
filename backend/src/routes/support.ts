@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { createAdminClient, createAnonClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
+import { forgetCachedToken } from '../lib/authUserCache.js';
 import { recordUserAction } from '../legal/monitor.js';
 import {
   HANDOFF_MS,
@@ -58,6 +59,7 @@ export async function endSupportSession(
 ): Promise<void> {
   if (accessToken) {
     try {
+      forgetCachedToken(accessToken);
       await admin.auth.admin.signOut(accessToken, 'local');
     } catch {
       /* the token also dies on its own within the hour */

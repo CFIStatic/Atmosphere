@@ -15,6 +15,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAnonClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { forgetCachedUser } from '../lib/authUserCache.js';
 
 export type RevokeSessionsResult =
   | { ok: true }
@@ -45,6 +46,9 @@ export async function revokeAllAuthSessionsForUser(
 ): Promise<RevokeSessionsResult> {
   const id = String(userId ?? '').trim();
   if (!id) return { ok: false, reason: 'missing_user_id' };
+  // Even if Auth's revoke below fails, this server stops trusting the
+  // tokens it had already verified for them.
+  forgetCachedUser(id);
 
   try {
     const { data: got, error: getError } = await admin.auth.admin.getUserById(id);

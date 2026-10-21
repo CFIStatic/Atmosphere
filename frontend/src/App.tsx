@@ -1,4 +1,3 @@
-import HdOrderScreenshotPage from './pages/HdOrderScreenshotPage';
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
@@ -25,8 +24,6 @@ import { SupportBanner } from './components/SupportBanner';
 import { billingStepHref, unpaidWorkspaceTarget } from './lib/firstRun';
 import { safeAuthRedirect } from './lib/authRedirect';
 import { isUnpaidEvaluationLocation, sharedJobInsteadOfSetup } from './lib/unpaidEvaluation';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DocumentTitle } from './components/DocumentTitle';
 import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
@@ -43,6 +40,15 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
+// Off the first download: a dev screenshot page (with its fixture) and the
+// password-reset pages most visits never open.
+const HdOrderScreenshotPage = lazy(() => import('./pages/HdOrderScreenshotPage'));
+const ForgotPasswordPage = lazy(() =>
+  import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
+);
+const ResetPasswordPage = lazy(() =>
+  import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
+);
 const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
 const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
 const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
