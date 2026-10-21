@@ -49,13 +49,13 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
-/** Office rail — Start a job, Dashboard, Suggested work, then Logins, in this order. */
+/** Office rail — Start a job, Dashboard, Notifications, then Logins, in this order. */
 const WORK: NavGroup = {
   label: 'Work',
   items: [
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-    { to: '/suggested-work', label: 'Suggested work', Icon: SparkIcon },
+    { to: '/notifications', label: 'Notifications', Icon: SparkIcon },
     { to: '/logins', label: 'Logins', Icon: KeyIcon },
   ],
 };

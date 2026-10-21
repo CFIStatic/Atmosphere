@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { api, type JobSuggestion } from '../lib/api';
 import { takeSuggestedAsk } from '../lib/suggestedWork';
-import { SuggestedWorkPage } from './SuggestedWorkPage';
+import { NotificationsPage } from './NotificationsPage';
 
 const base: JobSuggestion = {
   id: 's1',
@@ -29,16 +29,16 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe('SuggestedWorkPage', () => {
+describe('NotificationsPage', () => {
   it('groups by job, and Approve opens that job’s Chat with the request waiting', async () => {
     vi.spyOn(api, 'listSuggestions').mockResolvedValue({
       suggestions: [base, { ...base, id: 's2', jobId: 'job-2', jobTitle: 'TEST Basement', kind: 'homeowner_update', title: 'Send the homeowner an update' }],
     });
     vi.spyOn(api, 'approveSuggestion').mockResolvedValue({ suggestion: base, prompt: base.prompt });
     render(
-      <MemoryRouter initialEntries={['/suggested-work']}>
+      <MemoryRouter initialEntries={['/notifications']}>
         <Routes>
-          <Route path="/suggested-work" element={<SuggestedWorkPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/job-progress" element={<Where />} />
         </Routes>
       </MemoryRouter>,
@@ -55,7 +55,7 @@ describe('SuggestedWorkPage', () => {
     vi.spyOn(api, 'listSuggestions').mockResolvedValue({ suggestions: [] });
     render(
       <MemoryRouter>
-        <SuggestedWorkPage />
+        <NotificationsPage />
       </MemoryRouter>,
     );
     expect(await screen.findByTestId('suggested-work-empty')).toBeInTheDocument();
