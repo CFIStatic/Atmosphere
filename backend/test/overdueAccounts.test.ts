@@ -175,8 +175,10 @@ test('only listed billing contacts can be messaged', () => {
 });
 
 test('each send is logged with who sent it and the outcome', async () => {
-  const rows: any[] = [];
-  const admin = { from: () => ({ insert: async (row: any) => (rows.push(row), { error: null }) }) } as any;
+  const rows: Array<Record<string, unknown>> = [];
+  const admin = {
+    from: () => ({ insert: async (row: Record<string, unknown>) => (rows.push(row), { error: null }) }),
+  } as unknown as Parameters<typeof sendOverdueMessage>[0]['admin'];
   const emails: string[] = [];
   const results = await sendOverdueMessage(
     {
@@ -191,8 +193,8 @@ test('each send is logged with who sent it and the outcome', async () => {
   );
   assert.deepEqual(emails, ['owner@ridge.example']);
   assert.deepEqual(results, [{ recipient: 'owner@ridge.example', status: 'sent', error: null }]);
-  assert.equal(rows[0].sent_by_email, 'jack@jettx.ai');
-  assert.equal(rows[0].amount_due_cents, 29900);
+  assert.equal(rows[0]!.sent_by_email, 'jack@jettx.ai');
+  assert.equal(rows[0]!.amount_due_cents, 29900);
 
   const sms = await sendOverdueMessage(
     {
@@ -206,8 +208,8 @@ test('each send is logged with who sent it and the outcome', async () => {
     { channel: 'sms', recipients: ['6085550199'], subject: null, body: 'Pay please' },
   );
   assert.equal(sms[0]!.status, 'failed');
-  assert.equal(rows[1].channel, 'sms');
-  assert.equal(rows[1].error, 'Twilio said no');
+  assert.equal(rows[1]!.channel, 'sms');
+  assert.equal(rows[1]!.error, 'Twilio said no');
 
   await assert.rejects(
     sendOverdueMessage(
