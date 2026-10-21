@@ -23,6 +23,7 @@ slide-in drawer opened from the header menu button.
 | Summary | Overview (`/overview`) | `GET /api/analytics/overview` + `GET /api/analytics/product-health` | investor + internal |
 | Summary | North star (`/north-star`) | product-health `northStar` | investor + internal |
 | Growth & revenue | Revenue & customers (`/growth`) | overview `summary`, `monthly`, `planMix` | investor + internal |
+| Growth & revenue | Behind on payments (`/overdue`) | `GET /api/analytics/overdue` (Stripe open invoices + `org_billing`) and `POST /api/analytics/overdue/:orgId/message` | internal |
 | Growth & revenue | Organizations (`/accounts`) | overview `accounts` + `GET /api/analytics/accounts/:orgId` | internal |
 | Growth & revenue | Experiments | `GET /api/analytics/experiments` | internal |
 | Product | Feature usage (`/usage`) | overview `features` | investor + internal |
@@ -92,6 +93,27 @@ labelled otherwise.
   In production it also requires `CAMPAIGN_POSTAL_ADDRESS` (CAN-SPAM). The
   request must repeat the recipient count the person confirmed, and the
   server recomputes it before sending.
+
+### Behind on payments
+
+- Lists every workspace with an open Stripe invoice that already failed to
+  charge (or is past its due date), plus any workspace `org_billing` marks
+  `past_due` / `unpaid`. Most owed first. Stripe is read on the server; if it
+  can't be read the page says so and shows those workspaces without amounts.
+- Contacts are billing people only: the owner, global admins, accountants and
+  office managers (email from `profiles`, phone from the sign-in phone on the
+  auth user), plus the email and phone on the Stripe invoice. Homeowners and
+  subs are never listed.
+- Staff write each email or text (three editable starting templates) and send
+  it from the page. The API only accepts addresses listed for that workspace,
+  and logs every send, with who sent it, in `overdue_account_messages`
+  (`20261021210000_overdue_account_messages.sql`). Nothing is sent
+  automatically.
+- Email goes through the platform mail path as transactional mail. Outside
+  production it requires `SYSTEM_MAIL_DRIVER=log`. Texts use the existing
+  Twilio settings (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER`) and are only sent
+  from production; without them the Text buttons are off.
 
 ### Local development with TEST DATA
 

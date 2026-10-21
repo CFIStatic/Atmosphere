@@ -1,4 +1,5 @@
 import type { CustomersResponse, SupportSessionCreated } from './customers';
+import type { OverdueChannel, OverdueResponse, OverdueSendResult } from './overdue';
 import type {
   MotionClipsStaffResponse,
   AccessRequest,
@@ -121,6 +122,17 @@ function rangeQuery({ from, to, months }: RangeParams): string {
 
 export const api = {
   customers: () => request<CustomersResponse>('/api/analytics/customers'),
+
+  overdue: () => request<OverdueResponse>('/api/analytics/overdue'),
+
+  messageOverdue: (
+    orgId: string,
+    input: { channel: OverdueChannel; recipients: string[]; subject: string | null; body: string },
+  ) =>
+    request<{ results: OverdueSendResult[] }>(`/api/analytics/overdue/${encodeURIComponent(orgId)}/message`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   openSupportSession: (input: { orgId: string; userId: string; reason?: string }) =>
     request<SupportSessionCreated>('/api/analytics/support-sessions', {

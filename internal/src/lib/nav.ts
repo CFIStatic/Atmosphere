@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   BadgeDollarSign,
+  CircleAlert,
   BarChart3,
   Bot,
   Building2,
@@ -50,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/growth', label: 'Revenue & customers', icon: BadgeDollarSign },
       { to: '/customers', label: 'Customers', icon: Users, internal: true },
+      { to: '/overdue', label: 'Behind on payments', icon: CircleAlert, internal: true },
       { to: '/accounts', label: 'Organizations', icon: Building2, internal: true },
       // Experiments is hidden: nothing is instrumented (/experiments shows an empty state).
     ],
