@@ -23,7 +23,7 @@ const MAX_ENTRIES = 5_000;
 type Lookup = { data: { user: User | null }; error: unknown };
 
 const verified = new Map<string, { user: User; until: number }>();
-const inflight = new Map<string, Promise<any>>();
+const inflight = new Map<string, Promise<Lookup>>();
 /** Bumped by every forget, so a lookup already in flight is not cached after it. */
 let generation = 0;
 

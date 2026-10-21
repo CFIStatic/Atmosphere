@@ -548,6 +548,9 @@ async function backfillStills(proofIds: string[]): Promise<void> {
   }
 }
 
+/** What an awaited PostgREST list query resolves to. */
+type RowsResult = { data: any[] | null; error: { message: string } | null };
+
 const POSTER_URL_SECONDS = 3600;
 /**
  * A poster's signed link is handed out again for its first half hour, so it
@@ -1069,7 +1072,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     // Global Admins also see hidden (soft-deleted) clips so they can restore. Bytes are never purged.
     // A query builder only runs once something awaits it (and again on every
     // await), so each one is started here, once, by Promise.resolve.
-    const pendingRequest: Promise<{ data: any[] | null; error: { message: string } | null }> | null =
+    const pendingRequest: Promise<RowsResult> | null =
       isGlobalAdmin(role)
         ? Promise.resolve(
             writerForOrg(orgId, supabase)
@@ -1082,7 +1085,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
               .limit(200),
           )
         : null;
-    const jobRowsRequest: Promise<{ data: any[] | null; error: { message: string } | null }> = searched
+    const jobRowsRequest: Promise<RowsResult> = searched
       ? Promise.resolve({ data: searched.jobRows, error: null })
       : Promise.resolve(
           supabase
@@ -1130,7 +1133,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       const tombstoned = await tombstonesRequest;
       const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
       const jobIds = liveJobRows.map((j) => j.id as string).filter(Boolean);
-      const partyChunks: Array<Promise<{ data: any[] | null; error: { message: string } | null }>> = [];
+      const partyChunks: Array<Promise<RowsResult>> = [];
       for (let chunk = 0; chunk < jobIds.length; chunk += 200) {
         partyChunks.push(
           Promise.resolve(

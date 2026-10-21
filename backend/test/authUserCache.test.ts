@@ -1,4 +1,5 @@
 import test from 'node:test';
+import type { User } from '@supabase/supabase-js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -18,7 +19,7 @@ function fakeLookup(userId = 'u1') {
   let calls = 0;
   const lookup = async () => {
     calls += 1;
-    return { data: { user: { id: userId } as any }, error: null };
+    return { data: { user: { id: userId } as User }, error: null };
   };
   return { lookup, calls: () => calls };
 }
@@ -84,9 +85,9 @@ test('a forget during an in-flight lookup is not undone by its answer', async ()
   let calls = 0;
   let release!: () => void;
   const slow = () =>
-    new Promise<{ data: { user: any }; error: null }>((resolve) => {
+    new Promise<{ data: { user: User }; error: null }>((resolve) => {
       calls += 1;
-      release = () => resolve({ data: { user: { id: 'u5' } }, error: null });
+      release = () => resolve({ data: { user: { id: 'u5' } as User }, error: null });
     });
   const pending = cachedGetUser(token, slow);
   forgetCachedUser('u5');
