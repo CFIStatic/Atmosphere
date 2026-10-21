@@ -17,8 +17,9 @@ export function JobSuggestions({ jobId, onHandoff }: { jobId: string; onHandoff:
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .listSuggestions(jobId)
+    // Promise.resolve first: a sync throw (e.g. an older API stub) is a quiet empty list.
+    Promise.resolve()
+      .then(() => api.listSuggestions(jobId))
       .then((res) => {
         if (!cancelled) setLoaded({ jobId, items: res.suggestions });
       })
