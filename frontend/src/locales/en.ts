@@ -18,6 +18,7 @@ export const EN = {
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
   'nav.logins': 'Logins',
+  'nav.suggestedWork': 'Suggested work',
   'nav.connectCrm': 'Connect',
   'nav.settings': 'Settings',
   'nav.support': 'Support',

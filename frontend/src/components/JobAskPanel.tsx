@@ -37,6 +37,7 @@ import {
 import { analysisEventsFromProofs, eventsForGrounded, seekTargetFromAnswer } from '../lib/askSeek';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { COMPUTER_RESUME_EVENT, computerCardTitle, type ComputerTaskView } from '../lib/computer';
+import { SUGGESTED_WORK_ASK_EVENT, takeSuggestedAsk } from '../lib/suggestedWork';
 import { AskActionCards } from './ask/AskActionCards';
 import { AskAnswerToolbar } from './ask/AskAnswerToolbar';
 import { AskPinnedAnswers } from './ask/AskPinnedAnswers';
@@ -708,6 +709,21 @@ export function JobAskPanel({
     window.addEventListener(COMPUTER_RESUME_EVENT, onResume);
     return () => window.removeEventListener(COMPUTER_RESUME_EVENT, onResume);
   }, []);
+
+  // An approved Suggested work item: send its prompt once, as the person's request.
+  useEffect(() => {
+    if (!officeExtras) return;
+    const send = () => {
+      const text = takeSuggestedAsk(jobId);
+      if (text) void askRef.current?.(text);
+    };
+    send();
+    const onSuggested = (event: Event) => {
+      if ((event as CustomEvent<{ jobId?: string }>).detail?.jobId === jobId) send();
+    };
+    window.addEventListener(SUGGESTED_WORK_ASK_EVENT, onSuggested);
+    return () => window.removeEventListener(SUGGESTED_WORK_ASK_EVENT, onSuggested);
+  }, [jobId, officeExtras]);
 
   async function ask(
     textRaw: string,

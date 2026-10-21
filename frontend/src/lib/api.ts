@@ -3201,6 +3201,25 @@ async function requestBlob(
   return { blob: await res.blob(), filename };
 }
 
+
+/** Work Atmosphere suggests on a job (Suggested work). Office members only. */
+export type SuggestionKind = 'capture_missing' | 'build_estimate' | 'supplement_packet' | 'crm_update' | 'homeowner_update';
+
+export interface JobSuggestion {
+  id: string;
+  jobId: string;
+  jobTitle: string | null;
+  kind: SuggestionKind;
+  status: 'open' | 'approved' | 'dismissed' | 'superseded';
+  title: string;
+  detail: string | null;
+  reason: string | null;
+  /** What Approve sends to Chat. */
+  prompt: string;
+  handoff: 'chat';
+  createdAt: string;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const embedToken = fieldEmbedAccessToken();
   let res: Response;
@@ -4526,6 +4545,30 @@ export const api = {
       `/api/operations/shared/${jobId}/proofs/summary-feedback`,
       { method: 'GET' },
     ),
+
+  listSuggestions: (jobId?: string | null) =>
+    request<{ suggestions: JobSuggestion[] }>(
+      `/api/suggestions${jobId ? `?jobId=${encodeURIComponent(jobId)}` : ''}`,
+      { method: 'GET', cache: 'no-store' },
+    ),
+
+  approveSuggestion: (id: string, prompt?: string | null) =>
+    request<{ suggestion: JobSuggestion; prompt: string }>(`/api/suggestions/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(prompt ? { prompt } : {}),
+    }),
+
+  dismissSuggestion: (id: string, reason?: string | null) =>
+    request<{ suggestion: JobSuggestion }>(`/api/suggestions/${encodeURIComponent(id)}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+
+  evaluateJobSuggestions: (jobId: string) =>
+    request<{ suggestions: JobSuggestion[] }>(`/api/suggestions/jobs/${encodeURIComponent(jobId)}/evaluate`, {
+      method: 'POST',
+      body: '{}',
+    }),
 
   getAiTraining: () => request<{ setting: AiTrainingSetting }>('/api/org/ai-training', { method: 'GET' }),
 

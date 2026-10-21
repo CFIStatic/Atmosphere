@@ -82,6 +82,7 @@ export interface VerifierChromeStrings {
   startJob: string;
   dashboard: string;
   logins: string;
+  suggestedWork: string;
   connectCrm: string;
   settings: string;
   support: string;
@@ -108,6 +109,7 @@ export function verifierChromeStrings(
     startJob: translate(locale, 'nav.startJob'),
     dashboard: translate(locale, 'nav.dashboard'),
     logins: translate(locale, 'nav.logins'),
+    suggestedWork: translate(locale, 'nav.suggestedWork'),
     connectCrm: translate(locale, 'nav.connectCrm'),
     settings: translate(locale, 'nav.settings'),
     support: translate(locale, 'nav.support'),

@@ -2237,6 +2237,7 @@
      only ever returns jobs shared with them; this just hides what they cannot use. */
   body[data-atm-viewer] #nav-start-job,
   body[data-atm-viewer] #nav-logins,
+  body[data-atm-viewer] #nav-suggested-work,
   body[data-atm-viewer] #nav-settings,
   body[data-atm-viewer] #menu-settings,
   body[data-atm-viewer] .job-acts,
@@ -2274,6 +2275,10 @@
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label" data-i18n-chrome="dashboard">Dashboard</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-suggested-work">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/></svg>
+        <span class="label" data-i18n-chrome="suggestedWork">Suggested work</span>
       </button>
       <button type="button" class="navitem nav-icon" id="nav-logins">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M16 7l3 3M18 5l2 2"/></svg>
@@ -9070,6 +9075,11 @@
       if (startJob) startJob.setAttribute('aria-current', 'true');
       return;
     }
+    if (activeRoute === '/suggested-work') {
+      var suggestedBtn = document.getElementById('nav-suggested-work');
+      if (suggestedBtn) suggestedBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/logins') {
       var loginsBtn = document.getElementById('nav-logins');
       if (loginsBtn) loginsBtn.setAttribute('aria-current', 'true');
@@ -9693,6 +9703,10 @@
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
       navStartJob.addEventListener('click', function () { goShell('/intake'); });
+    }
+    var navSuggested = document.getElementById('nav-suggested-work');
+    if (navSuggested) {
+      navSuggested.addEventListener('click', function () { goShell('/suggested-work'); });
     }
     var navLogins = document.getElementById('nav-logins');
     if (navLogins) {
