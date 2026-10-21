@@ -24,6 +24,7 @@ import { phoneAuthRouter } from './authPhone.js';
 import { emailCodeAuthRouter } from './authEmailCode.js';
 import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { forgetCachedToken, forgetCachedUser } from '../lib/authUserCache.js';
 import { recordEvent } from '../lib/memory.js';
 import {
   createPasswordAccount,
@@ -249,6 +250,7 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
     const refreshToken =
       (req.cookies?.[config.cookies.refreshTokenName] as string | undefined) ||
       (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined);
+    forgetCachedToken(req.cookies?.[config.cookies.accessTokenName] as string | undefined);
 
     if (refreshToken) {
       const supabase = createAnonClient();
@@ -266,6 +268,7 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
         // scope: 'local' revokes ONLY the current session, leaving the user's
         // other devices signed in.
         await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        forgetCachedToken(data.session.access_token);
       }
     }
 
@@ -483,6 +486,7 @@ authRouter.post(
         /* ignored */
       }
       await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
+      forgetCachedUser(updated.user.id);
 
       clearDeviceCookie(res);
       setSessionCookies(res, session, req.hostname);
@@ -576,6 +580,7 @@ authRouter.post(
       // old password loses access, which is the point of changing it. This
       // device keeps its session.
       await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
+      forgetCachedUser(updated.user.id);
 
       setSessionCookies(res, verified.session, req.hostname);
       res.json({ user: publicUser(updated.user) });

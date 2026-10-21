@@ -24,6 +24,21 @@ export default defineConfig({
   resolve: {
     alias: { '@': srcDir },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // React and the router change only when their versions do, so they
+        // ship as their own file and stay cached in the browser across our
+        // deploys; only the app's own code downloads again after a merge.
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|cookie|set-cookie-parser)[\\/]/.test(id)) {
+            return 'vendor-react';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   server: {
     // Listen on all interfaces so Cursor port forwarding and both IPv4/IPv6
     // localhost resolve correctly — binding [::1] alone causes ERR_CONNECTION_REFUSED.
