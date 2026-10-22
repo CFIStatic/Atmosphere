@@ -66,6 +66,9 @@ bash "$HERE/19_video_write_once.sh" "$@"
 echo "==> Suggested work: members only, server-written, one per job state (baseline + later migrations)"
 bash "$HERE/20_job_suggestions.sh" "$@"
 
+echo "==> Homeowner permissions: office-set, server-written, enforced on direct clip reads (baseline + later migrations)"
+bash "$HERE/21_homeowner_permissions.sh" "$@"
+
 echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"
 echo "    refusing the operation. Orchestration section 3 (event update) and 4"

@@ -749,6 +749,30 @@ export interface SharedJobRecord {
   risks: JobRisk[];
   /** Homeowner progress-share claim — read-only, not an org seat. */
   access?: 'org' | 'viewer';
+  /** Homeowner only: what the contractor lets them see and do on this job. */
+  homeownerPermissions?: HomeownerPermissions;
+}
+
+/** Per-job homeowner settings (job_homeowner_permissions). All on by default. */
+export interface HomeownerPermissions {
+  seeVideos: boolean;
+  seeTranscripts: boolean;
+  seeAiSummaries: boolean;
+  seeScope: boolean;
+  seeEvidenceReport: boolean;
+  seeAccessList: boolean;
+  useChat: boolean;
+  downloadFiles: boolean;
+}
+
+export type ShareDelayHours = 0 | 24 | 48 | 72;
+
+export interface HomeownerPermissionsResponse {
+  permissions: HomeownerPermissions;
+  /** Hours after upload before new clips reach the homeowner. 0 = right away. */
+  shareDelayHours: ShareDelayHours;
+  effective: HomeownerPermissions;
+  defaults: HomeownerPermissions;
 }
 
 
@@ -1132,6 +1156,9 @@ export interface ProofChildPrivacyRedactions {
 
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
+  /** Office only, when a sharing delay or override applies: when the homeowner sees it (null = held). */
+  homeownerVisibleAt?: string | null;
+  homeownerRelease?: 'share_now' | 'hold' | null;
   id: string;
   partyId: string;
   company: string;
@@ -3999,6 +4026,21 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ personId }) },
     ),
 
+
+  homeownerPermissions: (jobId: string) =>
+    request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),
+
+  saveHomeownerPermissions: (jobId: string, permissions: HomeownerPermissions, shareDelayHours?: ShareDelayHours) =>
+    request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`, {
+      method: 'PUT',
+      body: JSON.stringify(shareDelayHours === undefined ? permissions : { ...permissions, shareDelayHours }),
+    }),
+
+  setHomeownerRelease: (jobId: string, proofId: string, mode: 'share_now' | 'hold' | 'default') =>
+    request<{ ok: true; mode: string }>(`/api/operations/shared/${jobId}/proofs/${proofId}/homeowner-release`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
 
   renameJobFile: (jobId: string, title: string) =>
     request<{

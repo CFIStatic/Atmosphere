@@ -41,7 +41,11 @@ test('homeowner Videos payload keeps the videos, drops office-only data', () => 
 
 test('GET /shared/:jobId/proof sanitizes for viewers; list query excludes deleted clips', () => {
   const src = readFileSync(new URL('../src/routes/proofOfWork.ts', import.meta.url), 'utf8');
-  assert.match(src, /access === 'viewer'\s*\?\s*partyId\s*\?\s*partyProofPayload\(payload, partyId\)\s*:\s*homeownerProofPayload\(payload\)\s*:\s*payload/);
+  // Homeowner: sanitized, then the contractor's per-job permissions and sharing delay.
+  assert.match(
+    src,
+    /access === 'viewer'\s*\?\s*partyId\s*\?\s*partyProofPayload\(payload, partyId\)\s*:\s*applyHomeownerSharingToProofPayload\(\s*applyHomeownerPermissionsToProofPayload\(homeownerProofPayload\(payload\), homeownerLimits\(viewer\)\),\s*homeownerSharingOf\(viewer\),\s*\)\s*:\s*annotateOfficeProofPayload\(/,
+  );
   const list = src.slice(src.indexOf('export async function listAllVisibleProofs'));
   assert.match(list.slice(0, 600), /\.is\('deleted_at', null\)/);
 });

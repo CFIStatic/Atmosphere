@@ -670,6 +670,10 @@ function VideoCatalog({
   const scrollOnOpen = useRef(false);
   const library = useLibraryClipMeta(jobId, videos);
   const summaryFeedback = useClipSummaryFeedback(rateSummaries ? jobId : undefined);
+  /** Office Share now / Hold choices made here, until the next load. */
+  const [shareOverride, setShareOverride] = useState<
+    Record<string, Pick<ProofVideoRecord, 'homeownerVisibleAt' | 'homeownerRelease'>>
+  >({});
 
   useEffect(() => {
     if (seekProofId) setOpenId(seekProofId);
@@ -683,7 +687,8 @@ function VideoCatalog({
 
   if (!videos.length) return null;
 
-  const rows: LibraryRow[] = videos.map((video) => {
+  const rows: LibraryRow[] = videos.map((base) => {
+    const video = shareOverride[base.id] ? { ...base, ...shareOverride[base.id] } : base;
     const meta = library.get(video.id) ?? null;
     return {
       video,
@@ -773,6 +778,7 @@ function VideoCatalog({
             seekAt={seekProofId === openRow.video.id ? seekAt : null}
             seekNonce={seekProofId === openRow.video.id ? seekNonce : 0}
             onSeek={onSeek}
+            onHomeownerShare={(proofId, next) => setShareOverride((prev) => ({ ...prev, [proofId]: next }))}
             onClose={() => setOpenId(null)}
           />
         </div>
@@ -847,6 +853,7 @@ function VideoCatalog({
                       </span>
                       <span>{formatClipLength(video.durationSeconds)}</span>
                     </span>
+                    <HomeownerShareLabel video={video} />
                   </span>
                 </button>
               </li>
@@ -884,7 +891,9 @@ function VideoViewer({
   seekNonce,
   onSeek,
   onClose,
+  onHomeownerShare,
 }: {
+  onHomeownerShare?: (proofId: string, next: Pick<ProofVideoRecord, 'homeownerVisibleAt' | 'homeownerRelease'>) => void;
   row: LibraryRow;
   jobId?: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
@@ -931,6 +940,9 @@ function VideoViewer({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {jobId && video.homeownerVisibleAt !== undefined ? (
+            <HomeownerShareControls jobId={jobId} video={video} onChange={onHomeownerShare} />
+          ) : null}
           {allowDownload ? <DownloadVideoButton proofId={video.id} /> : null}
           {hasTranscript ? <CopyTranscriptButton text={plain} /> : null}
           {jobId && video.transcriptStatus !== 'done' ? (
@@ -1143,5 +1155,72 @@ function ClipPlayer({
       {loading && <SpinnerIcon className="animate-spin" width={14} height={14} />}
       {failed ? 'Could not load' : loading ? 'Loading…' : 'Play'}
     </button>
+  );
+}
+
+/** Office only: when a delayed / held clip reaches the homeowner. */
+export function homeownerShareText(video: Pick<ProofVideoRecord, 'homeownerVisibleAt'>, now = Date.now()): string | null {
+  if (video.homeownerVisibleAt === undefined) return null;
+  if (video.homeownerVisibleAt === null) return 'Held from homeowner';
+  const ms = Date.parse(video.homeownerVisibleAt) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const hours = Math.ceil(ms / 3_600_000);
+  return `Visible to homeowner in ${hours}h`;
+}
+
+function HomeownerShareLabel({ video }: { video: ProofVideoRecord }) {
+  const text = homeownerShareText(video);
+  if (!text) return null;
+  return (
+    <span
+      className="mt-1.5 inline-block rounded-full bg-caution-50 px-2 py-0.5 text-[10px] font-semibold text-caution-700 ring-1 ring-caution-200"
+      data-testid="job-video-homeowner-share"
+    >
+      {text}
+    </span>
+  );
+}
+
+function HomeownerShareControls({
+  jobId,
+  video,
+  onChange,
+}: {
+  jobId: string;
+  video: ProofVideoRecord;
+  onChange?: (proofId: string, next: Pick<ProofVideoRecord, 'homeownerVisibleAt' | 'homeownerRelease'>) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const pending = homeownerShareText(video);
+  async function set(mode: 'share_now' | 'hold' | 'default') {
+    setBusy(true);
+    try {
+      await api.setHomeownerRelease(jobId, video.id, mode);
+      onChange?.(video.id, {
+        homeownerRelease: mode === 'default' ? null : mode,
+        homeownerVisibleAt: mode === 'hold' ? null : mode === 'share_now' ? new Date(0).toISOString() : video.homeownerVisibleAt,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const cls = 'inline-flex items-center rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50';
+  return (
+    <>
+      {pending ? (
+        <button type="button" className={cls} disabled={busy} onClick={() => void set('share_now')} data-testid="homeowner-share-now">
+          Share now
+        </button>
+      ) : null}
+      {video.homeownerRelease === 'hold' ? (
+        <button type="button" className={cls} disabled={busy} onClick={() => void set('default')} data-testid="homeowner-unhold">
+          Stop holding
+        </button>
+      ) : (
+        <button type="button" className={cls} disabled={busy} onClick={() => void set('hold')} data-testid="homeowner-hold">
+          Hold from homeowner
+        </button>
+      )}
+    </>
   );
 }
