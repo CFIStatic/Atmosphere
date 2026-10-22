@@ -141,10 +141,10 @@ describe('JobIntakePage', () => {
     expect(screen.queryByRole('heading', { name: 'Address' })).toBeNull();
     expect(screen.queryByPlaceholderText('Search Google for the site address')).toBeNull();
 
-    // Invites are tucked behind a disclosure, closed by default.
-    const people = screen.getByRole('button', { name: /Invite people/i });
-    expect(people).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Marcus Webb')).toBeNull();
+    // Invites are always shown — no collapse toggle.
+    expect(screen.getByRole('heading', { name: 'Invite people' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Invite people/i })).toBeNull();
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     expect(screen.queryByLabelText(/homeowner email/i)).toBeNull();
 
     expect(screen.getByRole('button', { name: 'Create job' })).toBeInTheDocument();
@@ -178,7 +178,6 @@ describe('JobIntakePage', () => {
     const user = userEvent.setup();
     renderIntakeWithJobFile();
 
-    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create job' })).toBeInTheDocument();
 
@@ -220,7 +219,6 @@ describe('JobIntakePage', () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Contact name'), 'Alex Rivera');
     await user.type(screen.getByLabelText('Company'), 'Rio Grande Mitigation');
@@ -240,7 +238,6 @@ describe('JobIntakePage', () => {
     renderIntakeWithJobFile();
 
     await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     expect(screen.queryByTestId('homeowner-disclosure')).toBeNull();
     await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
 
@@ -266,7 +263,6 @@ describe('JobIntakePage', () => {
     renderIntakeWithJobFile();
 
     await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
     await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
 
@@ -282,7 +278,6 @@ describe('JobIntakePage', () => {
     renderIntakeWithJobFile();
 
     await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
     await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
