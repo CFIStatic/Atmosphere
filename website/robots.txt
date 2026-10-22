@@ -1,4 +1,28 @@
+# Atmosphere corporate site. Public marketing and docs pages are open to
+# search engines and AI assistants so they can read and cite them.
+#
+# Note: on atmosphereteam.com Cloudflare can prepend its own "managed
+# robots.txt" block (and AI-bot blocking) at the edge. Those are dashboard
+# settings, not this file — see website/README.md.
+
 User-agent: *
+Allow: /
+
+# AI search / answer crawlers (explicitly allowed)
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Google-Extended
+User-agent: Applebot
+User-agent: Applebot-Extended
+User-agent: xAI-Bot
+User-agent: GrokBot
+User-agent: Grok
 Allow: /
 
 Sitemap: https://atmosphereteam.com/sitemap.xml
