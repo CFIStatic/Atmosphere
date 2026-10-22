@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="How Atmosphere text messages work: who gets them, how people opt in, and how to stop them." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Text messages (SMS) · Atmosphere</title>
-  <meta property="og:title" content="Text messages (SMS) · Atmosphere" />
+  <title>Atmosphere text messaging</title>
+  <meta property="og:title" content="Atmosphere text messaging" />
   <meta property="og:description" content="How Atmosphere text messages work: who gets them, how people opt in, and how to stop them." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
-  <link rel="canonical" href="https://atmosphereteam.com/sms-opt-in" />
-  <meta property="og:url" content="https://atmosphereteam.com/sms-opt-in" />
+  <link rel="canonical" href="https://atmosphereteam.com/sms" />
+  <meta property="og:url" content="https://atmosphereteam.com/sms" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=4" />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=4" />
@@ -104,39 +104,48 @@
 <div class="wrap docs-layout" style="grid-template-columns: minmax(0, 1fr);">
   <article class="docs-prose" style="max-width: 68ch;">
     <div class="eyebrow mono">Legal</div>
-    <h1>Text messages from Atmosphere</h1>
-    <p class="lede">How Atmosphere (operated by Jettx LLC) sends SMS, how people opt in, and how to stop.</p>
+    <h1>Atmosphere text messaging</h1>
+    <p class="lede">Atmosphere (operated by Jettx LLC) sends a small number of account text messages (SMS). This page explains who gets them, how people opt in, and how to stop.</p>
 
-    <h2>What we text</h2>
-    <p>Atmosphere sends account texts only. We do not send marketing or promotional texts.</p>
+    <h2>Who gets texts</h2>
     <ul>
-      <li><strong>Team invitations.</strong> One text inviting a crew member to their company's Atmosphere workspace, with a link to sign in.</li>
-      <li><strong>Sign-in codes.</strong> A one-time 6-digit code, sent only when the person asks for one.</li>
+      <li><strong>Crew members invited by their employer.</strong> A contractor that uses Atmosphere can invite a crew member to its workspace by mobile number. The crew member gives that number to their employer and agrees to get the invite text.</li>
+      <li><strong>People signing in.</strong> Anyone signing in to Atmosphere can choose to get a one-time sign-in code by text at the number they type in themselves.</li>
     </ul>
-    <p>Message frequency varies. Message and data rates may apply.</p>
 
     <h2>How people opt in</h2>
-    <h3>1. Team invite form</h3>
-    <p>A crew member gives their mobile number to their employer, a contractor that uses Atmosphere, so they can be added to the company's workspace. The company's admin enters the number at app.atmosphereteam.com under Settings &gt; Organization &gt; Invite teammates &gt; Phone. Before the invite can be sent, the admin must check this box:</p>
+    <h3>1. Team invite form (employer invites a crew member)</h3>
+    <p>The crew member gives their own mobile number to their employer and agrees, in person or verbally, to get a text from Atmosphere. The employer's admin enters the number in Atmosphere at platform.atmosphereteam.com under <strong>Settings &gt; Organization &gt; Invite teammates &gt; Phone</strong> (or on a job's Access tab when inviting crew by mobile number). Before the invite can be sent, the admin must check this required box:</p>
     <blockquote>This person agreed to get a text from Atmosphere with their invite. Msg &amp; data rates may apply. Reply STOP to opt out.</blockquote>
-    <p>The Invite button stays disabled until the box is checked.</p>
-    <p><img src="assets/sms/invite-form.png" alt="Atmosphere invite form with Phone selected, a mobile number entered, and the consent checkbox checked" style="width: 100%; height: auto; border: 1px solid var(--line, #e5e0d8); border-radius: 12px;" loading="lazy" /></p>
+    <p>The invite button stays disabled until the box is checked, and our server rejects any phone invite sent without this confirmation.</p>
+    <p><img src="assets/sms/invite-form.png" alt="Atmosphere invite form with Phone selected, a mobile number entered, and the required consent checkbox checked" style="width: 100%; max-width: 520px; height: auto; border: 1px solid var(--line, #e5e0d8); border-radius: 12px;" loading="lazy" /></p>
 
-    <h3>2. Sign-in page</h3>
-    <p>At app.atmosphereteam.com/login, a person taps "Text me a code instead", enters their own mobile number, and taps "Text me a code". The page states:</p>
+    <h3>2. Sign-in page (person requests a code)</h3>
+    <p>On the Atmosphere sign-in page (app.atmosphereteam.com, the Field Capture app, and platform.atmosphereteam.com/login), a person taps <strong>Text me a code instead</strong>, enters their own mobile number, and taps <strong>Text me a code</strong>. Right next to the button, the page states:</p>
     <blockquote>We'll text you a 6-digit code. Message and data rates may apply. Reply STOP to opt out.</blockquote>
-    <p><img src="assets/sms/signin-phone.png" alt="Atmosphere sign-in page with a mobile number entered above the Text me a code button and the message rates and STOP notice" style="width: 100%; height: auto; border: 1px solid var(--line, #e5e0d8); border-radius: 12px;" loading="lazy" /></p>
+    <p><img src="assets/sms/signin-phone.png" alt="Atmosphere sign-in page with a mobile number entered, the Text me a code button, and the message rates and STOP notice" style="width: 100%; max-width: 320px; height: auto; border: 1px solid var(--line, #e5e0d8); border-radius: 12px;" loading="lazy" /></p>
+
+    <h2>Message types</h2>
+    <ul>
+      <li><strong>Invite text.</strong> One text with a link to sign in to the employer's Atmosphere workspace.</li>
+      <li><strong>Sign-in codes.</strong> A one-time 6-digit code, sent only when the person asks for one.</li>
+    </ul>
+    <p>Atmosphere does not send marketing or promotional texts.</p>
+
+    <h2>Message frequency</h2>
+    <p>Message frequency varies. The invite is sent once per invitation; sign-in codes are sent only on request.</p>
+    <p><strong>Msg &amp; data rates may apply.</strong></p>
 
     <h2>Sample messages</h2>
     <blockquote>Jack Cyganiak invited you to join Jettx LLC on Atmosphere. Open https://app.atmosphereteam.com/login?invited=1 and sign in with this number. We will text you a 6-digit code. Reply STOP to opt out.</blockquote>
     <blockquote>Your Atmosphere sign-in code is 482913. Reply STOP to opt out.</blockquote>
 
-    <h2>Stopping texts and getting help</h2>
-    <p>Reply <strong>STOP</strong> to any Atmosphere text to stop receiving them. Reply <strong>START</strong> to resubscribe. Reply <strong>HELP</strong> for help, or email <a href="mailto:hello@atmosphereteam.com">hello@atmosphereteam.com</a>.</p>
+    <h2>Opt out and help</h2>
+    <p><strong>Reply STOP to opt out, HELP for help.</strong> Reply STOP to any Atmosphere text and we will stop texting that number. Reply START to resubscribe. For help, reply HELP or email <a href="mailto:hello@atmosphereteam.com">hello@atmosphereteam.com</a>.</p>
     <p>Carriers are not liable for delayed or undelivered messages.</p>
 
     <h2>Privacy</h2>
-    <p>Mobile numbers and text-messaging consent are used only to send the messages described above. No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. See our <a href="privacy.html#text-messages">Privacy Policy</a> and <a href="terms.html">Terms</a>.</p>
+    <p>Mobile numbers and text-messaging consent are used only to send the messages described above. No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. Read our <a href="privacy.html#text-messages">Privacy Policy</a> and <a href="terms.html">Terms</a>.</p>
   </article>
 </div>
 
@@ -183,7 +192,7 @@
       </div>
     </div>
     <div class="foot-note">
-      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="legal.html">Legal requests</a></span>
+      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="sms.html">Text messaging</a> · <a href="legal.html">Legal requests</a></span>
       <span>Every clip, on the record.</span>
     </div>
   </div>

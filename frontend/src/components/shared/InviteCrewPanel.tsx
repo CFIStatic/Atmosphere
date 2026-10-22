@@ -57,6 +57,7 @@ export function InviteCrewPanel({
   const [phoneEnabled, setPhoneEnabled] = useState(false);
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [phone, setPhone] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
   const byPhone = mode === 'crew' && phoneEnabled && via === 'phone';
 
   useEffect(() => {
@@ -120,7 +121,7 @@ export function InviteCrewPanel({
     try {
       const res = await api.addJobParty(jobId, {
         company: name,
-        ...(byPhone ? { phone: number } : { email: to }),
+        ...(byPhone ? { phone: number, smsConsent } : { email: to }),
         role: 'subcontractor',
         ...(mode === 'crew' ? { serviceRole: 'crew' } : {}),
       });
@@ -133,6 +134,7 @@ export function InviteCrewPanel({
             : { emailed: false, email: to, link },
       );
       setCompany('');
+      setSmsConsent(false);
       setEmail('');
       setPhone('');
       await load();
@@ -229,9 +231,23 @@ export function InviteCrewPanel({
             />
           </label>
         )}
+        {byPhone ? (
+          <label className="flex items-start gap-2 text-xs text-ink-600" data-testid="crew-sms-consent">
+            <input
+              type="checkbox"
+              checked={smsConsent}
+              onChange={(e) => setSmsConsent(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              This person agreed to get a text from Atmosphere with their invite. Msg &amp; data rates may apply. Reply
+              STOP to opt out.
+            </span>
+          </label>
+        ) : null}
         <button
           type="submit"
-          disabled={busy || !company.trim() || !(byPhone ? phone.trim() : email.trim())}
+          disabled={busy || !company.trim() || !(byPhone ? phone.trim() && smsConsent : email.trim())}
           className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}

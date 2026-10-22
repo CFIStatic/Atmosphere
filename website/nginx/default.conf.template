@@ -89,6 +89,12 @@ server {
     proxy_pass $api_upstream$request_uri;
   }
 
+  # Old SMS opt-in URL (cited in an earlier Twilio A2P submission).
+  location ~ ^/sms-opt-in(\.html)?$ {
+    include /etc/nginx/security-headers.conf;
+    return 301 /sms;
+  }
+
   # Extensionless URLs: /pricing → pricing.html. Existing *.html links
   # still resolve via the .html location above (try_files $uri).
   location / {

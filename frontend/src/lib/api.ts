@@ -4076,6 +4076,8 @@ export const api = {
       email?: string | null;
       /** Crew invited by mobile number only (SMS code sign-in). */
       phone?: string | null;
+      /** Required with phone: the crew member agreed to get the invite text. */
+      smsConsent?: boolean;
       role?: string;
       serviceRole?: string | null;
     },

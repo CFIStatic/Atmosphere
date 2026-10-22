@@ -123,11 +123,14 @@ describe('SharePopup access variant (Access tab → Invite)', () => {
     await user.click(await screen.findByRole('radio', { name: 'Phone' }));
     await user.type(screen.getByPlaceholderText('Delgado Roofing'), 'Sam Rivera');
     await user.type(screen.getByPlaceholderText('(555) 123-4567'), '3125550100');
+    expect(screen.getByRole('button', { name: 'Text crew invite' })).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: /agreed to get a text/ }));
     await user.click(screen.getByRole('button', { name: 'Text crew invite' }));
     await waitFor(() =>
       expect(addJobParty).toHaveBeenCalledWith('job-1', {
         company: 'Sam Rivera',
         phone: '+13125550100',
+        smsConsent: true,
         role: 'subcontractor',
         serviceRole: 'crew',
       }),

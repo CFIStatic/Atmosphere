@@ -1815,6 +1815,7 @@
         $('#phone-number-wrap').hidden = Boolean(sent);
         $('#phone-code-wrap').hidden = !sent;
         $('#phone-resend').hidden = !sent;
+        if ($('#phone-sms-note')) $('#phone-sms-note').hidden = Boolean(sent);
         $('#phone-btn-lbl').textContent = sent ? 'Sign in' : 'Text me a code';
         if (sent) $('#phone-code').focus();
       };

@@ -1066,6 +1066,8 @@ const partySchema = z.object({
   contactName: z.string().trim().max(160).nullable().optional(),
   email: z.string().email().max(200).nullable().optional(),
   phone: z.string().trim().max(60).nullable().optional(),
+  /** Inviter confirms the crew member agreed to get the invite text (A2P 10DLC). */
+  smsConsent: z.boolean().optional(),
   role: z.enum(['general_contractor', 'subcontractor', 'owner', 'adjuster']).optional(),
   serviceRole: z.enum(SERVICE_ROLE_SLUGS).nullable().optional(),
   serviceRoleCustom: z
@@ -1099,6 +1101,13 @@ sharedJobsRouter.post(
         if (!phoneAuthEnabled()) {
           throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
         }
+        if (input.smsConsent !== true) {
+          throw new HttpError(400, 'Confirm they agreed to get a text from Atmosphere.', 'sms_consent_required');
+        }
+        // No consent table yet: the record is this log line (who, when, masked number).
+        console.info(
+          `[sms-consent] job-party invite org=${orgId} job=${req.params.jobId} inviter=${userId} to=***${partyPhone.slice(-4)} at=${new Date().toISOString()}`,
+        );
       }
       // Homeowner/owner/adjuster parties force matching service titles.
       const forcedHomeowner = partyRole === 'owner';
