@@ -259,7 +259,7 @@
       /* Only after sign-in (Today / new job / Platform). Never on login or terms. */
       var showSwitch =
         id === 's-home' || id === 's-new-job' || id === 's-platform';
-      switchbar.hidden = !showSwitch;
+      switchbar.hidden = !showSwitch || elevateActive;
     }
     var todayTab = document.querySelector('#product-switch a[href="#today"]');
     var platformTab = document.getElementById('platform-link');
@@ -291,50 +291,105 @@
    * dark — same tokens as the rest of the phone. Plays only after a
    * successful connect — not on later launches.
    */
-  function playElevate() {
-    return new Promise(function (resolve) {
-      var el = $('#s-elevate');
-      if (!el) {
-        resolve();
-        return;
-      }
-      /* Hide Field Capture | Platform during the short connect animation;
-         Today re-shows it when the mark melts away. */
-      var switchbar = document.getElementById('product-switch');
-      var restoreSwitch = false;
-      if (switchbar && !switchbar.hidden) {
-        switchbar.hidden = true;
-        restoreSwitch = true;
-      }
-      el.setAttribute('aria-hidden', 'false');
-      el.setAttribute('aria-label', 'Connected');
-      el.setAttribute('data-on', '1');
+  /* True while the connect splash is up: Today may mount underneath, but
+     the Field Capture | Platform bar stays hidden until the mark melts. */
+  var elevateActive = false;
+  var ELEVATE_HOLD_MS = 4000;
+  var ELEVATE_FADE_MS = 2700;
+
+  /**
+   * Show the connect splash right now and return a handle. Call
+   * `finish()` once Today is ready underneath (it waits out the rest of the
+   * four-second lockup, then dissolves) or `cancel()` to drop it at once
+   * (terms gate, sign-in error). The splash goes up before any session
+   * fetch, so the login screen never flashes Today first.
+   */
+  function startElevate() {
+    var el = $('#s-elevate');
+    var noop = function () { return Promise.resolve(); };
+    if (!el) return { finish: noop, cancel: noop };
+    var switchbar = document.getElementById('product-switch');
+    if (switchbar) switchbar.hidden = true;
+    elevateActive = true;
+    /* Hide header, screens and footer under the splash (CSS) so Today can
+       mount behind it without ever painting first — even if the viewport
+       resizes (keyboard closing) mid-splash. Cleared when the mark melts. */
+    document.documentElement.setAttribute('data-elevate-preview', '1');
+    el.setAttribute('aria-hidden', 'false');
+    el.setAttribute('aria-label', 'Connected');
+    el.setAttribute('data-on', '1');
+    el.classList.remove('play', 'out');
+    void el.offsetWidth;
+    el.classList.add('play');
+    var startedAt = Date.now();
+    var done = false;
+
+    function teardown() {
+      el.setAttribute('data-on', '0');
+      el.setAttribute('aria-hidden', 'true');
       el.classList.remove('play', 'out');
-      void el.offsetWidth;
-      el.classList.add('play');
-      /* CSS already flattens the choreography when the OS asks for reduced
-         motion. Four-second lockup, then the mark melts into the same
-         paper or night Today is already using. */
-      var hold = 4000;
-      var fade = 2700;
-      window.setTimeout(function () {
+      elevateActive = false;
+    }
+
+    return {
+      finish: function () {
+        if (done) return Promise.resolve();
+        done = true;
+        var wait = Math.max(0, ELEVATE_HOLD_MS - (Date.now() - startedAt));
+        return new Promise(function (resolve) {
+          window.setTimeout(function () {
+            document.documentElement.removeAttribute('data-elevate-preview');
+            el.classList.add('out');
+            window.setTimeout(function () {
+              teardown();
+              /* Land on Today with the product bar visible after the short video. */
+              show('s-home');
+              syncAppHeight();
+              resolve();
+            }, ELEVATE_FADE_MS);
+          }, wait);
+        });
+      },
+      cancel: function () {
+        if (done) return Promise.resolve();
+        done = true;
+        teardown();
         document.documentElement.removeAttribute('data-elevate-preview');
-        el.classList.add('out');
-        window.setTimeout(function () {
-          el.setAttribute('data-on', '0');
-          el.setAttribute('aria-hidden', 'true');
-          el.classList.remove('play', 'out');
-          /* Land on Today with the product bar visible after the short video. */
-          show('s-home');
-          if (restoreSwitch) {
-            var bar = document.getElementById('product-switch');
-            if (bar) bar.hidden = false;
-          }
-          syncAppHeight();
-          resolve();
-        }, fade);
-      }, hold);
-    });
+        var screen = document.body.getAttribute('data-screen');
+        if (screen) show(screen);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  /**
+   * Splash first, then the work (session + Today load) underneath it, then
+   * dissolve. Plays only after a successful connect — not on later launches.
+   * `work` resolves truthy when Today is up; falsy (e.g. terms gate) or a
+   * rejection drops the splash immediately.
+   */
+  function elevateDuring(work) {
+    var splash = startElevate();
+    var p;
+    try {
+      p = Promise.resolve(work());
+    } catch (err) {
+      p = Promise.reject(err);
+    }
+    return p.then(
+      function (ready) {
+        if (ready === false) return splash.cancel();
+        return splash.finish();
+      },
+      function (err) {
+        splash.cancel();
+        throw err;
+      },
+    );
+  }
+
+  function playElevate() {
+    return startElevate().finish();
   }
 
   var state = {
@@ -1386,9 +1441,16 @@
   }
 
   function finishAccountConnect() {
-    return ensureTermsThenConnect(function () {
-      return bootAccountSession().then(function () {
-        return playElevate();
+    /* Splash goes up the instant sign-in succeeds; terms check, profile and
+       Today's jobs load behind it, so Today never flashes before the mark. */
+    return elevateDuring(function () {
+      var reachedHome = false;
+      return ensureTermsThenConnect(function () {
+        return bootAccountSession().then(function () {
+          reachedHome = true;
+        });
+      }).then(function () {
+        return reachedHome && document.body.getAttribute('data-screen') === 's-home';
       });
     });
   }
@@ -1907,8 +1969,10 @@
         showTermsError('');
         Core.acceptTerms(API_BASE, state.accessToken, Core.CURRENT_TERMS_VERSION || '2026-09-10')
           .then(function () {
-            return bootAccountSession().then(function () {
-              return playElevate();
+            return elevateDuring(function () {
+              return bootAccountSession().then(function () {
+                return document.body.getAttribute('data-screen') === 's-home';
+              });
             });
           })
           .catch(function (err) {
