@@ -100,7 +100,7 @@ export function createOtpThrottle(opts: { minGapMs?: number; windowMs?: number; 
 export function orgInviteSms(input: { orgName: string; inviterName?: string | null; link: string }): string {
   const org = input.orgName.trim() || 'your team';
   const who = input.inviterName?.trim();
-  return `${who ? `${who} invited you` : 'You are invited'} to join ${org} on Atmosphere. Open ${input.link} and sign in with this number. We will text you a 6-digit code.`;
+  return `${who ? `${who} invited you` : 'You are invited'} to join ${org} on Atmosphere. Open ${input.link} and sign in with this number. We will text you a 6-digit code. Reply STOP to opt out.`;
 }
 
 /**
