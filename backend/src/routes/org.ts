@@ -761,6 +761,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     // erasure list" is itself a disclosure.
     let emailed = false;
     let texted = false;
+    let textStatus: 'sent' | 'not_configured' | 'failed' | null = null;
     const admin = unscopedAdminOrNull();
     let erased = false;
     if (admin && email) {
@@ -771,6 +772,10 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     // Without a Twilio sender (no number / messaging service), skip the
     // invite text: the admin tells the crew member, and the sign-in code
     // itself goes out through Supabase Auth's Twilio Verify.
+    if (phone && !email && !smsProviderConfigured()) {
+      textStatus = 'not_configured';
+      console.error('[org-invite] invite text skipped: no Twilio sender (set TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER)');
+    }
     if (phone && !email && smsProviderConfigured()) {
       const { data: profile } = await supabase
         .from('profiles')
@@ -789,8 +794,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
           link: `${origin}/login?${params.toString()}`,
         }),
       });
-      if (!sms.ok) console.warn(`[org-invite] text to ${phone} failed: ${sms.reason}`);
+      if (!sms.ok) console.warn(`[org-invite] text to ***${phone.slice(-4)} failed: ${sms.reason}: ${sms.message}`);
       texted = sms.ok;
+      textStatus = sms.ok ? 'sent' : 'failed';
     }
 
     if (email && !erased) {
@@ -835,6 +841,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       },
       emailed,
       texted,
+      textStatus,
     });
   } catch (err) {
     next(err);

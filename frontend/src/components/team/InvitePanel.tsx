@@ -172,8 +172,8 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       setOutcome(
         usingPhone
           ? res.texted
-            ? `Invited. Atmosphere texted ${formatPhone(phoneE164)} a sign-in link.`
-            : `Invited. Tell them to open app.atmosphereteam.com, tap "Text me a code instead", and enter ${formatPhone(phoneE164)}. We'll text them a sign-in code.`
+            ? `Invited. We texted ${formatPhone(phoneE164)} a link to app.atmosphereteam.com. They sign in with that number and a 6-digit code.`
+            : `Invited, but we couldn't text ${formatPhone(phoneE164)} ${res.textStatus === 'not_configured' ? '(team texting isn\'t set up yet)' : 'just now'}. Send them app.atmosphereteam.com and have them sign in with that number.`
           : res.emailed
             ? `Invited — Atmosphere emailed ${email}.`
             : `Invited. Atmosphere could not email them, so let them know to check with you.`,

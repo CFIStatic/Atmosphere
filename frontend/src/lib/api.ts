@@ -4145,7 +4145,7 @@ export const api = {
     serviceRole?: string;
     serviceRoleCustom?: string | null;
   }) =>
-    request<{ invite: OrgInvite; emailed: boolean; texted?: boolean }>('/api/org/invites', {
+    request<{ invite: OrgInvite; emailed: boolean; texted?: boolean; textStatus?: 'sent' | 'not_configured' | 'failed' | null }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
