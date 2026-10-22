@@ -21,9 +21,21 @@ COPY verifier /verifier
 COPY fieldcapture /fieldcapture
 ARG VITE_API_BASE_URL=
 ARG VITE_BACKEND_URL=
+ARG RAILWAY_GIT_COMMIT_SHA=
+ENV APP_BUILD_ID=$RAILWAY_GIT_COMMIT_SHA
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 RUN npm run build
+# Carry the live site's recent /assets files into this image so tabs opened
+# before this deploy can still load their page files (see the script).
+# Railway passes RAILWAY_PUBLIC_DOMAIN / RAILWAY_GIT_COMMIT_SHA to declared
+# ARGs; set PREVIOUS_ASSETS_ORIGIN on the service to override
+# (e.g. https://platform.atmosphereteam.com). Never fails the build.
+ARG PREVIOUS_ASSETS_ORIGIN=
+ARG RAILWAY_PUBLIC_DOMAIN=
+ARG ASSET_RETAIN_DAYS=14
+RUN ORIGIN="${PREVIOUS_ASSETS_ORIGIN:-${RAILWAY_PUBLIC_DOMAIN:+https://$RAILWAY_PUBLIC_DOMAIN}}"; \
+    ASSET_RETAIN_DAYS="$ASSET_RETAIN_DAYS" node scripts/retain-previous-assets.mjs dist "$ORIGIN" || true
 
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atmosphereApiProxy } from './vite.apiProxy';
 import { staticAppPlugin } from './vite.verifier';
+import { buildVersionPlugin } from './vite.buildVersion';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const srcDir = path.resolve(frontendDir, 'src');
@@ -20,6 +21,7 @@ export default defineConfig({
     staticAppPlugin('/verifier', verifierDir, distDir),
     staticAppPlugin('/fieldcapture', fieldCaptureDir, distDir),
     react(),
+    buildVersionPlugin(),
   ],
   resolve: {
     alias: { '@': srcDir },

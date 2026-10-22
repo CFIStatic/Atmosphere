@@ -30,6 +30,7 @@ import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { lazyWithRetry } from './lib/chunkReload';
+import { VersionWatch } from './lib/versionWatch';
 import { DASHBOARD_HOME, PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { OperationsShell } from './layouts/OperationsShell';
@@ -397,6 +398,7 @@ export default function App() {
   return (
     <Router {...routerProps()}>
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
+      <VersionWatch />
       <AuthProvider>
         <DocumentTitle />
         <SupportBanner />
