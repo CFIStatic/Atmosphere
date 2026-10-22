@@ -66,7 +66,10 @@ function useSuggestedWork(): SuggestedState {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load suggested work.');
+          // Missing endpoint (older server) or a failed load: show the calm
+          // empty state rather than a red error. Nothing here is urgent.
+          console.warn('Suggested work did not load', err);
+          setError(null);
           setItems([]);
         }
       });
@@ -96,11 +99,10 @@ function SuggestedWorkSection({ state }: { state: SuggestedState }) {
       </div>
     );
   }
-  if (state.error) return <p className="text-sm text-red-700" role="alert">{state.error}</p>;
   if (!byJob.length) {
     return (
       <p className="rounded-xl border border-line bg-paper-50 px-4 py-6 text-sm text-ink-600" data-testid="suggested-work-empty">
-        Nothing to suggest right now. New suggestions show up here when a job is ready for its next step.
+        No suggested work right now. We’ll let you know when a job is ready for its next step.
       </p>
     );
   }

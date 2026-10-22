@@ -60,4 +60,17 @@ describe('NotificationsPage', () => {
     );
     expect(await screen.findByTestId('suggested-work-empty')).toBeInTheDocument();
   });
+
+  it('shows the friendly empty state instead of an error when loading fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(api, 'listSuggestions').mockRejectedValue(new Error('Not found'));
+    render(
+      <MemoryRouter>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('suggested-work-empty')).toHaveTextContent('No suggested work right now');
+    expect(screen.queryByText('Not found')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
