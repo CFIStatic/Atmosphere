@@ -1,0 +1,46 @@
+# Atmosphere
+
+> Atmosphere is intelligence for contractors. Crews film the work on site with Field Capture; the Atmosphere Platform checks each clip at the door, reads it with AI against the agreed scope, holds it in a chain of custody, and gives the office a complete job record it can share with customers and reviewers.
+
+Atmosphere is one system with two parts, not separate purchases:
+
+- **Field Capture**: how crews record the walk-through and daily work on site. Footage uploads to the Platform.
+- **Platform**: where footage is checked (filmed on site, filmed today), read against the scope, stored with a SHA-256 custody log, and shared.
+
+Self-serve plans (every plan includes Field Capture and the Platform, plus an AI usage allowance; buy credits if you need more):
+
+- Starter: $399/mo, 1 Field Capture account
+- Work Verification: $849/mo, 3 Field Capture accounts
+- Scale: $1,999/mo, 10 Field Capture accounts
+- Extra Field Capture accounts: $125/mo each. Homeowners invited to a job file pay nothing. Enterprise terms are arranged with sales.
+- Optional Field Capture Chest Mount: $99.99 one-time, ships in 2–5 business days.
+
+Production AI vendors are configured not to train on customer data, and Atmosphere does not use an organization's job or account data to train shared models.
+
+## Product
+
+- [How it works](https://atmosphereteam.com/how-it-works): the full pipeline, from the walk-through on site through integrity checks, AI reading against the scope, chain of custody, and sharing
+- [Platform](https://atmosphereteam.com/verification): record, verify, store, and share
+- [Field Capture](https://atmosphereteam.com/field): film and check work on site
+- [Chest Mount](https://atmosphereteam.com/hardware): hands-free Field Capture kit
+- [Accessories](https://atmosphereteam.com/accessories): Chest Mount, chargers, battery packs
+- [Pricing](https://atmosphereteam.com/pricing): plans, seats, usage, and FAQ
+
+## Docs
+
+- [Documentation](https://atmosphereteam.com/docs): how every piece works
+- [Getting started](https://atmosphereteam.com/doc-getting-started)
+- [Guides & recipes](https://atmosphereteam.com/doc-recipes): ways crews use Atmosphere
+- [Field Capture docs](https://atmosphereteam.com/doc-field)
+- [Web access](https://atmosphereteam.com/doc-web-access)
+- [Billing](https://atmosphereteam.com/doc-billing)
+- [Troubleshooting](https://atmosphereteam.com/doc-troubleshooting)
+- [Security](https://atmosphereteam.com/security): hashed sign-in passwords, encrypted saved logins, httpOnly sessions, and database-enforced access
+
+## Company
+
+- [About](https://atmosphereteam.com/about)
+- [Book a demo](https://atmosphereteam.com/demo)
+- [Contact](https://atmosphereteam.com/contact)
+- [Careers](https://atmosphereteam.com/careers)
+- [Privacy](https://atmosphereteam.com/privacy), [Terms](https://atmosphereteam.com/terms)
