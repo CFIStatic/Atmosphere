@@ -57,6 +57,19 @@ server {
     try_files $uri =404;
   }
 
+  # Old SMS opt-in URL (cited in a Twilio A2P submission). Exact matches beat
+  # the .html regex below; relative Location so the proxy's host/scheme hold.
+  location = /sms-opt-in {
+    absolute_redirect off;
+    include /etc/nginx/security-headers.conf;
+    return 301 /sms;
+  }
+  location = /sms-opt-in.html {
+    absolute_redirect off;
+    include /etc/nginx/security-headers.conf;
+    return 301 /sms;
+  }
+
   location ~* \.html$ {
     add_header Cache-Control "no-store";
     include /etc/nginx/security-headers.conf;
@@ -87,12 +100,6 @@ server {
     proxy_read_timeout 60s;
     # $request_uri, because a variable proxy_pass passes no URI of its own.
     proxy_pass $api_upstream$request_uri;
-  }
-
-  # Old SMS opt-in URL (cited in an earlier Twilio A2P submission).
-  location ~ ^/sms-opt-in(\.html)?$ {
-    include /etc/nginx/security-headers.conf;
-    return 301 /sms;
   }
 
   # Extensionless URLs: /pricing → pricing.html. Existing *.html links
