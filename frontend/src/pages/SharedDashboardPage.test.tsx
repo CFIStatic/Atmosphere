@@ -404,6 +404,37 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
+  it('hides the tabs the contractor turned off for this homeowner and opens on the Timeline', async () => {
+    authMembership.current = null;
+    sharedJob.mockResolvedValue({
+      ...record,
+      access: 'viewer',
+      homeownerPermissions: {
+        seeVideos: false,
+        seeTranscripts: true,
+        seeAiSummaries: true,
+        seeScope: true,
+        seeEvidenceReport: false,
+        seeAccessList: true,
+        useChat: false,
+        downloadFiles: false,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
+      expect(tabs).toEqual(['Timeline', 'Access']);
+    });
+    expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-ask-panel')).not.toBeInTheDocument();
+  });
+
   it('gives grant / homeowner viewers the same tabs, with Who-has-access read-only', async () => {
     const user = userEvent.setup();
     authMembership.current = null;

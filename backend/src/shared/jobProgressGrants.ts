@@ -13,6 +13,7 @@ import { requireOrgContext, type OrgContext } from '../lib/orgContext.js';
 import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { normalizeServiceRoleInput } from './serviceRole.js';
 import { partiesInvitedToEmail } from './inviteeJobAccess.js';
+import { loadHomeownerPermissions, type HomeownerPermissions } from './homeownerPermissions.js';
 
 export type JobProgressGrant = {
   orgId: string;
@@ -86,6 +87,12 @@ export type SharedJobAccess =
        * every recording.
        */
       partyId?: string | null;
+      /**
+       * Set for a homeowner (progress grant): what the contractor lets them
+       * see and do on this job (job_homeowner_permissions, effective values).
+       * Null/absent for a sub and for list-level access without a job.
+       */
+      homeownerPermissions?: HomeownerPermissions | null;
     };
 
 function missingGrantsTable(error: { message?: string; code?: string } | null | undefined): boolean {
@@ -436,6 +443,13 @@ function viewerAccess(req: Request, orgId: string, partyId: string | null = null
 }
 
 /** The sub's party id when this access is an invited subcontractor, else null. */
+/** A homeowner on one job: viewer access carrying the contractor's settings. */
+async function homeownerAccess(req: Request, orgId: string, jobId: string): Promise<SharedJobAccess> {
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  const homeownerPermissions = await loadHomeownerPermissions(admin, jobId);
+  return { ...viewerAccess(req, orgId), homeownerPermissions } as SharedJobAccess;
+}
+
 export function viewerPartyId(access: SharedJobAccess): string | null {
   return access.access === 'viewer' ? access.partyId ?? null : null;
 }
@@ -515,7 +529,7 @@ export async function resolveOrgOrViewerAccess(
       if (jobOrg && jobOrg !== ctx.orgId) {
         // A contractor invited to another company's job opens it as a viewer.
         const grant = await findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
-        if (grant) return viewerAccess(req, grant.orgId);
+        if (grant) return homeownerAccess(req, grant.orgId, jobId);
         const party = await findJobPartyView(admin, req.user!.email, jobId);
         if (party && party.orgId === jobOrg) return viewerAccess(req, party.orgId, party.partyId);
       }
@@ -526,7 +540,7 @@ export async function resolveOrgOrViewerAccess(
     const admin = unscopedAdminOrNull() ?? requireAdmin();
     if (jobId) {
       const grant = await findJobProgressGrant(admin, req.user!.id, jobId, req.user!.email);
-      if (grant) return viewerAccess(req, grant.orgId);
+      if (grant) return homeownerAccess(req, grant.orgId, jobId);
       const party = await findJobPartyView(admin, req.user!.email, jobId);
       if (party) return viewerAccess(req, party.orgId, party.partyId);
       throw err;

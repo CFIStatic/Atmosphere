@@ -53,6 +53,16 @@ import {
   resolveOrgOrViewerAccess,
 } from '../shared/jobProgressGrants.js';
 import { loadJobAccessPeople } from '../shared/loadJobAccessRoster.js';
+import {
+  DEFAULT_HOMEOWNER_PERMISSIONS,
+  HOMEOWNER_PERMISSION_KEYS,
+  assertHomeownerMay,
+  effectiveHomeownerPermissions,
+  homeownerLimits,
+  loadStoredHomeownerPermissions,
+  saveHomeownerPermissions,
+  type HomeownerPermissions,
+} from '../shared/homeownerPermissions.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
 import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import { roomsMentionedIn } from '../audio/conversationDetails.js';
@@ -377,6 +387,9 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
       ? record.scope.map((item: any) => ({ ...item, amount: null }))
       : record.scope;
     const messages = access === 'viewer' ? [] : record.messages;
+    // The contractor's homeowner settings (job_homeowner_permissions).
+    const limits = homeownerLimits(resolved);
+    const hideScope = Boolean(limits && !limits.seeScope);
 
     res.json({
       job: {
@@ -386,15 +399,15 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
         status: record.job.status,
         claimNumber: record.job.claim_number,
       },
-      brief: record.briefs[0] ?? null,
+      brief: hideScope ? null : record.briefs[0] ?? null,
       // Every revision, so "what did it say when they accepted it" is
       // answerable rather than argued about.
-      revisions: record.briefs.map((b) => ({
+      revisions: hideScope ? [] : record.briefs.map((b) => ({
         revision: b.revision,
         note: b.note,
         createdAt: b.created_at,
       })),
-      currentRevision,
+      currentRevision: hideScope ? null : currentRevision,
       parties: access === 'viewer'
         ? []
         : record.parties.map((party) => {
@@ -410,7 +423,7 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
               }),
             };
           }),
-      scope,
+      scope: hideScope ? [] : scope,
       money: access === 'viewer' ? { approved: 0, pending: 0, unpricedApprovals: 0 } : scopeMoney(record.scope),
       messages,
       risks: access === 'viewer'
@@ -422,11 +435,101 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
             currentRevision,
           }),
       access,
+      ...(limits ? { homeownerPermissions: limits } : {}),
     });
   } catch (err) {
     next(err);
   }
 });
+
+const homeownerPermissionsBody = z
+  .object(
+    Object.fromEntries(HOMEOWNER_PERMISSION_KEYS.map((key) => [key, z.boolean()])) as Record<
+      keyof HomeownerPermissions,
+      z.ZodBoolean
+    >,
+  )
+  .strict();
+
+/** The office's own job (not a job shared with them from another company). */
+async function requireOfficeJob(req: Request, jobId: string) {
+  const ctx = await requireOrgContext(req);
+  const admin = unscopedAdminOrNull() ?? requireAdmin();
+  const { data: job, error } = await admin
+    .from('crm_jobs')
+    .select('id, org_id, deleted_at')
+    .eq('id', jobId)
+    .maybeSingle();
+  if (error) throw new HttpError(500, error.message, 'job_lookup_failed');
+  if (!job || (job as any).deleted_at || (job as any).org_id !== ctx.orgId) {
+    throw new HttpError(404, 'No such job.', 'job_not_found');
+  }
+  if (await jobFileIsTombstoned(writerForJob({ orgId: ctx.orgId, jobId }, ctx.supabase).raw, ctx.orgId, jobId)) {
+    throw new HttpError(404, 'No such job.', 'job_not_found');
+  }
+  return { ...ctx, admin };
+}
+
+/**
+ * GET /api/operations/shared/:jobId/homeowner-permissions
+ * Office only: what the invited homeowner may see and do on this job file.
+ * `permissions` is what the office saved; `effective` is what the server
+ * enforces (Chat and the Evidence report need the content they are built from).
+ */
+sharedJobsRouter.get(
+  '/shared/:jobId/homeowner-permissions',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const { admin } = await requireOfficeJob(req, jobId);
+      const permissions = await loadStoredHomeownerPermissions(admin, jobId);
+      res.json({
+        permissions,
+        effective: effectiveHomeownerPermissions(permissions),
+        defaults: DEFAULT_HOMEOWNER_PERMISSIONS,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PUT /api/operations/shared/:jobId/homeowner-permissions
+ * Office only (members of the job's workspace). Homeowners and subs get 403/404.
+ */
+sharedJobsRouter.put(
+  '/shared/:jobId/homeowner-permissions',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const input = homeownerPermissionsBody.parse(req.body ?? {});
+      const { orgId, userId, supabase, admin } = await requireOfficeJob(req, jobId);
+      const permissions = await saveHomeownerPermissions(admin, {
+        orgId,
+        jobId,
+        userId,
+        permissions: input as HomeownerPermissions,
+      });
+      const off = HOMEOWNER_PERMISSION_KEYS.filter((key) => !permissions[key]);
+      await recordAccess(supabase, {
+        orgId,
+        jobId,
+        action: 'uploaded',
+        actorId: userId,
+        actorLabel: 'Office',
+        detail: off.length ? `Homeowner permissions changed (off: ${off.join(', ')})` : 'Homeowner permissions reset to all on',
+      }).catch(() => undefined);
+      res.json({
+        permissions,
+        effective: effectiveHomeownerPermissions(permissions),
+        defaults: DEFAULT_HOMEOWNER_PERMISSIONS,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * GET /api/operations/shared/:jobId/access-roster
@@ -439,7 +542,9 @@ sharedJobsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const jobId = z.string().uuid().parse(req.params.jobId);
-      const { orgId, supabase } = await resolveOrgOrViewerAccess(req, jobId);
+      const resolved = await resolveOrgOrViewerAccess(req, jobId);
+      assertHomeownerMay(resolved, 'seeAccessList');
+      const { orgId, supabase } = resolved;
 
       const { data: job, error: jobError } = await supabase
         .from('crm_jobs')

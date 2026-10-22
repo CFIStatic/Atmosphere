@@ -34,6 +34,11 @@ import {
   viewerPartyId,
 } from '../shared/jobProgressGrants.js';
 import { existingPrivacySafeCopy, privacyBlurWindows } from '../lib/proofPrivacySafe.js';
+import {
+  applyHomeownerPermissionsToProofPayload,
+  assertHomeownerMay,
+  homeownerLimits,
+} from '../shared/homeownerPermissions.js';
 import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload, partyProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
@@ -2850,7 +2855,7 @@ export async function jobProofs(req: Request, res: Response, next: NextFunction)
       access === 'viewer'
         ? partyId
           ? partyProofPayload(payload, partyId)
-          : homeownerProofPayload(payload)
+          : applyHomeownerPermissionsToProofPayload(homeownerProofPayload(payload), homeownerLimits(viewer))
         : payload,
     );
   } catch (err) {
@@ -4137,6 +4142,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     // Org members, claimed progress-share homeowners (grant viewers), and
     // invited subcontractors (only their own videos).
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(viewer, 'useChat');
     const { orgId, userId, supabase, access } = viewer;
     const partyId = viewerPartyId(viewer);
     const input = z
@@ -4249,6 +4255,7 @@ const ASK_WARM_EVERY_MS = 4 * 60_000;
 export async function warmProofAsk(req: Request, res: Response, next: NextFunction) {
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(viewer, 'useChat');
     const { orgId, userId, supabase, access } = viewer;
     const input = z
       .object({
@@ -4294,6 +4301,7 @@ export async function warmProofAsk(req: Request, res: Response, next: NextFuncti
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(viewer, 'useChat');
     const { orgId, userId, supabase, access } = viewer;
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
     let ownsThread = false;
@@ -4346,7 +4354,9 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
 /** GET /api/operations/shared/:jobId/ask/threads — list (and migrate) chats for this job. */
 export async function listJobAskThreads(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const resolvedAccess = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(resolvedAccess, 'useChat');
+    const { orgId, userId, supabase } = resolvedAccess;
     const writeDb = askWriteClient(supabase);
     const owner: AskThreadOwner = { kind: 'user', userId };
     const threads = await ensureAskThreads(writeDb, {
@@ -4363,7 +4373,9 @@ export async function listJobAskThreads(req: Request, res: Response, next: NextF
 /** POST /api/operations/shared/:jobId/ask/threads — start a New chat. */
 export async function createJobAskThread(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const resolvedAccess = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(resolvedAccess, 'useChat');
+    const { orgId, userId, supabase } = resolvedAccess;
     const writeDb = askWriteClient(supabase);
     const input = z
       .object({ title: z.string().trim().min(1).max(200).optional() })
@@ -4383,7 +4395,9 @@ export async function createJobAskThread(req: Request, res: Response, next: Next
 /** PATCH /api/operations/shared/:jobId/ask/threads/:threadId — rename a chat. */
 export async function renameJobAskThread(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const resolvedAccess = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(resolvedAccess, 'useChat');
+    const { orgId, userId, supabase } = resolvedAccess;
     const writeDb = askWriteClient(supabase);
     const input = z
       .object({ title: z.string().trim().min(1).max(200) })
@@ -4491,6 +4505,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     // Resolve after we know the job — proof rows carry job_id. Own org, or a
     // job shared with this person (they may also have a workspace of their own).
     const viewer = await resolveProofAccess(req, req.params.proofId);
+    assertHomeownerMay(viewer, 'seeVideos');
     const { orgId, userId, supabase, access } = viewer;
     // Job viewers never get a removed clip. The homeowner plays every clip like
     // the contractor; a sub never gets a raw original with privacy redactions.
@@ -5187,6 +5202,7 @@ export async function restoreEvidence(req: Request, res: Response, next: NextFun
 export async function jobProofPackPdf(req: Request, res: Response, next: NextFunction) {
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    assertHomeownerMay(viewer, 'seeEvidenceReport');
     const { orgId, userId, supabase, access } = viewer;
     const partyId = viewerPartyId(viewer);
     const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();

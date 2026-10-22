@@ -144,6 +144,10 @@ export function SharedDashboardPage() {
     recordIdRef.current = record?.job.id ?? null;
   }, [record]);
 
+  // A homeowner whose contractor turned Chat off lands on the Timeline.
+  const chatOff = viewerOnly && record?.homeownerPermissions?.useChat === false;
+  if (chatOff && section === 'chat') setSection('timeline');
+
   useEffect(() => {
     if (openId) touchJobFile(openId);
   }, [openId]);
@@ -481,6 +485,9 @@ function JobFileSections({
   office: boolean;
   onOpenHref?: (href: string) => void;
 }) {
+  // Homeowner only: the contractor's per-job settings. The server enforces
+  // them; a hidden tab here is just that answer reflected.
+  const perms = viewerOnly ? record.homeownerPermissions : undefined;
   const tabs = useMemo(() => {
     // Exactly the contractor's tabs for everyone. The server strips
     // office-only data from the videos and the evidence report for viewers (#710).
@@ -491,10 +498,18 @@ function JobFileSections({
       { id: 'videos', label: 'Videos' },
       { id: 'evidence', label: 'Evidence report' },
     ];
-    return next;
-  }, []);
+    if (!perms) return next;
+    return next.filter((tab) => {
+      if (tab.id === 'chat') return perms.useChat;
+      if (tab.id === 'access') return perms.seeAccessList;
+      if (tab.id === 'videos') return perms.seeVideos;
+      if (tab.id === 'evidence') return perms.seeEvidenceReport;
+      return true;
+    });
+  }, [perms]);
 
-  const active = tabs.some((t) => t.id === section) ? section : 'chat';
+  const fallback = tabs[0]?.id ?? 'timeline';
+  const active = tabs.some((t) => t.id === section) ? section : fallback;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2" data-job-file-sections="">
@@ -539,7 +554,7 @@ function JobFileSections({
             heading="Videos"
             showCollectionAsk={false}
             readOnly={viewerOnly}
-            allowDownload
+            allowDownload={perms ? perms.downloadFiles : true}
             rateSummaries={!grantViewer}
           />
         ) : null}

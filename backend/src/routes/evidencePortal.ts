@@ -1,3 +1,10 @@
+import {
+  applyHomeownerPermissionsToLibraryItem,
+  assertHomeownerMay,
+  homeownerLimits,
+  loadHomeownerPermissions,
+  type HomeownerPermissions,
+} from '../shared/homeownerPermissions.js';
 import { attachVerificationStatus } from '../shared/verificationStatusOfProofs.js';
 import { randomUUID } from 'node:crypto';
 import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
@@ -965,8 +972,14 @@ export async function viewerLibraryPayload(
     ]);
     if (proofsError) throw new HttpError(500, proofsError.message, 'library_failed');
     if (jobsError) throw new HttpError(500, jobsError.message, 'library_failed');
+    // A homeowner's jobs carry the contractor's settings for that job.
+    const permsByJob = new Map<string, HomeownerPermissions>();
+    for (const jobId of jobIds) {
+      if (!partyByJob.has(jobId)) permsByJob.set(jobId, await loadHomeownerPermissions(admin, jobId));
+    }
     const proofRows = ((proofs ?? []) as any[]).filter((p) => {
       const partyId = partyByJob.get(p.job_id as string);
+      if (permsByJob.get(p.job_id as string)?.seeVideos === false) return false;
       return !partyId || p.party_id === partyId;
     });
     // The homeowner gets every clip like the contractor; a sub's clips keep
@@ -976,7 +989,9 @@ export async function viewerLibraryPayload(
         .filter((p) => partyByJob.has(p.job_id as string) && proofFindingsHavePrivacyRedactions(p.ai_findings))
         .map((p) => p.id as string),
     );
-    const orgItems = await assembleLibrary(admin, orgId, proofRows);
+    const orgItems = ((await assembleLibrary(admin, orgId, proofRows)) as any[]).map((item) =>
+      applyHomeownerPermissionsToLibraryItem(item, permsByJob.get(item.jobId as string)),
+    );
     for (const item of orgItems as any[]) {
       if (redacted.has(item.id)) item.posterUrl = null;
       item.sharedWithMe = true;
@@ -1318,6 +1333,7 @@ evidencePortalRouter.get(
       // The office, or someone the job was shared with (homeowner, invited
       // sub): the same clip panel on their Dashboard as the contractor's.
       const resolved = await resolveProofAccess(req, req.params.proofId);
+      assertHomeownerMay(resolved, 'seeVideos');
       const { supabase, orgId } = resolved;
       const viewer = resolved.access === 'viewer';
       const { data: proof, error } = await supabase
@@ -1347,7 +1363,12 @@ evidencePortalRouter.get(
         guestRedacted ? Promise.resolve([]) : frameUrls(req.params.proofId),
       ]);
 
-      res.json({ item, custody, frames });
+      const limits = homeownerLimits(resolved);
+      res.json({
+        item: applyHomeownerPermissionsToLibraryItem(item, limits),
+        custody,
+        frames,
+      });
     } catch (err) {
       next(err);
     }
@@ -1475,6 +1496,7 @@ evidencePortalRouter.post(
     try {
       const resolved = await resolveProofAccess(req, req.params.proofId);
       const { supabase, orgId, userId } = resolved;
+      assertHomeownerMay(resolved, 'useChat');
       const viewer = resolved.access === 'viewer';
       const input = askBody.parse(req.body ?? {});
       const { data: proof, error } = await supabase
@@ -1536,6 +1558,7 @@ evidencePortalRouter.get(
       // the guest media rules.
       const resolved = await resolveProofAccess(req, req.params.proofId);
       const { supabase, orgId, userId, access } = resolved;
+      assertHomeownerMay(resolved, 'downloadFiles');
       const viewer = access === 'viewer';
       const { data: proof } = await supabase
         .from('job_proofs')

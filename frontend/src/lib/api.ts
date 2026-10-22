@@ -749,6 +749,26 @@ export interface SharedJobRecord {
   risks: JobRisk[];
   /** Homeowner progress-share claim — read-only, not an org seat. */
   access?: 'org' | 'viewer';
+  /** Homeowner only: what the contractor lets them see and do on this job. */
+  homeownerPermissions?: HomeownerPermissions;
+}
+
+/** Per-job homeowner settings (job_homeowner_permissions). All on by default. */
+export interface HomeownerPermissions {
+  seeVideos: boolean;
+  seeTranscripts: boolean;
+  seeAiSummaries: boolean;
+  seeScope: boolean;
+  seeEvidenceReport: boolean;
+  seeAccessList: boolean;
+  useChat: boolean;
+  downloadFiles: boolean;
+}
+
+export interface HomeownerPermissionsResponse {
+  permissions: HomeownerPermissions;
+  effective: HomeownerPermissions;
+  defaults: HomeownerPermissions;
 }
 
 
@@ -3999,6 +4019,15 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ personId }) },
     ),
 
+
+  homeownerPermissions: (jobId: string) =>
+    request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),
+
+  saveHomeownerPermissions: (jobId: string, permissions: HomeownerPermissions) =>
+    request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`, {
+      method: 'PUT',
+      body: JSON.stringify(permissions),
+    }),
 
   renameJobFile: (jobId: string, title: string) =>
     request<{

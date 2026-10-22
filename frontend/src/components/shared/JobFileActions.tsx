@@ -3,6 +3,7 @@ import { api, type SharedJobSummary } from '../../lib/api';
 import { suggestedDuplicateTitle } from '../../lib/jobFileCopy';
 import { SpinnerIcon } from '../icons';
 import { GlassModal } from './GlassModal';
+import { HomeownerPermissionsSettings } from './HomeownerPermissionsSettings';
 
 /**
  * Rename or duplicate the open job file.
@@ -39,6 +40,7 @@ export function JobFileActions({
   compact?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft] = useState(title);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,12 +107,32 @@ export function JobFileActions({
         </button>
         <button
           type="button"
+          onClick={() => setSettingsOpen(true)}
+          data-testid="job-file-settings"
+          className={`rounded-lg border border-line font-semibold text-ink-700 transition hover:bg-paper-50 ${pad}`}
+        >
+          Settings
+        </button>
+        <button
+          type="button"
           onClick={onShare}
           className={`rounded-lg bg-ink-900 font-semibold text-paper-0 transition hover:bg-ink-800 ${pad}`}
         >
           Share
         </button>
       </div>
+
+      {settingsOpen && (
+        <GlassModal
+          title="Job settings"
+          description="Settings for this job file only."
+          onClose={() => setSettingsOpen(false)}
+          width="max-w-lg"
+          testId="job-settings-modal"
+        >
+          <HomeownerPermissionsSettings jobId={jobId} />
+        </GlassModal>
+      )}
 
       {mode && (
         <GlassModal
