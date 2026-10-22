@@ -4150,6 +4150,11 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  textOrgInvite: (id: string) =>
+    request<{ texted: boolean; textStatus: 'sent' | 'not_configured' | 'failed' }>(`/api/org/invites/${id}/text`, {
+      method: 'POST',
+    }),
+
   revokeOrgInvite: (id: string) =>
     request<{ ok: boolean }>(`/api/org/invites/${id}/revoke`, { method: 'POST' }),
 

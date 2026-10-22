@@ -193,6 +193,23 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
     }
   }
 
+  async function textAgain(inv: OrgInvite) {
+    setError(null);
+    setOutcome(null);
+    try {
+      const res = await api.textOrgInvite(inv.id);
+      if (res.texted) setOutcome(`Texted ${formatPhone(inv.phone)} the invite link again.`);
+      else
+        setError(
+          res.textStatus === 'not_configured'
+            ? `Couldn't text ${formatPhone(inv.phone)}: team texting isn't set up yet.`
+            : `Couldn't text ${formatPhone(inv.phone)} just now. Try again in a minute.`,
+        );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not text that invitation.');
+    }
+  }
+
   async function revoke(id: string) {
     try {
       await api.revokeOrgInvite(id);
@@ -330,6 +347,15 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
                 >
                   {inv.status}
                 </span>
+                {inv.status === 'pending' && inv.phone && !inv.email && (
+                  <button
+                    onClick={() => void textAgain(inv)}
+                    data-testid="invite-text-again"
+                    className="text-[11px] text-ink-500 hover:text-brand-700"
+                  >
+                    text again
+                  </button>
+                )}
                 {inv.status === 'pending' && (
                   <button
                     onClick={() => void revoke(inv.id)}
