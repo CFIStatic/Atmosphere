@@ -741,6 +741,12 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     if (phone && !email && input.smsConsent !== true) {
       throw new HttpError(400, 'Confirm they agreed to get a text from Atmosphere.', 'sms_consent_required');
     }
+    if (phone && !email) {
+      // No consent table yet: the record is this log line (who, when, masked number).
+      console.info(
+        `[sms-consent] org invite org=${orgId} inviter=${req.user!.id} to=***${phone.slice(-4)} at=${new Date().toISOString()}`,
+      );
+    }
     const seatType = parseSeatType(input.seatType);
     // A Platform seat is a Global Admin without Field Capture or Billing.
     const seat = seatType === 'platform' ? 'global_admin' : toOrgProductRole(input.role ?? 'employee');
