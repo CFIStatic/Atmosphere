@@ -124,10 +124,12 @@ export function JobFileActions({
 
       {settingsOpen && (
         <GlassModal
-          title="Job settings"
-          description="Settings for this job file only."
+          title="Job settings · this job file only"
           onClose={() => setSettingsOpen(false)}
-          width="max-w-lg"
+          width="max-w-[920px]"
+          align="center"
+          className="flex max-h-[90vh] flex-col"
+          bodyClassName="flex min-h-0 flex-1 flex-col px-0 pb-0"
           testId="job-settings-modal"
         >
           <HomeownerPermissionsSettings jobId={jobId} />

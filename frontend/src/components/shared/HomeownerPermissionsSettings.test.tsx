@@ -77,4 +77,18 @@ describe('HomeownerPermissionsSettings', () => {
     await waitFor(() => expect(screen.queryByTestId('homeowner-perms-unavailable')).not.toBeInTheDocument());
     expect(screen.getByTestId('homeowner-perm-switch-seeVideos')).not.toBeDisabled();
   });
+
+  it('summarises what the homeowner can see and do, and keeps Save in the footer', async () => {
+    const user = userEvent.setup();
+    render(<HomeownerPermissionsSettings jobId="job-1" />);
+    const summary = await screen.findByTestId('homeowner-perms-summary');
+    expect(summary).toHaveTextContent('Homeowner can see: Videos, Transcripts');
+    expect(summary).toHaveTextContent('Can do: Chat, Download videos');
+    expect(summary).toHaveTextContent('Delay: None');
+    await user.click(screen.getByTestId('homeowner-perm-switch-seeVideos'));
+    await user.selectOptions(screen.getByTestId('homeowner-share-delay'), '24');
+    expect(summary).not.toHaveTextContent('Download videos');
+    expect(summary).toHaveTextContent('Delay: 24 hours');
+    expect(screen.getByTestId('homeowner-perms-footer')).toContainElement(screen.getByTestId('homeowner-perms-save'));
+  });
 });
