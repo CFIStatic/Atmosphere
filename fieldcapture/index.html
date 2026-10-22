@@ -919,7 +919,9 @@
   /* Elevate: bars slam up from the orange ground, then sit on paper or
      night — whichever the phone is already using — and ease into Today. */
   .elevate {
-    position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
+    /* Fixed to the viewport, not the .app column: a keyboard closing or a
+       wide window must never show Today around the edges of the splash. */
+    position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
     display: none; align-items: center; justify-content: center;
     background: var(--bg); overflow: hidden;
   }
