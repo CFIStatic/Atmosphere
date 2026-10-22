@@ -27,14 +27,14 @@ const ALL_ON: HomeownerPermissions = {
 };
 
 export const HOMEOWNER_PERMISSION_ROWS: Array<{ key: Key; label: string; help: string; group: 'see' | 'do' }> = [
-  { key: 'seeVideos', label: 'Videos', help: 'The Videos tab, clips on the Timeline, and playback.', group: 'see' },
-  { key: 'seeTranscripts', label: 'Transcripts', help: 'What was said on each video, word for word.', group: 'see' },
-  { key: 'seeAiSummaries', label: 'AI summaries', help: 'AI descriptions of each video and day, and AI clip names.', group: 'see' },
-  { key: 'seeScope', label: 'Job details & scope', help: 'The job brief and the scope lines (never prices).', group: 'see' },
-  { key: 'seeEvidenceReport', label: 'Evidence report', help: 'The Evidence report tab and its PDF.', group: 'see' },
-  { key: 'seeAccessList', label: 'Who has access', help: 'The Access tab listing everyone on this job file.', group: 'see' },
-  { key: 'useChat', label: 'Chat', help: 'Ask questions about this job in Chat.', group: 'do' },
-  { key: 'downloadFiles', label: 'Download videos', help: 'The Download button on each video.', group: 'do' },
+  { key: 'seeVideos', label: 'Videos', help: 'Videos tab, Timeline clips and playback.', group: 'see' },
+  { key: 'seeTranscripts', label: 'Transcripts', help: 'Word-for-word text of each video.', group: 'see' },
+  { key: 'seeAiSummaries', label: 'AI summaries', help: 'AI notes on each video and day.', group: 'see' },
+  { key: 'seeScope', label: 'Job details & scope', help: 'Brief and scope lines, never prices.', group: 'see' },
+  { key: 'seeEvidenceReport', label: 'Evidence report', help: 'Evidence report tab and PDF.', group: 'see' },
+  { key: 'seeAccessList', label: 'Who has access', help: 'Access tab: everyone on this job.', group: 'see' },
+  { key: 'useChat', label: 'Chat', help: 'Ask questions about this job.', group: 'do' },
+  { key: 'downloadFiles', label: 'Download videos', help: 'Download button on each video.', group: 'do' },
 ];
 
 /** Same rule as the server: Chat and the report are built from the content; downloads need videos. */
@@ -50,9 +50,9 @@ export function effectiveHomeownerPermissions(p: HomeownerPermissions): Homeowne
 
 function dependencyNote(key: Key, p: HomeownerPermissions): string | null {
   if ((key === 'useChat' || key === 'seeEvidenceReport') && !(p.seeVideos && p.seeTranscripts && p.seeAiSummaries && p.seeScope)) {
-    return 'Off while videos, transcripts, AI summaries or scope are hidden, because it is built from them.';
+    return 'Needs videos, transcripts, summaries, scope.';
   }
-  if (key === 'downloadFiles' && !p.seeVideos) return 'Off while videos are hidden.';
+  if (key === 'downloadFiles' && !p.seeVideos) return 'Needs videos.';
   return null;
 }
 
@@ -137,7 +137,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
       setDraft(res.permissions);
       setSavedDelay(res.shareDelayHours ?? 0);
       setDelay(res.shareDelayHours ?? 0);
-      setNotice('Saved. The homeowner sees the change the next time they open the job file.');
+      setNotice('Saved. The homeowner sees it next time they open the job.');
       onSaved?.();
     } catch {
       setError('Could not save homeowner permissions.');
@@ -148,7 +148,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
 
   if (!draft) {
     return (
-      <section data-testid="homeowner-permissions" className="text-sm text-ink-600">
+      <section data-testid="homeowner-permissions" className="px-6 pb-6 text-sm text-ink-600">
         Loading…
       </section>
     );
@@ -160,10 +160,10 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
       const note = dependencyNote(row.key, draft);
       const labelId = `homeowner-perm-${row.key}`;
       return (
-        <li key={row.key} className="flex items-start justify-between gap-4 py-3">
+        <li key={row.key} className="flex items-center justify-between gap-4 py-1.5">
           <div className="min-w-0">
             <p id={labelId} className="text-sm font-medium text-ink-900">{row.label}</p>
-            <p className="mt-0.5 text-xs text-ink-500">{note ?? row.help}</p>
+            <p className="mt-0.5 truncate text-xs text-ink-500" title={note ?? row.help}>{note ?? row.help}</p>
           </div>
           <Switch
             on={effective[row.key]}
@@ -176,61 +176,88 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
       );
     });
 
+  const labelOf = (k: Key) => HOMEOWNER_PERMISSION_ROWS.find((r) => r.key === k)?.label ?? k;
+  const seeOn = HOMEOWNER_PERMISSION_ROWS.filter((r) => r.group === 'see' && effective[r.key]).map((r) => labelOf(r.key));
+  const doOn = HOMEOWNER_PERMISSION_ROWS.filter((r) => r.group === 'do' && effective[r.key]).map((r) => labelOf(r.key));
+  const delayLabel = delay === 0 ? 'None' : `${delay} hours`;
+
   return (
-    <section data-testid="homeowner-permissions" aria-labelledby="homeowner-perms-heading">
-      <h3 id="homeowner-perms-heading" className="text-sm font-semibold text-ink-900">Homeowner permissions</h3>
-      <p className="mt-1 text-xs text-ink-500">
-        What the homeowner you invited can see and do on this job file. Pay, disputes and internal notes are always
-        hidden from homeowners, and they can never change the job.
-      </p>
-      {unavailable ? (
-        <div
-          data-testid="homeowner-perms-unavailable"
-          className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-line bg-paper-50 px-3 py-2 text-xs text-ink-600"
+    <section
+      data-testid="homeowner-permissions"
+      aria-labelledby="homeowner-perms-heading"
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-3">
+        <h3 id="homeowner-perms-heading" className="sr-only">Homeowner permissions</h3>
+        <p
+          data-testid="homeowner-perms-summary"
+          className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs leading-5 text-ink-700"
         >
-          <span>Homeowner settings aren’t available right now. Showing the defaults: the homeowner sees everything below.</span>
-          <button
-            type="button"
-            data-testid="homeowner-perms-retry"
-            onClick={() => setAttempt((n) => n + 1)}
-            className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-ink-900 ring-1 ring-line transition hover:bg-ink-900/5"
+          <span className="font-semibold text-ink-900">Homeowner can see:</span> {seeOn.length ? seeOn.join(', ') : 'Nothing'}
+          <span className="px-1.5 text-ink-400">·</span>
+          <span className="font-semibold text-ink-900">Can do:</span> {doOn.length ? doOn.join(', ') : 'Nothing'}
+          <span className="px-1.5 text-ink-400">·</span>
+          <span className="font-semibold text-ink-900">Delay:</span> {delayLabel}
+        </p>
+        {unavailable ? (
+          <div
+            data-testid="homeowner-perms-unavailable"
+            className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-line bg-paper-50 px-3 py-2 text-xs text-ink-600"
           >
-            Retry
-          </button>
+            <span>Homeowner settings aren’t available right now. Showing the defaults: the homeowner sees everything below.</span>
+            <button
+              type="button"
+              data-testid="homeowner-perms-retry"
+              onClick={() => setAttempt((n) => n + 1)}
+              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-ink-900 ring-1 ring-line transition hover:bg-ink-900/5"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        <div className="mt-2.5 grid gap-x-8 gap-y-3 md:grid-cols-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can see</p>
+            <ul className="divide-y divide-line">{group('see')}</ul>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can do</p>
+            <ul className="divide-y divide-line">{group('do')}</ul>
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Sharing delay</p>
+            <div className="flex items-start justify-between gap-4 py-2">
+              <div className="min-w-0">
+                <label htmlFor="homeowner-share-delay" className="text-sm font-medium text-ink-900">
+                  Homeowner sharing delay
+                </label>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  How long after upload new videos reach them.
+                </p>
+              </div>
+              <select
+                id="homeowner-share-delay"
+                data-testid="homeowner-share-delay"
+                value={delay}
+                disabled={busy || unavailable}
+                onChange={(e) => setDelay(Number(e.target.value) as ShareDelayHours)}
+                className="glass-field h-9 shrink-0 rounded-lg px-2 text-sm text-ink-900"
+              >
+                <option value={0}>None</option>
+                <option value={24}>24 hours</option>
+                <option value={48}>48 hours</option>
+                <option value={72}>72 hours</option>
+              </select>
+            </div>
+            <p className="mt-3 text-xs text-ink-500">
+              Share or hold any single video from the Videos tab. Pay, disputes and internal notes are always hidden,
+              and homeowners can never change the job.
+            </p>
+          </div>
         </div>
-      ) : null}
-      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can see</p>
-      <ul className="divide-y divide-line">{group('see')}</ul>
-      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can do</p>
-      <ul className="divide-y divide-line">{group('do')}</ul>
-      <div className="mt-3 flex items-start justify-between gap-4 border-t border-line pt-3">
-        <div className="min-w-0">
-          <label htmlFor="homeowner-share-delay" className="text-sm font-medium text-ink-900">
-            Homeowner sharing delay
-          </label>
-          <p className="mt-0.5 text-xs text-ink-500">
-            New videos, and their stills, transcripts and AI summaries, reach the homeowner this long after upload.
-            Share or hold any video from the Videos tab. Chat and the Evidence report open for the homeowner once
-            nothing is waiting.
-          </p>
-        </div>
-        <select
-          id="homeowner-share-delay"
-          data-testid="homeowner-share-delay"
-          value={delay}
-          disabled={busy || unavailable}
-          onChange={(e) => setDelay(Number(e.target.value) as ShareDelayHours)}
-          className="glass-field h-9 shrink-0 rounded-lg px-2 text-sm text-ink-900"
-        >
-          <option value={0}>None</option>
-          <option value={24}>24 hours</option>
-          <option value={48}>48 hours</option>
-          <option value={72}>72 hours</option>
-        </select>
       </div>
-      {error ? <p role="alert" className="mt-3 text-sm text-danger-600">{error}</p> : null}
-      {notice ? <p role="status" className="mt-3 text-sm text-success-700">{notice}</p> : null}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+      <div
+        data-testid="homeowner-perms-footer"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-6 py-2.5"
+      >
         <button
           type="button"
           disabled={busy || unavailable || !defaults}
@@ -242,16 +269,20 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
         >
           Reset to default
         </button>
-        <button
-          type="button"
-          data-testid="homeowner-perms-save"
-          disabled={busy || unavailable || !dirty}
-          onClick={() => void save()}
-          className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:opacity-60"
-        >
-          {busy ? <SpinnerIcon className="animate-spin" width={14} /> : null}
-          Save
-        </button>
+        <div className="ml-auto flex min-w-0 items-center gap-3">
+          {error ? <p role="alert" className="text-sm text-danger-600">{error}</p> : null}
+          {notice ? <p role="status" className="truncate text-sm text-success-700">{notice}</p> : null}
+          <button
+            type="button"
+            data-testid="homeowner-perms-save"
+            disabled={busy || unavailable || !dirty}
+            onClick={() => void save()}
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:opacity-60"
+          >
+            {busy ? <SpinnerIcon className="animate-spin" width={14} /> : null}
+            Save
+          </button>
+        </div>
       </div>
     </section>
   );
