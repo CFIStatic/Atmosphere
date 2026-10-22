@@ -8,6 +8,7 @@ import { initPreferences } from './lib/preferences';
 import { consumeRecoveryRedirect } from './lib/recoveryLink';
 import { initOfficeSentry } from './lib/sentry';
 import { initPlatform } from './lib/usePlatform';
+import { installChunkErrorReload } from './lib/chunkReload';
 import './index.css';
 
 // Keep the stamp in the entry chunk so a chrome-only bump changes the
@@ -21,6 +22,7 @@ initPlatform();
 initFieldEmbed();
 initAppShell();
 initOfficeSentry();
+installChunkErrorReload();
 // Stock recovery emails land on `/#access_token=…&type=recovery`. Move them
 // onto /reset-password before the router sends `/` to the dashboard.
 consumeRecoveryRedirect();
