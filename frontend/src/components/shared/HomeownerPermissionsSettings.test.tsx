@@ -63,4 +63,18 @@ describe('HomeownerPermissionsSettings', () => {
     await user.click(screen.getByTestId('homeowner-perms-save'));
     await waitFor(() => expect(saveHomeownerPermissions).toHaveBeenCalledWith('job-1', ALL, 48));
   });
+
+  it('shows defaults read-only with Retry when settings fail to load', async () => {
+    const user = userEvent.setup();
+    homeownerPermissions.mockRejectedValueOnce(new Error('Not found'));
+    render(<HomeownerPermissionsSettings jobId="job-1" />);
+    expect(await screen.findByTestId('homeowner-perms-unavailable')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('homeowner-perm-switch-seeVideos')).toBeDisabled();
+    expect(screen.getByTestId('homeowner-perm-switch-seeVideos')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('homeowner-perms-save')).toBeDisabled();
+    await user.click(screen.getByTestId('homeowner-perms-retry'));
+    await waitFor(() => expect(screen.queryByTestId('homeowner-perms-unavailable')).not.toBeInTheDocument());
+    expect(screen.getByTestId('homeowner-perm-switch-seeVideos')).not.toBeDisabled();
+  });
 });
