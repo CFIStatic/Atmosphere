@@ -14,6 +14,7 @@ import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { normalizeServiceRoleInput } from './serviceRole.js';
 import { partiesInvitedToEmail } from './inviteeJobAccess.js';
 import { loadHomeownerPermissions, type HomeownerPermissions } from './homeownerPermissions.js';
+import { loadHomeownerSharing, type HomeownerSharing } from './homeownerSharing.js';
 
 export type JobProgressGrant = {
   orgId: string;
@@ -93,6 +94,8 @@ export type SharedJobAccess =
        * Null/absent for a sub and for list-level access without a job.
        */
       homeownerPermissions?: HomeownerPermissions | null;
+      /** Homeowner only: clips not shared yet (sharing delay / held). */
+      homeownerSharing?: HomeownerSharing | null;
     };
 
 function missingGrantsTable(error: { message?: string; code?: string } | null | undefined): boolean {
@@ -446,8 +449,11 @@ function viewerAccess(req: Request, orgId: string, partyId: string | null = null
 /** A homeowner on one job: viewer access carrying the contractor's settings. */
 async function homeownerAccess(req: Request, orgId: string, jobId: string): Promise<SharedJobAccess> {
   const admin = unscopedAdminOrNull() ?? requireAdmin();
-  const homeownerPermissions = await loadHomeownerPermissions(admin, jobId);
-  return { ...viewerAccess(req, orgId), homeownerPermissions } as SharedJobAccess;
+  const [homeownerPermissions, homeownerSharing] = await Promise.all([
+    loadHomeownerPermissions(admin, jobId),
+    loadHomeownerSharing(admin, jobId),
+  ]);
+  return { ...viewerAccess(req, orgId), homeownerPermissions, homeownerSharing } as SharedJobAccess;
 }
 
 export function viewerPartyId(access: SharedJobAccess): string | null {

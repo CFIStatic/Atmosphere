@@ -146,6 +146,33 @@ select pg_temp.expect(has_table_privilege('service_role', 'public.job_homeowner_
   and has_table_privilege('service_role', 'public.job_homeowner_permissions', 'UPDATE'),
   'the server can write permissions');
 
+-- Sharing delay: job c2 gets 24 hours; its clip was just uploaded.
+update public.job_proofs set received_at = now() where id = '21000000-0000-4000-8000-0000000000d2';
+insert into public.job_homeowner_permissions (job_id, org_id, share_delay_hours) values
+  ('21000000-0000-4000-8000-0000000000c2', '21000000-0000-4000-8000-0000000000a1', 24);
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000003', 'job_proofs') = 1,
+  '24h delay: a clip uploaded just now is not readable by the homeowner yet');
+update public.job_proofs set received_at = now() - interval '25 hours' where id = '21000000-0000-4000-8000-0000000000d2';
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000003', 'job_proofs') = 2,
+  '24h delay: readable once the delay is up');
+update public.job_proofs set received_at = now() where id = '21000000-0000-4000-8000-0000000000d2';
+insert into public.job_homeowner_releases (proof_id, job_id, org_id, mode) values
+  ('21000000-0000-4000-8000-0000000000d2', '21000000-0000-4000-8000-0000000000c2', '21000000-0000-4000-8000-0000000000a1', 'share_now');
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000003', 'job_proofs') = 2,
+  'Share now: readable before the delay is up');
+insert into public.job_homeowner_releases (proof_id, job_id, org_id, mode) values
+  ('21000000-0000-4000-8000-0000000000d1', '21000000-0000-4000-8000-0000000000c1', '21000000-0000-4000-8000-0000000000a1', 'hold');
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000003', 'job_proofs') = 1,
+  'Hold: an old clip on a job with no delay is not readable');
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000001', 'job_homeowner_releases') = 2, 'a member reads the overrides');
+select pg_temp.expect(pg_temp.seen_by('21000000-0000-4000-8000-000000000003', 'job_homeowner_releases') = 0, 'the homeowner reads none');
+select pg_temp.expect(pg_temp.as_user('21000000-0000-4000-8000-000000000001', $q$
+  delete from public.job_homeowner_releases$q$) = '42501',
+  'a member cannot change overrides with a user token');
+select pg_temp.expect(pg_temp.as_user('21000000-0000-4000-8000-000000000001', $q$
+  update public.job_homeowner_permissions set share_delay_hours = 5$q$) <> '00000',
+  'nobody sets an odd delay with a user token');
+
 rollback;
 SQL
 echo "==> Homeowner permissions OK"

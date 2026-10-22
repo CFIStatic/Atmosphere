@@ -765,8 +765,12 @@ export interface HomeownerPermissions {
   downloadFiles: boolean;
 }
 
+export type ShareDelayHours = 0 | 24 | 48 | 72;
+
 export interface HomeownerPermissionsResponse {
   permissions: HomeownerPermissions;
+  /** Hours after upload before new clips reach the homeowner. 0 = right away. */
+  shareDelayHours: ShareDelayHours;
   effective: HomeownerPermissions;
   defaults: HomeownerPermissions;
 }
@@ -1152,6 +1156,9 @@ export interface ProofChildPrivacyRedactions {
 
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
+  /** Office only, when a sharing delay or override applies: when the homeowner sees it (null = held). */
+  homeownerVisibleAt?: string | null;
+  homeownerRelease?: 'share_now' | 'hold' | null;
   id: string;
   partyId: string;
   company: string;
@@ -4023,10 +4030,16 @@ export const api = {
   homeownerPermissions: (jobId: string) =>
     request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),
 
-  saveHomeownerPermissions: (jobId: string, permissions: HomeownerPermissions) =>
+  saveHomeownerPermissions: (jobId: string, permissions: HomeownerPermissions, shareDelayHours?: ShareDelayHours) =>
     request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`, {
       method: 'PUT',
-      body: JSON.stringify(permissions),
+      body: JSON.stringify(shareDelayHours === undefined ? permissions : { ...permissions, shareDelayHours }),
+    }),
+
+  setHomeownerRelease: (jobId: string, proofId: string, mode: 'share_now' | 'hold' | 'default') =>
+    request<{ ok: true; mode: string }>(`/api/operations/shared/${jobId}/proofs/${proofId}/homeowner-release`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
     }),
 
   renameJobFile: (jobId: string, title: string) =>

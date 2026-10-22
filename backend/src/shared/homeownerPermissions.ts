@@ -111,7 +111,7 @@ export async function loadHomeownerPermissions(admin: SupabaseClient, jobId: str
 
 export async function saveHomeownerPermissions(
   admin: SupabaseClient,
-  input: { orgId: string; jobId: string; userId: string; permissions: HomeownerPermissions },
+  input: { orgId: string; jobId: string; userId: string; permissions: HomeownerPermissions; shareDelayHours?: number },
 ): Promise<HomeownerPermissions> {
   const { data, error } = await admin
     .from('job_homeowner_permissions')
@@ -120,6 +120,7 @@ export async function saveHomeownerPermissions(
         job_id: input.jobId,
         org_id: input.orgId,
         ...homeownerPermissionsToRow(input.permissions),
+        ...(input.shareDelayHours === undefined ? {} : { share_delay_hours: input.shareDelayHours }),
         updated_at: new Date().toISOString(),
         updated_by: input.userId,
       },

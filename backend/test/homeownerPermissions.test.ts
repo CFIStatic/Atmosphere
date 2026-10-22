@@ -169,7 +169,7 @@ test('every homeowner-reachable route checks the contractor\'s setting on the se
   assert.match(shared, /scope: hideScope \? \[\] : scope/);
   // Only the job's own office may read or change the settings.
   assert.match(shared, /\(job as any\)\.org_id !== ctx\.orgId/);
-  assert.equal((shared.match(/await requireOfficeJob\(req, jobId\)/g) ?? []).length, 2);
+  assert.equal((shared.match(/await requireOfficeJob\(req, jobId\)/g) ?? []).length, 3);
 
   // Homeowner access always carries the settings for that job.
   const grants = src('shared/jobProgressGrants.ts');
@@ -183,7 +183,7 @@ test('the migration keeps writes server-only and gates direct clip reads on the 
   );
   assert.match(sql, /enable row level security/);
   assert.match(sql, /revoke insert, update, delete, truncate on public\.job_homeowner_permissions from anon, authenticated/);
-  assert.match(sql, /private\.homeowner_may_read_proof_rows\(job_id\)/);
+  assert.match(sql, /private\.homeowner_may_read_proof_row\(job_id, id, received_at\)/);
   for (const col of ['see_videos', 'see_transcripts', 'see_ai_summaries', 'see_scope', 'see_evidence_report', 'see_access_list', 'use_chat', 'download_files']) {
     assert.match(sql, new RegExp(`${col}\\s+boolean not null default true`), col);
   }

@@ -5,6 +5,7 @@ import {
   loadHomeownerPermissions,
   type HomeownerPermissions,
 } from '../shared/homeownerPermissions.js';
+import { assertHomeownerMaySeeProof, loadHomeownerSharing } from '../shared/homeownerSharing.js';
 import { attachVerificationStatus } from '../shared/verificationStatusOfProofs.js';
 import { randomUUID } from 'node:crypto';
 import { runWithAiUsageScope } from '../metering/aiUsageContext.js';
@@ -977,9 +978,15 @@ export async function viewerLibraryPayload(
     for (const jobId of jobIds) {
       if (!partyByJob.has(jobId)) permsByJob.set(jobId, await loadHomeownerPermissions(admin, jobId));
     }
+    // ...and its sharing delay: clips not shared with the homeowner yet stay out.
+    const hiddenForHomeowner = new Set<string>();
+    for (const jobId of permsByJob.keys()) {
+      for (const id of (await loadHomeownerSharing(admin, jobId)).hiddenProofIds) hiddenForHomeowner.add(id);
+    }
     const proofRows = ((proofs ?? []) as any[]).filter((p) => {
       const partyId = partyByJob.get(p.job_id as string);
       if (permsByJob.get(p.job_id as string)?.seeVideos === false) return false;
+      if (hiddenForHomeowner.has(p.id as string)) return false;
       return !partyId || p.party_id === partyId;
     });
     // The homeowner gets every clip like the contractor; a sub's clips keep
@@ -1334,6 +1341,7 @@ evidencePortalRouter.get(
       // sub): the same clip panel on their Dashboard as the contractor's.
       const resolved = await resolveProofAccess(req, req.params.proofId);
       assertHomeownerMay(resolved, 'seeVideos');
+      assertHomeownerMaySeeProof(resolved, req.params.proofId);
       const { supabase, orgId } = resolved;
       const viewer = resolved.access === 'viewer';
       const { data: proof, error } = await supabase
@@ -1497,6 +1505,7 @@ evidencePortalRouter.post(
       const resolved = await resolveProofAccess(req, req.params.proofId);
       const { supabase, orgId, userId } = resolved;
       assertHomeownerMay(resolved, 'useChat');
+      assertHomeownerMaySeeProof(resolved, req.params.proofId);
       const viewer = resolved.access === 'viewer';
       const input = askBody.parse(req.body ?? {});
       const { data: proof, error } = await supabase
@@ -1559,6 +1568,7 @@ evidencePortalRouter.get(
       const resolved = await resolveProofAccess(req, req.params.proofId);
       const { supabase, orgId, userId, access } = resolved;
       assertHomeownerMay(resolved, 'downloadFiles');
+      assertHomeownerMaySeeProof(resolved, req.params.proofId);
       const viewer = access === 'viewer';
       const { data: proof } = await supabase
         .from('job_proofs')

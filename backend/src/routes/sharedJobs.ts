@@ -63,6 +63,7 @@ import {
   saveHomeownerPermissions,
   type HomeownerPermissions,
 } from '../shared/homeownerPermissions.js';
+import { SHARE_DELAY_HOURS, loadShareDelay, setHomeownerRelease } from '../shared/homeownerSharing.js';
 import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
 import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import { roomsMentionedIn } from '../audio/conversationDetails.js';
@@ -443,12 +444,18 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
 });
 
 const homeownerPermissionsBody = z
-  .object(
-    Object.fromEntries(HOMEOWNER_PERMISSION_KEYS.map((key) => [key, z.boolean()])) as Record<
+  .object({
+    ...(Object.fromEntries(HOMEOWNER_PERMISSION_KEYS.map((key) => [key, z.boolean()])) as Record<
       keyof HomeownerPermissions,
       z.ZodBoolean
-    >,
-  )
+    >),
+    /** Hours after upload before a new clip reaches the homeowner (0 = right away). */
+    shareDelayHours: z
+      .number()
+      .int()
+      .refine((n) => (SHARE_DELAY_HOURS as readonly number[]).includes(n), 'Pick None, 24, 48 or 72 hours.')
+      .optional(),
+  })
   .strict();
 
 /** The office's own job (not a job shared with them from another company). */
@@ -482,9 +489,13 @@ sharedJobsRouter.get(
     try {
       const jobId = z.string().uuid().parse(req.params.jobId);
       const { admin } = await requireOfficeJob(req, jobId);
-      const permissions = await loadStoredHomeownerPermissions(admin, jobId);
+      const [permissions, shareDelayHours] = await Promise.all([
+        loadStoredHomeownerPermissions(admin, jobId),
+        loadShareDelay(admin, jobId),
+      ]);
       res.json({
         permissions,
+        shareDelayHours,
         effective: effectiveHomeownerPermissions(permissions),
         defaults: DEFAULT_HOMEOWNER_PERMISSIONS,
       });
@@ -503,14 +514,16 @@ sharedJobsRouter.put(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const jobId = z.string().uuid().parse(req.params.jobId);
-      const input = homeownerPermissionsBody.parse(req.body ?? {});
+      const { shareDelayHours, ...input } = homeownerPermissionsBody.parse(req.body ?? {});
       const { orgId, userId, supabase, admin } = await requireOfficeJob(req, jobId);
       const permissions = await saveHomeownerPermissions(admin, {
         orgId,
         jobId,
         userId,
         permissions: input as HomeownerPermissions,
+        shareDelayHours,
       });
+      const savedDelay = await loadShareDelay(admin, jobId);
       const off = HOMEOWNER_PERMISSION_KEYS.filter((key) => !permissions[key]);
       await recordAccess(supabase, {
         orgId,
@@ -518,13 +531,62 @@ sharedJobsRouter.put(
         action: 'uploaded',
         actorId: userId,
         actorLabel: 'Office',
-        detail: off.length ? `Homeowner permissions changed (off: ${off.join(', ')})` : 'Homeowner permissions reset to all on',
+        detail:
+          (off.length ? `Homeowner permissions changed (off: ${off.join(', ')})` : 'Homeowner permissions all on') +
+          (savedDelay ? `; sharing delay ${savedDelay}h` : ''),
       }).catch(() => undefined);
       res.json({
         permissions,
+        shareDelayHours: savedDelay,
         effective: effectiveHomeownerPermissions(permissions),
         defaults: DEFAULT_HOMEOWNER_PERMISSIONS,
       });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/operations/shared/:jobId/proofs/:proofId/homeowner-release
+ * Office only. { mode: 'share_now' | 'hold' | 'default' } — share one clip
+ * with the homeowner before the delay is up, keep it from them, or go back
+ * to the job's delay.
+ */
+sharedJobsRouter.post(
+  '/shared/:jobId/proofs/:proofId/homeowner-release',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const proofId = z.string().uuid().parse(req.params.proofId);
+      const { mode } = z
+        .object({ mode: z.enum(['share_now', 'hold', 'default']) })
+        .strict()
+        .parse(req.body ?? {});
+      const { orgId, userId, supabase, admin } = await requireOfficeJob(req, jobId);
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select('id, job_id, org_id, deleted_at')
+        .eq('id', proofId)
+        .maybeSingle();
+      if (!proof || (proof as any).job_id !== jobId || (proof as any).org_id !== orgId || (proof as any).deleted_at) {
+        throw new HttpError(404, 'No such video.', 'not_found');
+      }
+      await setHomeownerRelease(admin, { orgId, jobId, proofId, userId, mode });
+      await recordAccess(supabase, {
+        orgId,
+        jobId,
+        action: 'uploaded',
+        actorId: userId,
+        actorLabel: 'Office',
+        detail:
+          mode === 'share_now'
+            ? 'Video shared with the homeowner now'
+            : mode === 'hold'
+              ? 'Video held from the homeowner'
+              : 'Video back on the homeowner sharing delay',
+      }).catch(() => undefined);
+      res.json({ ok: true, mode });
     } catch (err) {
       next(err);
     }

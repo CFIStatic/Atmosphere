@@ -29,12 +29,12 @@ describe('HomeownerPermissionsSettings', () => {
   beforeEach(() => {
     homeownerPermissions.mockReset();
     saveHomeownerPermissions.mockReset();
-    homeownerPermissions.mockResolvedValue({ permissions: ALL, effective: ALL, defaults: ALL });
+    homeownerPermissions.mockResolvedValue({ permissions: ALL, shareDelayHours: 0, effective: ALL, defaults: ALL });
   });
 
   it('starts with everything on and saves a change for this job', async () => {
     const user = userEvent.setup();
-    saveHomeownerPermissions.mockImplementation(async (_job: string, p: typeof ALL) => ({ permissions: p, effective: p, defaults: ALL }));
+    saveHomeownerPermissions.mockImplementation(async (_job: string, p: typeof ALL, d: number) => ({ permissions: p, shareDelayHours: d, effective: p, defaults: ALL }));
     render(<HomeownerPermissionsSettings jobId="job-1" />);
 
     const transcripts = await screen.findByTestId('homeowner-perm-switch-seeTranscripts');
@@ -49,7 +49,18 @@ describe('HomeownerPermissionsSettings', () => {
     expect(screen.getByTestId('homeowner-perm-switch-seeEvidenceReport')).toHaveAttribute('aria-checked', 'false');
 
     await user.click(screen.getByTestId('homeowner-perms-save'));
-    await waitFor(() => expect(saveHomeownerPermissions).toHaveBeenCalledWith('job-1', { ...ALL, seeTranscripts: false }));
+    await waitFor(() => expect(saveHomeownerPermissions).toHaveBeenCalledWith('job-1', { ...ALL, seeTranscripts: false }, 0));
     expect(await screen.findByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('defaults the sharing delay to None and saves 48 hours', async () => {
+    const user = userEvent.setup();
+    saveHomeownerPermissions.mockImplementation(async (_job: string, p: typeof ALL, d: number) => ({ permissions: p, shareDelayHours: d, effective: p, defaults: ALL }));
+    render(<HomeownerPermissionsSettings jobId="job-1" />);
+    const select = await screen.findByTestId('homeowner-share-delay');
+    await waitFor(() => expect(select).toHaveValue('0'));
+    await user.selectOptions(select, '48');
+    await user.click(screen.getByTestId('homeowner-perms-save'));
+    await waitFor(() => expect(saveHomeownerPermissions).toHaveBeenCalledWith('job-1', ALL, 48));
   });
 });

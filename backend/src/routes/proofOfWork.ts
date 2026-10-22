@@ -39,6 +39,14 @@ import {
   assertHomeownerMay,
   homeownerLimits,
 } from '../shared/homeownerPermissions.js';
+import {
+  annotateOfficeProofPayload,
+  applyHomeownerSharingToProofPayload,
+  assertHomeownerMaySeeProof,
+  assertNothingPendingForHomeowner,
+  homeownerSharingOf,
+  loadHomeownerSharing,
+} from '../shared/homeownerSharing.js';
 import { homeownerAskClips, homeownerAskJobFile, homeownerProofPayload, partyProofPayload } from '../shared/homeownerProofPayload.js';
 import {
   createAskThread,
@@ -2855,8 +2863,19 @@ export async function jobProofs(req: Request, res: Response, next: NextFunction)
       access === 'viewer'
         ? partyId
           ? partyProofPayload(payload, partyId)
-          : applyHomeownerPermissionsToProofPayload(homeownerProofPayload(payload), homeownerLimits(viewer))
-        : payload,
+          : applyHomeownerSharingToProofPayload(
+              applyHomeownerPermissionsToProofPayload(homeownerProofPayload(payload), homeownerLimits(viewer)),
+              homeownerSharingOf(viewer),
+            )
+        : annotateOfficeProofPayload(
+            payload,
+            await loadHomeownerSharing(unscopedAdminOrNull() ?? supabase, req.params.jobId).catch(() => ({
+              delayHours: 0,
+              hiddenProofIds: new Set<string>(),
+              visibleAt: new Map(),
+              overrides: new Map(),
+            })),
+          ),
     );
   } catch (err) {
     next(err);
@@ -4143,6 +4162,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     // invited subcontractors (only their own videos).
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
     assertHomeownerMay(viewer, 'useChat');
+    assertNothingPendingForHomeowner(viewer);
     const { orgId, userId, supabase, access } = viewer;
     const partyId = viewerPartyId(viewer);
     const input = z
@@ -4256,6 +4276,7 @@ export async function warmProofAsk(req: Request, res: Response, next: NextFuncti
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
     assertHomeownerMay(viewer, 'useChat');
+    assertNothingPendingForHomeowner(viewer);
     const { orgId, userId, supabase, access } = viewer;
     const input = z
       .object({
@@ -4302,6 +4323,7 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
     assertHomeownerMay(viewer, 'useChat');
+    assertNothingPendingForHomeowner(viewer);
     const { orgId, userId, supabase, access } = viewer;
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
     let ownsThread = false;
@@ -4506,6 +4528,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     // job shared with this person (they may also have a workspace of their own).
     const viewer = await resolveProofAccess(req, req.params.proofId);
     assertHomeownerMay(viewer, 'seeVideos');
+    assertHomeownerMaySeeProof(viewer, req.params.proofId);
     const { orgId, userId, supabase, access } = viewer;
     // Job viewers never get a removed clip. The homeowner plays every clip like
     // the contractor; a sub never gets a raw original with privacy redactions.
@@ -5203,6 +5226,7 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
   try {
     const viewer = await resolveOrgOrViewerAccess(req, req.params.jobId);
     assertHomeownerMay(viewer, 'seeEvidenceReport');
+    assertNothingPendingForHomeowner(viewer);
     const { orgId, userId, supabase, access } = viewer;
     const partyId = viewerPartyId(viewer);
     const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();
