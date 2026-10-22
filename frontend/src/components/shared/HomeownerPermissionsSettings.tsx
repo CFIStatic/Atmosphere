@@ -14,6 +14,18 @@ import { SpinnerIcon } from '../icons';
 
 type Key = keyof HomeownerPermissions;
 
+/** Everything on: what homeowners get when the office has not changed anything. */
+const ALL_ON: HomeownerPermissions = {
+  seeVideos: true,
+  seeTranscripts: true,
+  seeAiSummaries: true,
+  seeScope: true,
+  seeEvidenceReport: true,
+  seeAccessList: true,
+  useChat: true,
+  downloadFiles: true,
+};
+
 export const HOMEOWNER_PERMISSION_ROWS: Array<{ key: Key; label: string; help: string; group: 'see' | 'do' }> = [
   { key: 'seeVideos', label: 'Videos', help: 'The Videos tab, clips on the Timeline, and playback.', group: 'see' },
   { key: 'seeTranscripts', label: 'Transcripts', help: 'What was said on each video, word for word.', group: 'see' },
@@ -76,6 +88,10 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Settings could not be loaded (older server, network). Show the defaults
+  // read-only with a calm note and Retry instead of a red error.
+  const [unavailable, setUnavailable] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -83,17 +99,25 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
       .homeownerPermissions(jobId)
       .then((res) => {
         if (!live) return;
+        setUnavailable(false);
         setSaved(res.permissions);
         setDraft(res.permissions);
         setDefaults(res.defaults);
         setSavedDelay(res.shareDelayHours ?? 0);
         setDelay(res.shareDelayHours ?? 0);
       })
-      .catch(() => live && setError('Could not load homeowner permissions.'));
+      .catch(() => {
+        if (!live) return;
+        setUnavailable(true);
+        setSaved({ ...ALL_ON });
+        setDraft({ ...ALL_ON });
+        setSavedDelay(0);
+        setDelay(0);
+      });
     return () => {
       live = false;
     };
-  }, [jobId]);
+  }, [jobId, attempt]);
 
   const dirty = useMemo(
     () =>
@@ -125,7 +149,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
   if (!draft) {
     return (
       <section data-testid="homeowner-permissions" className="text-sm text-ink-600">
-        {error ? <p role="alert" className="text-danger-600">{error}</p> : 'Loading…'}
+        Loading…
       </section>
     );
   }
@@ -143,7 +167,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
           </div>
           <Switch
             on={effective[row.key]}
-            disabled={busy || Boolean(note)}
+            disabled={busy || unavailable || Boolean(note)}
             labelId={labelId}
             testId={`homeowner-perm-switch-${row.key}`}
             onChange={() => setDraft((d) => (d ? { ...d, [row.key]: !d[row.key] } : d))}
@@ -159,6 +183,22 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
         What the homeowner you invited can see and do on this job file. Pay, disputes and internal notes are always
         hidden from homeowners, and they can never change the job.
       </p>
+      {unavailable ? (
+        <div
+          data-testid="homeowner-perms-unavailable"
+          className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-line bg-paper-50 px-3 py-2 text-xs text-ink-600"
+        >
+          <span>Homeowner settings aren’t available right now. Showing the defaults: the homeowner sees everything below.</span>
+          <button
+            type="button"
+            data-testid="homeowner-perms-retry"
+            onClick={() => setAttempt((n) => n + 1)}
+            className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-ink-900 ring-1 ring-line transition hover:bg-ink-900/5"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can see</p>
       <ul className="divide-y divide-line">{group('see')}</ul>
       <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Can do</p>
@@ -178,7 +218,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
           id="homeowner-share-delay"
           data-testid="homeowner-share-delay"
           value={delay}
-          disabled={busy}
+          disabled={busy || unavailable}
           onChange={(e) => setDelay(Number(e.target.value) as ShareDelayHours)}
           className="glass-field h-9 shrink-0 rounded-lg px-2 text-sm text-ink-900"
         >
@@ -193,7 +233,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
-          disabled={busy || !defaults}
+          disabled={busy || unavailable || !defaults}
           onClick={() => {
             if (defaults) setDraft({ ...defaults });
             setDelay(0);
@@ -205,7 +245,7 @@ export function HomeownerPermissionsSettings({ jobId, onSaved }: { jobId: string
         <button
           type="button"
           data-testid="homeowner-perms-save"
-          disabled={busy || !dirty}
+          disabled={busy || unavailable || !dirty}
           onClick={() => void save()}
           className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-paper-0 shadow-xs transition hover:bg-ink-800 disabled:opacity-60"
         >
