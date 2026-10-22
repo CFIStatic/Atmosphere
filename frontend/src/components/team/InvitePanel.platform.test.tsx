@@ -132,8 +132,9 @@ describe('InvitePanel: Platform seats', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Platform' }));
     await userEvent.click(screen.getByTestId('invite-via-phone'));
     await userEvent.type(screen.getByTestId('invite-phone'), '3125550100');
+    await userEvent.click(screen.getByRole('checkbox', { name: /agreed to get a text/ }));
     await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
-    expect(createOrgInvite.mock.calls.at(-1)?.[0]).toMatchObject({ phone: '+13125550100', role: 'global_admin', seatType: 'platform' });
+    expect(createOrgInvite.mock.calls.at(-1)?.[0]).toMatchObject({ phone: '+13125550100', smsConsent: true, role: 'global_admin', seatType: 'platform' });
   });
 
   it('lists Platform invites as Platform', async () => {

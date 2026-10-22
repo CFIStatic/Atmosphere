@@ -94,6 +94,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
   const phoneEnabled = usePhoneAuthEnabled();
   const [byPhone, setByPhone] = useState(false);
   const [phone, setPhone] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
   const phoneE164 = normalizePhoneE164(phone);
   const usingPhone = phoneEnabled && byPhone;
   const [busy, setBusy] = useState(false);
@@ -165,7 +166,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
     setOutcome(null);
     try {
       const res = await api.createOrgInvite({
-        ...(usingPhone ? { phone: phoneE164 ?? phone } : { email }),
+        ...(usingPhone ? { phone: phoneE164 ?? phone, smsConsent } : { email }),
         role,
         ...(platformSeat ? { seatType: 'platform' as const } : {}),
       });
@@ -180,6 +181,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       );
       setEmail('');
       setPhone('');
+      setSmsConsent(false);
       onInvited?.();
       await load();
     } catch (err) {
@@ -306,7 +308,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           </div>
           <button
             type="submit"
-            disabled={busy || (usingPhone ? !phoneE164 : !email.trim())}
+            disabled={busy || (usingPhone ? !phoneE164 || !smsConsent : !email.trim())}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition outline-hidden hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-50 sm:w-auto"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
@@ -314,6 +316,20 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           </button>
         </div>
       </form>
+      {usingPhone ? (
+        <label className="mt-2 flex items-start gap-2 text-xs text-ink-600" data-testid="invite-sms-consent">
+          <input
+            type="checkbox"
+            checked={smsConsent}
+            onChange={(e) => setSmsConsent(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            This person agreed to get a text from Atmosphere with their invite. Msg &amp; data rates may apply. Reply
+            STOP to opt out.
+          </span>
+        </label>
+      ) : null}
       <p className="mt-1.5 text-xs text-ink-500" data-testid="invite-help">
         {inviteKindHelp(kind, { inApp, fieldCaptureSeats: seats, platformSeats })}
         {platformSeat && platformSeats && platformSeats.available === false && platformSeats.remaining <= 0 ? (

@@ -4139,6 +4139,7 @@ export const api = {
   createOrgInvite: (input: {
     email?: string;
     phone?: string;
+    smsConsent?: boolean;
     role?: MemberRole;
     seatType?: SeatType;
     note?: string;

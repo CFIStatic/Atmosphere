@@ -690,6 +690,8 @@ const createInviteSchema = z.object({
   email: z.string().email().max(200).optional(),
   /** Crew without email: invite by mobile number (E.164, US default). */
   phone: z.string().trim().max(40).optional(),
+  /** Phone-only invites: the admin confirms the person agreed to the invite text (A2P 10DLC opt-in). */
+  smsConsent: z.boolean().optional(),
   role: z.enum(MEMBER_ROLES).optional(),
   /** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing. */
   seatType: z.enum(['field_capture', 'platform']).optional(),
@@ -735,6 +737,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     }
     if (phone && !email && !phoneAuthEnabled()) {
       throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
+    }
+    if (phone && !email && input.smsConsent !== true) {
+      throw new HttpError(400, 'Confirm they agreed to get a text from Atmosphere.', 'sms_consent_required');
     }
     const seatType = parseSeatType(input.seatType);
     // A Platform seat is a Global Admin without Field Capture or Billing.
