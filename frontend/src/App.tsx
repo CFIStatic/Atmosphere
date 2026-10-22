@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   MemoryRouter,
@@ -28,6 +28,9 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { DocumentTitle } from './components/DocumentTitle';
 import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
+import { lazyWithRetry } from './lib/chunkReload';
+import { VersionWatch } from './lib/versionWatch';
 import { DASHBOARD_HOME, PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { OperationsShell } from './layouts/OperationsShell';
@@ -42,34 +45,34 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 // dev mode otherwise pulls in every page on the first visit.
 // Off the first download: a dev screenshot page (with its fixture) and the
 // password-reset pages most visits never open.
-const HdOrderScreenshotPage = lazy(() => import('./pages/HdOrderScreenshotPage'));
-const ForgotPasswordPage = lazy(() =>
+const HdOrderScreenshotPage = lazyWithRetry(() => import('./pages/HdOrderScreenshotPage'));
+const ForgotPasswordPage = lazyWithRetry(() =>
   import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
 );
-const ResetPasswordPage = lazy(() =>
+const ResetPasswordPage = lazyWithRetry(() =>
   import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
 );
-const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
-const SharedDashboardPage = lazy(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
-const JobIntakePage = lazy(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
-const PlatformHomePage = lazy(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
-const MyJobsPage = lazy(() => import('./pages/MyJobsPage').then((m) => ({ default: m.MyJobsPage })));
-const JobSharePage = lazy(() => import('./pages/JobSharePage').then((m) => ({ default: m.JobSharePage })));
-const SettingsPage = lazy(() =>
+const SignupPage = lazyWithRetry(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })));
+const SharedDashboardPage = lazyWithRetry(() => import('./pages/SharedDashboardPage').then((m) => ({ default: m.SharedDashboardPage })));
+const JobIntakePage = lazyWithRetry(() => import('./pages/JobIntakePage').then((m) => ({ default: m.JobIntakePage })));
+const PlatformHomePage = lazyWithRetry(() => import('./pages/PlatformHomePage').then((m) => ({ default: m.PlatformHomePage })));
+const MyJobsPage = lazyWithRetry(() => import('./pages/MyJobsPage').then((m) => ({ default: m.MyJobsPage })));
+const JobSharePage = lazyWithRetry(() => import('./pages/JobSharePage').then((m) => ({ default: m.JobSharePage })));
+const SettingsPage = lazyWithRetry(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 const SpeakerIdPreviewPage = import.meta.env.DEV
-  ? lazy(() => import('./pages/SpeakerIdPreviewPage').then((m) => ({ default: m.SpeakerIdPreviewPage })))
+  ? lazyWithRetry(() => import('./pages/SpeakerIdPreviewPage').then((m) => ({ default: m.SpeakerIdPreviewPage })))
   : null;
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
-const LoginsPage = lazy(() => import('./pages/LoginsPage').then((m) => ({ default: m.LoginsPage })));
-const PlaybooksLibraryPage = lazy(() =>
+const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
+const LoginsPage = lazyWithRetry(() => import('./pages/LoginsPage').then((m) => ({ default: m.LoginsPage })));
+const PlaybooksLibraryPage = lazyWithRetry(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
-const CrewInviteGate = lazy(() =>
+const CrewInviteGate = lazyWithRetry(() =>
   import('./pages/CrewInviteGate').then((m) => ({ default: m.CrewInviteGate })),
 );
-const ShareLinkGate = lazy(() =>
+const ShareLinkGate = lazyWithRetry(() =>
   import('./pages/ShareLinkGate').then((m) => ({ default: m.ShareLinkGate })),
 );
 
@@ -395,10 +398,12 @@ export default function App() {
   return (
     <Router {...routerProps()}>
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
+      <VersionWatch />
       <AuthProvider>
         <DocumentTitle />
         <SupportBanner />
         <DocumentRobotsMeta />
+        <RouteErrorBoundary fullScreen>
         <Suspense fallback={<FullScreenSpinner />}>
           <TermsGate>
           <Routes>
@@ -513,6 +518,7 @@ export default function App() {
           </Routes>
           </TermsGate>
         </Suspense>
+        </RouteErrorBoundary>
       </AuthProvider>
     </Router>
   );

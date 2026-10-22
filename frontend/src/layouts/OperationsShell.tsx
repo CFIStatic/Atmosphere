@@ -2,7 +2,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
-import { MenuIcon } from '../components/icons';
+import { MenuIcon, SpinnerIcon } from '../components/icons';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useT } from '../lib/i18n';
 import { usePhoneShell } from '../lib/usePhoneShell';
@@ -118,12 +119,24 @@ export function OperationsShell() {
           >
             {/* Pages load on demand; suspend here so the shell and the
                 persistent Verifier iframe stay mounted while a page chunk loads. */}
-            <Suspense fallback={null}>
-              <Outlet context={{ chrome: 'operations', headerSlot } satisfies OperationsOutletContext} />
-            </Suspense>
+            <RouteErrorBoundary resetKey={pathname}>
+              <Suspense fallback={<PageLoading />}>
+                <Outlet context={{ chrome: 'operations', headerSlot } satisfies OperationsOutletContext} />
+              </Suspense>
+            </RouteErrorBoundary>
           </div>
         </main>
       )}
+    </div>
+  );
+}
+
+/** Shown in the content area while a page chunk loads (never a blank pane). */
+function PageLoading() {
+  return (
+    <div role="status" aria-live="polite" className="grid min-h-[40vh] place-items-center text-brand-600">
+      <SpinnerIcon className="animate-spin" width={24} height={24} />
+      <span className="sr-only">Loading…</span>
     </div>
   );
 }
