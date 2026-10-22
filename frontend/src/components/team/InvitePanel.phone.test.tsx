@@ -15,8 +15,10 @@ describe('InvitePanel Email | Phone toggle', () => { it('switches to Phone and s
   await userEvent.click(screen.getByRole('radio', { name: 'Phone' }));
   expect(screen.getByTestId('invite-phone')).toHaveAttribute('placeholder', '(555) 123-4567');
   await userEvent.type(screen.getByTestId('invite-phone'), '3125550100');
+  expect(screen.getByRole('button', { name: /^invite$/i })).toBeDisabled();
+  await userEvent.click(screen.getByRole('checkbox', { name: /agreed to get a text/ }));
   await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
-  expect(createOrgInvite).toHaveBeenCalledWith(expect.objectContaining({ phone: '+13125550100', role: 'employee' }));
+  expect(createOrgInvite).toHaveBeenCalledWith(expect.objectContaining({ phone: '+13125550100', smsConsent: true, role: 'employee' }));
   expect(await screen.findByText(/texted \(312\) 555-0100/)).toBeInTheDocument();
 });
   it('switches back to Email', async () => {

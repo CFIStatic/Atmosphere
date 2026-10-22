@@ -644,10 +644,54 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
   }
 });
 
+type InviteTextStatus = 'sent' | 'not_configured' | 'failed';
+
+/** Per-invite gap between texts, so "Text again" cannot be used to spam a number. */
+const INVITE_TEXT_GAP_MS = 60_000;
+const lastInviteText = new Map<string, number>();
+
+/**
+ * Text a phone-only invitee a link to sign in with their number. Needs a
+ * Twilio sender (TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER); Verify
+ * alone only sends sign-in codes.
+ */
+async function textOrgInvite(
+  supabase: ReturnType<typeof createUserClient>,
+  inviterId: string,
+  input: { phone: string; orgId: string; orgName: string },
+): Promise<InviteTextStatus> {
+  const { phone, orgId, orgName } = input;
+  if (!smsProviderConfigured()) {
+    console.error('[org-invite] invite text skipped: no Twilio sender (set TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER)');
+    return 'not_configured';
+  }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', inviterId)
+    .maybeSingle();
+  const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
+  // Sign in with this number (the code creates the account), then join.
+  const params = new URLSearchParams({ phone, invited: '1', next: '/signup?intent=join' });
+  const sms = await sendSms({
+    to: phone,
+    orgId,
+    body: orgInviteSms({
+      orgName,
+      inviterName: (profile as { full_name?: string | null } | null)?.full_name ?? null,
+      link: `${origin}/login?${params.toString()}`,
+    }),
+  });
+  if (!sms.ok) console.warn(`[org-invite] text to ***${phone.slice(-4)} failed: ${sms.reason}: ${sms.message}`);
+  return sms.ok ? 'sent' : 'failed';
+}
+
 const createInviteSchema = z.object({
   email: z.string().email().max(200).optional(),
   /** Crew without email: invite by mobile number (E.164, US default). */
   phone: z.string().trim().max(40).optional(),
+  /** Phone-only invites: the admin confirms the person agreed to the invite text (A2P 10DLC opt-in). */
+  smsConsent: z.boolean().optional(),
   role: z.enum(MEMBER_ROLES).optional(),
   /** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing. */
   seatType: z.enum(['field_capture', 'platform']).optional(),
@@ -693,6 +737,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     }
     if (phone && !email && !phoneAuthEnabled()) {
       throw new HttpError(409, 'Phone invites are not turned on yet.', 'phone_auth_disabled');
+    }
+    if (phone && !email && input.smsConsent !== true) {
+      throw new HttpError(400, 'Confirm they agreed to get a text from Atmosphere.', 'sms_consent_required');
     }
     const seatType = parseSeatType(input.seatType);
     // A Platform seat is a Global Admin without Field Capture or Billing.
@@ -761,7 +808,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     // erasure list" is itself a disclosure.
     let emailed = false;
     let texted = false;
-    let textStatus: 'sent' | 'not_configured' | 'failed' | null = null;
+    let textStatus: InviteTextStatus | null = null;
     const admin = unscopedAdminOrNull();
     let erased = false;
     if (admin && email) {
@@ -772,31 +819,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     // Without a Twilio sender (no number / messaging service), skip the
     // invite text: the admin tells the crew member, and the sign-in code
     // itself goes out through Supabase Auth's Twilio Verify.
-    if (phone && !email && !smsProviderConfigured()) {
-      textStatus = 'not_configured';
-      console.error('[org-invite] invite text skipped: no Twilio sender (set TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER)');
-    }
-    if (phone && !email && smsProviderConfigured()) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', req.user!.id)
-        .maybeSingle();
-      const origin = publicAppOrigin()?.replace(/\/$/, '') || 'https://app.atmosphereteam.com';
-      // Sign in with this number (the code creates the account), then join.
-      const params = new URLSearchParams({ phone, invited: '1', next: '/signup?intent=join' });
-      const sms = await sendSms({
-        to: phone,
-        orgId,
-        body: orgInviteSms({
-          orgName: name,
-          inviterName: (profile as any)?.full_name ?? null,
-          link: `${origin}/login?${params.toString()}`,
-        }),
-      });
-      if (!sms.ok) console.warn(`[org-invite] text to ***${phone.slice(-4)} failed: ${sms.reason}: ${sms.message}`);
-      texted = sms.ok;
-      textStatus = sms.ok ? 'sent' : 'failed';
+    if (phone && !email) {
+      textStatus = await textOrgInvite(supabase, req.user!.id, { phone, orgId, orgName: name });
+      texted = textStatus === 'sent';
     }
 
     if (email && !erased) {
@@ -843,6 +868,46 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       texted,
       textStatus,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/org/invites/:id/text — text a pending phone invite again, e.g.
+ * one created before Twilio could send. Global Admin only, once a minute.
+ */
+orgRouter.post('/invites/:id/text', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId, name, role: callerRole } = await orgForInvites(supabase, req.user!.id);
+    if (!isGlobalAdmin(callerRole)) {
+      throw new HttpError(403, 'Only a Global Admin can text an invitation.', 'insufficient_role');
+    }
+    const { data, error } = await supabase
+      .from('org_invites')
+      .select('id, email, phone, status')
+      .eq('org_id', orgId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw new HttpError(400, error.message, 'invite_lookup_failed');
+    const invite = data as { id: string; email: string | null; phone: string | null; status: string } | null;
+    if (!invite) throw new HttpError(404, 'That invitation was not found.', 'not_found');
+    if (invite.status !== 'pending') {
+      throw new HttpError(409, 'That invitation is not pending — it was already answered or withdrawn.', 'not_pending');
+    }
+    const phone = normalizePhoneE164(invite.phone);
+    if (!phone || invite.email) {
+      throw new HttpError(409, 'Only invitations sent to a mobile number can be texted.', 'not_phone_invite');
+    }
+    const now = Date.now();
+    const last = lastInviteText.get(invite.id);
+    if (last && now - last < INVITE_TEXT_GAP_MS) {
+      throw new HttpError(429, 'We just texted them. Try again in a minute.', 'text_too_soon');
+    }
+    const textStatus = await textOrgInvite(supabase, req.user!.id, { phone, orgId, orgName: name });
+    if (textStatus === 'sent') lastInviteText.set(invite.id, now);
+    res.json({ texted: textStatus === 'sent', textStatus });
   } catch (err) {
     next(err);
   }

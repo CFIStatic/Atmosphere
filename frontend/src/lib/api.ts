@@ -4139,6 +4139,7 @@ export const api = {
   createOrgInvite: (input: {
     email?: string;
     phone?: string;
+    smsConsent?: boolean;
     role?: MemberRole;
     seatType?: SeatType;
     note?: string;
@@ -4148,6 +4149,11 @@ export const api = {
     request<{ invite: OrgInvite; emailed: boolean; texted?: boolean; textStatus?: 'sent' | 'not_configured' | 'failed' | null }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+
+  textOrgInvite: (id: string) =>
+    request<{ texted: boolean; textStatus: 'sent' | 'not_configured' | 'failed' }>(`/api/org/invites/${id}/text`, {
+      method: 'POST',
     }),
 
   revokeOrgInvite: (id: string) =>

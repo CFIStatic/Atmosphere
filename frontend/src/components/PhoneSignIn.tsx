@@ -162,7 +162,7 @@ export function PhoneSignIn({
           placeholder="(555) 123-4567"
           className={inputClass}
         />
-        <p className="mt-1.5 text-xs text-ink-500">We&apos;ll text you a 6-digit code. Message and data rates may apply.</p>
+        <p className="mt-1.5 text-xs text-ink-500">We&apos;ll text you a 6-digit code. Message and data rates may apply. Reply STOP to opt out.</p>
       </div>
       <button type="submit" disabled={!phone || busy || !termsReady} className={primaryClass}>
         {busy && <SpinnerIcon className="animate-spin" />}

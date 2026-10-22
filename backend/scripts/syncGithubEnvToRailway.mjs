@@ -50,6 +50,12 @@ const KEYS = [
   'GOOGLE_CALENDAR_CLIENT_SECRET',
   'GOOGLE_CALENDAR_REFRESH_TOKEN',
   'GOOGLE_CALENDAR_ID',
+  // Texting (invite links, Chat). Verify alone only sends sign-in codes; a
+  // sender (Messaging Service or number) is what lets invites go out.
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_MESSAGING_SERVICE_SID',
+  'TWILIO_FROM_NUMBER',
 ];
 
 const REQUIRED = [
