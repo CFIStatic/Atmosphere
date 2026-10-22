@@ -441,6 +441,62 @@ function aiBudgets(includeInternal) {
 }
 
 
+// ----------------------------------------------------------------- behind on payments (TEST DATA, example.test only)
+const overdueMessages = [];
+function overdue() {
+  const day = 86400000;
+  const inv = (id, number, cents, daysAgo, attempts, description) => ({
+    id,
+    number,
+    amountDueCents: cents,
+    currency: 'usd',
+    createdAt: iso(new Date(NOW.getTime() - daysAgo * day)),
+    dueAt: iso(new Date(NOW.getTime() - daysAgo * day)),
+    attempts,
+    hostedInvoiceUrl: 'https://invoice.stripe.com/i/test_example',
+    description,
+  });
+  const account = (orgId, name, planCode, invoices, contacts) => {
+    const sorted = [...invoices].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    const messages = overdueMessages.filter((m) => m.orgId === orgId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const oldest = sorted[0]?.dueAt ?? null;
+    return {
+      orgId,
+      name,
+      billingStatus: 'past_due',
+      planCode,
+      stripeCustomerId: 'cus_test_example',
+      mrrCents: 29900,
+      amountDueCents: sorted.reduce((n, i) => n + i.amountDueCents, 0),
+      currency: 'usd',
+      oldestDueAt: oldest,
+      daysOverdue: oldest ? Math.floor((NOW.getTime() - Date.parse(oldest)) / day) : null,
+      invoices: sorted,
+      contacts,
+      messages,
+      lastMessageAt: messages[0]?.createdAt ?? null,
+    };
+  };
+  const accounts = [
+    account('00000000-0000-4000-8000-0000000000d1', 'Ridge Roofing (TEST DATA)', 'pro', [
+      inv('in_test_1', 'RR-0007', 29900, 38, 4, 'Atmosphere Pro, monthly'),
+      inv('in_test_2', 'RR-0008', 29900, 8, 2, 'Atmosphere Pro, monthly'),
+      inv('in_test_3', 'RR-0009', 4900, 8, 2, 'Extra Field Capture seat'),
+    ], [
+      { name: 'Avery Ridge', email: 'avery@example.test', phone: '+16085550199', role: 'Owner' },
+      { name: 'Blake Books', email: 'books@example.test', phone: null, role: 'Accountant' },
+      { name: 'Ridge Roofing LLC', email: 'billing@example.test', phone: '+16085550100', role: 'Stripe billing' },
+    ]),
+    account('00000000-0000-4000-8000-0000000000d2', 'Lakeside Restoration (TEST DATA)', 'starter', [
+      inv('in_test_4', 'LR-0012', 14900, 16, 3, 'Atmosphere Starter, monthly'),
+    ], [{ name: 'Casey Lake', email: 'casey@example.test', phone: '+14145550142', role: 'Owner' }]),
+    account('00000000-0000-4000-8000-0000000000d3', 'Northside Drywall (TEST DATA)', 'starter', [
+      inv('in_test_5', 'ND-0003', 14900, 2, 1, 'Atmosphere Starter, monthly'),
+    ], [{ name: 'Drew North', email: 'drew@example.test', phone: null, role: 'Owner' }]),
+  ].sort((a, b) => b.amountDueCents - a.amountDueCents);
+  return { generatedAt: iso(NOW), stripeChecked: true, stripeError: null, emailReady: true, smsReady: true, accounts };
+}
+
 // ----------------------------------------------------------------- customers (TEST DATA, example.com only)
 function customers() {
   const day = 86400000;
@@ -530,6 +586,30 @@ const server = http.createServer(async (req, res) => {
   if (r === '/ai-reconciliation') return send(res, 200, aiReconciliation());
   if (r === '/ai-budgets') return send(res, 200, aiBudgets(includeInternal));
   if (r === '/customers') return send(res, 200, customers());
+  if (r === '/overdue') return send(res, 200, overdue());
+  {
+    const om = /^\/overdue\/([0-9a-f-]{36})\/message$/.exec(r);
+    if (om && m === 'POST') {
+      // Never sends: records the message as "logged" so the page shows it.
+      const body = await readBody(req);
+      const results = (body.recipients ?? []).map((recipient) => {
+        overdueMessages.push({
+          id: `msg_${overdueMessages.length + 1}`,
+          orgId: om[1],
+          channel: body.channel,
+          recipient,
+          subject: body.subject ?? null,
+          body: body.body,
+          status: 'logged',
+          error: null,
+          sentByEmail: 'staff@example.test',
+          createdAt: iso(new Date()),
+        });
+        return { recipient, status: 'logged', error: null };
+      });
+      return send(res, 200, { results });
+    }
+  }
   if (r === '/support-sessions' && m === 'POST') {
     // The mock never creates a session; it hands back a local Platform preview URL.
     return send(res, 201, { sessionId: 'mock', expiresAt: iso(new Date(Date.now() + 30 * 60000)), openUrl: 'about:blank' });

@@ -53,7 +53,7 @@ import {
   sendCampaign,
   suppressedEmails,
 } from '../analytics/campaigns.js';
-import { sendSystemMail } from '../lib/systemMail.js';
+import { logMailEnabled, sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { config } from '../config.js';
 import { computerIqStore } from '../computer/worker.js';
@@ -71,6 +71,16 @@ import { PRACTICE_TASKS } from '../computer/iq/practice/catalog.js';
 
 import { staffSupportRouter } from './support.js';
 import { loadCustomers } from '../analytics/customers.js';
+import {
+  EMAIL_BODY_MAX,
+  loadOverdue,
+  MAX_RECIPIENTS,
+  overdueSendBlocker,
+  sendOverdueMessage,
+  stripeOpenInvoices,
+} from '../analytics/overdue.js';
+import { stripeClient } from '../lib/stripe.js';
+import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
 
 export const analyticsRouter = Router();
 
@@ -88,6 +98,78 @@ analyticsRouter.get(
       const admin = createAdminClient();
       if (!admin) throw new HttpError(503, 'Customers needs the server service key.', 'no_admin');
       res.json({ generatedAt: new Date().toISOString(), customers: await loadCustomers(admin) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+function overdueDeps() {
+  return {
+    openInvoices: config.stripe.secretKey ? stripeOpenInvoices(stripeClient()) : null,
+    emailReady: systemMailConfigured(),
+    smsReady: smsProviderConfigured(),
+  };
+}
+
+/** Behind on payments: workspaces that owe money and their billing contacts. Internal scope only. */
+analyticsRouter.get(
+  '/overdue',
+  requireAnalytics('internal'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Behind on payments needs the server service key.', 'no_admin');
+      res.json(await loadOverdue(admin, overdueDeps()));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/analytics/overdue/:orgId/message
+ * A staff-written email or text to the billing contacts of one overdue
+ * workspace. Only addresses listed for that workspace are accepted, and every
+ * send is logged with who sent it.
+ */
+analyticsRouter.post(
+  '/overdue/:orgId/message',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = analyticsOrgIdSchema.parse(req.params.orgId);
+      const input = z
+        .object({
+          channel: z.enum(['email', 'sms']),
+          recipients: z.array(z.string().trim().min(3).max(320)).min(1).max(MAX_RECIPIENTS),
+          subject: z.string().max(200).nullable().optional(),
+          body: z.string().max(EMAIL_BODY_MAX),
+        })
+        .parse(req.body ?? {});
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Behind on payments needs the server service key.', 'no_admin');
+      const deps = overdueDeps();
+      const blocker = overdueSendBlocker(input.channel, process.env, config.isProduction, deps);
+      if (blocker) throw new HttpError(403, blocker.message, blocker.code);
+      const overdue = await loadOverdue(admin, deps);
+      const account = overdue.accounts.find((a) => a.orgId === orgId);
+      if (!account) throw new HttpError(404, 'That workspace is not behind on payments.', 'not_overdue');
+      const results = await sendOverdueMessage(
+        {
+          admin,
+          account,
+          logOnly: logMailEnabled(),
+          sendEmail: (mail) => sendSystemMail({ to: mail.to, subject: mail.subject, text: mail.text, kind: 'transactional' }),
+          sendText: async (sms) => {
+            const sent = await sendSms({ to: sms.to, body: sms.body, orgId: sms.orgId });
+            return sent.ok ? { ok: true as const, id: sent.id } : { ok: false as const, message: sent.message };
+          },
+          sender: { userId: req.user?.id ?? null, email: req.user?.email ?? null },
+        },
+        { channel: input.channel, recipients: input.recipients, subject: input.subject ?? null, body: input.body },
+      );
+      res.json({ results });
     } catch (err) {
       next(err);
     }

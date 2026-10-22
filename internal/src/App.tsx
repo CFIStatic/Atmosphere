@@ -7,6 +7,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { NorthStarPage } from './pages/NorthStarPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { OverduePage } from './pages/OverduePage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
 import { UsagePage } from './pages/UsagePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
@@ -49,6 +50,7 @@ export function App() {
             <Route path="capture" element={<CapturePage />} />
             <Route path="ai" element={<AiPage />} />
             <Route path="customers" element={<RequireInternal><CustomersPage /></RequireInternal>} />
+            <Route path="overdue" element={<RequireInternal><OverduePage /></RequireInternal>} />
             <Route path="contacts" element={<RequireInternal><ContactsPage /></RequireInternal>} />
             <Route path="campaigns" element={<RequireInternal><CampaignsPage /></RequireInternal>} />
             <Route path="campaigns/new" element={<RequireInternal><CampaignBuilderPage /></RequireInternal>} />
