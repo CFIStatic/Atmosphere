@@ -1,10 +1,22 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, type AssignablePermissionRole, type MemberRole, type OrgInvite, type PermissionRole } from '../../lib/api';
+import {
+  api,
+  ApiError,
+  type AssignablePermissionRole,
+  type MemberRole,
+  type OrgInvite,
+  type PermissionRole,
+} from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin } from '../../domain/productRoles';
+import { ChevronDown } from 'lucide-react';
 import { SpinnerIcon } from '../icons';
-import { planRequiredMessage, UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
+import {
+  planRequiredMessage,
+  UpgradePrompt,
+  useProductActionsLocked,
+} from '../billing/ProductActionLock';
 import { APP_SHELL_SEATS_NOTE, isInAppShell } from '../../lib/appShell';
 import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
 import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
@@ -34,7 +46,10 @@ export const PERMISSION_ROLE_HELP: Record<PermissionRole, string> = {
 };
 
 /** The role a member row shows. Rows from servers without roles fall back to the old meaning. */
-export function memberPermissionRole(m: { permissionRole?: PermissionRole | null; role?: string | null }): PermissionRole {
+export function memberPermissionRole(m: {
+  permissionRole?: PermissionRole | null;
+  role?: string | null;
+}): PermissionRole {
   if (m.permissionRole) return m.permissionRole;
   return isGlobalAdmin(m.role) ? 'admin' : 'member';
 }
@@ -153,7 +168,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         usingPhone
           ? res.texted
             ? `Invited. We texted ${formatPhone(phoneE164)} a link to app.atmosphereteam.com. They sign in with that number and a 6-digit code.`
-            : `Invited, but we couldn't text ${formatPhone(phoneE164)} ${res.textStatus === 'not_configured' ? '(team texting isn\'t set up yet)' : 'just now'}. Send them app.atmosphereteam.com and have them sign in with that number.`
+            : `Invited, but we couldn't text ${formatPhone(phoneE164)} ${res.textStatus === 'not_configured' ? "(team texting isn't set up yet)" : 'just now'}. Send them app.atmosphereteam.com and have them sign in with that number.`
           : res.emailed
             ? `Invited — Atmosphere emailed ${email}.`
             : `Invited. Atmosphere could not email them, so let them know to check with you.`,
@@ -212,10 +227,19 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         </div>
       ) : null}
 
-      <form onSubmit={invite} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap" data-testid="invite-row">
+      <form
+        onSubmit={invite}
+        className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+        data-testid="invite-row"
+      >
         <div className="flex min-w-0 flex-col gap-2 sm:min-w-[18rem] sm:flex-1 sm:flex-row">
           {phoneEnabled ? (
-            <div role="radiogroup" aria-label="Invite by" data-testid="invite-via" className={`${SEGMENT_GROUP} shrink-0`}>
+            <div
+              role="radiogroup"
+              aria-label="Invite by"
+              data-testid="invite-via"
+              className={`${SEGMENT_GROUP} shrink-0`}
+            >
               {(['email', 'phone'] as const).map((key) => {
                 const on = key === 'phone' ? byPhone : !byPhone;
                 return (
@@ -264,19 +288,25 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           )}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <select
-            aria-label="Role"
-            data-testid="invite-role"
-            value={permissionRole}
-            onChange={(e) => setPermissionRole(e.target.value as AssignablePermissionRole)}
-            className="h-[38px] rounded-lg glass-field px-3 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
-          >
-            {PERMISSION_ROLE_CHOICES.map((key) => (
-              <option key={key} value={key}>
-                {PERMISSION_ROLE_LABELS[key]}
-              </option>
-            ))}
-          </select>
+          <div className="relative shrink-0">
+            <select
+              aria-label="Role"
+              data-testid="invite-role"
+              value={permissionRole}
+              onChange={(e) => setPermissionRole(e.target.value as AssignablePermissionRole)}
+              className="h-[38px] w-full cursor-pointer appearance-none rounded-lg glass-field pl-3 pr-10 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200 sm:w-auto"
+            >
+              {PERMISSION_ROLE_CHOICES.map((key) => (
+                <option key={key} value={key}>
+                  {PERMISSION_ROLE_LABELS[key]}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500"
+            />
+          </div>
           <button
             type="submit"
             disabled={busy || (usingPhone ? !phoneE164 || !smsConsent : !email.trim())}
@@ -288,7 +318,10 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         </div>
       </form>
       {usingPhone ? (
-        <label className="mt-2 flex items-start gap-2 text-xs text-ink-600" data-testid="invite-sms-consent">
+        <label
+          className="mt-2 flex items-start gap-2 text-xs text-ink-600"
+          data-testid="invite-sms-consent"
+        >
           <input
             type="checkbox"
             checked={smsConsent}
@@ -296,13 +329,14 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
             className="mt-0.5"
           />
           <span>
-            This person agreed to get a text from Atmosphere with their invite. Msg &amp; data rates may apply. Reply
-            STOP to opt out.
+            This person agreed to get a text from Atmosphere with their invite. Msg &amp; data rates
+            may apply. Reply STOP to opt out.
           </span>
         </label>
       ) : null}
       <p className="mt-1.5 text-xs text-ink-500" data-testid="invite-help">
-        <span data-testid="invite-role-help">{PERMISSION_ROLE_HELP[permissionRole]}</span> {inviteSeatHelp(seats)}
+        <span data-testid="invite-role-help">{PERMISSION_ROLE_HELP[permissionRole]}</span>{' '}
+        {inviteSeatHelp(seats)}
         {inApp && seatsFull ? (
           <span data-testid="app-shell-seats-note"> {APP_SHELL_SEATS_NOTE}</span>
         ) : null}
@@ -320,9 +354,15 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           {invites.slice(0, 12).map((inv) => (
             <li key={inv.id} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0">
-                <span className="block truncate text-xs font-medium text-ink-800">{inv.email || formatPhone(inv.phone)}</span>
+                <span className="block truncate text-xs font-medium text-ink-800">
+                  {inv.email || formatPhone(inv.phone)}
+                </span>
                 <span className="block text-[11px] text-ink-500">
-                  {PERMISSION_ROLE_LABELS[inv.permissionRole ?? 'member']}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
+                  {PERMISSION_ROLE_LABELS[inv.permissionRole ?? 'member']}
+                  {inv.serviceRole
+                    ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}`
+                    : ''}{' '}
+                  · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
