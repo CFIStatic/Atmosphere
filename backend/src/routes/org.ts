@@ -1,4 +1,4 @@
-import { getAiTraining, putAiTraining } from './clipFeedback.js';
+import { getAiTraining } from './clipFeedback.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -381,7 +381,6 @@ orgRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 /** Whether this workspace's corrected AI text may train Atmosphere's own models. */
 orgRouter.get('/ai-training', getAiTraining);
-orgRouter.put('/ai-training', putAiTraining);
 
 orgRouter.post('/join', async (req: Request, res: Response, next: NextFunction) => {
   try {

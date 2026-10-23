@@ -214,23 +214,12 @@ describe('Settings organization', () => {
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 
-  it('lets a Global Admin turn on Help improve Atmosphere\'s AI, and shows it off by default', async () => {
-    apiMocks.setAiTraining.mockResolvedValue({ setting: { optedIn: true, changedAt: '2026-10-20T00:00:00Z' } });
+  it('shows no AI training toggle or Team voices card', async () => {
     renderSettings('/settings?section=organization');
-    const box = within(await screen.findByTestId('ai-training-toggle')).getByRole('checkbox');
-    await waitFor(() => expect(box).not.toBeDisabled());
-    expect(box).not.toBeChecked();
-    fireEvent.click(box);
-    await waitFor(() => expect(apiMocks.setAiTraining).toHaveBeenCalledWith(true));
-    await waitFor(() => expect(box).toBeChecked());
-  });
-
-  it('shows the AI training setting read-only to an Employee', async () => {
-    authState.membership = { role: 'employee', org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' } };
-    renderSettings('/settings?section=organization');
-    const box = within(await screen.findByTestId('ai-training-toggle')).getByRole('checkbox');
-    expect(box).toBeDisabled();
-    expect(screen.getByText('Only a Global Admin can change this.')).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
+    expect(screen.queryByTestId('ai-training-toggle')).toBeNull();
+    expect(screen.queryByText("Help improve Atmosphere's AI")).toBeNull();
+    expect(screen.queryByText('Team voices')).toBeNull();
   });
 
   it('shows the seat counter and lets an admin change roles, never the owner or themselves', async () => {

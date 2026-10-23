@@ -5,7 +5,7 @@
  */
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
+import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAdmin } from '../lib/scopedAdmin.js';
 import {
   CLIP_FEEDBACK_REASONS,
@@ -13,7 +13,6 @@ import {
   getAiTrainingSetting,
   myClipFeedback,
   rateClipSummary,
-  setAiTrainingSetting,
 } from '../shared/clipSummaryFeedback.js';
 
 const uuid = z.string().uuid();
@@ -61,17 +60,6 @@ export async function getAiTraining(req: Request, res: Response, next: NextFunct
   try {
     const { orgId } = await requireOrgContext(req);
     res.json({ setting: await getAiTrainingSetting(requireAdmin(), orgId) });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/** PUT /api/org/ai-training  { optedIn: boolean } — Global Admin only. */
-export async function putAiTraining(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { orgId, userId } = await requireGlobalAdmin(req);
-    const { optedIn } = z.object({ optedIn: z.boolean() }).parse(req.body ?? {});
-    res.json({ setting: await setAiTrainingSetting(requireAdmin(), { orgId, userId, optedIn }) });
   } catch (err) {
     next(err);
   }

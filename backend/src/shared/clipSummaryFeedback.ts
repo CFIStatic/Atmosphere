@@ -142,30 +142,11 @@ export interface AiTrainingSetting {
 }
 
 /** Off unless a Global Admin turned it on. No row (or no table yet) reads as off. */
-export async function getAiTrainingSetting(admin: Db, orgId: string): Promise<AiTrainingSetting> {
-  const { data, error } = await admin
-    .from('org_ai_training_settings')
-    .select('opted_in, changed_at')
-    .eq('org_id', orgId)
-    .maybeSingle();
-  if (error || !data) return { optedIn: false, changedAt: null };
-  return { optedIn: data.opted_in === true, changedAt: data.changed_at ?? null };
-}
-
-export async function setAiTrainingSetting(
-  admin: Db,
-  input: { orgId: string; userId: string; optedIn: boolean },
-): Promise<AiTrainingSetting> {
-  const changedAt = new Date().toISOString();
-  const { error } = await admin.from('org_ai_training_settings').upsert(
-    { org_id: input.orgId, opted_in: input.optedIn, changed_by: input.userId, changed_at: changedAt },
-    { onConflict: 'org_id' },
-  );
-  if (error) {
-    if (missingTable(error, 'org_ai_training_settings')) {
-      throw new HttpError(503, 'This setting is not available yet.', 'ai_training_unavailable');
-    }
-    throw new HttpError(500, error.message, 'ai_training_failed');
-  }
-  return { optedIn: input.optedIn, changedAt };
+/**
+ * AI training on corrected clip summaries is always on for every workspace
+ * (covered by the terms of service). The org_ai_training_settings table is
+ * kept but no longer read or written.
+ */
+export async function getAiTrainingSetting(_admin: Db, _orgId: string): Promise<AiTrainingSetting> {
+  return { optedIn: true, changedAt: null };
 }
