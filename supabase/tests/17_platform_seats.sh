@@ -10,6 +10,7 @@
 #   - a Platform member is a non-admin (employee), and cannot change their own seat type
 #   - legacy pending Platform admin invites join as non-admins; Field Capture only seats
 #   - accepting a Platform invite makes a Platform member without a second seat
+#   - only the owner or an admin can create an admin invite, even directly
 #   - Billing belongs to the owner only: a Platform seat and a free Global Admin
 #     get can_manage_billing = false and billing_overview {can_manage:false}
 #
@@ -171,6 +172,35 @@ insert into public.org_members (org_id, user_id, role, work_type, status, create
 values ('17000000-0000-4000-8000-0000000000a1', '17000000-0000-4000-8000-000000000005', 'employee', 'mitigation', 'active', now(), '{}');
 select pg_temp.as_server();
 select pg_temp.expect((select permission_role from public.org_members where user_id = '17000000-0000-4000-8000-000000000005') = 'viewer', 'a viewer invite joins as viewer');
+
+-- Only the owner or an admin can invite an admin, even writing org_invites directly.
+select pg_temp.as_user('17000000-0000-4000-8000-000000000003');
+select pg_temp.expect(pg_temp.raises($s$
+  insert into public.org_invites (org_id, email, role, status, created_at, permission_role)
+  values ('17000000-0000-4000-8000-0000000000a1', 'sneaky17@example.com', 'employee', 'pending', now(), 'admin')
+$s$, 'permission_role_admin_only'), 'a member cannot create an admin invite');
+select pg_temp.as_server();
+insert into public.org_invites (id, org_id, email, role, status, created_at)
+values ('17000000-0000-4000-8000-0000000000b2', '17000000-0000-4000-8000-0000000000a1', 'plain17@example.com', 'employee', 'pending', now());
+select pg_temp.as_user('17000000-0000-4000-8000-000000000003');
+select pg_temp.expect(pg_temp.raises($s$
+  update public.org_invites set permission_role = 'admin' where id = '17000000-0000-4000-8000-0000000000b2'
+$s$, 'permission_role_admin_only'), 'a member cannot raise a pending invite to admin');
+select pg_temp.as_user('17000000-0000-4000-8000-000000000005');
+select pg_temp.expect(pg_temp.raises($s$
+  insert into public.org_invites (org_id, email, role, status, created_at, permission_role)
+  values ('17000000-0000-4000-8000-0000000000a1', 'sneaky17b@example.com', 'employee', 'pending', now(), 'admin')
+$s$, 'permission_role_admin_only'), 'a viewer cannot create an admin invite');
+select pg_temp.as_user('17000000-0000-4000-8000-000000000002');
+update public.org_invites set permission_role = 'admin' where id = '17000000-0000-4000-8000-0000000000b2';
+select pg_temp.expect((select permission_role from public.org_invites where id = '17000000-0000-4000-8000-0000000000b2') = 'admin',
+  'an admin can invite an admin');
+select pg_temp.as_user('17000000-0000-4000-8000-000000000001');
+insert into public.org_invites (org_id, email, role, status, created_at, permission_role)
+values ('17000000-0000-4000-8000-0000000000a1', 'owneradmin17@example.com', 'employee', 'pending', now(), 'admin');
+select pg_temp.expect(exists (select 1 from public.org_invites where email = 'owneradmin17@example.com' and permission_role = 'admin'),
+  'the owner can invite an admin');
+select pg_temp.as_server();
 
 -- Nobody changes their own role, products, or the owner.
 select pg_temp.as_user('17000000-0000-4000-8000-000000000005');

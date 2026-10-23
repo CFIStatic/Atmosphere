@@ -12,6 +12,7 @@
 --     admin  = today's Global Admin powers, no billing
 --     member = normal work
 --     viewer = read-only (enforced by the API)
+--   Only the owner or an admin can create an admin invite (enforced here).
 --   org_members.role keeps its database meaning (owner and pre-existing
 --   admins global_admin, everyone else employee), so a free "admin" can never
 --   dodge the Field Capture seat count.
@@ -134,6 +135,39 @@ begin
   return new;
 end;
 $$;
+
+-- Only the owner or an admin can hand out admin. Members can still write
+-- org_invites directly (RLS allows any member), so this is checked here and
+-- not only in the API.
+create or replace function private.org_invites_permission_role_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_is_server boolean := coalesce(auth.jwt() ->> 'role', '') = 'service_role' or auth.uid() is null;
+begin
+  if not v_is_server
+     and new.status = 'pending'
+     and new.permission_role = 'admin'
+     and (
+       tg_op = 'INSERT'
+       or old.permission_role is distinct from 'admin'
+       or old.status is distinct from 'pending'
+     )
+     and coalesce(private.org_permission_role(new.org_id), '') not in ('owner', 'admin') then
+    raise exception 'permission_role_admin_only'
+      using errcode = '42501', hint = 'Only the owner or an admin can invite an admin.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists org_invites_permission_role_guard on public.org_invites;
+create trigger org_invites_permission_role_guard
+  before insert or update of permission_role, status on public.org_invites
+  for each row execute function private.org_invites_permission_role_guard();
 
 -- Every new invite is both products.
 create or replace function private.org_invites_platform_seat()
