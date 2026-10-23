@@ -155,7 +155,10 @@ export async function requireOrgRole(req: Request, roles: string[]): Promise<Org
 /** Org actions for the owner and admins (permission role), not members or viewers.  Billing stays the owner's (requireOrgOwner). */
 export async function requireGlobalAdmin(req: Request): Promise<OrgContext> {
   const ctx = await requireOrgContext(req);
-  if (!isAdminPermission(ctx.permissionRole)) {
+  // A context set upstream (tests, internal callers) may predate permissionRole:
+  // fall back to the effective role, which already follows the permission role.
+  const permission = ctx.permissionRole ?? effectivePermissionRole({ role: ctx.role });
+  if (!isAdminPermission(permission)) {
     throw new HttpError(
       403,
       'That needs an admin on this organization.',
