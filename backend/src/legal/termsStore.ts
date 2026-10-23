@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import { VOICE_CONSENT_PREFIX, loadVoiceConsent, recordVoiceConsent } from './voiceConsent.js';
 import {
   CURRENT_TERMS_VERSION,
   TERMS_REQUIRED_CODE,
@@ -56,6 +57,7 @@ export async function latestTermsAcceptance(
     .from('terms_acceptances')
     .select('terms_version, accepted_at')
     .eq('user_id', userId)
+    .not('terms_version', 'like', `${VOICE_CONSENT_PREFIX}%`)
     .order('accepted_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -75,7 +77,19 @@ export async function loadTermsStatus(
   userId: string,
   accessToken?: string | null,
 ): Promise<TermsStatus> {
-  return termsStatus(await latestTermsAcceptance(userId, accessToken));
+  const status = termsStatus(await latestTermsAcceptance(userId, accessToken));
+  return withVoiceConsent(status, userId);
+}
+
+/** Adds voiceConsentRequired. A lookup failure never blocks sign-in. */
+async function withVoiceConsent(status: TermsStatus, userId: string): Promise<TermsStatus> {
+  try {
+    const voice = await loadVoiceConsent(termsAdmin(), userId);
+    return { ...status, voiceConsentRequired: voice.required };
+  } catch (err) {
+    console.warn('[terms] voice consent lookup failed:', err instanceof Error ? err.message : err);
+    return { ...status, voiceConsentRequired: false };
+  }
 }
 
 /**
@@ -118,6 +132,8 @@ export async function recordTermsAcceptance(input: {
   termsVersion: string;
   ip?: string | null;
   userAgent?: string | null;
+  /** The checkbox read "including voiceprint consent". */
+  voiceConsent?: boolean;
 }): Promise<TermsStatus> {
   if (!isAcceptableTermsVersion(input.termsVersion)) {
     throw new HttpError(
@@ -143,10 +159,23 @@ export async function recordTermsAcceptance(input: {
     throw new HttpError(500, error.message, 'terms_record_failed');
   }
 
-  return termsStatus({
+  const status = termsStatus({
     termsVersion: CURRENT_TERMS_VERSION,
     acceptedAt: new Date().toISOString(),
   });
+  if (input.voiceConsent === true) {
+    try {
+      await recordVoiceConsent(supabase, {
+        userId: input.userId,
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+      });
+      return { ...status, voiceConsentRequired: false };
+    } catch (err) {
+      throw new HttpError(500, err instanceof Error ? err.message : 'Could not record consent.', 'terms_record_failed');
+    }
+  }
+  return withVoiceConsent(status, input.userId);
 }
 
 export function requireAcceptedTermsVersion(version: string | null | undefined): string {

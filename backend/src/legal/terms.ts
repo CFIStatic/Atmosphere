@@ -20,6 +20,8 @@ export type TermsStatus = {
   acceptedVersion: string | null;
   acceptedAt: string | null;
   url: string;
+  /** No recorded voiceprint consent and never turned off: show the one-time acceptance. */
+  voiceConsentRequired?: boolean;
 };
 
 export function termsStatus(accepted: {

@@ -225,7 +225,7 @@ describe('LoginPage', () => {
     authState.login.mockResolvedValue({ org: { id: 'org-1', name: 'Acme' } });
 
     renderLogin();
-    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
+    expect(screen.queryByLabelText(/I agree to the Terms of Service, including voiceprint consent/i)).toBeNull();
     expect(screen.queryByRole('link', { name: 'Terms of Service' })).toBeNull();
 
     await user.type(screen.getByLabelText('Email'), 'new@acme.com');

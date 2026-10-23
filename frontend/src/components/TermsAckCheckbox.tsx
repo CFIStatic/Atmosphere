@@ -10,7 +10,7 @@ export function TermsAckLabel({
 }): ReactNode {
   return (
     <>
-      I acknowledge and agree to the{' '}
+      I agree to the{' '}
       <a
         href={termsHref}
         target="_blank"
@@ -18,8 +18,17 @@ export function TermsAckLabel({
         className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
       >
         Terms of Service
-      </a>{' '}
-      and have read the{' '}
+      </a>
+      , including{' '}
+      <a
+        href={`${termsHref}#voiceprints`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
+      >
+        voiceprint consent
+      </a>
+      , and have read the{' '}
       <a
         href={privacyHref}
         target="_blank"

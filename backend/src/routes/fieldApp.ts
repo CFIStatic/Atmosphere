@@ -112,6 +112,7 @@ fieldAppRouter.post(
           await recordTermsAcceptance({
             userId: created.user.id,
             termsVersion: input.acceptedTermsVersion,
+            voiceConsent: input.voiceConsent,
             ip: clientIp(req),
             userAgent: clientUserAgent(req),
           });
@@ -129,6 +130,7 @@ fieldAppRouter.post(
         userId: created.user.id,
         accessToken: created.session.access_token,
         termsVersion: input.acceptedTermsVersion,
+            voiceConsent: input.voiceConsent,
         ip: clientIp(req),
         userAgent: clientUserAgent(req),
       });

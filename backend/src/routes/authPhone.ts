@@ -90,6 +90,7 @@ const verifySchema = z.object({
   phone: phoneField,
   code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.'),
   acceptedTermsVersion: z.string().trim().min(1).optional(),
+  voiceConsent: z.boolean().optional(),
 });
 
 function requireEnabled(): void {
@@ -149,7 +150,7 @@ phoneAuthRouter.post('/phone/start', startLimiter, async (req: Request, res: Res
 phoneAuthRouter.post('/phone/verify', verifyLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     requireEnabled();
-    const { phone, code, acceptedTermsVersion } = verifySchema.parse(req.body ?? {});
+    const { phone, code, acceptedTermsVersion, voiceConsent } = verifySchema.parse(req.body ?? {});
     const { data, error } = await createAnonClient().auth.verifyOtp({ phone, token: code, type: 'sms' });
     if (error || !data.session || !data.user) {
       throw new HttpError(401, 'That code is incorrect or expired. Request a new one.', 'otp_invalid');
@@ -163,6 +164,7 @@ phoneAuthRouter.post('/phone/verify', verifyLimiter, async (req: Request, res: R
         userId: user.id,
         accessToken: session.access_token,
         termsVersion: acceptedTermsVersion,
+        voiceConsent,
         ip: clientIp(req),
         userAgent: clientUserAgent(req),
       });

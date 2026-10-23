@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
-import { TeamVoiceList } from '../components/settings/TeamVoiceList';
+import { VoicePrivacyCard } from '../components/settings/VoicePrivacyCard';
 import { SpeakerVerificationPrompt } from '../components/ask/SpeakerVerificationPrompt';
 import { SpeakerRenameControl } from '../components/analysis/SpeakerRenameControl';
 import { verificationQuestion, type RoleGuessStatus } from '../lib/speakerIdentity';
@@ -34,63 +33,8 @@ export function SpeakerIdPreviewPage() {
           <h1 className="text-2xl font-bold tracking-tight text-ink-900">Settings</h1>
           <p className="mt-1 text-sm text-ink-600">Account · synthetic preview</p>
         </header>
-        <div data-testid="preview-enrollment">
-          <VoiceEnrollmentCard />
-        </div>
-        <div data-testid="preview-enrolled">
-          <VoiceEnrollmentCard
-            preview={{
-              state: {
-                enrolled: true,
-                consentedAt: '2026-09-29T15:04:00.000Z',
-                crossCompanyOptIn: false,
-              },
-              pendingRequests: [{ id: 'req-1', requester_user_id: 'user-alex', status: 'pending' }],
-            }}
-          />
-        </div>
-        <div data-testid="preview-team">
-          <TeamVoiceList
-            currentUserId="user-1"
-            preview={[
-              {
-                userId: 'user-1',
-                fullName: 'Alex Rivera',
-                email: 'alex@example.com',
-                consentStatus: 'enrolled',
-                consentedAt: '2026-09-29T15:04:00.000Z',
-                crossCompanyOptIn: false,
-                pendingRequestId: null,
-              },
-              {
-                userId: 'user-2',
-                fullName: 'Marco Diaz',
-                email: 'marco@example.com',
-                consentStatus: 'pending',
-                consentedAt: null,
-                crossCompanyOptIn: false,
-                pendingRequestId: 'req-2',
-              },
-              {
-                userId: 'user-3',
-                fullName: 'Priya Shah',
-                email: 'priya@example.com',
-                consentStatus: 'revoked',
-                consentedAt: null,
-                crossCompanyOptIn: false,
-                pendingRequestId: null,
-              },
-              {
-                userId: 'user-4',
-                fullName: 'Jonah Ellis',
-                email: 'jonah@example.com',
-                consentStatus: 'none',
-                consentedAt: null,
-                crossCompanyOptIn: false,
-                pendingRequestId: null,
-              },
-            ]}
-          />
+        <div data-testid="preview-privacy">
+          <VoicePrivacyCard preview={{ enabled: true, consentedAt: '2026-10-23T15:04:00.000Z', learned: true, crossCompanyOptIn: false }} />
         </div>
         <section className="rounded-xl glass-card p-5" aria-label="Ask this job" data-testid="preview-ask">
           <h2 className="text-base font-semibold text-ink-900">Chat</h2>
