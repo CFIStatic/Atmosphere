@@ -13,7 +13,8 @@ export type JobFileSectionId =
   | 'timeline'
   | 'access'
   | 'videos'
-  | 'evidence';
+  | 'evidence'
+  | 'payments';
 
 export type JobFileSectionTab = {
   id: JobFileSectionId;

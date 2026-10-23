@@ -8,6 +8,7 @@ import { AlertIcon, SpinnerIcon } from '../icons';
 import { Logo } from '../Logo';
 import { AiAllowanceSection } from './AiAllowanceSection';
 import { AutoRechargeSection } from './AutoRechargeSection';
+import { PayoutsSection } from '../payments/PayoutsSection';
 import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -149,6 +150,8 @@ export function BillingSection() {
       ) : null}
 
       {allowance && !complimentary && !inApp ? <AutoRechargeSection /> : null}
+
+      {inApp ? null : <PayoutsSection />}
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>

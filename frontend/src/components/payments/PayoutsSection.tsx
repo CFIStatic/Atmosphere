@@ -1,0 +1,98 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { api, type PayoutsStatus } from '../../lib/api';
+import { Button } from '../../design';
+
+/**
+ * Billing > Get paid by homeowners. Owner only (the route is owner-gated).
+ * Onboards the workspace's Stripe Connect account (Express dashboard) so
+ * homeowners can pay deductibles and invoices from the job file.
+ */
+export function PayoutsSection() {
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState<PayoutsStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = params.get('payouts') === 'return' ? api.refreshPayouts() : api.payoutsStatus();
+    load
+      .then((s) => live && setStatus(s))
+      .catch(() => live && setStatus(null));
+    return () => {
+      live = false;
+    };
+  }, [params]);
+
+  if (!status?.available) return null;
+  const acct = status.account;
+  const ready = Boolean(acct?.chargesEnabled);
+  const feeLabel = `${(status.feeBps / 100).toFixed(status.feeBps % 100 ? 2 : 0)}%${
+    status.feeFlatCents ? ` + ${(status.feeFlatCents / 100).toFixed(2)}` : ''
+  }`;
+
+  const go = async (fn: () => Promise<{ url: string }>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await fn();
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open Stripe.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="payouts-section">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-ink-900">Get paid by homeowners</h3>
+          <p className="mt-0.5 text-xs text-ink-500">
+            Homeowners pay deductibles and invoices by card or bank transfer from their job file. Money goes to your bank
+            account through Stripe.
+          </p>
+        </div>
+        {status.testMode ? (
+          <span className="rounded-full bg-caution-50 px-2.5 py-0.5 text-[11px] font-semibold text-caution-600 ring-1 ring-caution-200">
+            Test mode
+          </span>
+        ) : null}
+      </header>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-ink-900" data-testid="payouts-state">
+            {ready
+              ? acct?.payoutsEnabled
+                ? 'Ready: payments and payouts are on'
+                : 'Payments on. Payouts start once Stripe verifies your bank.'
+              : acct?.detailsSubmitted
+                ? 'Stripe is reviewing your details'
+                : acct
+                  ? 'Setup started. Finish it to take payments.'
+                  : 'Not set up'}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-500">
+            Atmosphere fee: {feeLabel} of each payment. Card and bank processing fees are included.
+            {acct && acct.requirementsDue > 0 ? ` Stripe needs ${acct.requirementsDue} more item(s).` : ''}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {ready ? (
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => go(api.openPayoutsDashboard)}>
+              Open payouts dashboard
+            </Button>
+          ) : null}
+          {!ready || (acct && acct.requirementsDue > 0) ? (
+            <Button size="sm" loading={busy} disabled={busy} onClick={() => go(api.startPayoutsOnboarding)} data-testid="payouts-onboard">
+              {acct ? 'Continue setup' : 'Set up payouts'}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {error ? <p className="mt-2 text-xs text-danger-700">{error}</p> : null}
+    </section>
+  );
+}

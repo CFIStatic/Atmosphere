@@ -101,10 +101,13 @@ export function isLegacyJobFileSection(value: string | null | undefined): boolea
 }
 
 /** Chat unless the URL already asks for Timeline or a legacy tab. */
-export function initialJobFileSection(search: string, hash = ''): 'chat' | 'timeline' {
+export function initialJobFileSection(search: string, hash = ''): 'chat' | 'timeline' | 'payments' {
   if (timelineRedirectSearch(search, hash)) return 'timeline';
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  return params.get('section') === 'timeline' ? 'timeline' : 'chat';
+  const section = params.get('section');
+  // Stripe Checkout returns the homeowner to ?section=payments.
+  if (section === 'payments') return 'payments';
+  return section === 'timeline' ? 'timeline' : 'chat';
 }
 
 /** Old Happening Now, Job history, and Packet links become ?section=timeline. */

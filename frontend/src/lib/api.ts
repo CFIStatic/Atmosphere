@@ -3416,6 +3416,89 @@ export interface PlaybookSourceJob {
   analyzedClips: number;
 }
 
+/* ---------------------------------------------- Contractor payments (Connect) */
+
+export type PayoutsStatus = {
+  available: boolean;
+  feeBps: number;
+  feeFlatCents: number;
+  testMode: boolean;
+  account: null | {
+    connected: true;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+    requirementsDue: number;
+    updatedAt: string | null;
+  };
+};
+
+export type InvoiceEvidence = {
+  proofId: string;
+  atSeconds: number | null;
+  quote: string | null;
+  clipTitle?: string | null;
+  capturedAt?: string | null;
+};
+
+export type JobInvoiceLine = {
+  id?: string;
+  description: string;
+  quantity: number;
+  unitCents: number;
+  amountCents?: number;
+  evidence: InvoiceEvidence[];
+};
+
+export type JobInvoice = {
+  id: string;
+  jobId: string;
+  number: number;
+  title: string;
+  kind: 'invoice' | 'deductible' | 'out_of_pocket';
+  status: 'draft' | 'sent' | 'paid' | 'void';
+  currency: string;
+  totalCents: number;
+  homeownerNote: string | null;
+  internalNote?: string | null;
+  applicationFeeCents?: number;
+  sentAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  lines: JobInvoiceLine[];
+};
+
+export type JobPayment = {
+  id: string;
+  invoiceId: string | null;
+  amountCents: number;
+  applicationFeeCents?: number;
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired' | 'refunded';
+  method: string | null;
+  payerEmail?: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  testMode?: boolean;
+};
+
+export type JobPaymentsResponse = {
+  available: boolean;
+  testMode?: boolean;
+  feeBps?: number;
+  canManage: boolean;
+  payoutsReady: boolean;
+  invoices: JobInvoice[];
+  payments: JobPayment[];
+};
+
+export type JobInvoiceInput = {
+  title: string;
+  kind: JobInvoice['kind'];
+  homeownerNote?: string | null;
+  internalNote?: string | null;
+  lines: Array<{ description: string; quantity: number; unitCents: number; evidence: Array<{ proofId: string; atSeconds: number | null; quote: string | null }> }>;
+};
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -4005,6 +4088,23 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ personId }) },
     ),
 
+
+  payoutsStatus: () => request<PayoutsStatus>('/api/billing/connect'),
+  startPayoutsOnboarding: () => request<{ url: string }>('/api/billing/connect/onboard', { method: 'POST' }),
+  refreshPayouts: () => request<PayoutsStatus>('/api/billing/connect/refresh', { method: 'POST' }),
+  openPayoutsDashboard: () => request<{ url: string }>('/api/billing/connect/dashboard', { method: 'POST' }),
+  jobPayments: (jobId: string) => request<JobPaymentsResponse>(`/api/operations/shared/${jobId}/payments`),
+  createJobInvoice: (jobId: string, input: JobInvoiceInput) =>
+    request<{ id: string; number: number; totalCents: number }>(`/api/operations/shared/${jobId}/invoices`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  sendJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/send`, { method: 'POST' }),
+  voidJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/void`, { method: 'POST' }),
+  payJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ url: string }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/checkout`, { method: 'POST' }),
 
   homeownerPermissions: (jobId: string) =>
     request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),

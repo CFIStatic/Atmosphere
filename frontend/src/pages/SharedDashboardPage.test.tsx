@@ -429,7 +429,7 @@ describe('SharedDashboardPage job file identity', () => {
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
-      expect(tabs).toEqual(['Timeline', 'Access']);
+      expect(tabs).toEqual(['Timeline', 'Access', 'Payments']);
     });
     expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
     expect(screen.queryByTestId('job-ask-panel')).not.toBeInTheDocument();
@@ -449,7 +449,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim());
-    expect(tabs).toEqual(['Chat', 'Timeline', 'Access', 'Videos', 'Evidence report']);
+    expect(tabs).toEqual(['Chat', 'Timeline', 'Access', 'Videos', 'Evidence report', 'Payments']);
 
     await user.click(screen.getByRole('tab', { name: 'Access' }));
     expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
@@ -492,6 +492,7 @@ describe('SharedDashboardPage job file identity', () => {
       'Access',
       'Videos',
       'Evidence report',
+      'Payments',
     ]);
     expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Job history' })).not.toBeInTheDocument();

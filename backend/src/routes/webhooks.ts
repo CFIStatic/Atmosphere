@@ -54,9 +54,38 @@ import {
   isAutoRechargeIntent,
   supabaseAutoRechargeStore,
 } from '../metering/autoRecharge.js';
+import { applyConnectedAccount, applyJobPaymentRefund, applyJobPaymentSession, isJobPaymentMetadata } from '../payments/webhook.js';
 import { grantAiCredits, recordSubscriptionPriceSpan, syncCreditPackClawback } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleJobPaymentEvent(event: Stripe.Event, admin: any): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj = event.data.object as any;
+  switch (event.type) {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded':
+    case 'checkout.session.async_payment_failed':
+    case 'checkout.session.expired':
+      if (!isJobPaymentMetadata(obj.metadata)) return false;
+      await applyJobPaymentSession(admin, obj as Stripe.Checkout.Session, event.type);
+      return true;
+    case 'payment_intent.succeeded':
+    case 'payment_intent.payment_failed':
+      // Checkout events carry the outcome; acknowledge the intent events.
+      return isJobPaymentMetadata(obj.metadata);
+    case 'charge.refunded':
+      if (!isJobPaymentMetadata(obj.metadata)) return false;
+      await applyJobPaymentRefund(admin, obj as Stripe.Charge);
+      return true;
+    case 'account.updated':
+      await applyConnectedAccount(admin, obj as Stripe.Account);
+      return true;
+    default:
+      return false;
+  }
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -122,6 +151,8 @@ webhookRouter.post('/stripe', async (req: Request, res: Response) => {
 });
 
 async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
+  // Homeowner job payments (Connect destination charges) never touch billing.
+  if (await handleJobPaymentEvent(event, admin)) return;
   switch (event.type) {
     case 'checkout.session.completed':
       await onCheckoutCompleted(event.data.object as Stripe.Checkout.Session, admin);
