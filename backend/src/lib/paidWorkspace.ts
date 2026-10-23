@@ -10,7 +10,7 @@ type BillingLookup = {
 };
 
 export const PRODUCT_ACTION_LOCKED_MESSAGE =
-  'Choose a plan to upload, record, share, or invite.';
+  'This workspace needs an active plan to upload, record, share, or invite. The account owner manages billing.';
 
 export const PRODUCT_ACTION_LOCKED_CODE = 'billing_required';
 

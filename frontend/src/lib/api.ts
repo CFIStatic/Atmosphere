@@ -76,10 +76,15 @@ export interface Org {
 
 /** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing and Usage. */
 export type SeatType = 'field_capture' | 'platform';
+/** Free, not billed. owner = created the workspace (one per workspace). */
+export type PermissionRole = 'owner' | 'admin' | 'member' | 'viewer';
+export type AssignablePermissionRole = Exclude<PermissionRole, 'owner'>;
 
 export interface Membership {
   role: MemberRole;
   seatType?: SeatType;
+  permissionRole?: PermissionRole;
+  isOwner?: boolean;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -110,6 +115,8 @@ export interface OrgMember {
   avatarUrl?: string | null;
   role: MemberRole;
   seatType?: SeatType;
+  permissionRole?: PermissionRole;
+  isOwner?: boolean;
   workType: WorkType;
   usageIntents: UsageIntent[];
   status: string;
@@ -1992,6 +1999,7 @@ export interface OrgInvite {
   /** Advisory — the joiner picks their own role at onboarding. */
   role: MemberRole;
   seatType?: SeatType;
+  permissionRole?: AssignablePermissionRole;
   note?: string | null;
   status: 'pending' | 'joined' | 'revoked';
   /** Advisory person service title for Analysis labeling. */
@@ -4138,12 +4146,19 @@ export const api = {
   // ---- Invitations ----
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
+  /** Owner/admin: change a teammate's permission role. */
+  setMemberPermissionRole: (userId: string, permissionRole: AssignablePermissionRole) =>
+    request<{ member: { userId: string; permissionRole: PermissionRole } }>(
+      `/api/org/members/${encodeURIComponent(userId)}`,
+      { method: 'PATCH', body: JSON.stringify({ permissionRole }) },
+    ),
+
   createOrgInvite: (input: {
     email?: string;
     phone?: string;
     smsConsent?: boolean;
     role?: MemberRole;
-    seatType?: SeatType;
+    permissionRole?: AssignablePermissionRole;
     note?: string;
     serviceRole?: string;
     serviceRoleCustom?: string | null;

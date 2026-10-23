@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { isGlobalAdmin } from '../lib/productRoles.js';
+import { effectivePermissionRole, isAdminPermission } from '../lib/productRoles.js';
 import { deriveServiceRole } from '../shared/serviceRole.js';
 import type { DailyReportRecipients } from './types.js';
 
@@ -60,11 +60,14 @@ export async function resolveDailyReportRecipients(
     }
   }
 
-  const { data: members } = await admin
-    .from('org_members')
-    .select('role, status, profiles(email, service_role, service_role_custom, full_name)')
-    .eq('org_id', orgId)
-    .eq('status', 'active');
+  const memberQuery = (columns: string) =>
+    admin.from('org_members').select(columns).eq('org_id', orgId).eq('status', 'active');
+  let memberResult = await memberQuery('role, permission_role, status, profiles(email, service_role, service_role_custom, full_name)');
+  if (memberResult.error) {
+    // permission_role not migrated yet: the old role meaning applies.
+    memberResult = await memberQuery('role, status, profiles(email, service_role, service_role_custom, full_name)');
+  }
+  const members = memberResult.data;
 
   for (const row of (members ?? []) as any[]) {
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
@@ -75,7 +78,7 @@ export async function resolveDailyReportRecipients(
       memberRole: row.role,
       kind: 'org_member',
     });
-    const adminSeat = isGlobalAdmin(row.role);
+    const adminSeat = isAdminPermission(effectivePermissionRole({ permission_role: row.permission_role, role: row.role }));
     if (inferred?.role === 'project_manager' || adminSeat) {
       pushEmail(emails, seenEmail, profile.email);
     }

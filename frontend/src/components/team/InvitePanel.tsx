@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, ROLE_LABELS, type MemberRole, type OrgInvite, type PlatformSeatCounts } from '../../lib/api';
+import { api, ApiError, type AssignablePermissionRole, type MemberRole, type OrgInvite, type PermissionRole } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin } from '../../domain/productRoles';
@@ -10,53 +10,39 @@ import { usePhoneAuthEnabled } from '../../hooks/usePhoneAuthEnabled';
 import { formatPhone, formatPhoneInput, normalizePhoneE164 } from '../../lib/phone';
 
 /**
- * Adding somebody to the team.
+ * Adding somebody to the company team.
  *
- * Org invites create Employee (Field Capture) seats, or a Platform
- * seat ($75/mo): Global Admin access on the Platform, no Field Capture, no
- * Billing and Usage. Invited workers on one job are invited from the job file
- * via a job-share token — not here.
+ * Every teammate gets Field Capture and Platform (one Field Capture seat).
+ * The only choice is a permission role: Member (default), Admin or Viewer.
+ * Homeowners and subcontractors are job guests, invited from the job file
+ * (job-share), not here; nothing about them changes.
  */
 
-export const PLATFORM_SEAT_PRICE_LABEL = '$75/mo';
-
-/**
- * One control for who the person is. The workspace has one Global Admin, the
- * account owner who pays; nobody else can be invited as one.
- *   field_capture -> role employee (uses a Field Capture seat)
- *   platform      -> role global_admin + seatType platform ($75/mo; the
- *                    database role behind a Platform seat, not a Global Admin)
- */
-export type InviteKind = 'field_capture' | 'platform';
-export const INVITE_KINDS: InviteKind[] = ['field_capture', 'platform'];
-export const INVITE_KIND_LABELS: Record<InviteKind, string> = {
-  field_capture: 'Field Capture',
-  platform: 'Platform',
+export const PERMISSION_ROLE_CHOICES: AssignablePermissionRole[] = ['member', 'admin', 'viewer'];
+export const PERMISSION_ROLE_LABELS: Record<PermissionRole, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+};
+/** One plain line each. */
+export const PERMISSION_ROLE_HELP: Record<PermissionRole, string> = {
+  owner: 'Created the workspace. Everything, including billing.',
+  admin: 'Everything except billing: team, settings, playbooks.',
+  member: 'Films and works on jobs.',
+  viewer: 'Can look, but not change anything.',
 };
 
-/** The one helper line under the row. No prices inside the phone app (App Store 3.1.1). */
-export function inviteKindHelp(
-  kind: InviteKind,
-  opts: {
-    inApp: boolean;
-    fieldCaptureSeats?: { used: number; allowed: number } | null;
-    platformSeats?: PlatformSeatCounts | null;
-  },
-): string {
-  const { inApp, fieldCaptureSeats, platformSeats } = opts;
-  if (kind === 'field_capture') {
-    const base = 'Films jobs in Field Capture and uses the Platform.';
-    return fieldCaptureSeats
-      ? `${base} ${fieldCaptureSeats.used} of ${fieldCaptureSeats.allowed} Field Capture seats used.`
-      : base;
-  }
-  let line = 'Full Platform access except Billing and Usage, no Field Capture.';
-  if (!inApp) line += ` ${PLATFORM_SEAT_PRICE_LABEL} each.`;
-  // Only once some are bought: never "0 of 0".
-  if (platformSeats && platformSeats.allowed > 0) {
-    line += ` ${platformSeats.used} of ${platformSeats.allowed} in use.`;
-  }
-  return line;
+/** The role a member row shows. Rows from servers without roles fall back to the old meaning. */
+export function memberPermissionRole(m: { permissionRole?: PermissionRole | null; role?: string | null }): PermissionRole {
+  if (m.permissionRole) return m.permissionRole;
+  return isGlobalAdmin(m.role) ? 'admin' : 'member';
+}
+
+/** Seat line under the form. No prices inside the phone app (App Store 3.1.1). */
+export function inviteSeatHelp(seats?: { used: number; allowed: number } | null): string {
+  const base = 'Gets Field Capture and Platform.';
+  return seats ? `${base} ${seats.used} of ${seats.allowed} seats used.` : base;
 }
 
 const SEGMENT_GROUP =
@@ -87,10 +73,9 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
-  const [kind, setKind] = useState<InviteKind>('field_capture');
-  const platformSeat = kind === 'platform';
-  const role: MemberRole = platformSeat ? 'global_admin' : 'employee';
-  const [platformSeats, setPlatformSeats] = useState<PlatformSeatCounts | null>(null);
+  const [permissionRole, setPermissionRole] = useState<AssignablePermissionRole>('member');
+  // Database role is always employee; admin powers come from permissionRole.
+  const role: MemberRole = 'employee';
   const phoneEnabled = usePhoneAuthEnabled();
   const [byPhone, setByPhone] = useState(false);
   const [phone, setPhone] = useState('');
@@ -125,7 +110,6 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           allowed: workspace.fieldCaptureSeats.allowed,
         });
       }
-      if (workspace.platformSeats) setPlatformSeats(workspace.platformSeats);
     } catch {
       /* billing is optional on this screen */
     }
@@ -151,12 +135,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       setError(planRequiredMessage());
       return;
     }
-    if (inApp && platformSeat && platformSeats && platformSeats.remaining <= 0) {
-      setOutcome(null);
-      setError(`Every Platform seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
-      return;
-    }
-    if (inApp && seatsFull && !platformSeat) {
+    if (inApp && seatsFull) {
       setOutcome(null);
       setError(`Every Field Capture seat on this team is in use. ${APP_SHELL_SEATS_NOTE}`);
       return;
@@ -168,7 +147,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
       const res = await api.createOrgInvite({
         ...(usingPhone ? { phone: phoneE164 ?? phone, smsConsent } : { email }),
         role,
-        ...(platformSeat ? { seatType: 'platform' as const } : {}),
+        permissionRole,
       });
       setOutcome(
         usingPhone
@@ -285,27 +264,19 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
           )}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <div role="radiogroup" aria-label="Access" data-testid="invite-seat-type" className={`${SEGMENT_GROUP} shrink-0`}>
-            {INVITE_KINDS.map((key) => {
-              const on = kind === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  data-testid={`invite-seat-${key}`}
-                  onClick={() => {
-                    setKind(key);
-                    setError(null);
-                  }}
-                  className={segmentClass(on)}
-                >
-                  {INVITE_KIND_LABELS[key]}
-                </button>
-              );
-            })}
-          </div>
+          <select
+            aria-label="Role"
+            data-testid="invite-role"
+            value={permissionRole}
+            onChange={(e) => setPermissionRole(e.target.value as AssignablePermissionRole)}
+            className="h-[38px] rounded-lg glass-field px-3 text-sm text-ink-900 outline-hidden focus:ring-2 focus:ring-brand-200"
+          >
+            {PERMISSION_ROLE_CHOICES.map((key) => (
+              <option key={key} value={key}>
+                {PERMISSION_ROLE_LABELS[key]}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={busy || (usingPhone ? !phoneE164 || !smsConsent : !email.trim())}
@@ -331,11 +302,8 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
         </label>
       ) : null}
       <p className="mt-1.5 text-xs text-ink-500" data-testid="invite-help">
-        {inviteKindHelp(kind, { inApp, fieldCaptureSeats: seats, platformSeats })}
-        {platformSeat && platformSeats && platformSeats.available === false && platformSeats.remaining <= 0 ? (
-          <span data-testid="platform-seat-unavailable"> Platform seats aren&apos;t available yet.</span>
-        ) : null}
-        {inApp && seatsFull && kind === 'field_capture' ? (
+        <span data-testid="invite-role-help">{PERMISSION_ROLE_HELP[permissionRole]}</span> {inviteSeatHelp(seats)}
+        {inApp && seatsFull ? (
           <span data-testid="app-shell-seats-note"> {APP_SHELL_SEATS_NOTE}</span>
         ) : null}
       </p>
@@ -354,7 +322,7 @@ export function InvitePanel({ onInvited }: { onInvited?: () => void } = {}) {
               <span className="min-w-0">
                 <span className="block truncate text-xs font-medium text-ink-800">{inv.email || formatPhone(inv.phone)}</span>
                 <span className="block text-[11px] text-ink-500">
-                  {inv.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[inv.role as MemberRole] ?? inv.role)}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
+                  {PERMISSION_ROLE_LABELS[inv.permissionRole ?? 'member']}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">

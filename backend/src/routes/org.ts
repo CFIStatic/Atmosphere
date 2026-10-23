@@ -8,6 +8,7 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { decideMemberRemoval } from '../org/members.js';
+import { decideMemberRoleChange } from '../org/memberAccess.js';
 import { fillLoginNames } from '../shared/mentionContext.js';
 import { revokeAllAuthSessionsForUser } from '../auth/revokeUserSessions.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
@@ -22,10 +23,17 @@ import { HttpError } from '../lib/errors.js';
 import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 import { ensureFieldCaptureSeatForInvite } from '../lib/fieldCaptureInviteSeats.js';
-import { ensurePlatformSeatForInvite, isPlatformSeatLimitDbError, parseSeatType } from '../lib/platformSeats.js';
+import { parseSeatType } from '../lib/platformSeats.js';
 import { GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, isOrgOwnerRow, loadOrgOwnerId } from '../middleware/requireOrgOwner.js';
 import { isAppShellRequest } from '../lib/appShell.js';
-import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
+import {
+  ASSIGNABLE_PERMISSION_ROLES,
+  effectivePermissionRole,
+  isGlobalAdmin,
+  productRoleForPermission,
+  toOrgProductRole,
+  type PermissionRole,
+} from '../lib/productRoles.js';
 import { joinOrgAsInvitee, requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { normalizePhoneE164, orgInviteSms, phoneAuthEnabled } from '../auth/phoneAuth.js';
 import { sendSms, smsProviderConfigured } from '../shared/smsProvider.js';
@@ -48,11 +56,25 @@ function serializeOrg(org: any) {
   };
 }
 
+/**
+ * Permission fields shared by both serializers. `role` is the effective role
+ * the apps gate on (global_admin for owner/admin, else employee), so existing
+ * "is Global Admin?" checks follow the permission role, not the billing seat.
+ */
+function permissionFields(row: any) {
+  const permissionRole = effectivePermissionRole({ permission_role: row.permission_role, role: row.role });
+  return {
+    role: productRoleForPermission(permissionRole),
+    permissionRole,
+    isOwner: permissionRole === 'owner',
+  };
+}
+
 function serializeMembership(m: any) {
   if (!m) return null;
   const org = Array.isArray(m.orgs) ? m.orgs[0] : m.orgs;
   return {
-    role: m.role,
+    ...permissionFields(m),
     seatType: parseSeatType(m.seat_type),
     workType: m.work_type,
     usageIntents: Array.isArray(m.usage_intents) ? m.usage_intents : [],
@@ -80,7 +102,7 @@ function serializeMember(row: any) {
     fullName: p?.full_name ?? null,
     handle: typeof p?.handle === 'string' ? p.handle : null,
     avatarUrl,
-    role: row.role,
+    ...permissionFields(row),
     seatType: parseSeatType(row.seat_type),
     workType: row.work_type,
     usageIntents: Array.isArray(row.usage_intents) ? row.usage_intents : [],
@@ -89,7 +111,7 @@ function serializeMember(row: any) {
 }
 
 const MEMBERSHIP_SELECT =
-  'role, seat_type, work_type, usage_intents, status, orgs(id, name, join_code, contractor_type)';
+  'role, seat_type, permission_role, work_type, usage_intents, status, orgs(id, name, join_code, contractor_type)';
 
 /** Pre-questionnaire columns — used if the new migration is not applied yet. */
 const MEMBERSHIP_SELECT_LEGACY =
@@ -97,7 +119,7 @@ const MEMBERSHIP_SELECT_LEGACY =
 
 function isMissingColumnError(message: string | undefined): boolean {
   if (!message) return false;
-  return /usage_intents|contractor_type|seat_type|column .* does not exist/i.test(message);
+  return /usage_intents|contractor_type|seat_type|permission_role|column .* does not exist/i.test(message);
 }
 
 function isOrgMemberPrivilegeError(message: string | undefined): boolean {
@@ -217,7 +239,19 @@ orgRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => 
     const supabase = await ensureProfile(req);
     const { data, error } = await loadMembership(supabase, req.user!.id);
     if (error) throw new HttpError(500, error.message, 'org_me_failed');
-    res.json({ membership: data?.[0] ? serializeMembership(data[0]) : null });
+    const row = data?.[0] ? { ...(data[0] as any) } : null;
+    if (row && row.permission_role === undefined) {
+      // my_org_membership predates products/permission roles: read them from the caller's own row.
+      const extra = await supabase
+        .from('org_members')
+        .select('seat_type, permission_role')
+        .eq('user_id', req.user!.id)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      const e = (extra.data ?? [])[0] as any;
+      if (!extra.error && e) Object.assign(row, e);
+    }
+    res.json({ membership: row ? serializeMembership(row) : null });
   } catch (err) {
     next(err);
   }
@@ -437,9 +471,17 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
-      .select('user_id, role, seat_type, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
+      .select('user_id, role, seat_type, permission_role, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
+
+    if (result.error && /permission_role/i.test(result.error.message)) {
+      result = await supabase
+        .from('org_members')
+        .select('user_id, role, seat_type, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
+    }
 
     if (result.error && /handle|seat_type/i.test(result.error.message)) {
       result = await supabase
@@ -462,6 +504,64 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
     const serialized = (result.data ?? []).map(serializeMember);
     const members = await fillLoginNames(serialized);
     res.json({ members });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const updateMemberRoleSchema = z.object({
+  permissionRole: z.enum(ASSIGNABLE_PERMISSION_ROLES),
+});
+
+/**
+ * PATCH /api/org/members/:userId  { permissionRole: admin | member | viewer }
+ * The owner and admins change a teammate's permission role (free; products
+ * and billing do not change). The owner row never changes and nobody is made
+ * owner. Written by the server: members cannot change the column themselves.
+ */
+orgRouter.patch('/members/:userId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const targetUserId = String(req.params.userId ?? '').trim();
+    if (!targetUserId) throw new HttpError(400, 'Missing member.', 'bad_request');
+    const input = updateMemberRoleSchema.parse(req.body ?? {});
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId, permissionRole: callerPermissionRole } = await orgForInvites(supabase, req.user!.id);
+
+    const { data: targetRow, error: targetError } = await supabase
+      .from('org_members')
+      .select('user_id, role, permission_role')
+      .eq('org_id', orgId)
+      .eq('user_id', targetUserId)
+      .maybeSingle();
+    if (targetError) {
+      if (isMissingColumnError(targetError.message)) {
+        throw new HttpError(503, 'Roles are not set up on this server yet.', 'permission_roles_unavailable');
+      }
+      throw new HttpError(500, targetError.message, 'members_failed');
+    }
+    if (!targetRow) throw new HttpError(404, 'That person is not in this workspace.', 'not_found');
+
+    const ownerId = await loadOrgOwnerId(req, orgId);
+    const decision = decideMemberRoleChange({
+      callerUserId: req.user!.id,
+      callerPermissionRole,
+      targetUserId,
+      targetIsOwner: ownerId === targetUserId || (targetRow as any).permission_role === 'owner',
+      permissionRole: input.permissionRole,
+    });
+    if (!decision.allowed) throw new HttpError(decision.status, decision.message, decision.code);
+
+    const admin = unscopedAdminOrNull();
+    if (!admin) throw new HttpError(503, 'Changing teammates is not configured on this server.', 'no_admin');
+    const { error } = await admin
+      .from('org_members')
+      .update({ permission_role: input.permissionRole })
+      .eq('org_id', orgId)
+      .eq('user_id', targetUserId);
+    if (error) throw new HttpError(400, error.message, 'member_update_failed');
+    res.json({
+      member: { userId: targetUserId, ...permissionFields({ ...(targetRow as any), permission_role: input.permissionRole }) },
+    });
   } catch (err) {
     next(err);
   }
@@ -490,11 +590,14 @@ orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: N
 
     const { data: memberRows, error: listError } = await supabase
       .from('org_members')
-      .select('user_id, role, profiles(email)')
+      .select('user_id, role, permission_role, profiles(email)')
       .eq('org_id', orgId);
     if (listError) throw new HttpError(500, listError.message, 'members_failed');
 
-    const members = (memberRows ?? []) as any[];
+    const members = ((memberRows ?? []) as any[]).map((row) => ({
+      ...row,
+      role: productRoleForPermission(effectivePermissionRole({ permission_role: row.permission_role, role: row.role })),
+    }));
     const target = members.find((row) => row.user_id === targetUserId);
     if (!target) {
       throw new HttpError(404, 'That person is not in this workspace.', 'not_found');
@@ -566,19 +669,30 @@ orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: N
 
 /** The caller's org, with the fields inviting needs. */
 async function orgForInvites(supabase: any, userId: string) {
-  const { data } = await supabase
+  let res = await supabase
     .from('org_members')
-    .select('org_id, role, orgs(id, name, join_code)')
+    .select('org_id, role, permission_role, orgs(id, name, join_code)')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1);
-  const row = (data ?? [])[0] as any;
+  if (res.error && isMissingColumnError(res.error.message)) {
+    res = await supabase
+      .from('org_members')
+      .select('org_id, role, orgs(id, name, join_code)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+  }
+  const row = (res.data ?? [])[0] as any;
   if (!row?.org_id) throw new HttpError(404, 'You are not in an organization yet.', 'no_org');
+  const permissionRole = effectivePermissionRole({ permission_role: row.permission_role, role: row.role });
   return {
     orgId: row.org_id as string,
     name: row.orgs?.name as string,
     joinCode: row.orgs?.join_code as string,
-    role: row.role as string,
+    /** Effective: global_admin for owner/admin (permission role), else employee. */
+    role: productRoleForPermission(permissionRole) as string,
+    permissionRole,
   };
 }
 
@@ -597,13 +711,25 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
     const supabase = createUserClient(req.accessToken!);
     const { orgId } = await orgForInvites(supabase, req.user!.id);
 
-    const [{ data: inviteRows }, { data: memberRows }] = await Promise.all([
-      supabase
+    const inviteColumns =
+      'id, email, phone, role, seat_type, note, status, created_at, joined_at, revoked_at, invited_by, service_role, service_role_custom';
+    const listInvites = async () => {
+      const first = await supabase
         .from('org_invites')
-        .select('id, email, phone, role, seat_type, note, status, created_at, joined_at, revoked_at, invited_by, service_role, service_role_custom')
+        .select(`${inviteColumns}, permission_role`)
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(200);
+      if (!first.error || !isMissingColumnError(first.error.message)) return first;
+      return supabase
+        .from('org_invites')
+        .select(inviteColumns)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+    };
+    const [{ data: inviteRows }, { data: memberRows }] = await Promise.all([
+      listInvites(),
       supabase.from('org_members').select('user_id, profiles(email)').eq('org_id', orgId),
     ]);
 
@@ -630,6 +756,7 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
         phone: invite.phone ?? null,
         role: invite.role,
         seatType: parseSeatType(invite.seat_type),
+        permissionRole: invite.permission_role ?? 'member',
         note: invite.note,
         status: invite.status,
         serviceRole: invite.service_role ?? null,
@@ -693,8 +820,11 @@ const createInviteSchema = z.object({
   /** Phone-only invites: the admin confirms the person agreed to the invite text (A2P 10DLC opt-in). */
   smsConsent: z.boolean().optional(),
   role: z.enum(MEMBER_ROLES).optional(),
-  /** 'platform' = Platform-only seat ($75/mo): Global Admin access, no Field Capture, no Billing. */
-  seatType: z.enum(['field_capture', 'platform']).optional(),
+  /**
+   * Every invite gets Field Capture + Platform (one Field Capture seat).
+   * The permission role is free: admin | member (default) | viewer. Never owner.
+   */
+  permissionRole: z.enum(ASSIGNABLE_PERMISSION_ROLES).optional(),
   note: z.string().trim().max(500).optional(),
   serviceRole: z.enum(SERVICE_ROLE_SLUGS).optional(),
   serviceRoleCustom: z
@@ -747,33 +877,20 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         `[sms-consent] org invite org=${orgId} inviter=${req.user!.id} to=***${phone.slice(-4)} at=${new Date().toISOString()}`,
       );
     }
-    const seatType = parseSeatType(input.seatType);
-    // A Platform seat is a Global Admin without Field Capture or Billing.
-    const seat = seatType === 'platform' ? 'global_admin' : toOrgProductRole(input.role ?? 'employee');
-    // One Global Admin per workspace: the account owner who pays. Nobody else is
-    // invited as one (a Platform seat carries the role in the database but is
-    // not a Global Admin: no Billing and Usage, no inviting admins).
-    if (seatType !== 'platform' && isGlobalAdmin(seat)) {
+    const permissionRole: PermissionRole = input.permissionRole ?? 'member';
+    // Database role is always employee (a Field Capture seat); admin powers
+    // come from the permission role. Only the account owner is owner.
+    const seat = toOrgProductRole(input.role ?? 'employee');
+    if (isGlobalAdmin(seat)) {
       throw new HttpError(403, GLOBAL_ADMIN_OWNER_ONLY_MESSAGE, 'global_admin_owner_only');
     }
-
-    if (seatType === 'platform') {
-      await ensurePlatformSeatForInvite(supabase, orgId, {
-        actingUserEmail: req.user!.email,
-        customerEmail: req.user!.email,
-        orgName: name,
-        fromAppShell: isAppShellRequest(req),
-        actorIsOwner: isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, orgId) }, req.user!.id),
-      });
-    } else if (seat === 'employee') {
-      await ensureFieldCaptureSeatForInvite(supabase, orgId, {
-        actingUserEmail: req.user!.email,
-        customerEmail: req.user!.email,
-        orgName: name,
-        fromAppShell: isAppShellRequest(req),
-        actorIsOwner: isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, orgId) }, req.user!.id),
-      });
-    }
+    await ensureFieldCaptureSeatForInvite(supabase, orgId, {
+      actingUserEmail: req.user!.email,
+      customerEmail: req.user!.email,
+      orgName: name,
+      fromAppShell: isAppShellRequest(req),
+      actorIsOwner: isOrgOwnerRow({ created_by: await loadOrgOwnerId(req, orgId) }, req.user!.id),
+    });
 
     const serviceNorm = normalizeServiceRoleInput({
       serviceRole: input.serviceRole ?? null,
@@ -786,13 +903,13 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         email,
         phone,
         role: seat,
-        ...(seatType === 'platform' ? { seat_type: 'platform' } : {}),
+        ...(permissionRole !== 'member' ? { permission_role: permissionRole } : {}),
         note: input.note ?? null,
         invited_by: req.user!.id,
         service_role: serviceNorm.service_role,
         service_role_custom: serviceNorm.service_role_custom,
       })
-      .select(`id, email, phone, role, status, created_at, service_role, service_role_custom${seatType === 'platform' ? ', seat_type' : ''}`)
+      .select('id, email, phone, role, status, created_at, service_role, service_role_custom')
       .single();
     if (error) {
       if (error.code === '23505') {
@@ -800,9 +917,6 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       }
       if (isFcSeatLimitDbError(error)) {
         throw fcSeatLimitFromDb();
-      }
-      if (isPlatformSeatLimitDbError(error)) {
-        throw new HttpError(402, 'Every Platform seat on this workspace is in use.', 'platform_seat_limit');
       }
       throw new HttpError(400, error.message, 'invite_failed');
     }
@@ -841,8 +955,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
         inviteEmailAddress: email,
         origin: publicAppOrigin(),
-        // Platform seats have no Field Capture: do not point them at it.
-        fieldCaptureOrigin: seatType === 'platform' ? null : LIVE_FIELD_CAPTURE_ORIGIN,
+        fieldCaptureOrigin: LIVE_FIELD_CAPTURE_ORIGIN,
         note: input.note ?? null,
       });
       // Atmosphere sends — not the org's connected Gmail/Microsoft.
@@ -864,7 +977,8 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         email: (invite as any).email ?? null,
         phone: (invite as any).phone ?? null,
         role: (invite as any).role,
-        seatType,
+        seatType: 'field_capture',
+        permissionRole,
         status: (invite as any).status,
         serviceRole: (invite as any).service_role ?? null,
         serviceRoleCustom: (invite as any).service_role_custom ?? null,

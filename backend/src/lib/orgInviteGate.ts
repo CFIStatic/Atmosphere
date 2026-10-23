@@ -83,7 +83,10 @@ export async function requirePendingOrgInvite(input: {
 
   return {
     orgId: org.id as string,
-    role: toOrgProductRole(String(invite.role)),
+    // Only the account owner is Global Admin, and the owner never joins by
+    // invite. A legacy pending invite that still says global_admin (old
+    // Platform invites) joins as a non-admin; the database enforces the same.
+    role: toOrgProductRole(String(invite.role)) === 'global_admin' ? 'employee' : toOrgProductRole(String(invite.role)),
     inviteId: String(invite.id),
     email: (invite as { email?: string | null }).email ?? null,
     phone: (invite as { phone?: string | null }).phone ?? null,
