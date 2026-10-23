@@ -901,6 +901,7 @@
         email: email,
         password: password,
         acceptedTermsVersion: acceptedTermsVersion || CURRENT_TERMS_VERSION,
+        voiceConsent: true,
       },
     });
   }
@@ -949,7 +950,7 @@
     return apiJson(origin(apiBase) + '/api/auth/terms/accept', {
       method: 'POST',
       accessToken: accessToken,
-      body: { acceptedTermsVersion: version || CURRENT_TERMS_VERSION },
+      body: { acceptedTermsVersion: version || CURRENT_TERMS_VERSION, voiceConsent: true },
     });
   }
 

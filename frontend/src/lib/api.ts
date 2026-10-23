@@ -38,6 +38,14 @@ export interface AuthUser {
   metadata: Record<string, unknown>;
 }
 
+/** Settings → Privacy. `learned` is true once a voiceprint exists. */
+export type VoicePrivacy = {
+  enabled: boolean;
+  consentedAt: string | null;
+  learned: boolean;
+  crossCompanyOptIn: boolean;
+};
+
 export type MemberRole =
   | 'global_admin'
   | 'employee'
@@ -3413,7 +3421,7 @@ export const api = {
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
     request<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, acceptedTermsVersion }),
+      body: JSON.stringify({ email, password, acceptedTermsVersion, voiceConsent: true }),
     }),
 
   /** Field Capture iOS — create the website account and join by invite or start an office. */
@@ -3467,7 +3475,9 @@ export const api = {
   phoneAuthVerify: (phone: string, code: string, acceptedTermsVersion?: string) =>
     request<AuthResponse>('/api/auth/phone/verify', {
       method: 'POST',
-      body: JSON.stringify({ phone, code, acceptedTermsVersion }),
+      body: JSON.stringify(
+        acceptedTermsVersion ? { phone, code, acceptedTermsVersion, voiceConsent: true } : { phone, code },
+      ),
     }),
 
   /** Email a 6-digit sign-in code to an existing account (never creates one). */
@@ -3491,7 +3501,7 @@ export const api = {
   acceptTerms: (acceptedTermsVersion: string) =>
     request<{ terms: TermsStatus }>('/api/auth/terms/accept', {
       method: 'POST',
-      body: JSON.stringify({ acceptedTermsVersion }),
+      body: JSON.stringify({ acceptedTermsVersion, voiceConsent: true }),
     }),
 
   // ---- Password recovery ----
@@ -3544,62 +3554,23 @@ export const api = {
 
   removeAvatar: () => request<{ profile: Profile }>('/api/profile/avatar', { method: 'DELETE' }),
 
-  getVoiceEnrollment: () =>
-    request<{
-      consentText: string;
-      voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean; durationSeconds: number | null };
-      pendingRequests: Array<{ id: string; requester_user_id: string; subject_user_id: string; status: string }>;
-    }>('/api/speaker-identity/voiceprint'),
+  /** Account privacy: voice recognition (auto-learned from job clips) and cross-company matching. */
+  getVoicePrivacy: () =>
+    request<{ voice: VoicePrivacy }>('/api/speaker-identity/voiceprint'),
 
-  enrollVoiceprint: (body: { consentText: string; consented: true; wavBase64: string; crossCompanyOptIn?: boolean }) =>
-    request<{ voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean } }>(
-      '/api/speaker-identity/voiceprint',
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
+  enableVoiceRecognition: () =>
+    request<{ voice: VoicePrivacy }>('/api/speaker-identity/voice-consent', {
+      method: 'POST',
+      body: JSON.stringify({ consented: true }),
+    }),
+
+  disableVoiceRecognition: () =>
+    request<{ voice: VoicePrivacy }>('/api/speaker-identity/voiceprint', { method: 'DELETE' }),
 
   setVoiceCrossCompanyOptIn: (crossCompanyOptIn: boolean) =>
-    request<{ voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean } }>(
-      '/api/speaker-identity/voiceprint',
-      { method: 'PATCH', body: JSON.stringify({ crossCompanyOptIn }) },
-    ),
-
-  revokeVoiceprint: () =>
-    request<{ voiceprint: { enrolled: boolean; consentedAt: null; crossCompanyOptIn: boolean } }>(
-      '/api/speaker-identity/voiceprint',
-      { method: 'DELETE' },
-    ),
-
-  voiceTeam: () =>
-    request<{
-      people: Array<{
-        userId: string;
-        fullName: string | null;
-        email: string | null;
-        consentStatus: 'enrolled' | 'pending' | 'revoked' | 'none';
-        consentedAt: string | null;
-        crossCompanyOptIn: boolean;
-        pendingRequestId: string | null;
-      }>;
-    }>('/api/speaker-identity/team'),
-
-  requestVoiceEnrollment: (subjectUserId: string) =>
-    request<{ request: { id: string; status: string } }>('/api/speaker-identity/enrollment-requests', {
-      method: 'POST',
-      body: JSON.stringify({ subjectUserId }),
-    }),
-
-  confirmVoiceEnrollment: (
-    id: string,
-    body: { consentText: string; consented: true; wavBase64: string; crossCompanyOptIn?: boolean },
-  ) =>
-    request<{ request: { id: string; status: string } }>(`/api/speaker-identity/enrollment-requests/${id}/confirm`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  declineVoiceEnrollment: (id: string) =>
-    request<{ request: { id: string; status: string } }>(`/api/speaker-identity/enrollment-requests/${id}/decline`, {
-      method: 'POST',
+    request<{ voice: VoicePrivacy }>('/api/speaker-identity/voiceprint', {
+      method: 'PATCH',
+      body: JSON.stringify({ crossCompanyOptIn }),
     }),
 
   speakerVerifications: (jobId: string) =>

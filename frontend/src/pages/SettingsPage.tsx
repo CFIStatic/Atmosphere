@@ -50,8 +50,7 @@ import {
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useHomeownerPortal } from '../lib/homeownerPortal';
 import { CrmConnectPanel } from './CrmConnectPage';
-import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
-import { TeamVoiceList } from '../components/settings/TeamVoiceList';
+import { VoicePrivacyCard } from '../components/settings/VoicePrivacyCard';
 
 /**
  * Settings → Connect is hidden for now (the section tab and the CRM
@@ -77,7 +76,7 @@ function isSectionId(value: string | null): value is SectionId {
 export function SettingsPage() {
   useFeatureTimer('settings');
   const t = useT();
-  const { membership, user } = useAuth();
+  const { membership } = useAuth();
   // Invited homeowners (no org): their profile and sign-out, nothing else.
   const { homeowner } = useHomeownerPortal();
   // Billing and Usage: the account owner (who created the organization) only.
@@ -187,7 +186,6 @@ export function SettingsPage() {
             <>
               <InvitePanel />
               <LinkedAccountsCard />
-              <TeamVoiceList currentUserId={user?.id} />
               <AiTrainingCard />
               <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
                 <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>
@@ -547,8 +545,6 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
         </div>
       </Card>
 
-      {homeowner ? null : <VoiceEnrollmentCard />}
-
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
         {(user?.email || !user?.phone) && (
           <>
@@ -568,6 +564,8 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
         <ReadOnlyRow label={t('settings.account.lastSignIn')} value={formatDate(user?.lastSignInAt, locale)} />
         <p className="mt-4 text-xs text-ink-500">{t('settings.account.emailLocked')}</p>
       </Card>
+
+      {homeowner ? null : <VoicePrivacyCard />}
 
       <Card
         title={t('settings.language.title')}

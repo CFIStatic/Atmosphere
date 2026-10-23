@@ -30,14 +30,19 @@ export const acceptedTermsVersionField = z
   .trim()
   .min(1, 'Acknowledge the Terms of Service to continue.');
 
+/** True when the checkbox read "I agree to the Terms, including voiceprint consent". */
+export const voiceConsentField = z.boolean().optional();
+
 export const signupCredentialsSchema = credentialsSchema.extend({
   acceptedTermsVersion: acceptedTermsVersionField,
+  voiceConsent: voiceConsentField,
 });
 
 export type SignupCredentials = z.infer<typeof signupCredentialsSchema>;
 
 export const acceptTermsSchema = z.object({
   acceptedTermsVersion: acceptedTermsVersionField,
+  voiceConsent: voiceConsentField,
 });
 
 export type AcceptTermsInput = z.infer<typeof acceptTermsSchema>;
@@ -338,6 +343,7 @@ export const fieldRegisterSchema = z.object({
     .max(80, 'Organization name is too long')
     .optional(),
   acceptedTermsVersion: acceptedTermsVersionField,
+  voiceConsent: voiceConsentField,
 });
 
 export type FieldRegisterInput = z.infer<typeof fieldRegisterSchema>;

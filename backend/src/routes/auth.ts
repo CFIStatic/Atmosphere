@@ -76,7 +76,7 @@ export const authLimiter = rateLimit({
  */
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, acceptedTermsVersion } = signupCredentialsSchema.parse(req.body);
+    const { email, password, acceptedTermsVersion, voiceConsent } = signupCredentialsSchema.parse(req.body);
     requireAcceptedTermsVersion(acceptedTermsVersion);
     const result = await createPasswordAccount(email, password);
 
@@ -87,6 +87,7 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
         await recordTermsAcceptance({
           userId: result.user.id,
           termsVersion: acceptedTermsVersion,
+          voiceConsent,
           ip: clientIp(req),
           userAgent: clientUserAgent(req),
         });
@@ -112,6 +113,7 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
       userId: result.user.id,
       accessToken: result.session.access_token,
       termsVersion: acceptedTermsVersion,
+      voiceConsent,
       ip: clientIp(req),
       userAgent: clientUserAgent(req),
     });
@@ -360,11 +362,12 @@ authRouter.post(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { acceptedTermsVersion } = acceptTermsSchema.parse(req.body);
+      const { acceptedTermsVersion, voiceConsent } = acceptTermsSchema.parse(req.body);
       const terms = await recordTermsAcceptance({
         userId: req.user!.id,
         accessToken: req.accessToken,
         termsVersion: acceptedTermsVersion,
+        voiceConsent,
         ip: clientIp(req),
         userAgent: clientUserAgent(req),
       });

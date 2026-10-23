@@ -9,11 +9,16 @@ export type TermsStatus = {
   acceptedVersion: string | null;
   acceptedAt?: string | null;
   url: string;
+  /** No recorded voiceprint consent yet (and never turned off): ask once. */
+  voiceConsentRequired?: boolean;
 };
+
+/** Bump with backend/src/legal/voiceConsent.ts VOICE_CONSENT_VERSION. */
+export const VOICE_CONSENT_VERSION = 'voiceprint:2026-10-23';
 
 export function termsRequired(status: TermsStatus | null | undefined): boolean {
   if (!status) return true;
-  return status.required || status.acceptedVersion !== status.currentVersion;
+  return status.required || status.acceptedVersion !== status.currentVersion || status.voiceConsentRequired === true;
 }
 
 export function publicTermsStatus(): TermsStatus {
@@ -27,11 +32,15 @@ export function publicTermsStatus(): TermsStatus {
 }
 
 const SESSION_TERMS_ACK_KEY = 'atmosphere.termsAckVersion';
+/** Session marker covers the Terms revision and the voiceprint consent. */
+function sessionAckValue(version: string): string {
+  return `${version}|${VOICE_CONSENT_VERSION}`;
+}
 
 /** Record that this browser tab acknowledged the current Terms (login / accept). */
 export function markSessionTermsAccepted(version: string = CURRENT_TERMS_VERSION): void {
   try {
-    sessionStorage.setItem(SESSION_TERMS_ACK_KEY, version);
+    sessionStorage.setItem(SESSION_TERMS_ACK_KEY, sessionAckValue(version));
   } catch {
     /* private mode / blocked storage */
   }
@@ -40,7 +49,7 @@ export function markSessionTermsAccepted(version: string = CURRENT_TERMS_VERSION
 /** True when this tab already acknowledged the live Terms version. */
 export function sessionTermsAcceptedForCurrent(): boolean {
   try {
-    return sessionStorage.getItem(SESSION_TERMS_ACK_KEY) === CURRENT_TERMS_VERSION;
+    return sessionStorage.getItem(SESSION_TERMS_ACK_KEY) === sessionAckValue(CURRENT_TERMS_VERSION);
   } catch {
     return false;
   }
