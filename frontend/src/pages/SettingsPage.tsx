@@ -10,11 +10,17 @@ import { useNavigate, useOutletContext, useSearchParams, Link } from 'react-rout
 import { useAuth } from '../context/AuthContext';
 import { isGlobalAdmin } from '../domain/productRoles';
 import { useIsOrgOwner } from '../lib/billingOwner';
-import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
+import { api, ApiError, WORK_TYPE_LABELS, type AssignablePermissionRole, type OrgMember } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
-import { InvitePanel } from '../components/team/InvitePanel';
+import {
+  InvitePanel,
+  memberPermissionRole,
+  PERMISSION_ROLE_CHOICES,
+  PERMISSION_ROLE_HELP,
+  PERMISSION_ROLE_LABELS,
+} from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
 import { PersonAvatar } from '../components/PersonAvatar';
@@ -922,9 +928,19 @@ function LinkedAccountsCard() {
   const [members, setMembers] = useState<OrgMember[] | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [seats, setSeats] = useState<{ used: number; allowed: number } | null>(null);
+  const [roleSavingId, setRoleSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    api
+      .getBillingOnboarding()
+      .then((w) => {
+        if (!cancelled && w.fieldCaptureSeats) {
+          setSeats({ used: w.fieldCaptureSeats.used, allowed: w.fieldCaptureSeats.allowed });
+        }
+      })
+      .catch(() => undefined);
     api
       .getMembers()
       .then(({ members: next }) => {
@@ -937,6 +953,25 @@ function LinkedAccountsCard() {
       cancelled = true;
     };
   }, []);
+
+  async function changeRole(member: OrgMember, next: AssignablePermissionRole) {
+    setRoleSavingId(member.userId);
+    setRemoveError(null);
+    try {
+      await api.setMemberPermissionRole(member.userId, next);
+      setMembers((prev) =>
+        (prev ?? []).map((row) =>
+          row.userId === member.userId
+            ? { ...row, permissionRole: next, role: next === 'admin' ? 'global_admin' : 'employee' }
+            : row,
+        ),
+      );
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Could not change that role.');
+    } finally {
+      setRoleSavingId(null);
+    }
+  }
 
   async function removeMember(member: OrgMember) {
     setRemovingId(member.userId);
@@ -956,6 +991,11 @@ function LinkedAccountsCard() {
       title={t('settings.linked.title')}
       description={t('settings.linked.description')}
     >
+      {seats ? (
+        <p className="mb-3 text-xs text-ink-500" data-testid="team-seat-counter">
+          {seats.used} of {seats.allowed} seats used
+        </p>
+      ) : null}
       {members === null ? (
         <div className="grid place-items-center py-8 text-brand-600">
           <SpinnerIcon className="animate-spin" width={22} height={22} />
@@ -969,7 +1009,10 @@ function LinkedAccountsCard() {
           {members.map((member) => {
             const isYou = member.userId === user?.id;
             const name = displayName(member.fullName, member.email);
-            const showRemove = canRemoveMembers && !isYou;
+            const memberRole = memberPermissionRole(member);
+            const isOwnerRow = member.isOwner === true || memberRole === 'owner';
+            const showRemove = canRemoveMembers && !isYou && !isOwnerRow;
+            const canEditRole = canRemoveMembers && !isYou && !isOwnerRow;
             return (
               <li
                 key={member.userId}
@@ -998,13 +1041,31 @@ function LinkedAccountsCard() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    data-testid="member-seat-label"
-                    title={member.seatType === 'platform' ? 'Platform seat: Global Admin access, no Field Capture, no Billing and Usage.' : undefined}
-                    className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
-                  >
-                    {member.seatType === 'platform' ? 'Platform' : (ROLE_LABELS[member.role] ?? member.role)}
-                  </span>
+                  {canEditRole ? (
+                    <select
+                      aria-label={`Role for ${name}`}
+                      data-testid="member-role-select"
+                      title={PERMISSION_ROLE_HELP[memberRole]}
+                      value={memberRole}
+                      disabled={roleSavingId === member.userId}
+                      onChange={(e) => void changeRole(member, e.target.value as AssignablePermissionRole)}
+                      className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
+                    >
+                      {PERMISSION_ROLE_CHOICES.map((key) => (
+                        <option key={key} value={key}>
+                          {PERMISSION_ROLE_LABELS[key]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      data-testid="member-seat-label"
+                      title={PERMISSION_ROLE_HELP[memberRole]}
+                      className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700"
+                    >
+                      {PERMISSION_ROLE_LABELS[memberRole]}
+                    </span>
+                  )}
                   {showRemove && (
                     <button
                       type="button"

@@ -527,6 +527,38 @@ describe('SignupPage', () => {
     expect(screen.queryByRole('heading', { name: 'Invite your team' })).toBeNull();
   });
 
+  it.each([
+    ['/signup?step=2&intent=join'],
+    ['/signup?step=2&intent=join&checkout=success'],
+    ['/signup?step=2&checkout=success'],
+  ])('an invited teammate who already joined never sees a plan, price or checkout (%s)', async (entry) => {
+    authState.user = {
+      id: 'user-9',
+      email: 'crew@example.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    // Not the payer: billing is the owner's company account.
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: false, complete: false });
+    renderSignup(entry);
+    await waitFor(() => expect(apiMocks.getBillingOnboarding).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull());
+    expect(screen.queryByText(/Continue to Stripe/i)).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Starter|Work Verification/i })).toBeNull();
+    expect(screen.queryByText(/free trial/i)).toBeNull();
+    expect(apiMocks.startOnboardingCheckout).not.toHaveBeenCalled();
+  });
+
+  it('a join-by-invite with no membership yet shows no plan picker', () => {
+    renderSignup('/signup?step=2&intent=join');
+    expect(screen.queryByText(/Set up billing|Joiners skip|pays the bill/i)).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Starter|Work Verification/i })).toBeNull();
+    expect(screen.queryByText(/Continue to Stripe/i)).toBeNull();
+  });
+
   it('never shows plan or billing UI on a homeowner invitee signup', () => {
     renderSignup('/signup?intent=homeowner&step=2&checkout=success');
     expect(screen.getByRole('heading', { level: 2, name: 'Save this job' })).toBeInTheDocument();

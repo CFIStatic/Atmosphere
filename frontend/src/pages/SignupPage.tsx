@@ -93,6 +93,12 @@ export function SignupPage() {
     parseAtmosphereBillingInterval(searchParams.get('interval')),
   );
   const [annualAvailable, setAnnualAvailable] = useState(false);
+  /**
+   * Whether this person pays (the workspace creator on Stripe). False for
+   * anyone who joined by invite: they never see a plan, price or checkout;
+   * billing belongs to the owner's company account. Null until known.
+   */
+  const [billingRequired, setBillingRequired] = useState<boolean | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
@@ -152,8 +158,15 @@ export function SignupPage() {
       try {
         const status = await api.getBillingOnboarding();
         if (cancelled) return;
+        setBillingRequired(Boolean(status.required));
         const needsBilling = status.required && !status.complete;
         const stepParam = searchParams.get('step');
+        // Invited teammates (not the payer) never stay on the plan step,
+        // even from a ?step=2 link or a stale checkout return.
+        if (!status.required && step === 2) {
+          setStep(3);
+          return;
+        }
         // Invite screen only once paid (or comped).
         if (stepParam === INVITE_STEP_PARAM) {
           setStep(needsBilling ? 2 : 3);
@@ -164,7 +177,7 @@ export function SignupPage() {
         // Paid checkout returns still need the billing step so SetupBillingStep
         // can auto-enter — do not wait for an incomplete payment.
         if (
-          checkoutParam ||
+          (status.required && checkoutParam) ||
           (needsBilling &&
             (stepParam === '2' || stepParam === '3' || stepParam === '4' || stepParam === '5'))
         ) {
@@ -254,6 +267,7 @@ export function SignupPage() {
   async function continueAfterWorkspace() {
     try {
       const status = await api.getBillingOnboarding();
+      setBillingRequired(Boolean(status.required));
       const needsBilling = status.required && !status.complete;
       if (needsBilling) {
         // Account, then plan and invites. No first job is needed first.
@@ -262,7 +276,10 @@ export function SignupPage() {
       }
       enterApp();
     } catch {
-      goToStep(2);
+      // A teammate who joined by invite never pays: straight into the
+      // company, not the plan step. Only a new company's creator retries billing.
+      if (mode === 'join') enterApp();
+      else goToStep(2);
     }
   }
 
@@ -609,7 +626,7 @@ export function SignupPage() {
         />
       )}
 
-      {step === 2 && !isInviteeAccount && membership && (
+      {step === 2 && !isInviteeAccount && membership && billingRequired !== false && (
         <SetupBillingStep
           redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
@@ -618,7 +635,7 @@ export function SignupPage() {
         />
       )}
 
-      {step === 2 && !isInviteeAccount && !membership && inApp && (
+      {step === 2 && !isInviteeAccount && !membership && mode !== 'join' && inApp && (
         <SetupStepCard
           step={2}
           intent={orgIntent}
@@ -631,7 +648,7 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {step === 2 && !isInviteeAccount && !membership && !inApp && (
+      {step === 2 && !isInviteeAccount && !membership && mode !== 'join' && !inApp && (
         <SetupStepCard
           step={2}
           intent={orgIntent}

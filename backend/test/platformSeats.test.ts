@@ -237,20 +237,19 @@ test('a Platform line is never mistaken for the plan item, and its quantity sync
   assert.equal(platformSeatQuantityFromSubscription({ items: { data: items } }), 4);
 });
 
-test('the invite route takes the Platform path and stores seat_type', () => {
+test('every team invite is Field Capture + Platform: no Platform-only path in the invite route', () => {
   const s = src('routes/org.ts');
-  assert.match(s, /seatType: z\.enum\(\['field_capture', 'platform'\]\)\.optional\(\)/);
-  const route = s.slice(s.indexOf("orgRouter.post('/invites'"));
-  assert.match(route, /seatType === 'platform' \? 'global_admin'/);
-  assert.match(route, /ensurePlatformSeatForInvite\(supabase, orgId/);
-  assert.match(route, /seat_type: 'platform'/);
-  assert.ok(route.indexOf('ensurePlatformSeatForInvite') < route.indexOf(".from('org_invites')"), 'seat before the invite row');
+  const route = s.slice(s.indexOf("orgRouter.post('/invites'"), s.indexOf("orgRouter.post('/invites/:id/revoke'"));
+  assert.doesNotMatch(route, /ensurePlatformSeatForInvite/);
+  assert.doesNotMatch(route, /seat_type:/);
+  assert.match(route, /ensureFieldCaptureSeatForInvite\(supabase, orgId/);
+  assert.ok(route.indexOf('ensureFieldCaptureSeatForInvite') < route.indexOf(".from('org_invites')"), 'seat before the invite row');
 });
 
 test('one Global Admin per workspace: the invite route refuses admin invites (Platform seats still allowed)', () => {
   const s = src('routes/org.ts');
   const route = s.slice(s.indexOf("orgRouter.post('/invites'"), s.indexOf("orgRouter.post('/invites/:id/revoke'"));
-  assert.match(route, /seatType !== 'platform' && isGlobalAdmin\(seat\)/);
+  assert.match(route, /if \(isGlobalAdmin\(seat\)\)/);
   assert.match(route, /'global_admin_owner_only'/);
   assert.ok(route.indexOf("'global_admin_owner_only'") < route.indexOf(".from('org_invites')"), 'refused before any row is written');
 });

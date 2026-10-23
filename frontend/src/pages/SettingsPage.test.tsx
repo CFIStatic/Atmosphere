@@ -27,6 +27,7 @@ const authState = vi.hoisted(() => ({
 }));
 
 const apiMocks = vi.hoisted(() => ({
+  setMemberPermissionRole: vi.fn(),
   updateProfile: vi.fn(),
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
@@ -232,26 +233,38 @@ describe('Settings organization', () => {
     expect(screen.getByText('Only a Global Admin can change this.')).toBeInTheDocument();
   });
 
-  it('labels a Platform seat "Platform" in the member list', async () => {
+  it('shows the seat counter and lets an admin change roles, never the owner or themselves', async () => {
+    apiMocks.getBillingOnboarding.mockResolvedValue({
+      isCreator: false, required: false, complete: true, hasSubscription: true, paymentProvider: 'stripe',
+      fieldCaptureSeats: { used: 2, allowed: 5, remaining: 3 },
+    });
+    apiMocks.setMemberPermissionRole.mockReset().mockResolvedValue({ member: { userId: 'user-2', permissionRole: 'viewer' } });
     apiMocks.getMembers.mockResolvedValue({
       members: [
+        { ...LINKED_ACCOUNTS[0], permissionRole: 'owner', isOwner: true, userId: 'user-owner', fullName: 'Olive Owner', email: 'owner@example.com' },
         ...LINKED_ACCOUNTS,
-        {
-          userId: 'user-platform',
-          email: 'office@example.com',
-          fullName: 'Office Lead',
-          role: 'global_admin',
-          seatType: 'platform',
-          workType: 'mitigation',
-          usageIntents: [],
-          status: 'active',
-        },
       ],
     });
     renderSettings('/settings?section=organization');
-    await waitFor(() => expect(screen.getByText('Office Lead')).toBeInTheDocument());
-    const labels = screen.getAllByTestId('member-seat-label').map((el) => el.textContent);
-    expect(labels).toContain('Platform');
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    expect(await screen.findByTestId('team-seat-counter')).toHaveTextContent('2 of 5 seats used');
+    expect(screen.queryByRole('combobox', { name: 'Role for Olive Owner' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove Olive Owner from this workspace' })).toBeNull();
+    expect(screen.getAllByTestId('member-seat-label').map((el) => el.textContent)).toContain('Owner');
+    const select = screen.getByRole('combobox', { name: 'Role for El Presidente' }) as HTMLSelectElement;
+    expect(select.value).toBe('member');
+    await userEvent.selectOptions(select, 'viewer');
+    expect(apiMocks.setMemberPermissionRole).toHaveBeenCalledWith('user-2', 'viewer');
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Role for El Presidente' }) as HTMLSelectElement).value).toBe('viewer'));
+  });
+
+  it('a member sees role labels, no editors', async () => {
+    authState.membership = { role: 'employee', permissionRole: 'member', org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' } } as never;
+    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
+    renderSettings('/settings?section=organization');
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    expect(screen.queryByTestId('member-role-select')).toBeNull();
+    expect(screen.getAllByTestId('member-seat-label').map((el) => el.textContent)).toEqual(['Admin', 'Member']);
   });
 
   it('lets a Global Admin remove someone else, but not themselves', async () => {

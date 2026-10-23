@@ -70,6 +70,10 @@ echo "==> Homeowner permissions: office-set, server-written, enforced on direct 
 bash "$HERE/21_homeowner_permissions.sh" "$@"
 
 echo
+echo "==> Permission role backfill keeps everyone's access (20261023150000)"
+bash "$HERE/22_permission_roles_backfill.sh" "$@"
+
+echo
 echo "==> Done. Core PM sections that say 'expect ERROR' are the guarantees"
 echo "    refusing the operation. Orchestration section 3 (event update) and 4"
 echo "    (delete) are the same — an ERROR there is the pass."

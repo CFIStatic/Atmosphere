@@ -2,7 +2,13 @@ import type { Request } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createUserClient } from './supabase.js';
 import { HttpError } from './errors.js';
-import { isGlobalAdmin, toOrgProductRole } from './productRoles.js';
+import {
+  effectivePermissionRole,
+  isAdminPermission,
+  productRoleForPermission,
+  toOrgProductRole,
+  type PermissionRole,
+} from './productRoles.js';
 
 /**
  * Resolves the organization the caller is acting for.
@@ -19,10 +25,40 @@ import { isGlobalAdmin, toOrgProductRole } from './productRoles.js';
 export interface OrgContext {
   orgId: string;
   userId: string;
+  /**
+   * Effective role for capability checks: 'global_admin' when the permission
+   * role is owner or admin, otherwise 'employee'. Existing `isGlobalAdmin(ctx.role)`
+   * checks therefore follow the permission role, not the billing seat.
+   */
   role: string;
-  /** Normalized Work Verification seat: global_admin | employee. */
+  /** org_members.role as stored (billing meaning; legacy). */
+  dbRole: string;
+  /** Normalized: global_admin (owner/admin) | employee (member/viewer). */
   productRole: 'global_admin' | 'employee';
+  /** owner | admin | member | viewer */
+  permissionRole: PermissionRole;
   supabase: SupabaseClient;
+}
+
+/**
+ * A viewer may read everything their membership can see but change nothing.
+ * Writes they still need: their own profile/preferences, leaving, deleting
+ * their account, and sign-in housekeeping.
+ */
+const VIEWER_WRITE_ALLOWLIST: RegExp[] = [
+  /^\/api\/org\/me(\/|$)/,
+  /^\/api\/org\/join(\/|$)/,
+  /^\/api\/org\/leave(\/|$)/,
+  /^\/api\/account(\/|$)/,
+  /^\/api\/auth(\/|$)/,
+  /^\/api\/profile(\/|$)/,
+  /^\/api\/me(\/|$)/,
+];
+export function isViewerBlockedWrite(req: Pick<Request, 'method'> & { originalUrl?: string; url?: string }): boolean {
+  const method = String(req.method ?? 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
+  const path = String(req.originalUrl ?? req.url ?? '').split('?')[0];
+  return !VIEWER_WRITE_ALLOWLIST.some((re) => re.test(path));
 }
 
 /**
@@ -43,16 +79,31 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
   const supabase = createUserClient(req.accessToken!);
   const userId = req.user!.id;
 
-  const { data, error } = await supabase
+  let result = await supabase
     .from('org_members')
-    .select('org_id, role')
+    .select('org_id, role, permission_role')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1);
+  if (result.error && /column .* does not exist|permission_role/i.test(result.error.message)) {
+    // Migration 20261023150000 not applied yet: the old role meaning applies.
+    result = (await supabase
+      .from('org_members')
+      .select('org_id, role')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1)) as typeof result;
+  }
+  const { data, error } = result;
 
   if (error) throw new HttpError(500, error.message, 'org_lookup_failed');
 
-  const orgId = data?.[0]?.org_id as string | undefined;
+  const row = (data?.[0] ?? null) as {
+    org_id?: string;
+    role?: string;
+    permission_role?: string | null;
+  } | null;
+  const orgId = row?.org_id as string | undefined;
   if (!orgId) {
     // Not an auth failure — the session is fine, the user just has not finished
     // onboarding. A distinct code lets the frontend route to the wizard instead
@@ -60,12 +111,19 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
     throw new HttpError(403, 'Join or create an organization first.', 'no_organization');
   }
 
-  const role = String(data?.[0]?.role ?? 'employee');
+  const dbRole = String(row?.role ?? 'employee');
+  const permissionRole = effectivePermissionRole({ permission_role: row?.permission_role, role: dbRole });
+  const productRole = productRoleForPermission(permissionRole);
+  if (permissionRole === 'viewer' && isViewerBlockedWrite(req)) {
+    throw new HttpError(403, 'Viewers have read-only access. Ask an admin to change your role.', 'viewer_read_only');
+  }
   const ctx: OrgContext = {
     orgId,
     userId,
-    role,
-    productRole: toOrgProductRole(role),
+    role: productRole,
+    dbRole,
+    productRole,
+    permissionRole,
     supabase,
   };
   (req as CachedRequest)[CACHE_KEY] = ctx;
@@ -87,20 +145,23 @@ export async function requireOrgRole(req: Request, roles: string[]): Promise<Org
   if (!allowed.has(ctx.productRole)) {
     throw new HttpError(
       403,
-      'That needs a Global Admin on this organization.',
+      'That needs an admin on this organization.',
       'insufficient_role',
     );
   }
   return ctx;
 }
 
-/** Org actions that only the bill payer may take. */
+/** Org actions for the owner and admins (permission role), not members or viewers.  Billing stays the owner's (requireOrgOwner). */
 export async function requireGlobalAdmin(req: Request): Promise<OrgContext> {
   const ctx = await requireOrgContext(req);
-  if (!isGlobalAdmin(ctx.role)) {
+  // A context set upstream (tests, internal callers) may predate permissionRole:
+  // fall back to the effective role, which already follows the permission role.
+  const permission = ctx.permissionRole ?? effectivePermissionRole({ role: ctx.role });
+  if (!isAdminPermission(permission)) {
     throw new HttpError(
       403,
-      'That needs a Global Admin on this organization.',
+      'That needs an admin on this organization.',
       'insufficient_role',
     );
   }

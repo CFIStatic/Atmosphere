@@ -50,12 +50,7 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Join your team',
-    detail: 'Create a login with the invited email.',
-  },
-  {
-    step: 2 as const,
-    title: 'Set up billing',
-    detail: 'Joiners skip this — only the Global Admin pays the bill.',
+    detail: 'Create a login with the invited email. No plan or card — your company covers your seat.',
   },
 ] as const;
 
