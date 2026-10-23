@@ -50,7 +50,7 @@ function Switch({
 /**
  * Account privacy: voice recognition on/off and cross-company matching.
  * Voices are learned automatically from job clips for people who agreed to the
- * Terms, including voiceprint consent. Turning it off deletes the voiceprint.
+ * Terms of Service. Turning it off deletes the voiceprint.
  */
 export function VoicePrivacyCard({ preview }: { preview?: VoicePrivacyState }) {
   const [state, setState] = useState<VoicePrivacyState>(preview ?? OFF);
