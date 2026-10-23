@@ -5,10 +5,12 @@
  *  - Each workspace onboards one connected account with the Express dashboard.
  *    Atmosphere owns pricing (fees_collector "application") and negative
  *    balance liability (losses_collector "application").
- *  - Homeowner payments are destination charges via Stripe Checkout:
- *    on_behalf_of + transfer_data.destination = the contractor's account, and
- *    Atmosphere keeps application_fee_amount = PAYMENTS_APPLICATION_FEE_BPS of
- *    the charge (basis points; 300 = 3.00%), plus an optional flat fee.
+ *  - Homeowner payments are separate charges and transfers: the homeowner
+ *    pays the invoice to the platform (on_behalf_of the contractor, one
+ *    transfer_group per invoice). Money is held per line and released by a
+ *    Transfer when the GC confirms the work (proof-based release). Atmosphere
+ *    keeps PAYMENTS_APPLICATION_FEE_BPS of each line (basis points; 300 =
+ *    3.00%), plus an optional flat fee taken from the first line released.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { HttpError } from '../lib/errors.js';
@@ -73,7 +75,7 @@ export function assertMayManageInvoices(role: PermissionRole | string | null | u
 }
 
 export type Evidence = { proofId: string; atSeconds: number | null; quote: string | null };
-export type LineInput = { description: string; quantity: number; unitCents: number; evidence: Evidence[] };
+export type LineInput = { description: string; quantity: number; unitCents: number; evidence: Evidence[]; scopeItemId?: string | null };
 
 export function lineAmountCents(quantity: number, unitCents: number): number {
   return Math.round(quantity * unitCents);
@@ -124,6 +126,14 @@ export type LineRow = {
   unit_cents: number;
   amount_cents: number;
   evidence: unknown;
+  scope_item_id?: string | null;
+  release_status?: string | null;
+  held_at?: string | null;
+  ai_verdict?: unknown;
+  ai_verified_at?: string | null;
+  released_at?: string | null;
+  release_mode?: string | null;
+  release_cents?: number | null;
 };
 export type ProofInfo = { id: string; title: string | null; capturedAt: string | null };
 
@@ -139,7 +149,7 @@ function normEvidence(raw: unknown): Evidence[] {
 }
 
 /** Office view: everything, evidence enriched with clip titles. */
-export function presentInvoice(inv: InvoiceRow, lines: LineRow[], proofs: Map<string, ProofInfo>, feeCents?: number) {
+export function presentInvoice(inv: InvoiceRow, lines: LineRow[], proofs: Map<string, ProofInfo>, feeCents?: number, scopeTitles?: Map<string, string>) {
   return {
     id: inv.id,
     jobId: inv.job_id,
@@ -163,6 +173,17 @@ export function presentInvoice(inv: InvoiceRow, lines: LineRow[], proofs: Map<st
         quantity: Number(l.quantity),
         unitCents: Number(l.unit_cents),
         amountCents: Number(l.amount_cents),
+        scopeItemId: l.scope_item_id ?? null,
+        scopeTitle: (l.scope_item_id && scopeTitles?.get(l.scope_item_id)) || null,
+        release: {
+          status: (l.release_status ?? 'unpaid') as ReleaseStatus,
+          heldAt: l.held_at ?? null,
+          verifiedAt: l.ai_verified_at ?? null,
+          releasedAt: l.released_at ?? null,
+          mode: l.release_mode ?? null,
+          releasedCents: l.release_cents == null ? null : Number(l.release_cents),
+          verdict: (l.ai_verdict as AiVerdict | null) ?? null,
+        },
         evidence: normEvidence(l.evidence).map((e) => ({
           ...e,
           clipTitle: proofs.get(e.proofId)?.title ?? null,
@@ -192,6 +213,8 @@ export function homeownerInvoice(
     ...rest,
     lines: inv.lines.map((l) => ({
       ...l,
+      // The homeowner sees the status, not the AI's working or the payout amount.
+      release: { ...l.release, verdict: null, releasedCents: null, mode: null },
       evidence: seeVideos
         ? l.evidence
             .filter((e) => !hiddenProofIds.has(e.proofId))
@@ -211,4 +234,92 @@ export function paymentStatusFromSession(session: { status?: string | null; paym
   if (session.status === 'expired') return 'expired';
   if (session.status === 'complete') return 'processing'; // ACH: completed, funds pending
   return 'pending';
+}
+
+/* ------------------------------------------------ Proof-based release */
+
+export type ReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released';
+
+/** Stripe lets a platform hold funds before transfer for a limited time; we warn well before. */
+export const HOLD_WARN_DAYS = 75;
+export const HOLD_MAX_DAYS = 90;
+
+export type ClipAnalysis = {
+  id: string;
+  title: string | null;
+  analysisStatus: string | null;
+  state: string | null;
+  text: string; // ai_summary + findings + narration + transcript + labels, lowercased
+};
+
+export type AiVerdict = {
+  verified: boolean;
+  checkedAt: string;
+  reasons: string[];
+  matchedTerms: string[];
+  clipIds: string[];
+};
+
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'per', 'each', 'all', 'of', 'to', 'in', 'on', 'a', 'an', 'ft', 'lf', 'sf', 'day', 'days', 'x']);
+
+export function significantTerms(text: string): string[] {
+  const words = text.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/);
+  return [...new Set(words.filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w)))];
+}
+
+/**
+ * Deterministic check over the job's existing video analysis: every linked
+ * clip must be analysed and not rejected, and the clips together must mention
+ * at least half of the scope item's key terms (at least one). It never
+ * releases money by itself; it only marks the line "Verified by AI".
+ */
+export function verifyLine(
+  line: { description: string; evidence: Evidence[] },
+  scopeTitle: string | null,
+  clips: Map<string, ClipAnalysis>,
+  now = new Date(),
+): AiVerdict {
+  const reasons: string[] = [];
+  const linked = line.evidence.map((e) => clips.get(e.proofId)).filter(Boolean) as ClipAnalysis[];
+  const clipIds = linked.map((c) => c.id);
+  if (!linked.length) reasons.push('No video is linked to this line.');
+  const pending = linked.filter((c) => c.analysisStatus !== 'done');
+  if (pending.length) reasons.push(`${pending.length} linked clip(s) are not analysed yet.`);
+  const rejected = linked.filter((c) => c.state === 'rejected');
+  if (rejected.length) reasons.push(`${rejected.length} linked clip(s) were rejected.`);
+  const terms = significantTerms(scopeTitle || line.description);
+  const corpus = linked.map((c) => c.text).join(' ');
+  const quotes = line.evidence.map((e) => (e.quote ?? '').toLowerCase()).join(' ');
+  const matched = terms.filter((t) => corpus.includes(t) || corpus.includes(t.replace(/s$/, '')));
+  const need = Math.max(1, Math.ceil(terms.length / 2));
+  if (linked.length && matched.length < need) {
+    reasons.push(`The clips show ${matched.length} of ${terms.length} key terms for "${scopeTitle || line.description}".`);
+  }
+  if (quotes && linked.length && !line.evidence.every((e) => !e.quote || corpus.includes(e.quote.toLowerCase().slice(0, 24)))) {
+    reasons.push('A quoted line was not found in the clip transcript.');
+  }
+  const verified = reasons.length === 0;
+  if (verified) reasons.push(`Clips show ${matched.join(', ')}.`);
+  return { verified, checkedAt: now.toISOString(), reasons, matchedTerms: matched, clipIds };
+}
+
+/** Amount transferred to the contractor for one line: line minus Atmosphere's cut. */
+export function lineReleaseCents(lineCents: number, fee: FeeConfig, includeFlat: boolean): number {
+  const cut = applicationFeeCents(lineCents, { bps: fee.bps, flatCents: includeFlat ? fee.flatCents : 0 });
+  return Math.max(lineCents - cut, 0);
+}
+
+export function assertMayRelease(status: string | null | undefined, opts: { aiOnly: boolean; allowAiRelease: boolean }): void {
+  if (status === 'released') throw new HttpError(409, 'This line was already released.', 'line_released');
+  if (status !== 'held' && status !== 'verified') {
+    throw new HttpError(409, 'The homeowner has not paid this line yet.', 'line_not_held');
+  }
+  if (opts.aiOnly && (!opts.allowAiRelease || status !== 'verified')) {
+    throw new HttpError(403, 'Release needs a GC confirmation.', 'gc_confirmation_required');
+  }
+}
+
+export function holdAgeDays(heldAt: string | null | undefined, now = new Date()): number | null {
+  if (!heldAt) return null;
+  return Math.floor((now.getTime() - Date.parse(heldAt)) / 86_400_000);
 }

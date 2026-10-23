@@ -3429,6 +3429,7 @@ export type PayoutsStatus = {
     payoutsEnabled: boolean;
     detailsSubmitted: boolean;
     requirementsDue: number;
+    allowAiRelease?: boolean;
     updatedAt: string | null;
   };
 };
@@ -3441,12 +3442,26 @@ export type InvoiceEvidence = {
   capturedAt?: string | null;
 };
 
+export type LineReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released';
+export type LineRelease = {
+  status: LineReleaseStatus;
+  heldAt: string | null;
+  verifiedAt: string | null;
+  releasedAt: string | null;
+  mode: 'gc_confirmed' | 'ai_auto' | null;
+  releasedCents: number | null;
+  verdict: null | { verified: boolean; checkedAt: string; reasons: string[]; matchedTerms: string[]; clipIds: string[] };
+};
+
 export type JobInvoiceLine = {
   id?: string;
   description: string;
   quantity: number;
   unitCents: number;
   amountCents?: number;
+  scopeItemId?: string | null;
+  scopeTitle?: string | null;
+  release?: LineRelease;
   evidence: InvoiceEvidence[];
 };
 
@@ -3487,6 +3502,8 @@ export type JobPaymentsResponse = {
   feeBps?: number;
   canManage: boolean;
   payoutsReady: boolean;
+  scopeItems?: Array<{ id: string; title: string }>;
+  allowAiRelease?: boolean;
   invoices: JobInvoice[];
   payments: JobPayment[];
 };
@@ -3496,7 +3513,7 @@ export type JobInvoiceInput = {
   kind: JobInvoice['kind'];
   homeownerNote?: string | null;
   internalNote?: string | null;
-  lines: Array<{ description: string; quantity: number; unitCents: number; evidence: Array<{ proofId: string; atSeconds: number | null; quote: string | null }> }>;
+  lines: Array<{ description: string; quantity: number; unitCents: number; scopeItemId?: string | null; evidence: Array<{ proofId: string; atSeconds: number | null; quote: string | null }> }>;
 };
 
 export const api = {
@@ -4105,6 +4122,12 @@ export const api = {
     request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/void`, { method: 'POST' }),
   payJobInvoice: (jobId: string, invoiceId: string) =>
     request<{ url: string }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/checkout`, { method: 'POST' }),
+  verifyInvoiceLine: (jobId: string, invoiceId: string, lineId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/verify`, { method: 'POST' }),
+  releaseInvoiceLine: (jobId: string, invoiceId: string, lineId: string) =>
+    request<{ ok: true; releasedCents: number }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/release`, { method: 'POST' }),
+  setPayoutsSettings: (input: { allowAiRelease: boolean }) =>
+    request<PayoutsStatus>('/api/billing/connect/settings', { method: 'PUT', body: JSON.stringify(input) }),
 
   homeownerPermissions: (jobId: string) =>
     request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),

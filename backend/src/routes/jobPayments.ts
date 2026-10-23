@@ -32,6 +32,7 @@ import {
   type ProofInfo,
 } from '../payments/model.js';
 import { connectedAccountPatch } from '../payments/webhook.js';
+import { releaseLine, verifyInvoiceLines } from '../payments/release.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -54,7 +55,7 @@ connectRouter.use(requireAuth, requireOrg, requireOrgOwner);
 async function loadAccount(orgId: string) {
   const { data, error } = await admin()
     .from('org_payment_accounts')
-    .select('org_id, stripe_account_id, livemode, charges_enabled, payouts_enabled, details_submitted, requirements_due, updated_at')
+    .select('org_id, stripe_account_id, livemode, charges_enabled, payouts_enabled, details_submitted, requirements_due, allow_ai_release, updated_at')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error) throw new HttpError(500, 'Could not load payouts.', 'payouts_load_failed');
@@ -74,6 +75,7 @@ function presentAccount(row: any, feeBps: number) {
           payoutsEnabled: Boolean(row.payouts_enabled),
           detailsSubmitted: Boolean(row.details_submitted),
           requirementsDue: (row.requirements_due ?? []).length,
+          allowAiRelease: Boolean(row.allow_ai_release),
           updatedAt: row.updated_at,
         }
       : null,
@@ -157,6 +159,24 @@ connectRouter.post('/refresh', async (req, res, next) => {
   }
 });
 
+/** PUT /api/billing/connect/settings — company release policy (owner only). */
+connectRouter.put('/settings', async (req, res, next) => {
+  try {
+    assertPaymentsEnabled(gate());
+    const body = z.object({ allowAiRelease: z.boolean() }).parse(req.body ?? {});
+    const row = await loadAccount(req.orgId!);
+    if (!row) throw new HttpError(404, 'Set up payouts first.', 'no_payout_account');
+    const { error } = await admin()
+      .from('org_payment_accounts')
+      .update({ allow_ai_release: body.allowAiRelease, updated_at: new Date().toISOString() })
+      .eq('org_id', req.orgId!);
+    if (error) throw new HttpError(500, 'Could not save the setting.', 'payouts_save_failed');
+    res.json(presentAccount(await loadAccount(req.orgId!), feeConfigFromEnv().bps));
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** POST /api/billing/connect/dashboard — one-time link into the Stripe Express dashboard. */
 connectRouter.post('/dashboard', async (req, res, next) => {
   try {
@@ -212,14 +232,20 @@ async function loadInvoices(orgId: string, jobId: string, invoiceId?: string) {
   if (error) throw new HttpError(500, 'Could not load invoices.', 'invoices_load_failed');
   const ids = ((invoices ?? []) as any[]).map((i) => i.id);
   const { data: lines } = ids.length
-    ? await admin().from('job_invoice_lines').select('id, invoice_id, position, description, quantity, unit_cents, amount_cents, evidence').eq('org_id', orgId).in('invoice_id', ids)
+    ? await admin().from('job_invoice_lines').select('id, invoice_id, position, description, quantity, unit_cents, amount_cents, evidence, scope_item_id, release_status, held_at, ai_verdict, ai_verified_at, released_at, release_mode, release_cents').eq('org_id', orgId).in('invoice_id', ids)
     : { data: [] };
   const byInvoice = new Map<string, LineRow[]>();
   for (const l of (lines ?? []) as LineRow[]) {
     byInvoice.set(l.invoice_id, [...(byInvoice.get(l.invoice_id) ?? []), l]);
   }
-  const proofs = await proofInfo(orgId, jobId);
-  return ((invoices ?? []) as InvoiceRow[]).map((inv) => ({ row: inv, lines: byInvoice.get(inv.id) ?? [], proofs }));
+  const [proofs, scopes] = await Promise.all([proofInfo(orgId, jobId), scopeItems(orgId, jobId)]);
+  const scopeTitles = new Map(scopes.map((s) => [s.id, s.title]));
+  return ((invoices ?? []) as InvoiceRow[]).map((inv) => ({ row: inv, lines: byInvoice.get(inv.id) ?? [], proofs, scopeTitles, scopes }));
+}
+
+async function scopeItems(orgId: string, jobId: string): Promise<Array<{ id: string; title: string }>> {
+  const { data } = await admin().from('job_scope_items').select('id, title, state').eq('org_id', orgId).eq('job_id', jobId).order('created_at');
+  return ((data ?? []) as any[]).map((s) => ({ id: String(s.id), title: String(s.title) }));
 }
 
 async function loadPayments(orgId: string, jobId: string) {
@@ -246,7 +272,7 @@ jobPaymentsRouter.get('/shared/:jobId/payments', async (req, res, next) => {
     const [invoices, payments, account] = await Promise.all([
       loadInvoices(a.orgId, req.params.jobId),
       loadPayments(a.orgId, req.params.jobId),
-      admin().from('org_payment_accounts').select('charges_enabled').eq('org_id', a.orgId).maybeSingle(),
+      admin().from('org_payment_accounts').select('charges_enabled, allow_ai_release').eq('org_id', a.orgId).maybeSingle(),
     ]);
     const payoutsReady = Boolean((account.data as any)?.charges_enabled);
     const testMode = !/^(sk|rk)_live_/.test(config.stripe.secretKey);
@@ -260,7 +286,7 @@ jobPaymentsRouter.get('/shared/:jobId/payments', async (req, res, next) => {
         payoutsReady,
         invoices: invoices
           .filter((i) => homeownerVisibleInvoice(i.row.status))
-          .map((i) => homeownerInvoice(presentInvoice(i.row, i.lines, i.proofs), perms, hidden)),
+          .map((i) => homeownerInvoice(presentInvoice(i.row, i.lines, i.proofs, undefined, i.scopeTitles), perms, hidden)),
         // The homeowner sees their own payment outcomes, never the fee.
         payments: payments
           .filter((p) => p.status !== 'expired')
@@ -274,7 +300,9 @@ jobPaymentsRouter.get('/shared/:jobId/payments', async (req, res, next) => {
       feeBps: fee.bps,
       canManage: mayManageInvoices((a as any).permissionRole),
       payoutsReady,
-      invoices: invoices.map((i) => presentInvoice(i.row, i.lines, i.proofs, applicationFeeCents(Number(i.row.total_cents), fee))),
+      invoices: invoices.map((i) => presentInvoice(i.row, i.lines, i.proofs, applicationFeeCents(Number(i.row.total_cents), fee), i.scopeTitles)),
+      scopeItems: invoices[0]?.scopes ?? (await scopeItems(a.orgId, req.params.jobId)),
+      allowAiRelease: Boolean((account as any)?.data?.allow_ai_release),
       payments: payments.map((p) => ({
         id: p.id,
         invoiceId: p.invoice_id,
@@ -303,6 +331,7 @@ const lineSchema = z.object({
   quantity: z.number().positive().max(100_000),
   unitCents: z.number().int().min(0).max(10_000_000),
   evidence: z.array(evidenceSchema).max(10).default([]),
+  scopeItemId: z.string().uuid().nullable().optional(),
 });
 const invoiceSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -326,6 +355,10 @@ async function writeLines(orgId: string, jobId: string, invoiceId: string, lines
     evidence: l.evidence.map((e) => ({ proofId: e.proofId, atSeconds: e.atSeconds ?? null, quote: e.quote ?? null })),
   }));
   assertEvidenceOnJob(norm, new Set(proofs.keys()));
+  const scopeIds = new Set((await scopeItems(orgId, jobId)).map((s) => s.id));
+  if (norm.some((l) => l.scopeItemId && !scopeIds.has(l.scopeItemId))) {
+    throw new HttpError(400, 'Each line must map to a scope item on this job.', 'scope_not_on_job');
+  }
   await admin().from('job_invoice_lines').delete().eq('org_id', orgId).eq('invoice_id', invoiceId);
   const { error } = await admin().from('job_invoice_lines').insert(
     norm.map((l, position) => ({
@@ -338,6 +371,7 @@ async function writeLines(orgId: string, jobId: string, invoiceId: string, lines
       unit_cents: l.unitCents,
       amount_cents: lineAmountCents(l.quantity, l.unitCents),
       evidence: l.evidence,
+      scope_item_id: l.scopeItemId ?? null,
     })),
   );
   if (error) throw new HttpError(500, 'Could not save invoice lines.', 'invoice_lines_failed');
@@ -433,7 +467,9 @@ jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/checkout', async (req
     const destination = String((acct as any).stripe_account_id);
     const fee = applicationFeeCents(amount, feeConfigFromEnv());
     const paymentId = randomUUID();
+    const transferGroup = `atm_inv_${inv.row.id}`;
     const { error } = await admin().from('job_payments').insert({
+      transfer_group: transferGroup,
       id: paymentId, org_id: a.orgId, job_id: req.params.jobId, invoice_id: inv.row.id,
       stripe_account_id: destination, amount_cents: amount, application_fee_cents: fee,
       livemode: /^(sk|rk)_live_/.test(config.stripe.secretKey), payer_user_id: req.user!.id, status: 'pending',
@@ -449,10 +485,11 @@ jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/checkout', async (req
           quantity: 1,
           price_data: { currency: 'usd', unit_amount: amount, product_data: { name: `Invoice #${inv.row.number}: ${inv.row.title}`.slice(0, 250) } },
         }],
+        // Separate charges and transfers: funds stay on the platform until
+        // each line is released (GC confirmation) by a Transfer.
         payment_intent_data: {
-          application_fee_amount: fee,
           on_behalf_of: destination,
-          transfer_data: { destination },
+          transfer_group: transferGroup,
           metadata,
         },
         metadata,
@@ -463,6 +500,34 @@ jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/checkout', async (req
     );
     await admin().from('job_payments').update({ stripe_checkout_session_id: session.id }).eq('id', paymentId).eq('org_id', a.orgId);
     res.json({ url: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST .../invoices/:invoiceId/lines/:lineId/verify — re-run the AI check (office). */
+jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/lines/:lineId/verify', async (req, res, next) => {
+  try {
+    assertPaymentsEnabled(gate());
+    const ctx = await officeAdmin(req);
+    const [inv] = await loadInvoices(ctx.orgId, req.params.jobId, req.params.invoiceId);
+    if (!inv || !inv.lines.some((l) => l.id === req.params.lineId)) throw new HttpError(404, 'No such line.', 'not_found');
+    await verifyInvoiceLines(admin(), ctx.orgId, inv.row.id, req.params.lineId);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST .../invoices/:invoiceId/lines/:lineId/release — GC confirms and releases the line's money. */
+jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/lines/:lineId/release', async (req, res, next) => {
+  try {
+    assertPaymentsEnabled(gate());
+    const ctx = await officeAdmin(req);
+    const [inv] = await loadInvoices(ctx.orgId, req.params.jobId, req.params.invoiceId);
+    if (!inv || !inv.lines.some((l) => l.id === req.params.lineId)) throw new HttpError(404, 'No such line.', 'not_found');
+    const out = await releaseLine(admin(), ctx.orgId, req.params.lineId, { actorId: ctx.userId, aiOnly: false });
+    res.json({ ok: true, releasedCents: out.releasedCents });
   } catch (err) {
     next(err);
   }

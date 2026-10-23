@@ -47,6 +47,29 @@ const STATUS_LABEL: Record<string, string> = {
   refunded: 'Refunded',
 };
 
+const RELEASE_STYLE: Record<string, string> = {
+  held: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
+  verified: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',
+  released: 'bg-success-50 text-success-600 ring-1 ring-success-200',
+};
+const RELEASE_LABEL: Record<string, string> = {
+  held: 'Paid – held',
+  verified: 'Verified by AI',
+  released: 'Released',
+};
+
+function ReleasePill({ status }: { status: string }) {
+  if (!RELEASE_LABEL[status]) return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${RELEASE_STYLE[status]}`}
+      data-testid={`release-${status}`}
+    >
+      {RELEASE_LABEL[status]}
+    </span>
+  );
+}
+
 function Pill({ status }: { status: string }) {
   return (
     <span
@@ -66,6 +89,7 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
   const [building, setBuilding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [player, setPlayer] = useState<{ url: string; at: number } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -148,8 +172,8 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
             <h3 className="text-base font-semibold text-ink-900">Invoices</h3>
             <p className="mt-0.5 text-xs text-ink-500">
               {homeowner
-                ? 'From your contractor. Each line links the video that shows the work.'
-                : 'Each line can link the video, moment and words that prove the work.'}
+                ? 'From your contractor. Each line links the video that shows the work. Your payment is held until your contractor confirms each line is done.'
+                : 'Each line maps to a scope item and links the video, moment and words that prove it. Paid lines are held until you confirm and release them.'}
             </p>
           </div>
           {!homeowner && data.canManage && !building ? (
@@ -162,6 +186,7 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
         {building ? (
           <InvoiceBuilder
             jobId={jobId}
+            scopeItems={data.scopeItems ?? []}
             onCancel={() => setBuilding(false)}
             onSaved={() => {
               setBuilding(false);
@@ -202,13 +227,17 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
                   {inv.lines.map((line, i) => (
                     <li key={line.id ?? i} className="px-4 py-3">
                       <div className="flex items-start justify-between gap-3 text-sm">
-                        <span className="text-ink-900">
+                        <span className="min-w-0 text-ink-900">
                           {line.description}
                           {line.quantity !== 1 ? (
                             <span className="text-ink-500"> · {line.quantity} × {usd(line.unitCents)}</span>
                           ) : null}
+                          {line.scopeTitle ? <span className="mt-0.5 block text-[11px] text-ink-500">Scope: {line.scopeTitle}</span> : null}
                         </span>
-                        <span className="shrink-0 tabular-nums text-ink-900">{usd(line.amountCents ?? line.unitCents)}</span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {line.release ? <ReleasePill status={line.release.status} /> : null}
+                          <span className="tabular-nums text-ink-900">{usd(line.amountCents ?? line.unitCents)}</span>
+                        </span>
                       </div>
                       {line.evidence.length ? (
                         <div className="mt-2 flex flex-col gap-1.5" data-testid="line-evidence">
@@ -231,6 +260,27 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
                             </button>
                           ))}
                         </div>
+                      ) : null}
+                      {!homeowner && line.release && line.release.status !== 'unpaid' ? (
+                        <LineReleaseBar
+                          line={line}
+                          canManage={data.canManage}
+                          busy={busyId === line.id}
+                          confirming={confirming === line.id}
+                          onAsk={() => setConfirming(line.id ?? null)}
+                          onCancel={() => setConfirming(null)}
+                          onRecheck={() => line.id && act(line.id, () => api.verifyInvoiceLine(jobId, inv.id, line.id!))}
+                          onRelease={() =>
+                            line.id &&
+                            act(line.id, async () => {
+                              await api.releaseInvoiceLine(jobId, inv.id, line.id!);
+                              setConfirming(null);
+                            })
+                          }
+                        />
+                      ) : null}
+                      {homeowner && line.release?.status === 'released' ? (
+                        <p className="mt-1.5 text-[11px] text-success-600">Your contractor confirmed this work; payment released {day(line.release.releasedAt)}.</p>
                       ) : null}
                     </li>
                   ))}
@@ -286,6 +336,70 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
   );
 }
 
+function LineReleaseBar(props: {
+  line: JobInvoice['lines'][number];
+  canManage: boolean;
+  busy: boolean;
+  confirming: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onRecheck: () => void;
+  onRelease: () => void;
+}) {
+  const r = props.line.release!;
+  const amount = props.line.amountCents ?? props.line.unitCents;
+  return (
+    <div
+      className={`mt-2 rounded-md px-3 py-2 text-xs ring-1 ${r.status === 'released' ? 'bg-success-50/60 ring-success-200' : r.status === 'verified' ? 'bg-brand-50/60 ring-brand-200' : 'bg-caution-50/60 ring-caution-200'}`}
+      data-testid="line-release"
+    >
+      {r.status === 'released' ? (
+        <p className="text-success-700">
+          Released {r.releasedCents !== null ? usd(r.releasedCents) : ''} to your payout account on {day(r.releasedAt)}
+          {r.mode === 'ai_auto' ? ' (AI auto-release)' : ' after GC confirmation'}.
+        </p>
+      ) : (
+        <>
+          <p className="font-medium text-ink-900">
+            {r.status === 'verified' ? 'AI checked the linked clips against this scope item.' : 'Paid by the homeowner and held until you confirm the work.'}
+          </p>
+          {r.verdict?.reasons?.length ? (
+            <ul className="mt-1 list-disc pl-4 text-ink-600" data-testid="ai-verdict">
+              {r.verdict.reasons.map((reason, i) => (
+                <li key={i}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+          {props.canManage ? (
+            props.confirming ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="release-confirm">
+                <span className="text-ink-700">
+                  Release {usd(amount)} (less Atmosphere fee) to the contractor account? This cannot be undone here.
+                </span>
+                <Button size="sm" loading={props.busy} onClick={props.onRelease} data-testid="release-confirm-button">
+                  Confirm &amp; release
+                </Button>
+                <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancel}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" onClick={props.onAsk} data-testid="release-line">
+                  {r.status === 'verified' ? 'Confirm & release' : 'Release without AI check'}
+                </Button>
+                <Button size="sm" variant="ghost" loading={props.busy} onClick={props.onRecheck} data-testid="recheck-line">
+                  Re-check with AI
+                </Button>
+              </div>
+            )
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 function PaymentsList({ payments, homeowner }: { payments: JobPayment[]; homeowner: boolean }) {
   return (
     <section className="rounded-xl border border-line bg-paper-50 p-4 sm:p-5" data-testid="payments-list">
@@ -329,9 +443,10 @@ type DraftLine = {
   description: string;
   quantity: string;
   unit: string;
+  scopeItemId: string;
   evidence: Array<{ proofId: string; at: string; quote: string }>;
 };
-const blankLine = (): DraftLine => ({ description: '', quantity: '1', unit: '', evidence: [] });
+const blankLine = (): DraftLine => ({ description: '', quantity: '1', unit: '', scopeItemId: '', evidence: [] });
 
 function parseClock(value: string): number | null {
   const v = value.trim();
@@ -347,7 +462,7 @@ function clipLabel(v: ProofVideoRecord): string {
   return `${summary ? summary.slice(0, 60) : `${v.phase} video`} · ${when}`;
 }
 
-function InvoiceBuilder({ jobId, onCancel, onSaved }: { jobId: string; onCancel: () => void; onSaved: () => void }) {
+function InvoiceBuilder({ jobId, scopeItems, onCancel, onSaved }: { jobId: string; scopeItems: Array<{ id: string; title: string }>; onCancel: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<JobInvoice['kind']>('invoice');
   const [note, setNote] = useState('');
@@ -381,6 +496,7 @@ function InvoiceBuilder({ jobId, onCancel, onSaved }: { jobId: string; onCancel:
           description: l.description.trim(),
           quantity: Number(l.quantity) || 1,
           unitCents: Math.round((Number(l.unit) || 0) * 100),
+          scopeItemId: l.scopeItemId || null,
           evidence: l.evidence
             .filter((e) => e.proofId)
             .map((e) => ({ proofId: e.proofId, atSeconds: parseClock(e.at), quote: e.quote.trim() || null })),
@@ -416,6 +532,19 @@ function InvoiceBuilder({ jobId, onCancel, onSaved }: { jobId: string; onCancel:
               <input className={field} inputMode="decimal" placeholder="Qty" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
               <input className={field} inputMode="decimal" placeholder="Unit $" value={line.unit} onChange={(e) => setLine(i, { unit: e.target.value })} />
             </div>
+            <select
+              className={`${field} mt-2 w-full`}
+              value={line.scopeItemId}
+              onChange={(e) => setLine(i, { scopeItemId: e.target.value })}
+              data-testid="builder-scope"
+            >
+              <option value="">Scope item this line bills for…</option>
+              {scopeItems.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </select>
             {line.evidence.map((ev, k) => (
               <div key={k} className="mt-2 grid gap-2 sm:grid-cols-[1fr_80px_1fr_auto]" data-testid="builder-evidence">
                 <select

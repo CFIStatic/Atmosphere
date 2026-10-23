@@ -79,3 +79,59 @@ test('checkout status mapping and metadata routing', () => {
   assert.equal(isJobPaymentMetadata({ kind: 'job_payment', payment_id: 'x' }), true);
   assert.equal(isJobPaymentMetadata({ kind: 'ai_credits' }), false);
 });
+
+import { assertMayRelease, lineReleaseCents, verifyLine, holdAgeDays, type ClipAnalysis } from '../src/payments/model.js';
+
+const clip = (id: string, text: string, analysisStatus = 'done', state = 'accepted'): [string, ClipAnalysis] => [
+  id,
+  { id, title: null, analysisStatus, state, text: text.toLowerCase() },
+];
+
+test('AI verification: clips must be analysed and show the scope item', () => {
+  const clips = new Map([
+    clip('c1', 'Technician removes drywall in the hallway with a two foot flood cut. "we cut two feet up the full hallway run"'),
+    clip('c2', 'Kitchen overview', 'queued'),
+  ]);
+  const ok = verifyLine({ description: 'Line', evidence: [{ proofId: 'c1', atSeconds: 3, quote: 'We cut two feet up the full hallway run' }] }, 'Drywall flood cut, hallway', clips);
+  assert.equal(ok.verified, true);
+  assert.ok(ok.matchedTerms.includes('drywall'));
+
+  const none = verifyLine({ description: 'Drywall', evidence: [] }, null, clips);
+  assert.equal(none.verified, false);
+  const pending = verifyLine({ description: 'Kitchen', evidence: [{ proofId: 'c2', atSeconds: null, quote: null }] }, null, clips);
+  assert.equal(pending.verified, false);
+  const wrong = verifyLine({ description: 'x', evidence: [{ proofId: 'c1', atSeconds: null, quote: null }] }, 'Roof shingle replacement', clips);
+  assert.equal(wrong.verified, false);
+  const badQuote = verifyLine({ description: 'x', evidence: [{ proofId: 'c1', atSeconds: null, quote: 'we replaced the cabinets' }] }, 'Drywall flood cut', clips);
+  assert.equal(badQuote.verified, false);
+});
+
+test('release: GC confirmation required; AI-only only when the company allows it', () => {
+  assert.throws(() => assertMayRelease('unpaid', { aiOnly: false, allowAiRelease: false }), /not paid/);
+  assert.throws(() => assertMayRelease('released', { aiOnly: false, allowAiRelease: false }), /already released/);
+  assert.doesNotThrow(() => assertMayRelease('verified', { aiOnly: false, allowAiRelease: false }));
+  assert.doesNotThrow(() => assertMayRelease('held', { aiOnly: false, allowAiRelease: false }));
+  assert.throws(() => assertMayRelease('verified', { aiOnly: true, allowAiRelease: false }), /GC confirmation/);
+  assert.throws(() => assertMayRelease('held', { aiOnly: true, allowAiRelease: true }), /GC confirmation/);
+  assert.doesNotThrow(() => assertMayRelease('verified', { aiOnly: true, allowAiRelease: true }));
+});
+
+test('release amount: line minus Atmosphere fee; flat fee only once', () => {
+  assert.equal(lineReleaseCents(120_000, { bps: 300, flatCents: 0 }, true), 116_400);
+  assert.equal(lineReleaseCents(10_000, { bps: 300, flatCents: 50 }, true), 9_650);
+  assert.equal(lineReleaseCents(10_000, { bps: 300, flatCents: 50 }, false), 9_700);
+  assert.equal(holdAgeDays(new Date(Date.now() - 3 * 86_400_000).toISOString()), 3);
+});
+
+test('homeowner view hides the AI verdict and payout amount', () => {
+  const office = presentInvoice(
+    { id: 'i', job_id: 'j', number: 1, title: 't', kind: 'invoice', status: 'paid', currency: 'usd', total_cents: 100, homeowner_note: null, internal_note: null, sent_at: null, paid_at: null, created_at: '' },
+    [{ id: 'l', invoice_id: 'i', position: 0, description: 'd', quantity: 1, unit_cents: 100, amount_cents: 100, evidence: [], release_status: 'released', release_cents: 97, release_mode: 'gc_confirmed', ai_verdict: { verified: true, reasons: ['x'] } }],
+    new Map(),
+  );
+  assert.equal(office.lines[0].release.releasedCents, 97);
+  const home = homeownerInvoice(office, DEFAULT_HOMEOWNER_PERMISSIONS, new Set());
+  assert.equal(home.lines[0].release.status, 'released');
+  assert.equal(home.lines[0].release.verdict, null);
+  assert.equal(home.lines[0].release.releasedCents, null);
+});

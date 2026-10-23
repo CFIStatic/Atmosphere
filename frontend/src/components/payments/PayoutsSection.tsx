@@ -50,8 +50,8 @@ export function PayoutsSection() {
         <div>
           <h3 className="text-base font-semibold text-ink-900">Get paid by homeowners</h3>
           <p className="mt-0.5 text-xs text-ink-500">
-            Homeowners pay deductibles and invoices by card or bank transfer from their job file. Money goes to your bank
-            account through Stripe.
+            Homeowners pay deductibles and invoices by card or bank transfer from their job file. Payments are held and
+            released to your bank account line by line as you confirm the work.
           </p>
         </div>
         {status.testMode ? (
@@ -92,6 +92,34 @@ export function PayoutsSection() {
           ) : null}
         </div>
       </div>
+      {acct ? (
+        <label className="mt-3 flex items-start gap-3 rounded-lg border border-line px-4 py-3" data-testid="ai-release-setting">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={Boolean(acct.allowAiRelease)}
+            disabled={busy}
+            onChange={async (e) => {
+              setBusy(true);
+              setError(null);
+              try {
+                setStatus(await api.setPayoutsSettings({ allowAiRelease: e.target.checked }));
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Could not save.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-ink-900">Release payments on AI verification alone</span>
+            <span className="block text-xs text-ink-500">
+              Off: homeowner payments are held per line until you or an admin taps Confirm &amp; release. On: a line releases as
+              soon as the AI verifies it from the job videos.
+            </span>
+          </span>
+        </label>
+      ) : null}
       {error ? <p className="mt-2 text-xs text-danger-700">{error}</p> : null}
     </section>
   );

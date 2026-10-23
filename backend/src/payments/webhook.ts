@@ -1,5 +1,6 @@
 import type Stripe from 'stripe';
 import { paymentStatusFromSession } from './model.js';
+import { holdInvoiceLines } from './release.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -70,6 +71,8 @@ export async function applyJobPaymentSession(
       .eq('org_id', row.org_id)
       .neq('status', 'paid');
     if (invError) throw new Error(`job invoice ${row.invoice_id} update failed: ${invError.message}`);
+    // Funds now sit on the platform balance: hold every line until release.
+    await holdInvoiceLines(admin, row.org_id, row.invoice_id);
   }
 }
 
