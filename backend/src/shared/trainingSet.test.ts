@@ -82,16 +82,15 @@ test('every clip of one job lands in the same split', () => {
   assert.notEqual(a.sft?.meta.exampleId, b.sft?.meta.exampleId);
 });
 
-test('collectTrainingSet reads nothing when no workspace opted in', async () => {
-  const { db, calls } = fakeDb({ org_ai_training_settings: { data: [], error: null } });
+test('collectTrainingSet reads nothing when no workspace has feedback', async () => {
+  const { db, calls } = fakeDb({ clip_summary_feedback: { data: [], error: null } });
   const out = await collectTrainingSet(db);
   assert.equal(out.orgsOptedIn, 0);
-  assert.deepEqual(calls.map((c) => c.table), ['org_ai_training_settings']);
+  assert.deepEqual(calls.map((c) => c.table), ['clip_summary_feedback']);
 });
 
-test('collectTrainingSet only reads feedback from opted-in workspaces and never asks for media', async () => {
+test('collectTrainingSet reads every workspace with feedback, ignores the old opt-in table, and never asks for media', async () => {
   const { db, calls } = fakeDb({
-    org_ai_training_settings: { data: [{ org_id: 'o1' }], error: null },
     clip_summary_feedback: { data: [feedback()], error: null },
     job_proofs: { data: [clip()], error: null },
     job_parties: { data: [{ company: 'Delgado Roofing', contact_name: 'Maria Lopez' }], error: null },
@@ -103,9 +102,8 @@ test('collectTrainingSet only reads feedback from opted-in workspaces and never 
   const out = await collectTrainingSet(db);
   assert.equal(out.sft.length, 1);
   assert.equal(out.sft[0]!.messages[2]!.content, '[NAME] agreed to dry the kitchen.');
-  const settings = calls.find((c) => c.table === 'org_ai_training_settings')!;
-  assert.ok(has(settings, 'eq', 'opted_in', true));
-  assert.ok(has(calls.find((c) => c.table === 'clip_summary_feedback')!, 'eq', 'org_id', 'o1'));
+  assert.equal(calls.some((c) => c.table === 'org_ai_training_settings'), false);
+  assert.ok(calls.some((c) => c.table === 'clip_summary_feedback' && has(c, 'eq', 'org_id', 'o1')));
   const clipSelect = calls.find((c) => c.table === 'job_proofs')!.ops.find(([o]) => o === 'select')![1][0] as string;
   assert.doesNotMatch(clipSelect, /storage_path|frame/);
 });

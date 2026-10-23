@@ -3,8 +3,8 @@
  * clip summaries, for fine-tuning a model on Atmosphere's own work.
  *
  * What goes in, and what never does:
- * - Only workspaces whose Global Admin turned on "Help improve Atmosphere's
- *   AI" (org_ai_training_settings.opted_in).
+ * - Every workspace's feedback (training is covered by the terms of service;
+ *   org_ai_training_settings is no longer read).
  * - Only text: the clip's transcript in, the summary a person approved or
  *   wrote out. No video, audio, stills or storage paths.
  * - Clips with a child or private moment are skipped entirely.
@@ -185,7 +185,7 @@ export interface TrainingSetResult {
   skipped: Record<SkipReason, number>;
 }
 
-/** Reads opted-in workspaces' feedback with the service client and builds the examples in memory. */
+/** Reads every workspace's feedback with the service client and builds the examples in memory. */
 export async function collectTrainingSet(admin: Db): Promise<TrainingSetResult> {
   const skipped: Record<SkipReason, number> = {
     no_transcript: 0,
@@ -195,12 +195,12 @@ export async function collectTrainingSet(admin: Db): Promise<TrainingSetResult> 
   };
   const result: TrainingSetResult = { orgsOptedIn: 0, feedbackRows: 0, sft: [], preference: [], skipped };
 
-  const { data: settings, error: settingsError } = await admin
-    .from('org_ai_training_settings')
+  const { data: orgRows, error: orgsError } = await admin
+    .from('clip_summary_feedback')
     .select('org_id')
-    .eq('opted_in', true);
-  if (settingsError) throw new Error(settingsError.message);
-  const orgIds = (settings ?? []).map((row: { org_id: string }) => row.org_id);
+    .limit(100000);
+  if (orgsError) throw new Error(orgsError.message);
+  const orgIds = [...new Set((orgRows ?? []).map((row: { org_id: string }) => row.org_id))] as string[];
   result.orgsOptedIn = orgIds.length;
   if (!orgIds.length) return result;
 

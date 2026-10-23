@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpError } from '../lib/errors.js';
-import { getAiTrainingSetting, myClipFeedback, rateClipSummary, setAiTrainingSetting, shownSummary } from './clipSummaryFeedback.js';
+import { getAiTrainingSetting, myClipFeedback, rateClipSummary, shownSummary } from './clipSummaryFeedback.js';
 
 type Call = { table: string; ops: Array<[string, unknown[]]> };
 type Chain = { [method: string]: (...args: unknown[]) => Chain } & PromiseLike<unknown>;
@@ -112,14 +112,8 @@ test('myClipFeedback keys this person\'s ratings by clip', async () => {
   assert.ok(has(calls[0]!, 'eq', 'user_id', 'u1'));
 });
 
-test('the training switch reads as off with no row, and saving records who changed it', async () => {
-  const none = fakeDb({ org_ai_training_settings: { data: null, error: null } });
-  assert.deepEqual(await getAiTrainingSetting(none.db, ORG), { optedIn: false, changedAt: null });
-  const { db, calls } = fakeDb({ org_ai_training_settings: { data: null, error: null } });
-  const saved = await setAiTrainingSetting(db, { orgId: ORG, userId: 'admin1', optedIn: true });
-  assert.equal(saved.optedIn, true);
-  const row = calls[0]!.ops.find(([o]) => o === 'upsert')![1][0] as Record<string, unknown>;
-  assert.equal(row.org_id, ORG);
-  assert.equal(row.changed_by, 'admin1');
-  assert.equal(row.opted_in, true);
+test('AI training is always on and never reads the old settings table', async () => {
+  const { db, calls } = fakeDb({});
+  assert.deepEqual(await getAiTrainingSetting(db, ORG), { optedIn: true, changedAt: null });
+  assert.equal(calls.length, 0);
 });

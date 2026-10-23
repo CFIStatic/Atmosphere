@@ -4637,11 +4637,6 @@ export const api = {
 
   getAiTraining: () => request<{ setting: AiTrainingSetting }>('/api/org/ai-training', { method: 'GET' }),
 
-  setAiTraining: (optedIn: boolean) =>
-    request<{ setting: AiTrainingSetting }>('/api/org/ai-training', {
-      method: 'PUT',
-      body: JSON.stringify({ optedIn }),
-    }),
 
   askFeedback: (jobId: string, questionIds: string[]) =>
     request<{ feedback: Record<string, AskFeedback> }>(
