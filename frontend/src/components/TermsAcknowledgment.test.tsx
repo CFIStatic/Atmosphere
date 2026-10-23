@@ -34,6 +34,6 @@ describe('TermsAckCheckbox', () => {
 
   it('labels the checkbox as an explicit acknowledgment', () => {
     render(<TermsAckCheckbox id="signup-tos" checked={false} onChange={() => undefined} />);
-    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/I agree to the Terms of Service/i)).toBeInTheDocument();
   });
 });

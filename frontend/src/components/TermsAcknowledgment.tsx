@@ -50,8 +50,10 @@ export function TermsAcknowledgment({
               Please acknowledge the Terms
             </h1>
             <p className="mt-1.5 text-sm text-ink-600">
-              Please acknowledge the Terms of Service before using Atmosphere.
-              If the Terms change, we will ask you to review them again.
+              Atmosphere now learns voices from job clips to label who is
+              speaking. Please review and agree to the Terms, including
+              voiceprint consent. You can turn voice recognition off anytime
+              in Settings.
             </p>
 
             {error ? (

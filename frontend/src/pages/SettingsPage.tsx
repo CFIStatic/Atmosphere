@@ -50,7 +50,7 @@ import {
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useHomeownerPortal } from '../lib/homeownerPortal';
 import { CrmConnectPanel } from './CrmConnectPage';
-import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
+import { VoicePrivacyCard } from '../components/settings/VoicePrivacyCard';
 
 /**
  * Settings → Connect is hidden for now (the section tab and the CRM
@@ -544,8 +544,6 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
         </div>
       </Card>
 
-      {homeowner ? null : <VoiceEnrollmentCard />}
-
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
         {(user?.email || !user?.phone) && (
           <>
@@ -565,6 +563,8 @@ function ProfileSection({ homeowner = false }: { homeowner?: boolean }) {
         <ReadOnlyRow label={t('settings.account.lastSignIn')} value={formatDate(user?.lastSignInAt, locale)} />
         <p className="mt-4 text-xs text-ink-500">{t('settings.account.emailLocked')}</p>
       </Card>
+
+      {homeowner ? null : <VoicePrivacyCard />}
 
       <Card
         title={t('settings.language.title')}

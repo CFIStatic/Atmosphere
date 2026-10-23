@@ -97,7 +97,7 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/I agree to the Terms of Service/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
       'href',
       'https://atmosphereteam.com/terms',
@@ -124,7 +124,7 @@ describe('SignupPage', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(screen.getByLabelText(/I agree to the Terms of Service/i));
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
@@ -146,7 +146,7 @@ describe('SignupPage', () => {
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/Each plan includes an AI usage allowance/)).toBeInTheDocument();
     expect(screen.queryByText(/30-day notice/)).toBeNull();
-    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
+    expect(screen.queryByLabelText(/I agree to the Terms of Service/i)).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Account' }));
@@ -212,7 +212,7 @@ describe('SignupPage', () => {
       target: { value: 'New Person Co' },
     });
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(screen.getByLabelText(/I agree to the Terms of Service/i));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
@@ -584,7 +584,7 @@ describe('SignupPage', () => {
 
     await user.type(screen.getByLabelText('Email'), 'home@example.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(screen.getByLabelText(/I agree to the Terms of Service/i));
     await user.click(
       screen
         .getAllByRole('button', { name: 'Save this job' })
@@ -609,7 +609,7 @@ describe('SignupPage', () => {
     renderSignup('/signup?intent=homeowner&next=%2Fprogress%2Ftok123');
     await user.type(screen.getByLabelText('Email'), 'home@example.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(screen.getByLabelText(/I agree to the Terms of Service/i));
     await user.click(
       screen
         .getAllByRole('button', { name: 'Save this job' })

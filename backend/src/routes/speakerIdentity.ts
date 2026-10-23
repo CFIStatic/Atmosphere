@@ -1,10 +1,10 @@
 /**
- * Voice enrollment and speaker verification.
+ * Voice recognition privacy and speaker verification.
  *
- * Enrollment always stores the caller's own voiceprint. A coworker request
- * stays pending until that person confirms from their account. Embeddings are
- * not returned to the client. Matching uses the service role and the consent
- * filter in speakerMatch.
+ * Voiceprints are learned automatically from job clips (audio/voiceprintLearn)
+ * for people with a recorded voiceprint consent. There is no manual sample.
+ * The account can turn recognition off (deletes the voiceprint) and opt into
+ * cross-company matching. Embeddings are never returned to the client.
  */
 
 import { Router, type Request } from 'express';
@@ -15,12 +15,12 @@ import { createUserClient } from '../lib/supabase.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import {
-  VOICE_CONSENT_TEXT,
-  canConfirmEnrollment,
-  canStoreVoiceprint,
-  consentAccepted,
-} from '../audio/speakerEnrollment.js';
-import { SPEAKER_EMBEDDING_MODEL, decodeWavPcm, embedPcm, SpeakerEmbeddingError } from '../audio/speakerEmbedding.js';
+  loadVoiceConsent,
+  recordVoiceConsent,
+  revokeVoiceConsent,
+  type VoiceConsentStatus,
+} from '../legal/voiceConsent.js';
+import { clientIp, clientUserAgent } from '../legal/terms.js';
 import { stampConfirmedSpeakers } from '../audio/speakerClipApply.js';
 import { requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../audio/speakerAccess.js';
 import {
@@ -37,15 +37,9 @@ import { SPEAKER_ROLES, type SpeakerRole } from '../audio/speakerRoleGuess.js';
 export const speakerIdentityRouter = Router();
 speakerIdentityRouter.use(requireAuth, requireOrg);
 
-const wavSchema = z.object({
-  consentText: z.string().min(20).max(4000),
-  consented: z.literal(true),
-  wavBase64: z.string().min(100).max(1_500_000),
-  crossCompanyOptIn: z.boolean().optional(),
-});
+const voiceConsentSchema = z.object({ consented: z.literal(true) });
 
 const optInSchema = z.object({ crossCompanyOptIn: z.boolean() });
-const requestSchema = z.object({ subjectUserId: z.string().uuid() });
 const answerSchema = z.object({
   answer: z.enum(['yes', 'no', 'other']),
   displayName: z.string().trim().min(1).max(80).optional(),
@@ -90,119 +84,45 @@ async function requireChangedClips(user: Db, orgId: string, jobId: string, proof
   await requireCompanyClips(admin, orgId, jobId, proofIds, { skipDeleted: true });
 }
 
-function wavBytes(wavBase64: string): Uint8Array {
-  const bytes = Buffer.from(wavBase64, 'base64');
-  if (bytes.length < 1000 || bytes.length > 800_000) {
-    throw badRequest('Record between one and twenty seconds.', 'voice_sample_size');
-  }
-  return bytes;
-}
-
-function embedOrReject(bytes: Uint8Array): { embedding: number[]; durationSeconds: number } {
-  try {
-    const { sampleRate, samples } = decodeWavPcm(bytes);
-    return {
-      embedding: embedPcm(samples, sampleRate),
-      durationSeconds: Math.round((samples.length / sampleRate) * 100) / 100,
-    };
-  } catch (err) {
-    if (err instanceof SpeakerEmbeddingError) throw badRequest(err.message, err.code);
-    throw err;
-  }
-}
-
-async function writeVoiceprint(
-  supabase: ReturnType<typeof userClient>,
-  input: { userId: string; orgId: string; consentText: string; crossCompanyOptIn: boolean; embedding: number[]; durationSeconds: number },
+function privacyState(
+  print: { consented_at?: string | null; cross_company_opt_in?: boolean | null; duration_seconds?: number | null } | null,
+  consent: VoiceConsentStatus,
 ) {
-  if (!canStoreVoiceprint(input.userId, input.userId)) {
-    throw badRequest('A coworker has to confirm enrollment from their own account.', 'coworker_must_confirm');
-  }
-  const now = new Date().toISOString();
-  const { data: existing } = await supabase.from('voiceprints').select('id').eq('user_id', input.userId).maybeSingle();
-  const row = {
-    user_id: input.userId,
-    org_id: input.orgId,
-    consent_text: input.consentText,
-    consented_at: now,
-    cross_company_opt_in: input.crossCompanyOptIn,
-    duration_seconds: input.durationSeconds,
-    embedding_model: SPEAKER_EMBEDDING_MODEL,
-    updated_at: now,
+  return {
+    enabled: consent.consented,
+    consentedAt: consent.consentedAt,
+    learned: Boolean(print),
+    crossCompanyOptIn: Boolean(print?.cross_company_opt_in),
   };
-  const saved = existing?.id
-    ? await supabase.from('voiceprints').update(row).eq('id', existing.id).select('id, consented_at, cross_company_opt_in').single()
-    : await supabase.from('voiceprints').insert(row).select('id, consented_at, cross_company_opt_in').single();
-  if (saved.error || !saved.data) throw new HttpError(500, saved.error?.message ?? 'Could not store the voiceprint.', 'voiceprint_failed');
-  const embedding = await supabase.from('voiceprint_embeddings').upsert(
-    { voiceprint_id: saved.data.id, embedding: input.embedding, dimension: input.embedding.length },
-    { onConflict: 'voiceprint_id' },
-  );
-  if (embedding.error) throw new HttpError(500, embedding.error.message, 'voiceprint_failed');
-  await supabase.from('voice_consent_events').insert({
-    user_id: input.userId,
-    org_id: input.orgId,
-    action: 'granted',
-    consent_text: input.consentText,
-  });
-  return saved.data;
 }
 
-speakerIdentityRouter.get('/consent-text', (_req, res) => {
-  res.json({ consentText: VOICE_CONSENT_TEXT });
-});
-
+/** Account privacy: is voice recognition on, has a voice been learned yet, cross-company opt-in. */
 speakerIdentityRouter.get('/voiceprint', async (req, res, next) => {
   try {
-    const supabase = userClient(req);
+    const admin = writerOrThrow();
     const userId = req.user!.id;
-    const [{ data: print }, { data: requests }] = await Promise.all([
-      supabase
-        .from('voiceprints')
-        .select('id, consented_at, cross_company_opt_in, consent_text, duration_seconds')
-        .eq('user_id', userId)
-        .maybeSingle(),
-      supabase
-        .from('voice_enrollment_requests')
-        .select('id, requester_user_id, subject_user_id, status, created_at')
-        .eq('subject_user_id', userId)
-        .eq('status', 'pending'),
+    const [{ data: print }, consent] = await Promise.all([
+      admin.from('voiceprints').select('consented_at, cross_company_opt_in, duration_seconds').eq('user_id', userId).maybeSingle(),
+      loadVoiceConsent(admin, userId),
     ]);
-    res.json({
-      consentText: VOICE_CONSENT_TEXT,
-      voiceprint: print
-        ? {
-            enrolled: true,
-            consentedAt: print.consented_at,
-            crossCompanyOptIn: Boolean(print.cross_company_opt_in),
-            durationSeconds: print.duration_seconds,
-          }
-        : { enrolled: false, consentedAt: null, crossCompanyOptIn: false, durationSeconds: null },
-      pendingRequests: requests ?? [],
-    });
+    res.json({ voice: privacyState(print ?? null, consent) });
   } catch (err) {
     next(err);
   }
 });
 
-speakerIdentityRouter.post('/voiceprint', async (req, res, next) => {
+/** Turn voice recognition back on. Same clickwrap record as the Terms checkbox. */
+speakerIdentityRouter.post('/voice-consent', async (req, res, next) => {
   try {
-    const body = wavSchema.parse(req.body);
-    if (!consentAccepted(body.consentText, body.consented)) {
-      throw badRequest('Consent to the voiceprint wording before enrolling.', 'consent_required');
-    }
-    const sample = embedOrReject(wavBytes(body.wavBase64));
-    const saved = await writeVoiceprint(writerOrThrow(), {
+    voiceConsentSchema.parse(req.body);
+    const admin = writerOrThrow();
+    const consent = await recordVoiceConsent(admin, {
       userId: req.user!.id,
       orgId: req.orgId!,
-      consentText: body.consentText.trim(),
-      crossCompanyOptIn: body.crossCompanyOptIn === true,
-      embedding: sample.embedding,
-      durationSeconds: sample.durationSeconds,
+      ip: clientIp(req),
+      userAgent: clientUserAgent(req),
     });
-    res.status(201).json({
-      voiceprint: { enrolled: true, consentedAt: saved.consented_at, crossCompanyOptIn: Boolean(saved.cross_company_opt_in) },
-    });
+    res.status(201).json({ voice: privacyState(null, consent) });
   } catch (err) {
     next(err);
   }
@@ -211,42 +131,28 @@ speakerIdentityRouter.post('/voiceprint', async (req, res, next) => {
 speakerIdentityRouter.patch('/voiceprint', async (req, res, next) => {
   try {
     const body = optInSchema.parse(req.body);
-    const { data, error } = await writerOrThrow()
+    const admin = writerOrThrow();
+    const consent = await loadVoiceConsent(admin, req.user!.id);
+    if (!consent.consented) throw badRequest('Turn on voice recognition first.', 'voice_consent_required');
+    const { data, error } = await admin
       .from('voiceprints')
       .update({ cross_company_opt_in: body.crossCompanyOptIn, updated_at: new Date().toISOString() })
       .eq('user_id', req.user!.id)
-      .select('consented_at, cross_company_opt_in')
+      .select('consented_at, cross_company_opt_in, duration_seconds')
       .maybeSingle();
     if (error) throw new HttpError(500, error.message, 'voiceprint_failed');
-    if (!data) throw notFound('Enroll a voiceprint before changing this setting.', 'voiceprint_missing');
-    res.json({ voiceprint: { enrolled: true, consentedAt: data.consented_at, crossCompanyOptIn: Boolean(data.cross_company_opt_in) } });
+    if (!data) throw notFound('Your voice has not been learned yet. Try again after your next job clip.', 'voiceprint_missing');
+    res.json({ voice: privacyState(data, consent) });
   } catch (err) {
     next(err);
   }
 });
 
+/** Turn voice recognition off: deletes the voiceprint and the consent record. */
 speakerIdentityRouter.delete('/voiceprint', async (req, res, next) => {
   try {
-    const supabase = userClient(req);
-    const userId = req.user!.id;
-    const { data: existing } = await supabase.from('voiceprints').select('id').eq('user_id', userId).maybeSingle();
-    const admin = writerOrThrow();
-    const { error } = await admin.from('voiceprints').delete().eq('user_id', userId);
-    if (error) throw new HttpError(500, error.message, 'voiceprint_failed');
-    await admin.from('voice_consent_events').insert({
-      user_id: userId,
-      org_id: req.orgId!,
-      action: 'revoked',
-      consent_text: null,
-    });
-    if (existing?.id) {
-      await admin
-        .from('speaker_identities')
-        .update({ status: 'rejected', voiceprint_id: null })
-        .eq('voiceprint_id', existing.id)
-        .eq('status', 'pending');
-    }
-    res.json({ voiceprint: { enrolled: false, consentedAt: null, crossCompanyOptIn: false } });
+    await revokeVoiceConsent(writerOrThrow(), { userId: req.user!.id, orgId: req.orgId! });
+    res.json({ voice: { enabled: false, consentedAt: null, learned: false, crossCompanyOptIn: false } });
   } catch (err) {
     next(err);
   }
@@ -289,98 +195,6 @@ speakerIdentityRouter.get('/team', async (req, res, next) => {
       };
     });
     res.json({ people });
-  } catch (err) {
-    next(err);
-  }
-});
-
-speakerIdentityRouter.post('/enrollment-requests', async (req, res, next) => {
-  try {
-    const body = requestSchema.parse(req.body);
-    if (body.subjectUserId === req.user!.id) {
-      throw badRequest('Enroll your own voice from this account.', 'self_enroll');
-    }
-    const supabase = userClient(req);
-    const { data: member } = await supabase
-      .from('org_members')
-      .select('user_id')
-      .eq('org_id', req.orgId!)
-      .eq('user_id', body.subjectUserId)
-      .maybeSingle();
-    if (!member) throw notFound('That person is not in this company.', 'not_in_org');
-    const { data, error } = await writerOrThrow()
-      .from('voice_enrollment_requests')
-      .insert({
-        org_id: req.orgId!,
-        requester_user_id: req.user!.id,
-        subject_user_id: body.subjectUserId,
-        status: 'pending',
-      })
-      .select('id, status, subject_user_id')
-      .single();
-    if (error) throw new HttpError(409, 'That person already has a pending enrollment request.', 'enrollment_pending');
-    res.status(201).json({ request: data });
-  } catch (err) {
-    next(err);
-  }
-});
-
-speakerIdentityRouter.post('/enrollment-requests/:id/confirm', async (req, res, next) => {
-  try {
-    const body = wavSchema.parse(req.body);
-    if (!consentAccepted(body.consentText, body.consented)) {
-      throw badRequest('Consent to the voiceprint wording before enrolling.', 'consent_required');
-    }
-    const supabase = userClient(req);
-    const { data: request } = await supabase
-      .from('voice_enrollment_requests')
-      .select('id, requester_user_id, subject_user_id, status')
-      .eq('id', req.params.id)
-      .maybeSingle();
-    if (!request) throw notFound('Enrollment request not found.', 'enrollment_missing');
-    if (!canConfirmEnrollment(req.user!.id, {
-      id: request.id,
-      requesterUserId: request.requester_user_id,
-      subjectUserId: request.subject_user_id,
-      status: request.status,
-    })) {
-      throw badRequest('A coworker has to confirm enrollment from their own account.', 'coworker_must_confirm');
-    }
-    const sample = embedOrReject(wavBytes(body.wavBase64));
-    const admin = writerOrThrow();
-    await writeVoiceprint(admin, {
-      userId: req.user!.id,
-      orgId: req.orgId!,
-      consentText: body.consentText.trim(),
-      crossCompanyOptIn: body.crossCompanyOptIn === true,
-      embedding: sample.embedding,
-      durationSeconds: sample.durationSeconds,
-    });
-    await admin
-      .from('voice_enrollment_requests')
-      .update({ status: 'confirmed', resolved_at: new Date().toISOString() })
-      .eq('id', request.id)
-      .eq('subject_user_id', req.user!.id)
-      .eq('status', 'pending');
-    res.json({ request: { id: request.id, status: 'confirmed' } });
-  } catch (err) {
-    next(err);
-  }
-});
-
-speakerIdentityRouter.post('/enrollment-requests/:id/decline', async (req, res, next) => {
-  try {
-    const { data, error } = await writerOrThrow()
-      .from('voice_enrollment_requests')
-      .update({ status: 'declined', resolved_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .eq('subject_user_id', req.user!.id)
-      .eq('status', 'pending')
-      .select('id')
-      .maybeSingle();
-    if (error) throw new HttpError(500, error.message, 'enrollment_failed');
-    if (!data) throw notFound('Enrollment request not found.', 'enrollment_missing');
-    res.json({ request: { id: data.id, status: 'declined' } });
   } catch (err) {
     next(err);
   }
@@ -442,6 +256,14 @@ async function publishConfirmedNames(orgId: string, rows: SpeakerIdentityRow[]) 
     await stampConfirmedSpeakers(admin, orgId, rows);
   } catch (err) {
     console.warn('[speaker-identity] name stamp failed:', err instanceof Error ? err.message : err);
+  }
+  // A newly confirmed name can teach that person's voiceprint (consent checked inside).
+  const proofIds = [...new Set(rows.filter((row) => row.status === 'confirmed' || row.method === 'voice_high').map((row) => row.proofId))];
+  if (proofIds.length) {
+    void (async () => {
+      const { learnVoiceprintsFromClip } = await import('../audio/voiceprintLearn.js');
+      for (const proofId of proofIds.slice(0, 5)) await learnVoiceprintsFromClip(admin, proofId);
+    })().catch((err) => console.warn('[voiceprint-learn] failed:', err instanceof Error ? err.message : err));
   }
 }
 

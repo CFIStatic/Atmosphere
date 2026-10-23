@@ -1,16 +1,14 @@
 import type { ReactNode } from 'react';
-import { PRIVACY_PUBLIC_URL, TERMS_PUBLIC_URL } from '../lib/terms';
+import { TERMS_PUBLIC_URL } from '../lib/terms';
 
 export function TermsAckLabel({
   termsHref = TERMS_PUBLIC_URL,
-  privacyHref = PRIVACY_PUBLIC_URL,
 }: {
   termsHref?: string;
-  privacyHref?: string;
 }): ReactNode {
   return (
     <>
-      I acknowledge and agree to the{' '}
+      I agree to the{' '}
       <a
         href={termsHref}
         target="_blank"
@@ -18,15 +16,6 @@ export function TermsAckLabel({
         className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
       >
         Terms of Service
-      </a>{' '}
-      and have read the{' '}
-      <a
-        href={privacyHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
-      >
-        Privacy Policy
       </a>
       .
     </>

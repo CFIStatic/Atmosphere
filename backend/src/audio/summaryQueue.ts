@@ -85,6 +85,13 @@ export async function refreshProofSummary(admin: any, proofId: string, deps?: Su
   } catch (err) {
     console.warn('[speaker-identity] voice match failed:', err instanceof Error ? err.message : err);
   }
+  // Learn consented members' voiceprints from their own speech on this clip.
+  try {
+    const { learnVoiceprintsFromClip } = await import('./voiceprintLearn.js');
+    await learnVoiceprintsFromClip(admin, proofId);
+  } catch (err) {
+    console.warn('[voiceprint-learn] failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 async function adminForProof(proofId: string) {
