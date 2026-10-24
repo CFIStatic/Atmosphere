@@ -19,6 +19,8 @@ import { privacyBlurWindows, secondsInBlurWindow } from '../lib/proofPrivacySafe
 import { cosineSimilarity, embedText, askEmbeddingsEnabled } from './askEmbeddings.js';
 import { askClipCite, clipsInScope, type AskLookupCatalog, type AskLookupClip } from './askLookup.js';
 
+type DbRow = Record<string, unknown>;
+
 export const MAX_FRAMES_PER_FIND = 8;
 
 export type FrameWindow = {
@@ -211,7 +213,7 @@ function readingText(reading: unknown): string {
   if (!reading) return '';
   if (typeof reading === 'string') return reading;
   try {
-    return JSON.stringify(reading).replace(/["{}\[\]]/g, ' ').replace(/\\n/g, ' ');
+    return JSON.stringify(reading).replace(/["{}[\]]/g, ' ').replace(/\\n/g, ' ');
   } catch {
     return '';
   }
@@ -241,7 +243,7 @@ export async function findFrames(
     embedQuery ? embedQuery(args.subject).catch(() => null) : Promise.resolve(null),
   ]);
   const windows: FrameWindow[] = [];
-  for (const r of (rooms.data ?? []) as any[]) {
+  for (const r of (rooms.data ?? []) as DbRow[]) {
     windows.push({
       proofId: String(r.proof_id),
       start: Number(r.start_seconds) || 0,
@@ -250,7 +252,7 @@ export async function findFrames(
       kind: 'room',
     });
   }
-  for (const c of (chunks.data ?? []) as any[]) {
+  for (const c of (chunks.data ?? []) as DbRow[]) {
     const start = Number(c.start_sec) || 0;
     windows.push({
       proofId: String(c.proof_id),
@@ -261,7 +263,7 @@ export async function findFrames(
       embedding: parseVector(c.embedding),
     });
   }
-  for (const s of (readings.data ?? []) as any[]) {
+  for (const s of (readings.data ?? []) as DbRow[]) {
     windows.push({
       proofId: String(s.proof_id),
       start: Number(s.start_seconds) || 0,
@@ -276,7 +278,7 @@ export async function findFrames(
       windows.push({ proofId: clip.proofId, start: Number(seg.start) || 0, end: Number(seg.end) || 0, text: seg.text, kind: 'speech' });
     }
   }
-  const frameRows: FrameRow[] = ((frames.data ?? []) as any[]).map((f) => ({
+  const frameRows: FrameRow[] = ((frames.data ?? []) as DbRow[]).map((f) => ({
     proofId: String(f.proof_id),
     atSeconds: Number(f.at_seconds) || 0,
     storagePath: f.storage_path ? String(f.storage_path) : '',
