@@ -203,7 +203,7 @@ function groundLine(
   return out;
 }
 
-const TRAILER_RE = /\s*⟦(sources|quotes|followups|actions|artifact|\/artifact)(?::([^⟧]*))?⟧/gi;
+const TRAILER_RE = /\s*⟦(sources|quotes|followups|actions|frames|artifact|\/artifact)(?::([^⟧]*))?⟧/gi;
 
 function parseQuotes(raw: string): AskMomentQuote[] {
   const out: AskMomentQuote[] = [];

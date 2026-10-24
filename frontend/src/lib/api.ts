@@ -3523,7 +3523,27 @@ export type JobInvoiceInput = {
   lines: Array<{ description: string; quantity: number; unitCents: number; scopeItemId?: string | null; evidence: Array<{ proofId: string; atSeconds: number | null; quote: string | null }> }>;
 };
 
+/** One video still a Chat answer shows (signed URL, ten minutes). */
+export type AskStill = {
+  proofId: string;
+  jobId: string;
+  requestedSeconds: number;
+  atSeconds: number;
+  url: string;
+  title: string | null;
+  workDate: string | null;
+  capturedAt: string | null;
+  /** Short clip around the moment (signed video URL + window); null when not allowed. */
+  clip?: { url: string; start: number; end: number } | null;
+};
+
 export const api = {
+  /** The stills a Chat answer shows; ones this person may not see are left out. */
+  askStills: (stills: Array<{ proofId: string; atSeconds: number }>) =>
+    request<{ stills: AskStill[] }>('/api/evidence-portal/stills', {
+      method: 'POST',
+      body: JSON.stringify({ stills }),
+    }),
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
     request<AuthResponse>('/api/auth/signup', {

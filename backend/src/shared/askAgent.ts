@@ -58,6 +58,7 @@ import {
 } from './askWebSearch.js';
 import type { AskActionModelTool } from './askReasoning.js';
 import type { ClipStillsResult } from './clipStills.js';
+import { finalizeFramesTrailer, MAX_FRAMES_PER_FIND, type FindFramesFn } from './askFrameSearch.js';
 
 export type AskEngine = 'agent' | 'classic';
 
@@ -115,6 +116,9 @@ ${CHAT_VOICE_RULES}
 - After the answer, when you used the job file, add one line with the clips or records you relied on, using their cite ids:
   ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>, …⟧
   Omit @seconds when you do not know the time. Skip this line for answers that do not use the file.
+- When the person asks to see something ("show me the stairs", "what did the kitchen look like on the 20th", "what changed on the stairs since Tuesday"), call find_frames with the subject and the date or dates (resolve "two days later" to calendar dates from the clips' dates). To compare two days, pass both dates. Describe what the stills show, and for a comparison say plainly what changed between the dates. Then add one line with the stills to show, using the cite ids find_frames returned:
+  ⟦frames: video/<jobId>/<proofId>/<slug>@<seconds>, …⟧
+  The app shows them as pictures under your answer, labeled with date and time, each with a short playable clip (about 5 s before to 10 s after; never the whole video); each also opens the video at that moment. Only list stills a tool returned. If none were found, say so and offer the closest dates that have video.
 - Then, when useful, two or three short follow-up questions the person might ask next:
   ⟦followups: question one? ;; question two?⟧
 - Never write raw ids, UTC times, URLs from the web, or these machine lines inside sentences.`;
@@ -145,6 +149,23 @@ const LOOK_TOOL = {
       count: { type: 'number', description: 'How many stills, 1 to 4 (default 3).' },
     },
     required: ['proofId'],
+  },
+};
+
+const FRAMES_TOOL = {
+  name: 'find_frames',
+  description:
+    'Find video stills that show a subject (a room, object, area, damage or work: "stairs", "kitchen ceiling", "roof decking") on a date, several dates, or a date range. Searches room segments, video analysis and what was said, returns the best stills with date, time and cite ids, and shows you the first few as images. Pass two dates for a before/after comparison. Private moments and children are never returned.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      subject: { type: 'string', description: 'What should be in the picture, e.g. "stairs".' },
+      dates: { type: 'array', items: { type: 'string' }, description: 'Exact days, YYYY-MM-DD. Two days = before/after.' },
+      from: { type: 'string', description: 'Range start, YYYY-MM-DD.' },
+      to: { type: 'string', description: 'Range end, YYYY-MM-DD.' },
+      limit: { type: 'number', description: `How many stills, 1 to ${MAX_FRAMES_PER_FIND} (default 6).` },
+    },
+    required: ['subject'],
   },
 };
 
@@ -266,6 +287,8 @@ export type AskAgentInput = {
   loadOrgClips?: (() => Promise<AskLookupClip[]>) | null;
   /** Loads a clip's saved stills (privacy ranges already left out). Offers look_at_clip when set. */
   clipStills?: ((clip: AskLookupClip, opts: { atSeconds: number | null; count: number }) => Promise<ClipStillsResult>) | null;
+  /** Finds stills by subject and date. Offers find_frames when set. */
+  findFrames?: FindFramesFn | null;
   /** Office actions. Absent for homeowners and subs. */
   actions?: {
     tools: AskActionModelTool[];
@@ -362,6 +385,7 @@ function agentRequestShape(input: AskAgentInput) {
     ...(input.webSearch && isAskWebSearchConfigured() ? [WEB_TOOL] : []),
     ...(input.computer ? [COMPUTER_TOOL] : []),
     ...(input.clipStills ? [LOOK_TOOL] : []),
+    ...(input.findFrames ? [FRAMES_TOOL] : []),
     ...(input.actions?.tools ?? []),
   ];
   const canEscalate = models.deep !== models.fast;
@@ -439,6 +463,9 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
   const usages: Array<MeasuredUsage | null> = [];
   let servedBy: string | null = null;
   let answer = '';
+  /** Frame cites a tool returned this turn: the only ones the answer may show. */
+  const frameCites: string[] = [];
+  const foundFrameCites: string[] = [];
 
   for (let round = 0; round < MAX_ROUNDS && !signal.aborted; round += 1) {
     let streamed = '';
@@ -528,6 +555,15 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
             const look = await lookAtClip(catalog, args, input.clipStills);
             images = look.images;
             result = look.result;
+            for (const f of ((look.result.data as { frames?: Array<{ cite: string }> } | undefined)?.frames ?? [])) frameCites.push(f.cite);
+          } else if (c.name === FRAMES_TOOL.name && input.findFrames) {
+            const found = await runFindFrames(catalog, args, input.findFrames);
+            images = found.images;
+            result = found.result;
+            for (const cite of found.cites) {
+              frameCites.push(cite);
+              foundFrameCites.push(cite);
+            }
           } else if (actionNames.has(c.name) && input.actions) {
             result = await input.actions.run(c.name, args);
           } else {
@@ -579,6 +615,9 @@ export async function runAskAgent(input: AskAgentInput): Promise<AskAgentResult>
   finished = filterSources(finished, catalog);
   if (chunks.length) finished = enforceQuoteGrounding(finished, { chunks, question: input.question }).answer;
   finished = stripExternalAskLinks(finished).trim();
+  if (finished && (frameCites.length || /⟦frames:/i.test(finished))) {
+    finished = finalizeFramesTrailer(finished, frameCites, foundFrameCites).trim();
+  }
   return { answer: finished, model: servedBy, usage: mergeMeasuredUsages(usages, servedBy), trace, webHits, computerStarted: false, escalated };
 }
 
@@ -613,6 +652,44 @@ async function lookAtClip(
   };
 }
 
+/** find_frames: ranked stills for the model (data + first few images); cites for the trailer. */
+async function runFindFrames(
+  catalog: AskLookupCatalog,
+  args: Record<string, unknown>,
+  find: FindFramesFn,
+): Promise<{ result: AskLookupResult; images: Anthropic.ImageBlockParam[]; cites: string[] }> {
+  const subject = String(args.subject ?? '').trim();
+  if (!subject) return { result: { ok: false, tool: FRAMES_TOOL.name, summary: 'Say what should be in the picture.' }, images: [], cites: [] };
+  const dates = Array.isArray(args.dates) ? args.dates.map(String) : undefined;
+  const got = await find({
+    subject,
+    dates,
+    from: typeof args.from === 'string' ? args.from : null,
+    to: typeof args.to === 'string' ? args.to : null,
+    limit: typeof args.limit === 'number' ? args.limit : undefined,
+  });
+  const days = [...new Set(clipsInScope(catalog).map((c) => (c.workDate ?? '').slice(0, 10)).filter(Boolean))].sort();
+  const frames = got.frames.map((f, i) => ({
+    cite: f.cite,
+    date: f.workDate,
+    atSeconds: f.atSeconds,
+    clipSeconds: [f.clipStart, f.clipEnd],
+    clip: f.title,
+    why: f.why,
+    shownToYouAsImage: Boolean(got.jpegs[i]),
+  }));
+  const summary = frames.length
+    ? `Found ${frames.length} still(s) of ${subject} on ${[...new Set(frames.map((f) => f.date ?? 'undated'))].join(', ')}.`
+    : `No stills of ${subject} for those dates. Days with video: ${days.join(', ') || 'none'}.`;
+  return {
+    result: { ok: frames.length > 0, tool: FRAMES_TOOL.name, summary, data: { frames, daysWithVideo: days } },
+    images: got.jpegs.flatMap((jpeg) =>
+      jpeg ? [{ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: jpeg.toString('base64') } }] : [],
+    ),
+    cites: frames.map((f) => f.cite),
+  };
+}
+
 function statusFor(tool: string): string {
   switch (tool) {
     case 'web_search':
@@ -623,6 +700,8 @@ function statusFor(tool: string): string {
       return 'Opening a clip…';
     case 'look_at_clip':
       return 'Looking at the video…';
+    case 'find_frames':
+      return 'Finding the video frames…';
     case 'search_other_jobs':
       return 'Checking other jobs…';
     case 'send_job_sms':

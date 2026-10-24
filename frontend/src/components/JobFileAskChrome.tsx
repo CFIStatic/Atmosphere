@@ -16,6 +16,7 @@ import {
   JobFileFocusListener,
   JobFileFocusProvider,
   useJobFileFocus,
+  type JobFileFocusSection,
 } from '../lib/jobFileFocus';
 import {
   clampAskWidth,
@@ -31,7 +32,7 @@ import type { AskThread, ProofQuestion } from '../lib/api';
 
 type JobFilePane = 'file' | 'ask';
 
-function JobFileFocusRevealBridge({ reveal }: { reveal: () => void }) {
+function JobFileFocusRevealBridge({ reveal }: { reveal: (section?: JobFileFocusSection) => void }) {
   const { setRevealFile } = useJobFileFocus();
   useEffect(() => {
     setRevealFile(reveal);
@@ -93,6 +94,7 @@ export function JobFileAskChrome({
   initialPane = 'file',
   pane: paneControlled,
   onPaneChange,
+  onRevealSection,
   askPlacement = 'split',
   ask,
   loadQuestions,
@@ -110,6 +112,8 @@ export function JobFileAskChrome({
   /** Controlled File / Ask pane (office section bar Chat tab). */
   pane?: JobFilePane;
   onPaneChange?: (pane: JobFilePane) => void;
+  /** A Chat source / frame asked to open this job-file section (e.g. videos at a moment). */
+  onRevealSection?: (section: JobFileFocusSection) => void;
   /**
    * `split` — Ask beside the file (default; intake / detail / guest).
    * `section` — no Ask chrome; page renders Ask under the Chat section tab.
@@ -179,9 +183,10 @@ export function JobFileAskChrome({
     ['--job-file-ask-width' as string]: `${askWidth}px`,
   } as CSSProperties;
 
-  const revealFilePane = useCallback(() => {
+  const revealFilePane = useCallback((section?: JobFileFocusSection) => {
     setPane('file');
-  }, []);
+    if (section) onRevealSection?.(section);
+  }, [onRevealSection]);
 
   return (
     <VideoSeekProvider>

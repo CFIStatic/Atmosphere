@@ -199,7 +199,7 @@ export function trimChatFiller(input: string, opts?: { question?: string | null 
   if (DRAFT_REQUEST_RE.test(String(opts?.question ?? ''))) return text;
   if (/⟦artifact⟧/.test(text)) return text;
 
-  const trailerAt = text.search(/\n*⟦(?:sources|quotes|followups|actions|web)\b/);
+  const trailerAt = text.search(/\n*⟦(?:sources|quotes|followups|actions|frames|web)\b/);
   const body = trailerAt >= 0 ? text.slice(0, trailerAt) : text;
   const trailer = trailerAt >= 0 ? text.slice(trailerAt) : '';
 

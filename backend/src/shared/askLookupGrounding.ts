@@ -139,8 +139,8 @@ export async function groundLookupAnswer(input: {
       return null;
     }
   };
-  const trailersOf = (text: string) => text.match(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi) ?? [];
-  const proseOf = (text: string) => text.replace(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi, '').trim();
+  const trailersOf = (text: string) => text.match(/⟦(?:sources|quotes|followups|actions|frames):[^⟧]*⟧/gi) ?? [];
+  const proseOf = (text: string) => text.replace(/⟦(?:sources|quotes|followups|actions|frames):[^⟧]*⟧/gi, '').trim();
 
   if (!first.open.length) {
     // Every fact checks out. Answer-shape problems (no number for a count, no

@@ -3106,6 +3106,8 @@ async function runProofAskTurn(input: {
    * recorded (and never the job's memory notes, which summarise everyone's).
    */
   partyId?: string | null;
+  /** False for a homeowner without "see videos": Chat shows and reads no stills. */
+  videoStills?: boolean;
   /**
    * Documents uploaded in this office chat. Ignored for share and homeowner
    * Ask so an unattached or other-job file never enters that answer.
@@ -3855,6 +3857,7 @@ async function runProofAskTurn(input: {
       timing: clock,
       sessionDocuments,
       lookup,
+      videoStills: input.videoStills !== false,
       loadOrgClips: askAccess === 'org' ? () => loadOtherJobClips(80) : null,
       webSearch,
       onPreviewReset: () => preview.reset(),
@@ -4165,6 +4168,8 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     assertNothingPendingForHomeowner(viewer);
     const { orgId, userId, supabase, access } = viewer;
     const partyId = viewerPartyId(viewer);
+    // A homeowner the contractor has not shared videos with gets no stills in Chat.
+    const videoStills = homeownerLimits(viewer)?.seeVideos !== false;
     const input = z
       .object({
         question: askQuestionText,
@@ -4204,6 +4209,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         });
         if (typeof res.flushHeaders === 'function') res.flushHeaders();
         const result = await runProofAsk({
+          videoStills,
           supabase,
           orgId,
           jobId: req.params.jobId,
@@ -4242,6 +4248,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     }
 
     const result = await runProofAsk({
+      videoStills,
       supabase,
       orgId,
       jobId: req.params.jobId,

@@ -463,6 +463,10 @@ export function SharedDashboardPage() {
         if (next === 'ask') setSection('chat');
         else if (section === 'chat') setSection('timeline');
       }}
+      onRevealSection={(target) => {
+        // A video cite or Chat frame opens the Videos tab at that moment.
+        if (target === 'videos') setSection('videos');
+      }}
       extra={
         shareFormOpen && record ? (
           <SharePopup jobId={record.job.id} onClose={() => setShareFormOpen(false)} />

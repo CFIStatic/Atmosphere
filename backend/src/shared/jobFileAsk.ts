@@ -42,6 +42,7 @@ import {
 import { anthropicAskApiKey, logAskFailure } from '../lib/askModel.js';
 import type { AskLookupCatalog, AskLookupClip } from './askLookup.js';
 import { loadClipStills } from './clipStills.js';
+import { framesFinderFor } from './askFrameSearch.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { normalizeAskProse, trimChatFiller } from './askProse.js';
 import { stylePromptAddendum } from './askCommunicationStyle.js';
@@ -324,7 +325,11 @@ async function answerWithAgent(
             )
         : null,
     extraChunks: documentChunksForGrounding(documentViews(input.file)),
-    clipStills: stillsLoader(),
+    clipStills: input.videoStills === false ? null : stillsLoader(),
+    findFrames: (() => {
+      const admin = input.videoStills === false ? null : unscopedAdminOrNull();
+      return admin ? framesFinderFor(admin, lookup) : null;
+    })(),
     loadOrgClips: input.loadOrgClips ?? null,
     callModel: input.agentCall,
   };
@@ -382,6 +387,8 @@ export async function answerFromJobFile(input: {
    * reasoning model instead of one transcript dump.
    */
   lookup?: AskLookupCatalog | null;
+  /** False when this person may not see video stills (homeowner without "see videos"). */
+  videoStills?: boolean;
   /** Office Chat: loads clips on the company's other jobs when the agent searches them. */
   loadOrgClips?: (() => Promise<AskLookupClip[]>) | null;
   /**
