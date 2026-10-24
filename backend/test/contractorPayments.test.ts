@@ -135,3 +135,12 @@ test('homeowner view hides the AI verdict and payout amount', () => {
   assert.equal(home.lines[0].release.verdict, null);
   assert.equal(home.lines[0].release.releasedCents, null);
 });
+
+test('embeddedPublishableKey only hands the browser a key in the same mode as the secret key', async () => {
+  const { embeddedPublishableKey } = await import('../src/payments/model.js');
+  assert.equal(embeddedPublishableKey('sk_test_x', 'pk_test_y'), 'pk_test_y');
+  assert.equal(embeddedPublishableKey('sk_test_x', 'pk_live_y'), '');
+  assert.equal(embeddedPublishableKey('sk_live_x', 'pk_test_y'), '');
+  assert.equal(embeddedPublishableKey('sk_test_x', 'sk_test_y'), '');
+  assert.equal(embeddedPublishableKey('sk_test_x', ''), '');
+});

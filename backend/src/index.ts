@@ -1,3 +1,4 @@
+import { startPaymentHoldSweep } from './payments/sweep.js';
 import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
@@ -60,6 +61,8 @@ const server = app.listen(config.port, host, () => {
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
     startDailyJobReportSweep();
+    // Payments held too long (no-op unless PAYMENTS_CONNECT_ENABLED). PAYMENTS_HELD_ALERT_DAYS / PAYMENTS_HELD_AUTO_REFUND_DAYS.
+    startPaymentHoldSweep();
     // Chat's browser agent. Off until BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID are set.
     if (computerConfigured()) {
       startComputerTaskSweep();

@@ -54,6 +54,19 @@ export function paymentsGate(
   return { enabled: true };
 }
 
+/**
+ * Publishable key for Connect embedded components. Returns '' (embedded setup
+ * off) unless it is a pk_ key in the same mode as the secret key, so a test
+ * server can never hand the browser a live key.
+ */
+export function embeddedPublishableKey(secretKey: string, publishableKey: string): string {
+  const pk = String(publishableKey ?? '').trim();
+  if (!/^pk_(test|live)_/.test(pk)) return '';
+  const secretLive = /^(sk|rk)_live_/.test(secretKey);
+  const pkLive = pk.startsWith('pk_live_');
+  return secretLive === pkLive ? pk : '';
+}
+
 export function assertPaymentsEnabled(gate: PaymentsGate): void {
   if (gate.enabled) return;
   const message =
@@ -134,6 +147,9 @@ export type LineRow = {
   released_at?: string | null;
   release_mode?: string | null;
   release_cents?: number | null;
+  refunded_cents?: number | null;
+  reversed_cents?: number | null;
+  dispute_flag?: boolean | null;
 };
 export type ProofInfo = { id: string; title: string | null; capturedAt: string | null };
 
@@ -182,6 +198,9 @@ export function presentInvoice(inv: InvoiceRow, lines: LineRow[], proofs: Map<st
           releasedAt: l.released_at ?? null,
           mode: l.release_mode ?? null,
           releasedCents: l.release_cents == null ? null : Number(l.release_cents),
+          refundedCents: Number(l.refunded_cents ?? 0),
+          reversedCents: Number(l.reversed_cents ?? 0),
+          disputeFlag: Boolean(l.dispute_flag),
           verdict: (l.ai_verdict as AiVerdict | null) ?? null,
         },
         evidence: normEvidence(l.evidence).map((e) => ({
@@ -214,7 +233,7 @@ export function homeownerInvoice(
     lines: inv.lines.map((l) => ({
       ...l,
       // The homeowner sees the status, not the AI's working or the payout amount.
-      release: { ...l.release, verdict: null, releasedCents: null, mode: null },
+      release: { ...l.release, verdict: null, releasedCents: null, mode: null, reversedCents: 0, disputeFlag: false },
       evidence: seeVideos
         ? l.evidence
             .filter((e) => !hiddenProofIds.has(e.proofId))
@@ -238,7 +257,7 @@ export function paymentStatusFromSession(session: { status?: string | null; paym
 
 /* ------------------------------------------------ Proof-based release */
 
-export type ReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released';
+export type ReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released' | 'frozen' | 'refunded' | 'reversed';
 
 /** Stripe lets a platform hold funds before transfer for a limited time; we warn well before. */
 export const HOLD_WARN_DAYS = 75;

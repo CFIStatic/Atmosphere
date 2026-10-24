@@ -19,6 +19,7 @@ import {
   assertEvidenceOnJob,
   assertMayManageInvoices,
   assertPaymentsEnabled,
+  embeddedPublishableKey,
   feeConfigFromEnv,
   homeownerInvoice,
   homeownerVisibleInvoice,
@@ -33,6 +34,7 @@ import {
 } from '../payments/model.js';
 import { connectedAccountPatch } from '../payments/webhook.js';
 import { releaseLine, verifyInvoiceLines } from '../payments/release.js';
+import { refundJobPayment } from '../payments/disputes.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -68,6 +70,7 @@ function presentAccount(row: any, feeBps: number) {
     feeBps,
     feeFlatCents: feeConfigFromEnv().flatCents,
     testMode: !/^(sk|rk)_live_/.test(config.stripe.secretKey),
+    embedded: Boolean(embeddedPublishableKey(config.stripe.secretKey, config.stripe.publishableKey)),
     account: row
       ? {
           connected: true,
@@ -93,45 +96,82 @@ connectRouter.get('/', async (req, res, next) => {
   }
 });
 
-/** POST /api/billing/connect/onboard — create the account once, return a Stripe onboarding link. */
+/** Create the workspace's connected account once; return its row. */
+async function ensureAccount(req: Request) {
+  const orgId = req.orgId!;
+  const stripe = stripeClient();
+  let row = await loadAccount(orgId);
+  if (row) return row;
+  const { data: org } = await admin().from('orgs').select('name').eq('id', orgId).maybeSingle();
+  const account = await stripe.accounts.create(
+    {
+      country: 'US',
+      email: req.user?.email ?? undefined,
+      business_profile: { name: (org as any)?.name ?? undefined, mcc: '1799', product_description: 'Property damage restoration services' },
+      controller: {
+        fees: { payer: 'application' },
+        losses: { payments: 'application' },
+        stripe_dashboard: { type: 'express' },
+        requirement_collection: 'stripe',
+      },
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+        us_bank_account_ach_payments: { requested: true },
+      },
+      metadata: { org_id: orgId },
+    },
+    { idempotencyKey: `atm-connect-account-${orgId}` },
+  );
+  const { error } = await admin().from('org_payment_accounts').insert({
+    org_id: orgId,
+    stripe_account_id: account.id,
+    livemode: Boolean((account as any).livemode ?? /^(sk|rk)_live_/.test(config.stripe.secretKey)),
+    created_by: req.user!.id,
+    ...connectedAccountPatch(account),
+  });
+  if (error) throw new HttpError(500, 'Could not save the payout account.', 'payouts_save_failed');
+  row = await loadAccount(orgId);
+  return row;
+}
+
+/**
+ * POST /api/billing/connect/session — Account Session for Stripe Connect
+ * embedded components, so payout setup, account details and payouts happen
+ * inside Settings. The client secret is single-use and short-lived; it is
+ * handed to connect-js and never stored.
+ */
+connectRouter.post('/session', async (req, res, next) => {
+  try {
+    assertPaymentsEnabled(gate());
+    const publishableKey = embeddedPublishableKey(config.stripe.secretKey, config.stripe.publishableKey);
+    if (!publishableKey) throw new HttpError(503, 'In-app payout setup is not configured on this server.', 'payouts_embedded_unavailable');
+    const row = await ensureAccount(req);
+    const session = await stripeClient().accountSessions.create({
+      account: row.stripe_account_id,
+      components: {
+        account_onboarding: { enabled: true, features: { external_account_collection: true } },
+        account_management: { enabled: true, features: { external_account_collection: true } },
+        notification_banner: { enabled: true, features: { external_account_collection: true } },
+        payouts: {
+          enabled: true,
+          features: { instant_payouts: false, standard_payouts: false, edit_payout_schedule: false, external_account_collection: true },
+        },
+      },
+    } as any);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ clientSecret: session.client_secret, publishableKey });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/billing/connect/onboard — fallback: Stripe-hosted onboarding link (used only when embedded setup is not configured). */
 connectRouter.post('/onboard', async (req, res, next) => {
   try {
     assertPaymentsEnabled(gate());
-    const orgId = req.orgId!;
     const stripe = stripeClient();
-    let row = await loadAccount(orgId);
-    if (!row) {
-      const { data: org } = await admin().from('orgs').select('name').eq('id', orgId).maybeSingle();
-      const account = await stripe.accounts.create(
-        {
-          country: 'US',
-          email: req.user?.email ?? undefined,
-          business_profile: { name: (org as any)?.name ?? undefined, mcc: '1799', product_description: 'Property damage restoration services' },
-          controller: {
-            fees: { payer: 'application' },
-            losses: { payments: 'application' },
-            stripe_dashboard: { type: 'express' },
-            requirement_collection: 'stripe',
-          },
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-            us_bank_account_ach_payments: { requested: true },
-          },
-          metadata: { org_id: orgId },
-        },
-        { idempotencyKey: `atm-connect-account-${orgId}` },
-      );
-      const { error } = await admin().from('org_payment_accounts').insert({
-        org_id: orgId,
-        stripe_account_id: account.id,
-        livemode: Boolean((account as any).livemode ?? /^(sk|rk)_live_/.test(config.stripe.secretKey)),
-        created_by: req.user!.id,
-        ...connectedAccountPatch(account),
-      });
-      if (error) throw new HttpError(500, 'Could not save the payout account.', 'payouts_save_failed');
-      row = await loadAccount(orgId);
-    }
+    const row = await ensureAccount(req);
     const base = `${publicAppOrigin()}/settings?section=billing`;
     const link = await stripe.accountLinks.create({
       account: row.stripe_account_id,
@@ -232,7 +272,7 @@ async function loadInvoices(orgId: string, jobId: string, invoiceId?: string) {
   if (error) throw new HttpError(500, 'Could not load invoices.', 'invoices_load_failed');
   const ids = ((invoices ?? []) as any[]).map((i) => i.id);
   const { data: lines } = ids.length
-    ? await admin().from('job_invoice_lines').select('id, invoice_id, position, description, quantity, unit_cents, amount_cents, evidence, scope_item_id, release_status, held_at, ai_verdict, ai_verified_at, released_at, release_mode, release_cents').eq('org_id', orgId).in('invoice_id', ids)
+    ? await admin().from('job_invoice_lines').select('id, invoice_id, position, description, quantity, unit_cents, amount_cents, evidence, scope_item_id, release_status, held_at, ai_verdict, ai_verified_at, released_at, release_mode, release_cents, refunded_cents, reversed_cents, dispute_flag').eq('org_id', orgId).in('invoice_id', ids)
     : { data: [] };
   const byInvoice = new Map<string, LineRow[]>();
   for (const l of (lines ?? []) as LineRow[]) {
@@ -251,7 +291,7 @@ async function scopeItems(orgId: string, jobId: string): Promise<Array<{ id: str
 async function loadPayments(orgId: string, jobId: string) {
   const { data, error } = await admin()
     .from('job_payments')
-    .select('id, invoice_id, amount_cents, application_fee_cents, status, method, payer_email, paid_at, created_at, livemode')
+    .select('id, invoice_id, amount_cents, application_fee_cents, status, method, payer_email, paid_at, created_at, livemode, refunded_cents, dispute_status')
     .eq('org_id', orgId)
     .eq('job_id', jobId)
     .order('created_at', { ascending: false });
@@ -290,7 +330,7 @@ jobPaymentsRouter.get('/shared/:jobId/payments', async (req, res, next) => {
         // The homeowner sees their own payment outcomes, never the fee.
         payments: payments
           .filter((p) => p.status !== 'expired')
-          .map((p) => ({ id: p.id, invoiceId: p.invoice_id, amountCents: Number(p.amount_cents), status: p.status, method: p.method, paidAt: p.paid_at, createdAt: p.created_at })),
+          .map((p) => ({ id: p.id, invoiceId: p.invoice_id, amountCents: Number(p.amount_cents), refundedCents: Number(p.refunded_cents ?? 0), status: p.status, method: p.method, paidAt: p.paid_at, createdAt: p.created_at })),
       });
       return;
     }
@@ -308,6 +348,8 @@ jobPaymentsRouter.get('/shared/:jobId/payments', async (req, res, next) => {
         invoiceId: p.invoice_id,
         amountCents: Number(p.amount_cents),
         applicationFeeCents: Number(p.application_fee_cents),
+        refundedCents: Number(p.refunded_cents ?? 0),
+        disputeStatus: p.dispute_status ?? null,
         status: p.status,
         method: p.method,
         payerEmail: p.payer_email,
@@ -528,6 +570,32 @@ jobPaymentsRouter.post('/shared/:jobId/invoices/:invoiceId/lines/:lineId/release
     if (!inv || !inv.lines.some((l) => l.id === req.params.lineId)) throw new HttpError(404, 'No such line.', 'not_found');
     const out = await releaseLine(admin(), ctx.orgId, req.params.lineId, { actorId: ctx.userId, aiOnly: false });
     res.json({ ok: true, releasedCents: out.releasedCents });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST .../payments/:paymentId/refund — owner/admin refunds a homeowner
+ * payment, in full or in part. Held money is returned first; released lines
+ * are pulled back from the contractor with Transfer reversals.
+ */
+jobPaymentsRouter.post('/shared/:jobId/payments/:paymentId/refund', async (req, res, next) => {
+  try {
+    assertPaymentsEnabled(gate());
+    const ctx = await officeAdmin(req);
+    await assertJobInOrg(ctx.orgId, req.params.jobId);
+    const body = z
+      .object({ amountCents: z.number().int().positive().optional(), reason: z.string().max(200).optional() })
+      .parse(req.body ?? {});
+    const { data: pay } = await admin().from('job_payments').select('id').eq('id', req.params.paymentId).eq('org_id', ctx.orgId).eq('job_id', req.params.jobId).maybeSingle();
+    if (!pay) throw new HttpError(404, 'No such payment.', 'not_found');
+    const out = await refundJobPayment(admin(), ctx.orgId, req.params.paymentId, { ...body, actorId: ctx.userId });
+    res.json({
+      ok: true,
+      refundedFromHeldCents: (out.plan?.fromHeld ?? []).reduce((s, x) => s + x.cents, 0),
+      reversedCents: (out.plan?.reversals ?? []).reduce((s, x) => s + x.cents, 0),
+    });
   } catch (err) {
     next(err);
   }

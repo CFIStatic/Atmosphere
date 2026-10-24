@@ -27,6 +27,10 @@ create table if not exists public.org_payment_accounts (
   -- Company setting: release a line on AI verification alone. Off by default;
   -- today every release needs a GC (owner/admin) confirmation.
   allow_ai_release   boolean not null default false,
+  -- Last payout event from the connected account (Connect webhook).
+  last_payout_status text,
+  last_payout_at     timestamptz,
+  deauthorized_at    timestamptz,
   created_by         uuid references public.profiles (id) on delete set null,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
@@ -75,7 +79,15 @@ create table if not exists public.job_invoice_lines (
   -- The scope item this line bills for (verification checks the clips against it).
   scope_item_id uuid references public.job_scope_items (id) on delete set null,
   -- unpaid -> held (homeowner paid) -> verified (AI) -> released (Transfer made)
-  release_status text not null default 'unpaid' check (release_status in ('unpaid', 'held', 'verified', 'released')),
+  -- frozen: charge disputed, release blocked. refunded: held money returned to
+  -- the homeowner. reversed: released, then pulled back (Transfer reversal).
+  release_status text not null default 'unpaid'
+    check (release_status in ('unpaid', 'held', 'verified', 'released', 'frozen', 'refunded', 'reversed')),
+  refunded_cents bigint not null default 0 check (refunded_cents >= 0),
+  reversed_cents bigint not null default 0 check (reversed_cents >= 0),
+  stripe_reversal_id text,
+  dispute_flag  boolean not null default false,
+  held_alerted_at timestamptz,
   held_at       timestamptz,
   ai_verdict    jsonb,
   ai_verified_at timestamptz,
@@ -101,7 +113,11 @@ create table if not exists public.job_payments (
   application_fee_cents       bigint not null default 0 check (application_fee_cents >= 0),
   currency                    text not null default 'usd',
   status                      text not null default 'pending'
-                                check (status in ('pending', 'processing', 'paid', 'failed', 'expired', 'refunded')),
+                                check (status in ('pending', 'processing', 'paid', 'failed', 'expired', 'partially_refunded', 'refunded', 'disputed', 'dispute_lost')),
+  refunded_cents              bigint not null default 0 check (refunded_cents >= 0),
+  stripe_dispute_id           text,
+  dispute_status              text,
+  disputed_at                 timestamptz,
   method                      text,
   livemode                    boolean not null default false,
   stripe_checkout_session_id  text unique,

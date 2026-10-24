@@ -326,6 +326,10 @@ export const config = {
 
   stripe: {
     secretKey: resolveStripeSecretKey(),
+    // Browser-safe key for Stripe Connect embedded components (payout setup in
+    // Settings). Must be the same mode as the secret key; pk_live is refused
+    // outside production by paymentsGate's live-key rule.
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? process.env.VITE_STRIPE_PUBLISHABLE_KEY ?? '',
     // Signing secret for POST /api/webhooks/stripe. Without it we cannot tell a
     // genuine Stripe callback from anyone who can reach the URL, so the webhook
     // refuses every request rather than trusting an unverified payload.

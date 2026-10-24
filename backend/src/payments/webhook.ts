@@ -1,6 +1,7 @@
 import type Stripe from 'stripe';
 import { paymentStatusFromSession } from './model.js';
 import { holdInvoiceLines } from './release.js';
+import { allocateRefund } from './disputes.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -76,7 +77,11 @@ export async function applyJobPaymentSession(
   }
 }
 
-/** A refund on a job payment's charge marks the payment refunded (full refunds only). */
+/**
+ * charge.refunded on a job payment (full or partial, from our route or the
+ * Stripe dashboard): allocate the new refunded amount across lines, reversing
+ * released transfers as needed. Idempotent via job_payments.refunded_cents.
+ */
 export async function applyJobPaymentRefund(admin: any, charge: Stripe.Charge): Promise<boolean> {
   const pi = stripeId(charge.payment_intent);
   if (!pi) return false;
@@ -86,14 +91,42 @@ export async function applyJobPaymentRefund(admin: any, charge: Stripe.Charge): 
     .eq('stripe_payment_intent_id', pi)
     .maybeSingle();
   if (!row) return false;
-  if (charge.refunded) {
-    const { error } = await admin
-      .from('job_payments')
-      .update({ status: 'refunded', updated_at: new Date().toISOString() })
-      .eq('id', row.id)
-      .eq('org_id', row.org_id);
-    if (error) throw new Error(`job payment ${row.id} refund update failed: ${error.message}`);
-  }
+  await allocateRefund(admin, row.id, Number(charge.amount_refunded ?? 0));
+  return true;
+}
+
+/** payout.* on a connected account (Connect webhook): last payout status. */
+export async function applyConnectedPayout(admin: any, accountId: string, payout: Stripe.Payout, eventType: string): Promise<void> {
+  const { error } = await admin
+    .from('org_payment_accounts')
+    .update({ last_payout_status: payout.status ?? eventType.replace('payout.', ''), last_payout_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('stripe_account_id', accountId);
+  if (error) throw new Error(`connected account ${accountId} payout write failed: ${error.message}`);
+}
+
+/** account.application.deauthorized: the contractor disconnected Atmosphere. */
+export async function applyConnectedDeauthorized(admin: any, accountId: string): Promise<void> {
+  const { error } = await admin
+    .from('org_payment_accounts')
+    .update({ charges_enabled: false, payouts_enabled: false, deauthorized_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('stripe_account_id', accountId);
+  if (error) throw new Error(`connected account ${accountId} deauthorize write failed: ${error.message}`);
+}
+
+/** transfer.reversed (platform): keep the line's reversed total in sync with Stripe. */
+export async function applyTransferReversed(admin: any, transfer: Stripe.Transfer): Promise<boolean> {
+  if (transfer.metadata?.kind !== 'job_line_release') return false;
+  const lineId = transfer.metadata.line_id;
+  const { data: line } = await admin.from('job_invoice_lines').select('id, org_id, reversed_cents, release_cents').eq('id', lineId).eq('stripe_transfer_id', transfer.id).maybeSingle();
+  if (!line) return true;
+  const reversed = Number(transfer.amount_reversed ?? 0);
+  if (reversed <= Number(line.reversed_cents || 0)) return true;
+  const { error } = await admin
+    .from('job_invoice_lines')
+    .update({ reversed_cents: reversed, ...(transfer.reversed ? { release_status: 'reversed' } : {}) })
+    .eq('id', line.id)
+    .eq('org_id', line.org_id);
+  if (error) throw new Error(`line ${line.id} reversal sync failed: ${error.message}`);
   return true;
 }
 

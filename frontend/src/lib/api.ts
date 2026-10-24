@@ -3423,6 +3423,8 @@ export type PayoutsStatus = {
   feeBps: number;
   feeFlatCents: number;
   testMode: boolean;
+  /** Server can mint Account Sessions for in-app (embedded) payout setup. */
+  embedded?: boolean;
   account: null | {
     connected: true;
     chargesEnabled: boolean;
@@ -3442,7 +3444,7 @@ export type InvoiceEvidence = {
   capturedAt?: string | null;
 };
 
-export type LineReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released';
+export type LineReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released' | 'frozen' | 'refunded' | 'reversed';
 export type LineRelease = {
   status: LineReleaseStatus;
   heldAt: string | null;
@@ -3450,6 +3452,9 @@ export type LineRelease = {
   releasedAt: string | null;
   mode: 'gc_confirmed' | 'ai_auto' | null;
   releasedCents: number | null;
+  refundedCents?: number;
+  reversedCents?: number;
+  disputeFlag?: boolean;
   verdict: null | { verified: boolean; checkedAt: string; reasons: string[]; matchedTerms: string[]; clipIds: string[] };
 };
 
@@ -3488,7 +3493,9 @@ export type JobPayment = {
   invoiceId: string | null;
   amountCents: number;
   applicationFeeCents?: number;
-  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired' | 'refunded';
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired' | 'partially_refunded' | 'refunded' | 'disputed' | 'dispute_lost';
+  refundedCents?: number;
+  disputeStatus?: string | null;
   method: string | null;
   payerEmail?: string | null;
   paidAt: string | null;
@@ -4107,6 +4114,8 @@ export const api = {
 
 
   payoutsStatus: () => request<PayoutsStatus>('/api/billing/connect'),
+  payoutsSession: () =>
+    request<{ clientSecret: string; publishableKey: string }>('/api/billing/connect/session', { method: 'POST' }),
   startPayoutsOnboarding: () => request<{ url: string }>('/api/billing/connect/onboard', { method: 'POST' }),
   refreshPayouts: () => request<PayoutsStatus>('/api/billing/connect/refresh', { method: 'POST' }),
   openPayoutsDashboard: () => request<{ url: string }>('/api/billing/connect/dashboard', { method: 'POST' }),
@@ -4126,6 +4135,11 @@ export const api = {
     request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/verify`, { method: 'POST' }),
   releaseInvoiceLine: (jobId: string, invoiceId: string, lineId: string) =>
     request<{ ok: true; releasedCents: number }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/release`, { method: 'POST' }),
+  refundJobPayment: (jobId: string, paymentId: string, input: { amountCents?: number; reason?: string }) =>
+    request<{ ok: true; refundedFromHeldCents: number; reversedCents: number }>(`/api/operations/shared/${jobId}/payments/${paymentId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
   setPayoutsSettings: (input: { allowAiRelease: boolean }) =>
     request<PayoutsStatus>('/api/billing/connect/settings', { method: 'PUT', body: JSON.stringify(input) }),
 

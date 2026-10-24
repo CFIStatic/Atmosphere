@@ -34,6 +34,9 @@ const STATUS_STYLE: Record<string, string> = {
   failed: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
   expired: 'bg-paper-200/60 text-ink-500 ring-1 ring-line',
   refunded: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
+  partially_refunded: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
+  disputed: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
+  dispute_lost: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
 };
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft',
@@ -45,17 +48,26 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
   expired: 'Abandoned',
   refunded: 'Refunded',
+  partially_refunded: 'Partly refunded',
+  disputed: 'Disputed',
+  dispute_lost: 'Dispute lost',
 };
 
 const RELEASE_STYLE: Record<string, string> = {
   held: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
   verified: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',
   released: 'bg-success-50 text-success-600 ring-1 ring-success-200',
+  frozen: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
+  refunded: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
+  reversed: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
 };
 const RELEASE_LABEL: Record<string, string> = {
   held: 'Paid – held',
   verified: 'Verified by AI',
   released: 'Released',
+  frozen: 'Frozen – disputed',
+  refunded: 'Refunded',
+  reversed: 'Released, then refunded',
 };
 
 function ReleasePill({ status }: { status: string }) {
@@ -319,7 +331,13 @@ export function JobPaymentsPanel({ jobId, homeowner }: { jobId: string; homeowne
         </div>
       </section>
 
-      <PaymentsList payments={data.payments} homeowner={homeowner} />
+      <PaymentsList
+        payments={data.payments}
+        homeowner={homeowner}
+        canManage={Boolean(data.canManage)}
+        busyId={busyId}
+        onRefund={(p, amountCents) => act(`refund-${p.id}`, () => api.refundJobPayment(jobId, p.id, { amountCents }))}
+      />
 
       {player ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPlayer(null)}>
@@ -353,10 +371,22 @@ function LineReleaseBar(props: {
       className={`mt-2 rounded-md px-3 py-2 text-xs ring-1 ${r.status === 'released' ? 'bg-success-50/60 ring-success-200' : r.status === 'verified' ? 'bg-brand-50/60 ring-brand-200' : 'bg-caution-50/60 ring-caution-200'}`}
       data-testid="line-release"
     >
-      {r.status === 'released' ? (
+      {r.status === 'frozen' ? (
+        <p className="text-danger-700" data-testid="line-frozen">
+          The homeowner disputed this charge with their bank. Release is paused until the dispute closes.
+        </p>
+      ) : r.status === 'refunded' ? (
+        <p className="text-ink-600">Refunded {usd(r.refundedCents ?? 0)} to the homeowner before release.</p>
+      ) : r.status === 'reversed' ? (
+        <p className="text-ink-600">
+          Released, then {usd(r.reversedCents ?? 0)} pulled back from the payout account for a refund.
+        </p>
+      ) : r.status === 'released' ? (
         <p className="text-success-700">
           Released {r.releasedCents !== null ? usd(r.releasedCents) : ''} to your payout account on {day(r.releasedAt)}
           {r.mode === 'ai_auto' ? ' (AI auto-release)' : ' after GC confirmation'}.
+          {r.disputeFlag ? <span className="ml-1 font-semibold text-danger-700">Charge disputed: Stripe may pull this back.</span> : null}
+          {r.reversedCents ? <span className="ml-1 text-ink-600">{usd(r.reversedCents)} pulled back for a refund.</span> : null}
         </p>
       ) : (
         <>
@@ -400,7 +430,22 @@ function LineReleaseBar(props: {
   );
 }
 
-function PaymentsList({ payments, homeowner }: { payments: JobPayment[]; homeowner: boolean }) {
+function PaymentsList({
+  payments,
+  homeowner,
+  canManage = false,
+  busyId = null,
+  onRefund,
+}: {
+  payments: JobPayment[];
+  homeowner: boolean;
+  canManage?: boolean;
+  busyId?: string | null;
+  onRefund?: (p: JobPayment, amountCents?: number) => void;
+}) {
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const [amount, setAmount] = useState('');
+  const showActions = !homeowner && canManage && Boolean(onRefund);
   return (
     <section className="rounded-xl border border-line bg-paper-50 p-4 sm:p-5" data-testid="payments-list">
       <h3 className="text-base font-semibold text-ink-900">Payments</h3>
@@ -415,6 +460,7 @@ function PaymentsList({ payments, homeowner }: { payments: JobPayment[]; homeown
               <th className="py-1.5 font-medium">Method</th>
               <th className="py-1.5 font-medium">Status</th>
               {!homeowner ? <th className="py-1.5 text-right font-medium">Atmosphere fee</th> : null}
+              {showActions ? <th className="py-1.5" /> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -426,9 +472,53 @@ function PaymentsList({ payments, homeowner }: { payments: JobPayment[]; homeown
                 <td className="py-2">
                   <Pill status={p.status} />
                   {p.testMode ? <span className="ml-1.5 text-[10px] font-semibold uppercase text-caution-600">test</span> : null}
+                  {p.refundedCents && p.status !== 'refunded' ? (
+                    <span className="ml-1.5 text-[11px] text-ink-500">{usd(p.refundedCents)} refunded</span>
+                  ) : null}
                 </td>
                 {!homeowner ? (
                   <td className="py-2 text-right tabular-nums text-ink-600">{usd(p.applicationFeeCents ?? 0)}</td>
+                ) : null}
+                {showActions ? (
+                  <td className="py-2 text-right">
+                    {p.status === 'paid' || p.status === 'partially_refunded' ? (
+                      refunding === p.id ? (
+                        <span className="inline-flex flex-wrap items-center justify-end gap-2" data-testid="refund-form">
+                          <input
+                            className="w-24 rounded-md border border-line px-2 py-1 text-right text-sm"
+                            inputMode="decimal"
+                            placeholder={((p.amountCents - (p.refundedCents ?? 0)) / 100).toFixed(2)}
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            aria-label="Refund amount"
+                          />
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            loading={busyId === `refund-${p.id}`}
+                            onClick={() => {
+                              const cents = amount.trim() ? Math.round(Number(amount) * 100) : undefined;
+                              onRefund!(p, cents);
+                              setRefunding(null);
+                              setAmount('');
+                            }}
+                            data-testid="refund-confirm"
+                          >
+                            Refund
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRefunding(null)}>
+                            Cancel
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => setRefunding(p.id)} data-testid="refund-open">
+                          Refund
+                        </Button>
+                      )
+                    ) : p.status === 'disputed' ? (
+                      <span className="text-[11px] text-danger-700">Bank dispute open</span>
+                    ) : null}
+                  </td>
                 ) : null}
               </tr>
             ))}

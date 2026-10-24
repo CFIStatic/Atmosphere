@@ -1,18 +1,25 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, type PayoutsStatus } from '../../lib/api';
 import { Button } from '../../design';
+import type { EmbeddedView } from './StripeConnectEmbedded';
+
+// connect-js only loads when an owner opens payout setup.
+const StripeConnectEmbedded = lazy(() => import('./StripeConnectEmbedded'));
 
 /**
  * Billing > Get paid by homeowners. Owner only (the route is owner-gated).
- * Onboards the workspace's Stripe Connect account (Express dashboard) so
- * homeowners can pay deductibles and invoices from the job file.
+ * Onboards the workspace's Stripe Connect account inside Atmosphere (Connect
+ * embedded components) so homeowners can pay deductibles and invoices from the
+ * job file. Falls back to Stripe-hosted onboarding only if the server has no
+ * publishable key for embedded setup.
  */
 export function PayoutsSection() {
   const [params] = useSearchParams();
   const [status, setStatus] = useState<PayoutsStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<EmbeddedView | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -31,6 +38,12 @@ export function PayoutsSection() {
   const feeLabel = `${(status.feeBps / 100).toFixed(status.feeBps % 100 ? 2 : 0)}%${
     status.feeFlatCents ? ` + ${(status.feeFlatCents / 100).toFixed(2)}` : ''
   }`;
+
+  const embedded = Boolean(status.embedded);
+  const finishedSetup = () => {
+    setView(null);
+    api.refreshPayouts().then(setStatus).catch(() => undefined);
+  };
 
   const go = async (fn: () => Promise<{ url: string }>) => {
     setBusy(true);
@@ -80,18 +93,60 @@ export function PayoutsSection() {
           </p>
         </div>
         <div className="flex gap-2">
-          {ready ? (
+          {ready && embedded ? (
+            <>
+              <Button
+                variant={view === 'payouts' ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setView(view === 'payouts' ? null : 'payouts')}
+                data-testid="payouts-view-payouts"
+              >
+                Payouts
+              </Button>
+              <Button
+                variant={view === 'account' ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setView(view === 'account' ? null : 'account')}
+                data-testid="payouts-view-account"
+              >
+                Bank &amp; business details
+              </Button>
+            </>
+          ) : null}
+          {ready && !embedded ? (
             <Button variant="outline" size="sm" disabled={busy} onClick={() => go(api.openPayoutsDashboard)}>
               Open payouts dashboard
             </Button>
           ) : null}
-          {!ready || (acct && acct.requirementsDue > 0) ? (
-            <Button size="sm" loading={busy} disabled={busy} onClick={() => go(api.startPayoutsOnboarding)} data-testid="payouts-onboard">
+          {(!ready || (acct && acct.requirementsDue > 0)) && view !== 'onboarding' ? (
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={busy}
+              onClick={() => (embedded ? setView('onboarding') : go(api.startPayoutsOnboarding))}
+              data-testid="payouts-onboard"
+            >
               {acct ? 'Continue setup' : 'Set up payouts'}
             </Button>
           ) : null}
         </div>
       </div>
+      {view ? (
+        <div className="mt-3 rounded-lg border border-line p-4" data-testid="payouts-embedded">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-ink-900">
+              {view === 'onboarding' ? 'Set up payouts' : view === 'payouts' ? 'Payouts' : 'Bank & business details'}
+            </p>
+            <button type="button" className="text-xs text-ink-500 hover:text-ink-900" onClick={() => (view === 'onboarding' ? finishedSetup() : setView(null))}>
+              Close
+            </button>
+          </div>
+          <Suspense fallback={<p className="text-xs text-ink-500">Loading payout setup…</p>}>
+            <StripeConnectEmbedded key={view} view={view} onExit={finishedSetup} />
+          </Suspense>
+          <p className="mt-3 text-[11px] text-ink-400">Payments are processed securely by Stripe.</p>
+        </div>
+      ) : null}
       {acct ? (
         <label className="mt-3 flex items-start gap-3 rounded-lg border border-line px-4 py-3" data-testid="ai-release-setting">
           <input
