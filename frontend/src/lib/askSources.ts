@@ -83,6 +83,25 @@ const WEB_TRAILER_RE =
 const WEB_PAIR_RE = /([^|,][^|]*?)\|(https?:\/\/[^\s,⟧\]]+)/g;
 const ACTIONS_TRAILER_RE = /\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
 const QUOTES_TRAILER_RE = /\s*⟦quotes:\s*([^⟧]*)⟧\s*/i;
+const FRAMES_TRAILER_RE = /\s*⟦frames:\s*([^⟧]*)⟧\s*/i;
+
+/** A video still the answer shows (`⟦frames: video/<job>/<proof>/<slug>@<sec>, …⟧`). */
+export type AskFrameRef = { id: string; jobId: string; proofId: string; slug: string; atSeconds: number };
+
+export function parseAskFramesTrailer(answer: string): AskFrameRef[] {
+  const m = FRAMES_TRAILER_RE.exec(String(answer ?? ''));
+  if (!m) return [];
+  const out: AskFrameRef[] = [];
+  for (const raw of m[1]!.split(',')) {
+    const id = raw.trim();
+    const moment = parseVideoMoment(id);
+    if (!moment?.jobId || !moment.proofId || moment.atSeconds == null) continue;
+    if (out.some((f) => f.id === id)) continue;
+    out.push({ id, jobId: moment.jobId, proofId: moment.proofId, slug: moment.slug, atSeconds: moment.atSeconds });
+  }
+  return out.slice(0, 8);
+}
+
 const FOLLOWUPS_TRAILER_RE = /\s*⟦followups:\s*([^⟧]*)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
@@ -592,6 +611,7 @@ export function extractAskSources(answer: string): {
   actions: AskActionChip[];
   quotes: AskMomentQuote[];
   followUps: string[];
+  frames: AskFrameRef[];
 } {
   let text = String(answer ?? '');
   const ids: AskSourceId[] = [];
@@ -599,6 +619,8 @@ export function extractAskSources(answer: string): {
   const actions = parseAskActionsTrailer(text);
   const quotes = parseAskQuoteTrailer(text);
   const followUps = parseAskFollowups(text);
+  const frames = parseAskFramesTrailer(text);
+  text = text.replace(FRAMES_TRAILER_RE, '\n').trimEnd();
 
   for (const id of parseTrailerIds(text)) pushUnique(ids, id);
   text = text.replace(SOURCE_TRAILER_RE, '').trimEnd();
@@ -629,7 +651,7 @@ export function extractAskSources(answer: string): {
     const title = moment?.proofId ? titleByProof.get(moment.proofId) : undefined;
     return askSourceChip(id, title ? { title } : undefined);
   });
-  return { body: text, sources, webSources, actions, quotes, followUps };
+  return { body: text, sources, webSources, actions, quotes, followUps, frames };
 }
 
 /**

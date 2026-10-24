@@ -1384,6 +1384,93 @@ evidencePortalRouter.get(
 );
 
 
+const askStillsBody = z.object({
+  stills: z
+    .array(z.object({ proofId: z.string().uuid(), atSeconds: z.number().min(0).max(86_400) }))
+    .min(1)
+    .max(12),
+});
+
+/**
+ * POST /api/evidence-portal/stills — the video frames a Chat answer shows.
+ *
+ * Every clip goes through the same checks as opening it: job access, the
+ * homeowner's "see videos" permission and hidden clips, a sub's own clips
+ * only, and no stills from a private moment or a child range (or none at all
+ * for a guest when the clip has redactions). A still the person may not see
+ * is simply left out. Ten-minute signed URLs, like the clip panel.
+ */
+evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = askStillsBody.safeParse(req.body ?? {});
+    if (!parsed.success) throw new HttpError(400, 'Pick at least one still.', 'invalid_stills');
+    const admin = unscopedAdminOrNull();
+    if (!admin) {
+      res.json({ stills: [] });
+      return;
+    }
+    const byProof = new Map<string, number[]>();
+    for (const ref of parsed.data.stills) byProof.set(ref.proofId, [...(byProof.get(ref.proofId) ?? []), ref.atSeconds]);
+    const out: Array<{
+      proofId: string;
+      jobId: string;
+      requestedSeconds: number;
+      atSeconds: number;
+      url: string;
+      title: string | null;
+      workDate: string | null;
+      capturedAt: string | null;
+    }> = [];
+    for (const [proofId, wanted] of byProof) {
+      try {
+        const resolved = await resolveProofAccess(req, proofId);
+        assertHomeownerMay(resolved, 'seeVideos');
+        assertHomeownerMaySeeProof(resolved, proofId);
+        const { data: proof } = await resolved.supabase
+          .from('job_proofs')
+          .select('id, org_id, job_id, party_id, work_date, captured_at, title, custom_title, ai_findings, deleted_at')
+          .eq('org_id', resolved.orgId)
+          .eq('id', proofId)
+          .maybeSingle();
+        if (!proof || (proof as any).deleted_at) continue;
+        assertViewerMayOpenProof(resolved, proof as any);
+        if (viewerPartyId(resolved) && proofFindingsHavePrivacyRedactions((proof as any).ai_findings)) continue;
+        const windows = privacyBlurWindows((proof as any).ai_findings);
+        const { data: frames } = await admin
+          .from('job_proof_frames')
+          .select('at_seconds, storage_path')
+          .eq('proof_id', proofId)
+          .order('at_seconds');
+        const visible = ((frames ?? []) as any[])
+          .map((f) => ({ at: Number(f.at_seconds) || 0, path: f.storage_path ? String(f.storage_path) : '' }))
+          .filter((f) => f.path && !secondsInBlurWindow(f.at, windows));
+        for (const at of wanted) {
+          const nearest = [...visible].sort((a, b) => Math.abs(a.at - at) - Math.abs(b.at - at))[0];
+          // Only the still that was asked for (stills are a few seconds apart).
+          if (!nearest || Math.abs(nearest.at - at) > 5) continue;
+          const { data } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(nearest.path, 600);
+          if (!data?.signedUrl) continue;
+          out.push({
+            proofId,
+            jobId: String((proof as any).job_id),
+            requestedSeconds: at,
+            atSeconds: nearest.at,
+            url: data.signedUrl,
+            title: ((proof as any).custom_title || (proof as any).title || null) as string | null,
+            workDate: ((proof as any).work_date ?? null) as string | null,
+            capturedAt: ((proof as any).captured_at ?? null) as string | null,
+          });
+        }
+      } catch {
+        // No access to this clip (or it is hidden from this person): leave it out.
+      }
+    }
+    res.json({ stills: out });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * POST /api/evidence-portal/evidence/:proofId/retry-read
  *

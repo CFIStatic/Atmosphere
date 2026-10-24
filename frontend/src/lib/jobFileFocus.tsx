@@ -28,8 +28,8 @@ type JobFileFocusContextValue = {
   request: JobFileFocusTarget | null;
   focus: (target: Omit<JobFileFocusTarget, 'nonce'> & { nonce?: number }) => void;
   /** Phone File/Ask tabs — switch to the job file before scrolling. */
-  revealFile?: () => void;
-  setRevealFile: (fn: (() => void) | undefined) => void;
+  revealFile?: (section?: JobFileFocusSection) => void;
+  setRevealFile: (fn: ((section?: JobFileFocusSection) => void) | undefined) => void;
 };
 
 const JobFileFocusContext = createContext<JobFileFocusContextValue>({
@@ -40,7 +40,7 @@ const JobFileFocusContext = createContext<JobFileFocusContextValue>({
 
 export function JobFileFocusProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<JobFileFocusTarget | null>(null);
-  const [revealFile, setRevealFileState] = useState<(() => void) | undefined>(undefined);
+  const [revealFile, setRevealFileState] = useState<((section?: JobFileFocusSection) => void) | undefined>(undefined);
 
   const focus = useCallback((target: Omit<JobFileFocusTarget, 'nonce'> & { nonce?: number }) => {
     setRequest({
@@ -49,7 +49,7 @@ export function JobFileFocusProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setRevealFile = useCallback((fn: (() => void) | undefined) => {
+  const setRevealFile = useCallback((fn: ((section?: JobFileFocusSection) => void) | undefined) => {
     setRevealFileState(() => fn);
   }, []);
 
@@ -74,7 +74,7 @@ export function JobFileFocusListener() {
 
   useEffect(() => {
     if (!request) return;
-    revealFile?.();
+    revealFile?.(request.section);
 
     const run = () => {
       const setup = document.querySelector<HTMLDetailsElement>('[data-job-section="setup"]');

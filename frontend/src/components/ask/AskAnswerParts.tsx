@@ -21,6 +21,7 @@ import { AskWebResults } from '../AskWebResults';
 import { ComputerTaskCard } from '../computer/ComputerTaskCard';
 import { type ComputerTaskView } from '../../lib/computer';
 import { AskApprovalCard } from './AskApprovalCard';
+import { AskFrameGallery } from './AskFrameGallery';
 import type { AskWebSource } from '../../lib/askWebSources';
 
 export function AskCiteSpans({
@@ -478,6 +479,7 @@ export function AskAnswerBody({
         <p className="whitespace-pre-wrap">{prose}</p>
       ) : null}
       {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
+      <AskFrameGallery frames={extracted.frames} onOpen={onOpenSource} />
       {jobId
         ? approvals.map((id) => <AskApprovalCard key={id} jobId={jobId} approvalId={id} />)
         : null}

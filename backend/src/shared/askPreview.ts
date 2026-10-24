@@ -37,7 +37,7 @@ export type AskPreviewGate = {
   shown: () => number;
 };
 
-const MACHINE_LINE = /⟦\s*(?:sources|quotes|followups|actions)\s*:/i;
+const MACHINE_LINE = /⟦\s*(?:sources|quotes|followups|actions|frames)\s*:/i;
 const ARTIFACT_MARK = /⟦\/?artifact⟧/gi;
 const UNSAFE =
   /[“”"]|⟦|⟧|\[\[|\]\]|\bvideo\/[0-9a-f-]{8,}|https?:\/\/|\bwww\.|<\/?[a-z][^>]*>/i;

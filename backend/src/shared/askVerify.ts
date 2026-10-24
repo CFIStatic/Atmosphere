@@ -92,7 +92,7 @@ export type AskVerifySource = {
 type TimedLine = { start: number | null; end: number | null; norm: string };
 type ClipText = { clip: AskLookupClip; lines: TimedLine[]; joined: string; offsets: number[]; maxSecond: number };
 
-const TRAILER_RE = /⟦(sources|quotes|followups|actions):[^⟧]*⟧/gi;
+const TRAILER_RE = /⟦(sources|quotes|followups|actions|frames):[^⟧]*⟧/gi;
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const MONTH_RE =
   /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/gi;
