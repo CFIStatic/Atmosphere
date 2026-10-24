@@ -397,10 +397,10 @@ describe('ComputerTaskCard', () => {
 });
 
 describe('Computer live view CSP', () => {
-  it('the app CSP lets the Browserbase live view frame load and nothing broader', () => {
+  it('the app CSP lets the Browserbase live view (and Stripe Connect embedded payout setup) frame load and nothing broader', () => {
     const conf = readFileSync(resolve(__dirname, '../../../nginx/security-headers.conf'), 'utf8');
     const frameSrc = conf.match(/frame-src ([^;]+);/)?.[1];
-    expect(frameSrc).toBe("'self' https://www.browserbase.com");
+    expect(frameSrc).toBe("'self' https://www.browserbase.com https://connect-js.stripe.com https://js.stripe.com");
   });
 });
 
