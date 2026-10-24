@@ -58,7 +58,7 @@ import {
 } from './askWebSearch.js';
 import type { AskActionModelTool } from './askReasoning.js';
 import type { ClipStillsResult } from './clipStills.js';
-import { finalizeFramesTrailer, MAX_FRAMES_PER_FIND, type FindFramesFn } from './askFrameSearch.js';
+import { clipDay, finalizeFramesTrailer, MAX_FRAMES_PER_FIND, type FindFramesFn } from './askFrameSearch.js';
 
 export type AskEngine = 'agent' | 'classic';
 
@@ -668,7 +668,8 @@ async function runFindFrames(
     to: typeof args.to === 'string' ? args.to : null,
     limit: typeof args.limit === 'number' ? args.limit : undefined,
   });
-  const days = [...new Set(clipsInScope(catalog).map((c) => (c.workDate ?? '').slice(0, 10)).filter(Boolean))].sort();
+  const zone = catalog.timeZone || 'America/Chicago';
+  const days = [...new Set(clipsInScope(catalog).map((c) => clipDay(c, zone) ?? '').filter(Boolean))].sort();
   const frames = got.frames.map((f, i) => ({
     cite: f.cite,
     date: f.workDate,

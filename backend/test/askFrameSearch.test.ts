@@ -77,6 +77,45 @@ test('frames line: only stills a tool returned; filled in when the model forgot 
   assert.equal(finalizeFramesTrailer(`Here. ⟦frames: ${fake}⟧`, [], []), 'Here.');
 });
 
+test('no match: days with video include clips dated only by when they were filmed', async () => {
+  let round = 0;
+  const call: AskAgentModelCall = async () => {
+    round += 1;
+    const blocks: Anthropic.ContentBlock[] =
+      round === 1
+        ? [{ type: 'tool_use', id: 'tu1', name: 'find_frames', input: { subject: 'stairs', dates: ['2026-10-01'] } } as Anthropic.ToolUseBlock]
+        : [{ type: 'text', text: 'Nothing on that day.', citations: null } as Anthropic.TextBlock];
+    return { model: 'test', blocks, usage: null };
+  };
+  const cat: AskLookupCatalog = {
+    orgId: ORG,
+    jobId: JOB,
+    access: 'org',
+    timeZone: 'America/Chicago',
+    clips: [
+      {
+        proofId: P20,
+        jobId: JOB,
+        orgId: ORG,
+        title: 'Evening walkthrough',
+        workDate: null,
+        capturedAt: '2026-10-21T02:30:00.000Z',
+      },
+      { proofId: P22, jobId: JOB, orgId: ORG, title: 'Stairs rebuilt', workDate: '2026-10-22' },
+    ],
+  };
+  const result = await runAskAgent({
+    question: 'show me the stairs on October 1',
+    catalog: cat,
+    callModel: call,
+    findFrames: async () => ({ frames: [], jpegs: [] }),
+  });
+  const step = result.trace.find((t) => t.tool === 'find_frames');
+  assert.ok(step);
+  assert.match(step.result.summary, /Days with video: 2026-10-20, 2026-10-22/);
+  assert.deepEqual((step.result.data as { daysWithVideo?: string[] } | undefined)?.daysWithVideo, ['2026-10-20', '2026-10-22']);
+});
+
 test('agent: find_frames is offered, its stills are shown to the model and land in the answer', async () => {
   const seen: Array<Parameters<AskAgentModelCall>[0]> = [];
   let round = 0;

@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type AskStill } from '../../lib/api';
 import type { AskFrameRef, AskSourceChip } from '../../lib/askSources';
+import { viewerDayKey } from '../../lib/viewerTime';
 
 type Loaded = AskStill & { ref: AskFrameRef };
 
@@ -18,10 +19,16 @@ function clock(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
 }
 
+/** Calendar day: the work date, else the viewer's day of the capture. The UTC date prefix is already the next day for a late evening. */
+function stillDay(still: AskStill): string | null {
+  const raw = still.workDate ?? viewerDayKey(still.capturedAt);
+  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null;
+}
+
 function dayLabel(still: AskStill): string {
-  const day = still.workDate ?? (still.capturedAt ? still.capturedAt.slice(0, 10) : '');
-  if (!/^\d{4}-\d{2}-\d{2}/.test(day)) return 'Undated';
-  const d = new Date(`${day.slice(0, 10)}T12:00:00`);
+  const day = stillDay(still);
+  if (!day) return 'Undated';
+  const d = new Date(`${day}T12:00:00`);
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
@@ -71,10 +78,11 @@ export function AskFrameGallery({
   const groups = useMemo(() => {
     const byDay = new Map<string, Loaded[]>();
     for (const s of stills ?? []) {
-      const label = dayLabel(s);
-      byDay.set(label, [...(byDay.get(label) ?? []), s]);
+      const day = stillDay(s) ?? '';
+      byDay.set(day, [...(byDay.get(day) ?? []), s]);
     }
-    return [...byDay.entries()];
+    // Before is the earliest calendar day. Cite order can list the later day first. Undated last.
+    return [...byDay.entries()].sort(([a], [b]) => (a || '9999-99-99').localeCompare(b || '9999-99-99'));
   }, [stills]);
 
   if (!frames.length) return null;
@@ -104,14 +112,14 @@ export function AskFrameGallery({
     <div className="mt-2" data-testid="ask-frames">
       <div className={compare ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : ''}>
         {groups.map(([day, list], gi) => (
-          <div key={day} data-testid="ask-frames-day">
+          <div key={day || 'undated'} data-testid="ask-frames-day">
             <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
               {compare ? (
                 <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-white">
                   {gi === 0 ? 'Before' : gi === groups.length - 1 ? 'After' : 'Then'}
                 </span>
               ) : null}
-              <span>{day}</span>
+              <span>{list[0] ? dayLabel(list[0]) : 'Undated'}</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {list.map((s) => (
