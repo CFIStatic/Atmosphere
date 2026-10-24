@@ -13,6 +13,7 @@ import { UnpaidJobEvaluation } from '../components/shared/UnpaidJobEvaluation';
 import { useProductActionsLocked } from '../components/billing/ProductActionLock';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
 import { JobTimeline } from '../components/shared/JobTimeline';
+import { JobPaymentsPanel } from '../components/payments/JobPaymentsPanel';
 import {
   JobFileSectionBar,
   type JobFileSectionId,
@@ -191,7 +192,12 @@ export function SharedDashboardPage() {
         searchParams.get('section') === 'timeline' ||
         Boolean(timelineRedirectSearch(location.search, location.hash));
       if (keepTimeline) next.section = 'timeline';
-      else if (openAsk) next.ask = '1';
+      else if (searchParams.get('section') === 'payments' && searchParams.get('job') === jobId) {
+        // Back from Stripe Checkout: stay on Payments and keep the outcome.
+        next.section = 'payments';
+        const outcome = searchParams.get('payment');
+        if (outcome) next.payment = outcome;
+      } else if (openAsk) next.ask = '1';
       setSearchParams(next, {
         replace: true,
         state: location.state,
@@ -497,6 +503,7 @@ function JobFileSections({
       { id: 'access', label: 'Access' },
       { id: 'videos', label: 'Videos' },
       { id: 'evidence', label: 'Evidence report' },
+      { id: 'payments', label: 'Payments' },
     ];
     if (!perms) return next;
     return next.filter((tab) => {
@@ -560,6 +567,8 @@ function JobFileSections({
         ) : null}
 
         {active === 'evidence' ? <JobFileReport jobId={record.job.id} /> : null}
+
+        {active === 'payments' ? <JobPaymentsPanel jobId={record.job.id} homeowner={viewerOnly} /> : null}
       </div>
     </div>
   );

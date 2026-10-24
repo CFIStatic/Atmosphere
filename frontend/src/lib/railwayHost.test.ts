@@ -89,7 +89,7 @@ describe('Railway office-app image', () => {
     expect(headers).toContain(
       "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app",
     );
-    expect(headers).toContain("script-src 'self' 'unsafe-inline'");
+    expect(headers).toContain("script-src 'self' 'unsafe-inline' https://connect-js.stripe.com https://js.stripe.com");
     expect(headers).toContain('https://fonts.googleapis.com');
     expect(headers).toContain('https://fonts.gstatic.com');
     expect(headers).toContain('https://*.supabase.co');
@@ -97,7 +97,7 @@ describe('Railway office-app image', () => {
     // API, Office Live signaling, and computer-use sockets are same-origin.
     // Signed Supabase URLs are HTTPS only (no Realtime client).
     expect(cspDirective(headers, 'connect-src')).toBe(
-      "connect-src 'self' https://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com stun:stun.l.google.com:19302 stun:stun1.l.google.com:19302 turn:",
+      "connect-src 'self' https://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com stun:stun.l.google.com:19302 stun:stun1.l.google.com:19302 turn: https://api.stripe.com https://connect-js.stripe.com https://merchant-ui-api.stripe.com https://*.stripe.com",
     );
     expect(cspDirective(headers, 'connect-src').split(/\s+/)).not.toContain('*');
     expect(headers).not.toContain('https://*.up.railway.app');

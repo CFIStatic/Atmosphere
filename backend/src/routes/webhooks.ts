@@ -54,9 +54,120 @@ import {
   isAutoRechargeIntent,
   supabaseAutoRechargeStore,
 } from '../metering/autoRecharge.js';
+import {
+  applyConnectedAccount,
+  applyConnectedDeauthorized,
+  applyConnectedPayout,
+  applyJobPaymentRefund,
+  applyJobPaymentSession,
+  applyTransferReversed,
+  isJobPaymentMetadata,
+} from '../payments/webhook.js';
+import { applyJobPaymentDispute } from '../payments/disputes.js';
 import { grantAiCredits, recordSubscriptionPriceSpan, syncCreditPackClawback } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleJobPaymentEvent(event: Stripe.Event, admin: any): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj = event.data.object as any;
+  switch (event.type) {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded':
+    case 'checkout.session.async_payment_failed':
+    case 'checkout.session.expired':
+      if (!isJobPaymentMetadata(obj.metadata)) return false;
+      await applyJobPaymentSession(admin, obj as Stripe.Checkout.Session, event.type);
+      return true;
+    case 'payment_intent.succeeded':
+    case 'payment_intent.payment_failed':
+      // Checkout events carry the outcome; acknowledge the intent events.
+      return isJobPaymentMetadata(obj.metadata);
+    case 'charge.refunded':
+      if (!isJobPaymentMetadata(obj.metadata)) return false;
+      await applyJobPaymentRefund(admin, obj as Stripe.Charge);
+      return true;
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed':
+    case 'charge.dispute.funds_withdrawn':
+    case 'charge.dispute.funds_reinstated':
+      // Disputes carry no metadata; matched by payment intent / charge.
+      return applyJobPaymentDispute(admin, obj);
+    case 'transfer.reversed':
+      return applyTransferReversed(admin, obj as Stripe.Transfer);
+    case 'account.updated':
+      await applyConnectedAccount(admin, obj as Stripe.Account);
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Events from connected accounts (the Connect webhook endpoint). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function handleConnectEvent(event: Stripe.Event, admin: any): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj = event.data.object as any;
+  const accountId = event.account ?? (event.type === 'account.updated' ? obj.id : null);
+  if (!accountId) return;
+  switch (event.type) {
+    case 'account.updated':
+      await applyConnectedAccount(admin, obj as Stripe.Account);
+      break;
+    case 'account.application.deauthorized':
+      await applyConnectedDeauthorized(admin, accountId);
+      break;
+    case 'payout.created':
+    case 'payout.paid':
+    case 'payout.failed':
+    case 'payout.canceled':
+    case 'payout.updated':
+      await applyConnectedPayout(admin, accountId, obj as Stripe.Payout, event.type);
+      if (event.type === 'payout.failed') console.warn(`[stripe-connect] payout failed for ${accountId} (${event.id})`);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Connect webhook (events on contractors' connected accounts). Separate
+ * endpoint and signing secret (STRIPE_CONNECT_WEBHOOK_SECRET) from the
+ * platform endpoint. Same guarantees: verified, idempotent by event id,
+ * 500 on failure so Stripe retries.
+ */
+webhookRouter.post('/stripe/connect', async (req: Request, res: Response) => {
+  const secret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET ?? '';
+  if (!secret) {
+    res.status(503).json({ error: 'Webhook not configured', code: 'webhook_unconfigured' });
+    return;
+  }
+  let event: Stripe.Event;
+  try {
+    event = stripeClient().webhooks.constructEvent(req.body as Buffer, req.headers['stripe-signature'] as string, secret);
+  } catch (err) {
+    console.warn('[stripe-connect] signature verification failed:', (err as Error).message);
+    res.status(400).json({ error: 'Invalid signature', code: 'invalid_signature' });
+    return;
+  }
+  const admin = adminClient();
+  let claimed = false;
+  try {
+    if (!(await claimStripeEvent(admin, event))) {
+      res.json({ received: true, duplicate: true });
+      return;
+    }
+    claimed = true;
+    await handleConnectEvent(event, admin);
+    res.json({ received: true });
+  } catch (err) {
+    if (claimed) await releaseStripeEventClaim(admin, event.id);
+    console.error(`[stripe-connect] handler failed for ${event.type} (${event.id}):`, err);
+    res.status(500).json({ error: 'Webhook handler failed', code: 'webhook_failed' });
+  }
+});
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -122,6 +233,8 @@ webhookRouter.post('/stripe', async (req: Request, res: Response) => {
 });
 
 async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
+  // Homeowner job payments (Connect destination charges) never touch billing.
+  if (await handleJobPaymentEvent(event, admin)) return;
   switch (event.type) {
     case 'checkout.session.completed':
       await onCheckoutCompleted(event.data.object as Stripe.Checkout.Session, admin);

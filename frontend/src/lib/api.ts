@@ -3416,6 +3416,113 @@ export interface PlaybookSourceJob {
   analyzedClips: number;
 }
 
+/* ---------------------------------------------- Contractor payments (Connect) */
+
+export type PayoutsStatus = {
+  available: boolean;
+  feeBps: number;
+  feeFlatCents: number;
+  testMode: boolean;
+  /** Server can mint Account Sessions for in-app (embedded) payout setup. */
+  embedded?: boolean;
+  account: null | {
+    connected: true;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+    requirementsDue: number;
+    allowAiRelease?: boolean;
+    updatedAt: string | null;
+  };
+};
+
+export type InvoiceEvidence = {
+  proofId: string;
+  atSeconds: number | null;
+  quote: string | null;
+  clipTitle?: string | null;
+  capturedAt?: string | null;
+};
+
+export type LineReleaseStatus = 'unpaid' | 'held' | 'verified' | 'released' | 'frozen' | 'refunded' | 'reversed';
+export type LineRelease = {
+  status: LineReleaseStatus;
+  heldAt: string | null;
+  verifiedAt: string | null;
+  releasedAt: string | null;
+  mode: 'gc_confirmed' | 'ai_auto' | null;
+  releasedCents: number | null;
+  refundedCents?: number;
+  reversedCents?: number;
+  disputeFlag?: boolean;
+  verdict: null | { verified: boolean; checkedAt: string; reasons: string[]; matchedTerms: string[]; clipIds: string[] };
+};
+
+export type JobInvoiceLine = {
+  id?: string;
+  description: string;
+  quantity: number;
+  unitCents: number;
+  amountCents?: number;
+  scopeItemId?: string | null;
+  scopeTitle?: string | null;
+  release?: LineRelease;
+  evidence: InvoiceEvidence[];
+};
+
+export type JobInvoice = {
+  id: string;
+  jobId: string;
+  number: number;
+  title: string;
+  kind: 'invoice' | 'deductible' | 'out_of_pocket';
+  status: 'draft' | 'sent' | 'paid' | 'void';
+  currency: string;
+  totalCents: number;
+  homeownerNote: string | null;
+  internalNote?: string | null;
+  applicationFeeCents?: number;
+  sentAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  lines: JobInvoiceLine[];
+};
+
+export type JobPayment = {
+  id: string;
+  invoiceId: string | null;
+  amountCents: number;
+  applicationFeeCents?: number;
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired' | 'partially_refunded' | 'refunded' | 'disputed' | 'dispute_lost';
+  refundedCents?: number;
+  disputeStatus?: string | null;
+  method: string | null;
+  payerEmail?: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  testMode?: boolean;
+};
+
+export type JobPaymentsResponse = {
+  available: boolean;
+  testMode?: boolean;
+  feeBps?: number;
+  canManage: boolean;
+  payoutsReady: boolean;
+  scopeItems?: Array<{ id: string; title: string }>;
+  allowAiRelease?: boolean;
+  invoices: JobInvoice[];
+  payments: JobPayment[];
+};
+
+export type JobInvoiceInput = {
+  title: string;
+  kind: JobInvoice['kind'];
+  homeownerNote?: string | null;
+  internalNote?: string | null;
+  lines: Array<{ description: string; quantity: number; unitCents: number; scopeItemId?: string | null; evidence: Array<{ proofId: string; atSeconds: number | null; quote: string | null }> }>;
+};
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -4005,6 +4112,36 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ personId }) },
     ),
 
+
+  payoutsStatus: () => request<PayoutsStatus>('/api/billing/connect'),
+  payoutsSession: () =>
+    request<{ clientSecret: string; publishableKey: string }>('/api/billing/connect/session', { method: 'POST' }),
+  startPayoutsOnboarding: () => request<{ url: string }>('/api/billing/connect/onboard', { method: 'POST' }),
+  refreshPayouts: () => request<PayoutsStatus>('/api/billing/connect/refresh', { method: 'POST' }),
+  openPayoutsDashboard: () => request<{ url: string }>('/api/billing/connect/dashboard', { method: 'POST' }),
+  jobPayments: (jobId: string) => request<JobPaymentsResponse>(`/api/operations/shared/${jobId}/payments`),
+  createJobInvoice: (jobId: string, input: JobInvoiceInput) =>
+    request<{ id: string; number: number; totalCents: number }>(`/api/operations/shared/${jobId}/invoices`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  sendJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/send`, { method: 'POST' }),
+  voidJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/void`, { method: 'POST' }),
+  payJobInvoice: (jobId: string, invoiceId: string) =>
+    request<{ url: string }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/checkout`, { method: 'POST' }),
+  verifyInvoiceLine: (jobId: string, invoiceId: string, lineId: string) =>
+    request<{ ok: true }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/verify`, { method: 'POST' }),
+  releaseInvoiceLine: (jobId: string, invoiceId: string, lineId: string) =>
+    request<{ ok: true; releasedCents: number }>(`/api/operations/shared/${jobId}/invoices/${invoiceId}/lines/${lineId}/release`, { method: 'POST' }),
+  refundJobPayment: (jobId: string, paymentId: string, input: { amountCents?: number; reason?: string }) =>
+    request<{ ok: true; refundedFromHeldCents: number; reversedCents: number }>(`/api/operations/shared/${jobId}/payments/${paymentId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  setPayoutsSettings: (input: { allowAiRelease: boolean }) =>
+    request<PayoutsStatus>('/api/billing/connect/settings', { method: 'PUT', body: JSON.stringify(input) }),
 
   homeownerPermissions: (jobId: string) =>
     request<HomeownerPermissionsResponse>(`/api/operations/shared/${jobId}/homeowner-permissions`),

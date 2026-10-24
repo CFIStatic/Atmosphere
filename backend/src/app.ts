@@ -46,6 +46,7 @@ import { computerRouter } from './routes/computer.js';
 import { desktopLiveRouter } from './routes/desktopLive.js';
 import { crmCredentialsRouter } from './routes/crmCredentials.js';
 import { speakerIdentityRouter } from './routes/speakerIdentity.js';
+import { connectRouter, jobPaymentsRouter } from './routes/jobPayments.js';
 import { errorHandler, notFound, shouldReportError } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
@@ -224,6 +225,8 @@ export function createApp(): Express {
   // /api/audit unmounted — agent_runs ledger dropped (non-sold-path).
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
+  // Contractor payouts (Stripe Connect), owner only; before the billing router.
+  app.use('/api/billing/connect', connectRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/billing/ai-allowance', aiAllowanceRouter);
   app.use('/api/usage', usageRouter);
@@ -233,6 +236,7 @@ export function createApp(): Express {
   app.use('/api/operations', chatDocumentsRouter);
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
+  app.use('/api/operations', jobPaymentsRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
   app.use('/api/episodes', episodesRouter);
