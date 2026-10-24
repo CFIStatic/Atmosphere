@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type Anthropic from '@anthropic-ai/sdk';
-import { finalizeFramesTrailer, rankFrames, subjectTerms, type FrameWindow, type FrameRow } from '../src/shared/askFrameSearch.js';
+import { clipWindow, finalizeFramesTrailer, rankFrames, subjectTerms, type FrameWindow, type FrameRow } from '../src/shared/askFrameSearch.js';
 import { runAskAgent, type AskAgentModelCall } from '../src/shared/askAgent.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
 
@@ -104,4 +104,11 @@ test('agent: find_frames is offered, its stills are shown to the model and land 
   const content = toolTurn[0]!.content as Array<{ type: string }>;
   assert.equal(content.filter((b) => b.type === 'image').length, 2);
   assert.match(result.answer, /⟦frames: video\/.+@40, video\/.+@15⟧/);
+});
+
+test('clip window: 5 s before to 10 s after, kept inside the video', () => {
+  assert.deepEqual(clipWindow(40, 180), { start: 35, end: 50 });
+  assert.deepEqual(clipWindow(2, 180), { start: 0, end: 12 });
+  assert.deepEqual(clipWindow(178, 180), { start: 165, end: 180 });
+  assert.deepEqual(clipWindow(40, null), { start: 35, end: 50 });
 });

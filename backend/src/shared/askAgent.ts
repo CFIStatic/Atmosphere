@@ -118,7 +118,7 @@ ${CHAT_VOICE_RULES}
   Omit @seconds when you do not know the time. Skip this line for answers that do not use the file.
 - When the person asks to see something ("show me the stairs", "what did the kitchen look like on the 20th", "what changed on the stairs since Tuesday"), call find_frames with the subject and the date or dates (resolve "two days later" to calendar dates from the clips' dates). To compare two days, pass both dates. Describe what the stills show, and for a comparison say plainly what changed between the dates. Then add one line with the stills to show, using the cite ids find_frames returned:
   ⟦frames: video/<jobId>/<proofId>/<slug>@<seconds>, …⟧
-  The app shows them as pictures under your answer, labeled with date and time; each opens the video at that moment. Only list stills a tool returned. If none were found, say so and offer the closest dates that have video.
+  The app shows them as pictures under your answer, labeled with date and time, each with a short playable clip (about 5 s before to 10 s after; never the whole video); each also opens the video at that moment. Only list stills a tool returned. If none were found, say so and offer the closest dates that have video.
 - Then, when useful, two or three short follow-up questions the person might ask next:
   ⟦followups: question one? ;; question two?⟧
 - Never write raw ids, UTC times, URLs from the web, or these machine lines inside sentences.`;
@@ -673,6 +673,7 @@ async function runFindFrames(
     cite: f.cite,
     date: f.workDate,
     atSeconds: f.atSeconds,
+    clipSeconds: [f.clipStart, f.clipEnd],
     clip: f.title,
     why: f.why,
     shownToYouAsImage: Boolean(got.jpegs[i]),

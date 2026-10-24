@@ -34,4 +34,18 @@ describe('Chat video stills', () => {
     await waitFor(() => expect(container.querySelector('[data-testid="ask-frames-loading"]')).toBeNull());
     expect(container.querySelector('[data-testid="ask-frames"]')).toBeNull();
   });
+
+  it('plays a short clip inline, only when the server sent one', async () => {
+    const gif = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    const load = vi.fn().mockResolvedValue([
+      { proofId: A, jobId: JOB, requestedSeconds: 40, atSeconds: 40, url: gif, title: 'Demo day', workDate: '2026-10-20', capturedAt: null, clip: { url: 'https://x.example.com/v.mp4', start: 35, end: 50 } },
+      { proofId: B, jobId: JOB, requestedSeconds: 15, atSeconds: 15, url: gif, title: 'Stairs rebuilt', workDate: '2026-10-22', capturedAt: null, clip: null },
+    ]);
+    render(<AskFrameGallery frames={extractAskSources(answer).frames} onOpen={() => {}} load={load} />);
+    await waitFor(() => expect(screen.getAllByTestId('ask-frame')).toHaveLength(2));
+    expect(screen.getAllByTestId('ask-clip-play')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('ask-clip-play'));
+    const video = screen.getByTestId('ask-clip-video') as HTMLVideoElement;
+    expect(video.getAttribute('src')).toBe('https://x.example.com/v.mp4#t=35,50');
+  });
 });

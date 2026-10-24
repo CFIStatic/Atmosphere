@@ -23,6 +23,26 @@ type DbRow = Record<string, unknown>;
 
 export const MAX_FRAMES_PER_FIND = 8;
 
+/** Seconds before / after a matched moment that its Chat clip plays. */
+export const CLIP_BEFORE_SECONDS = 5;
+export const CLIP_AFTER_SECONDS = 10;
+
+/**
+ * The short clip around a matched moment: 5 s before to 10 s after, kept
+ * inside the video. Chat plays just this window, never the whole video.
+ */
+export function clipWindow(atSeconds: number, durationSeconds?: number | null): { start: number; end: number } {
+  const at = Math.max(0, Number(atSeconds) || 0);
+  const dur = Number(durationSeconds);
+  const max = Number.isFinite(dur) && dur > 0 ? dur : Infinity;
+  let start = Math.max(0, at - CLIP_BEFORE_SECONDS);
+  let end = Math.min(max, at + CLIP_AFTER_SECONDS);
+  // Near the end of a video, slide back so the clip is still ~15 s long.
+  if (end - start < CLIP_BEFORE_SECONDS + CLIP_AFTER_SECONDS && Number.isFinite(max)) start = Math.max(0, end - CLIP_BEFORE_SECONDS - CLIP_AFTER_SECONDS);
+  if (!(end > start)) end = start + 1;
+  return { start: Math.round(start * 10) / 10, end: Math.round(end * 10) / 10 };
+}
+
 export type FrameWindow = {
   proofId: string;
   start: number;
@@ -42,6 +62,9 @@ export type FoundFrame = {
   workDate: string | null;
   atSeconds: number;
   cite: string;
+  /** The short clip Chat plays around this moment. */
+  clipStart: number;
+  clipEnd: number;
   why: string;
   score: number;
   storagePath: string;
@@ -170,6 +193,10 @@ export function rankFrames(input: {
       workDate: clipDay(clip, zone),
       atSeconds: Math.round(best.atSeconds * 10) / 10,
       cite: askClipCite(clip, best.atSeconds),
+      ...(() => {
+        const w = clipWindow(best.atSeconds, clip.durationSeconds);
+        return { clipStart: w.start, clipEnd: w.end };
+      })(),
       why: w.text.replace(/\s+/g, ' ').trim().slice(0, 160),
       score,
       storagePath: best.storagePath,

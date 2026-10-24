@@ -1,10 +1,12 @@
 /**
  * The video stills a Chat answer shows: a strip of pictures labeled with the
  * day, time of day and clip moment. Two or more days read as a before/after.
- * Tapping a still opens that video at that moment. Stills this person may not
- * see never come back from the server, so they simply are not drawn.
+ * Tapping a still opens that video at that moment. Each still can also play
+ * a short clip (about 5 s before to 10 s after) right in the answer; the
+ * player stays inside that window. Stills and clips this person may not see
+ * never come back from the server, so they simply are not drawn.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type AskStill } from '../../lib/api';
 import type { AskFrameRef, AskSourceChip } from '../../lib/askSources';
 
@@ -31,6 +33,44 @@ function timeOfDay(still: AskStill): string {
   return Number.isNaN(t.getTime()) ? '' : t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * Plays only [start, end] of a video: media fragment for the first seek, and
+ * the player is held inside the window (loops back, never runs past `end`).
+ */
+export function AskClipPlayer({ url, start, end, poster, label }: { url: string; start: number; end: number; poster: string; label: string }) {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  const keep = () => {
+    const v = ref.current;
+    if (!v) return;
+    if (v.currentTime < start - 0.25 || v.currentTime > end + 0.25) v.currentTime = start;
+  };
+  return (
+    <video
+      ref={ref}
+      data-testid="ask-clip-video"
+      src={`${url}#t=${start},${end}`}
+      poster={poster}
+      autoPlay
+      muted
+      playsInline
+      controls
+      preload="metadata"
+      aria-label={label}
+      className="h-full w-full bg-black object-contain"
+      onLoadedMetadata={keep}
+      onSeeking={keep}
+      onPlay={keep}
+      onTimeUpdate={() => {
+        const v = ref.current;
+        if (v && v.currentTime >= end) {
+          v.pause();
+          v.currentTime = start;
+        }
+      }}
+    />
+  );
+}
+
 export function askStillsLoader(refs: AskFrameRef[]): Promise<AskStill[]> {
   return api.askStills(refs.map((r) => ({ proofId: r.proofId, atSeconds: r.atSeconds }))).then((res) => res.stills ?? []);
 }
@@ -48,6 +88,14 @@ export function AskFrameGallery({
   const key = frames.map((f) => f.id).join(',');
   const [stills, setStills] = useState<Loaded[] | null>(null);
   const [zoom, setZoom] = useState<Loaded | null>(null);
+  const [playing, setPlaying] = useState<ReadonlySet<string>>(() => new Set());
+  const play = (id: string, on: boolean) =>
+    setPlaying((cur) => {
+      const next = new Set(cur);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   useEffect(() => {
     if (!frames.length) return;
     let live = true;
@@ -102,7 +150,7 @@ export function AskFrameGallery({
 
   return (
     <div className="mt-2" data-testid="ask-frames">
-      <div className={compare ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : ''}>
+      <div className={compare ? 'grid grid-cols-2 gap-2 sm:gap-3' : ''}>
         {groups.map(([day, list], gi) => (
           <div key={day} data-testid="ask-frames-day">
             <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
@@ -115,31 +163,66 @@ export function AskFrameGallery({
             </div>
             <div className="flex flex-wrap gap-2">
               {list.map((s) => (
-                <figure key={s.ref.id} className="w-40 overflow-hidden rounded-lg border border-line bg-paper-50">
-                  <button
-                    type="button"
-                    data-testid="ask-frame"
-                    data-proof-id={s.proofId}
-                    data-at={String(s.atSeconds)}
-                    onClick={() => setZoom(s)}
-                    className="block aspect-video w-full overflow-hidden bg-ink-900"
-                    title="Enlarge"
-                  >
-                    <img src={s.url} alt={`${s.title ?? 'Video'} at ${clock(s.atSeconds)}`} className="h-full w-full object-cover" loading="lazy" />
-                  </button>
+                <figure
+                  key={s.ref.id}
+                  className={`overflow-hidden rounded-lg border border-line bg-paper-50 ${playing.has(s.ref.id) ? 'w-full max-w-md' : 'w-40'}`}
+                >
+                  <div className="relative block aspect-video w-full overflow-hidden bg-ink-900">
+                    {playing.has(s.ref.id) && s.clip ? (
+                      <AskClipPlayer
+                        url={s.clip.url}
+                        start={s.clip.start}
+                        end={s.clip.end}
+                        poster={s.url}
+                        label={`${s.title ?? 'Video'} clip ${clock(s.clip.start)} to ${clock(s.clip.end)}`}
+                      />
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          data-testid="ask-frame"
+                          data-proof-id={s.proofId}
+                          data-at={String(s.atSeconds)}
+                          onClick={() => setZoom(s)}
+                          className="block h-full w-full"
+                          title="Enlarge"
+                        >
+                          <img src={s.url} alt={`${s.title ?? 'Video'} at ${clock(s.atSeconds)}`} className="h-full w-full object-cover" loading="lazy" />
+                        </button>
+                        {s.clip ? (
+                          <button
+                            type="button"
+                            data-testid="ask-clip-play"
+                            onClick={() => play(s.ref.id, true)}
+                            className="absolute bottom-1 left-1 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-black/85"
+                            title="Play a short clip of this moment"
+                          >
+                            ▶ Clip {Math.round(s.clip.end - s.clip.start)}s
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
                   <figcaption className="flex items-center justify-between gap-1 px-2 py-1 text-[11px] text-ink-600">
                     <span className="truncate" title={s.title ?? ''}>
                       {[timeOfDay(s), s.title].filter(Boolean).join(' · ')}
                     </span>
-                    <button
-                      type="button"
-                      data-testid="ask-frame-open"
-                      onClick={() => open(s)}
-                      className="shrink-0 rounded px-1 font-medium text-brand-700 hover:underline"
-                      title="Open the video at this moment"
-                    >
-                      ▶ {clock(s.atSeconds)}
-                    </button>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {playing.has(s.ref.id) ? (
+                        <button type="button" data-testid="ask-clip-close" onClick={() => play(s.ref.id, false)} className="rounded px-1 text-ink-500 hover:underline">
+                          Close
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        data-testid="ask-frame-open"
+                        onClick={() => open(s)}
+                        className="rounded px-1 font-medium text-brand-700 hover:underline"
+                        title="Open the full video at this moment"
+                      >
+                        ▶ {clock(s.atSeconds)}
+                      </button>
+                    </span>
                   </figcaption>
                 </figure>
               ))}
@@ -156,7 +239,13 @@ export function AskFrameGallery({
           onClick={() => setZoom(null)}
         >
           <div className="max-w-4xl" onClick={(e) => e.stopPropagation()}>
-            <img src={zoom.url} alt="" className="max-h-[75vh] w-auto rounded-lg" />
+            {zoom.clip ? (
+              <div className="aspect-video w-[min(90vw,56rem)] overflow-hidden rounded-lg">
+                <AskClipPlayer url={zoom.clip.url} start={zoom.clip.start} end={zoom.clip.end} poster={zoom.url} label={`${zoom.title ?? 'Video'} clip`} />
+              </div>
+            ) : (
+              <img src={zoom.url} alt="" className="max-h-[75vh] w-auto rounded-lg" />
+            )}
             <div className="mt-2 flex items-center justify-between text-sm text-white">
               <span>
                 {dayLabel(zoom)} {timeOfDay(zoom) ? `· ${timeOfDay(zoom)}` : ''} · {zoom.title ?? 'Video'} at {clock(zoom.atSeconds)}

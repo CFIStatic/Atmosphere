@@ -69,6 +69,7 @@ import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
+import { clipWindow } from '../shared/askFrameSearch.js';
 import { assertGuestMayMintRawMedia, proofFindingsHavePrivacyRedactions } from '../shared/guestMediaAccess.js';
 import { ensurePrivacySafeCopy, hasPrivacyBlur, privacyBlurWindows, schedulePrivacySafeCopy, secondsInBlurWindow } from '../lib/proofPrivacySafe.js';
 import {
@@ -1399,6 +1400,8 @@ const askStillsBody = z.object({
  * only, and no stills from a private moment or a child range (or none at all
  * for a guest when the clip has redactions). A still the person may not see
  * is simply left out. Ten-minute signed URLs, like the clip panel.
+ * Each still also carries a short clip (5 s before to 10 s after) that the
+ * chat player keeps to that window; none when the video has any blur.
  */
 evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -1420,6 +1423,7 @@ evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: N
       title: string | null;
       workDate: string | null;
       capturedAt: string | null;
+      clip: { url: string; start: number; end: number } | null;
     }> = [];
     for (const [proofId, wanted] of byProof) {
       try {
@@ -1428,7 +1432,7 @@ evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: N
         assertHomeownerMaySeeProof(resolved, proofId);
         const { data: proof } = await resolved.supabase
           .from('job_proofs')
-          .select('id, org_id, job_id, party_id, work_date, captured_at, title, custom_title, ai_findings, deleted_at')
+          .select('id, org_id, job_id, party_id, work_date, captured_at, title, custom_title, ai_findings, deleted_at, storage_path, duration_seconds')
           .eq('org_id', resolved.orgId)
           .eq('id', proofId)
           .maybeSingle();
@@ -1444,6 +1448,14 @@ evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: N
         const visible = ((frames ?? []) as any[])
           .map((f) => ({ at: Number(f.at_seconds) || 0, path: f.storage_path ? String(f.storage_path) : '' }))
           .filter((f) => f.path && !secondsInBlurWindow(f.at, windows));
+        // Short clips play from the video file itself, so only when nothing in
+        // the video is blurred: a signed URL could be scrubbed past the window.
+        const videoPath = (proof as any).storage_path ? String((proof as any).storage_path) : '';
+        let videoUrl: string | null = null;
+        if (videoPath && !hasPrivacyBlur((proof as any).ai_findings) && !windows.length) {
+          const { data: v } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(videoPath, 600);
+          videoUrl = v?.signedUrl ?? null;
+        }
         for (const at of wanted) {
           const nearest = [...visible].sort((a, b) => Math.abs(a.at - at) - Math.abs(b.at - at))[0];
           // Only the still that was asked for (stills are a few seconds apart).
@@ -1459,6 +1471,7 @@ evidencePortalRouter.post('/stills', async (req: Request, res: Response, next: N
             title: ((proof as any).custom_title || (proof as any).title || null) as string | null,
             workDate: ((proof as any).work_date ?? null) as string | null,
             capturedAt: ((proof as any).captured_at ?? null) as string | null,
+            clip: videoUrl ? { url: videoUrl, ...clipWindow(nearest.at, (proof as any).duration_seconds) } : null,
           });
         }
       } catch {

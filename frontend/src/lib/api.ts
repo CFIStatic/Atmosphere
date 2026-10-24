@@ -3533,6 +3533,8 @@ export type AskStill = {
   title: string | null;
   workDate: string | null;
   capturedAt: string | null;
+  /** Short clip around the moment (signed video URL + window); null when not allowed. */
+  clip?: { url: string; start: number; end: number } | null;
 };
 
 export const api = {
